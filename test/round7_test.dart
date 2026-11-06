@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/session_state.dart';
+import 'package:nextx_mobile/screens/hr/attendance_screen.dart';
 import 'package:nextx_mobile/services/api_client.dart';
 import 'package:nextx_mobile/services/offline_queue.dart';
 
@@ -121,5 +122,11 @@ void main() {
     final form = adapter.calls.last.data;
     expect(form.files.single.key, 'files[]');
     expect(await config.apiClient.removeLeaveAttachment('5', 'a1'), isEmpty);
+  });
+
+  test('history marks punches that were sent offline', () {
+    expect(offlinePunchFlags({'clock_in_at': 'x', 'clock_out_at': 'y', 'clock_in_offline': 1, 'clock_out_offline': 0}), (true, false));
+    expect(offlinePunchFlags({'clock_in_at': 'x', 'source': 'app_offline'}), (true, false));
+    expect(offlinePunchFlags({'clock_in_offline': 1}), (false, false));
   });
 }
