@@ -22,14 +22,63 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _code = TextEditingController();
   bool _loading = false;
+  bool _otpMode = false;
+  bool _otpSent = false;
+  bool _obscure = true;
   String? _error;
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _code.dispose();
     super.dispose();
+  }
+
+  Future<void> _sendOtp() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = 'กรุณากรอกอีเมล');
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await context.read<AppConfig>().requestEmailOtp(email);
+      if (!mounted) return;
+      setState(() => _otpSent = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ส่งรหัส OTP ไปที่ $email แล้ว')),
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = formatApiError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    final email = _email.text.trim();
+    final code = _code.text.trim();
+    if (code.isEmpty) {
+      setState(() => _error = 'กรุณากรอกรหัส OTP');
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await context.read<AppConfig>().loginWithEmailOtp(email: email, code: code);
+    } catch (e) {
+      if (mounted) setState(() => _error = formatApiError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _login() async {
@@ -75,7 +124,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'เข้าสู่ระบบด้วยอีเมลและรหัสผ่าน\n(LINE Login ยังไม่รองรับบนแอปมือถือ)',
+                _otpMode ? 'เข้าสู่ระบบด้วยรหัส OTP ที่ส่งไปทางอีเมล' : 'เข้าสู่ระบบด้วยอีเมลและรหัสผ่าน',
                 style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 20),
@@ -125,23 +174,54 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: NxFieldStyle.decoration(context, label: 'อีเมล'),
                     ),
                     const SizedBox(height: 16),
-                    TextField(
-                      controller: _password,
-                      obscureText: true,
-                      autofillHints: const [AutofillHints.password],
-                      onSubmitted: (_) => _loading ? null : _login(),
-                      decoration: NxFieldStyle.decoration(context, label: 'รหัสผ่าน'),
-                    ),
+                    if (!_otpMode)
+                      TextField(
+                        controller: _password,
+                        obscureText: _obscure,
+                        autofillHints: const [AutofillHints.password],
+                        onSubmitted: (_) => _loading ? null : _login(),
+                        decoration: NxFieldStyle.decoration(context, label: 'รหัสผ่าน').copyWith(
+                          suffixIcon: IconButton(
+                            tooltip: _obscure ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน',
+                            icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                            onPressed: () => setState(() => _obscure = !_obscure),
+                          ),
+                        ),
+                      )
+                    else if (_otpSent)
+                      TextField(
+                        controller: _code,
+                        keyboardType: TextInputType.number,
+                        autofillHints: const [AutofillHints.oneTimeCode],
+                        onSubmitted: (_) => _loading ? null : _verifyOtp(),
+                        decoration: NxFieldStyle.decoration(context, label: 'รหัส OTP'),
+                      ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(_error!, style: TextStyle(color: colorScheme.error)),
                     ],
                     const SizedBox(height: 20),
                     NxHeroCta(
-                      label: 'เข้าสู่ระบบ',
+                      label: !_otpMode ? 'เข้าสู่ระบบ' : (_otpSent ? 'ยืนยันรหัส OTP' : 'ส่งรหัส OTP'),
                       busy: _loading,
-                      onPressed: _loading ? null : _login,
+                      onPressed: _loading ? null : (!_otpMode ? _login : (_otpSent ? _verifyOtp : _sendOtp)),
                     ),
+                    if (_otpMode && _otpSent)
+                      TextButton(
+                        onPressed: _loading ? null : _sendOtp,
+                        child: const Text('ส่งรหัสอีกครั้ง'),
+                      ),
+                    TextButton(
+                      onPressed: _loading
+                          ? null
+                          : () => setState(() {
+                                _otpMode = !_otpMode;
+                                _otpSent = false;
+                                _error = null;
+                              }),
+                      child: Text(_otpMode ? 'ใช้รหัสผ่านแทน' : 'เข้าสู่ระบบด้วยรหัส OTP ทางอีเมล'),
+                    ),
+                    if (!_otpMode)
                     TextButton(
                       onPressed: _loading
                           ? null

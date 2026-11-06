@@ -76,6 +76,8 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
         const _HubItem(NxI.robot, 'AI', 'ผู้ช่วย', AppRoutes.aiChat),
       if (MenuAccess.allow(session, MenuAccess.files))
         const _HubItem(NxI.folder, 'ไฟล์', 'กล้องและอัปโหลด', AppRoutes.files),
+      if (MenuAccess.any(session, const [MenuAccess.storeOrders, MenuAccess.storeStock]))
+        const _HubItem(NxI.package, 'ร้านค้า', 'ออเดอร์และสต็อก', AppRoutes.commerce),
       if (MenuAccess.allow(session, MenuAccess.mailbox))
         const _HubItem(NxI.envelope, 'เมล', 'อ่าน เขียน และตอบกลับ', AppRoutes.mail),
     ];

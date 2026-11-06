@@ -303,6 +303,28 @@ class AppConfig extends ChangeNotifier {
   }) async {
     _api.attachSession(baseUrl: _apiBaseUrl);
     final data = await _api.login(email: email, password: password, remember: true);
+    await _completeLogin(data, fallbackEmail: email);
+  }
+
+  /// Sends a one-time sign-in code to [email] (`/api/auth/otp/email/request`).
+  Future<void> requestEmailOtp(String email) async {
+    _api.attachSession(baseUrl: _apiBaseUrl);
+    await _api.requestEmailOtp(email);
+  }
+
+  /// Signs in with the emailed code. Accounts that need linking confirm on the web.
+  Future<void> loginWithEmailOtp({required String email, required String code}) async {
+    _api.attachSession(baseUrl: _apiBaseUrl);
+    final data = await _api.verifyEmailOtp(email: email, code: code);
+    if (data['needLinkConfirm'] == true) {
+      throw ApiException(409, 'บัญชีนี้ต้องยืนยันการเชื่อมวิธีเข้าสู่ระบบบนเว็บก่อน แล้วจึงใช้ OTP บนมือถือได้');
+    }
+    await _completeLogin(data, fallbackEmail: email);
+  }
+
+  /// Stores the session returned by any NEXTX login endpoint (`{token, user, business}`).
+  Future<void> _completeLogin(Map<String, dynamic> data, {required String fallbackEmail}) async {
+    final email = fallbackEmail;
     final token = data['token']?.toString();
     if (token == null || token.isEmpty) {
       throw ApiException(500, 'ไม่พบ token จากเซิร์ฟเวอร์');

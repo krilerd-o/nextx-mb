@@ -109,7 +109,8 @@ class ApiClient {
           final code = err.response?.statusCode;
           final path = err.requestOptions.path;
           final isAuthCall = path.contains('/api/auth/login') ||
-              path.contains('/api/auth/register');
+              path.contains('/api/auth/register') ||
+              path.contains('/api/auth/otp/');
           if (code == 401 && !isAuthCall) {
             _onUnauthorized?.call();
           }
@@ -253,6 +254,18 @@ class ApiClient {
       'remember': remember,
     });
     return _dataMap(env);
+  }
+
+  Future<void> requestEmailOtp(String email) async {
+    await _send('POST', '/api/auth/otp/email/request', data: {'email': email, 'locale': 'th'});
+  }
+
+  Future<Map<String, dynamic>> verifyEmailOtp({required String email, required String code}) async {
+    return _dataMap(await _send('POST', '/api/auth/otp/email/verify', data: {
+      'email': email,
+      'code': code,
+      'remember': true,
+    }));
   }
 
   Future<void> logoutRemote() async {
@@ -1158,6 +1171,53 @@ class ApiClient {
 
   Future<Map<String, dynamic>> getEntityRelated(String module, String id) async {
     return _dataMap(await _send('GET', '/api/entity/$module/$id/related'));
+  }
+
+  /// Store orders for one queue (all, new_today, awaiting_payment, awaiting_label,
+  /// awaiting_pickup, in_transit, delivered, cancelled). `meta.queue_counts` per queue.
+  Future<({List<Map<String, dynamic>> items, Map<String, dynamic> meta})> getCommercialOrders({
+    String queue = 'new_today',
+    int page = 1,
+    int limit = 25,
+    String? q,
+  }) async {
+    final env = await _send('GET', '/api/commercial/orders', query: {
+      'queue': queue,
+      'page': '$page',
+      'limit': '$limit',
+      if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+    });
+    final data = env['data'];
+    final meta = data is Map && data['meta'] is Map ? Map<String, dynamic>.from(data['meta'] as Map) : <String, dynamic>{};
+    return (items: extractMapList(data), meta: meta);
+  }
+
+  Future<void> markCommercialOrderPaid(String id) async {
+    await _send('POST', '/api/commercial/orders/$id/mark-paid');
+  }
+
+  /// Product stock (each with `variants`). Requires store admin rights.
+  Future<List<Map<String, dynamic>>> getStockBalance({String? q}) async {
+    final env = await _send('GET', '/api/commercial/stock/balance', query: {
+      if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+    });
+    return extractMapList(env['data']);
+  }
+
+  /// [kind] is `in`, `out` (quantity > 0) or `adjust` (signed delta).
+  Future<void> moveStock({
+    required String kind,
+    required String productId,
+    String? variantId,
+    required num amount,
+    String? notes,
+  }) async {
+    await _send('POST', '/api/commercial/stock/$kind', data: {
+      'product_id': int.tryParse(productId) ?? productId,
+      if (variantId != null) 'variant_id': int.tryParse(variantId) ?? variantId,
+      if (kind == 'adjust') 'delta': amount else 'quantity': amount,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
   }
 
   Future<Map<String, dynamic>> getCommercialOrder(String id) async {

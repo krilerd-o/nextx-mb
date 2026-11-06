@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nextx_mobile/screens/ai/ai_chat_screen.dart';
 import 'package:nextx_mobile/screens/calendar/calendar_home_screen.dart';
+import 'package:nextx_mobile/screens/commerce/commerce_home_screen.dart';
 import 'package:nextx_mobile/screens/dashboard/mobile_dashboard_screen.dart';
 import 'package:nextx_mobile/screens/files/files_home_screen.dart';
 import 'package:nextx_mobile/screens/profile_edit_screen.dart';
@@ -65,5 +66,13 @@ void main() {
     expect(formatBytes(null), '');
     expect(fileIconFor('image/png', 'a.png'), NxI.image);
     expect(fileIconFor(null, 'report.PDF'), NxI.filePdf);
+  });
+
+  test('baht and payment labels', () {
+    expect(formatBaht(1234567.5), '฿1,234,567.50');
+    expect(formatBaht('99'), '฿99.00');
+    expect(formatBaht(null), '');
+    expect(paymentStatusLabel('paid'), 'ชำระแล้ว');
+    expect(paymentStatusLabel(null), 'ยังไม่ชำระ');
   });
 }

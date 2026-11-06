@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../screens/ai/ai_chat_screen.dart';
 import '../../screens/approvals/approvals_screen.dart';
+import '../../screens/commerce/commerce_home_screen.dart';
 import '../../screens/app_shell.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/calendar/calendar_home_screen.dart';
@@ -164,6 +165,10 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.approvals,
         builder: (_, _) => const ApprovalsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.commerce,
+        builder: (_, _) => const CommerceHomeScreen(),
       ),
       // Web-style URLs (`https://<host>/modules/...`) arriving via Android App Links /
       // iOS Universal Links — reuse the push-payload mapper.

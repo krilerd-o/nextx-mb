@@ -31,6 +31,8 @@ class MenuAccess {
   static const files = 'file-manager';
   static const profile = 'profile';
   static const pendingApprovals = 'pending-approvals';
+  static const storeOrders = 'mini-store-orders';
+  static const storeStock = 'mini-store-stock';
 
   static const crmKeys = [
     lead,
