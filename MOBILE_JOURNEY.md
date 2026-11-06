@@ -6,13 +6,23 @@
 
 ## Phase 1 — Onboarding & Authentication
 
+ลำดับ: **Welcome → เลือกเซิร์ฟเวอร์ → เข้าสู่ระบบ → เลือกธุรกิจ → เลือก Package → บทบาท → เมนูของคุณ → แอป**
+
 | หัวข้อ | สถานะ |
 |--------|--------|
-| Email/Password login | ใช้จริง (`POST /api/auth/login`) + แสดง/ซ่อนรหัสผ่าน |
-| OTP ทางอีเมล / SMS | ใช้จริง (`/api/auth/otp/email/*`, `/api/auth/otp/sms/*`) |
-| Forgot password | ใช้จริง |
-| LINE / Google Login | **รอ backend** — callback ของเว็บยัง redirect กลับหน้าเว็บเท่านั้น |
-| Hub / Getting Started | ใช้จริง |
+| เซิร์ฟเวอร์ | ใช้ได้ทุกเซิร์ฟเวอร์ MOAI NEXT — ตรวจ `GET /api/health` (`app: 'MOAI NEXT API'`, `signature: 'aisystem'`), จำเซิร์ฟเวอร์ล่าสุด, เปลี่ยนได้จากหน้า login / ตั้งค่า |
+| อีเมล/ชื่อผู้ใช้ + รหัสผ่าน | ใช้จริง (`POST /api/auth/login`) |
+| OTP อีเมล / SMS | ใช้จริง พร้อมยืนยันเชื่อมบัญชี (`needLinkConfirm` → `/api/auth/link/*`) |
+| LINE | WebView ในแอป ดัก `…/login?token=` จาก callback ของเว็บ (บัญชีต้องผูก LINE แล้ว) — แสดงปุ่มเมื่อ `/api/auth/line/check` มี `channel_id` |
+| Google | Google Sign-In แบบ native → `POST /api/auth/google/one-tap` (+ merge บัญชี) — ต้องตั้งค่า OAuth client ใน GCP (ดู PUSH_AND_RELEASE.md) |
+| สมัครสมาชิก | มีรหัสเชิญ/ซีเรียล หรือสมัครรออนุมัติ (`POST /api/auth/register`) |
+| ลืมรหัสผ่าน | ใช้จริง |
+| ล็อกอินด้วยรหัสธุรกิจ | **ไม่ใส่โดยตั้งใจ** (`/api/auth/access` เข้าเป็นเจ้าของธุรกิจได้โดยไม่มีรหัสผ่าน) |
+| ธุรกิจ | กรองยกเลิก/sandbox เหมือนเว็บ, เลือกอัตโนมัติถ้ามีธุรกิจเดียว |
+| Package | `GET /api/businesses/:id/packages` — เลือกอัตโนมัติ (ล่าสุด → ค่าเริ่มต้นผู้ใช้ → ค่าเริ่มต้นธุรกิจ → มีอันเดียว), ตั้งค่าเริ่มต้นได้, ส่ง `X-Package-Code` ทุก request, เมนูจาก `/api/me/menus?package=` |
+| บทบาท | 9 บทบาท (ขาย, บริการ, ช่าง, การตลาด, ร้านค้าออนไลน์, บัญชี, HR, ผู้บริหาร, ทั่วไป) เลือกได้หลายข้อ |
+| เมนูล่าง | แนะนำจากบทบาท ∩ สิทธิ์ ปรับเอง/เรียงลำดับได้ (สูงสุด 4 + แท็บ "เมนู") เก็บแยกตามเซิร์ฟเวอร์+ผู้ใช้ในเครื่อง |
+| เซสชันหมดอายุ | แจ้ง "เซสชันหมดอายุ" บนหน้า login |
 
 ## Phase 2 — Dashboard, Search, Notifications
 

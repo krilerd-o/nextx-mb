@@ -4,10 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_config.dart';
+import '../core/server_profile.dart';
+import '../core/shell_tabs.dart';
 import '../core/app_version.dart';
 import '../core/navigation/app_routes.dart';
 import '../core/nx_breakpoint.dart';
-import '../services/api_client.dart';
 import '../widgets/nx_app_header.dart';
 import '../widgets/nx_app_logo.dart';
 import '../widgets/nx_surface_card.dart';
@@ -31,9 +32,9 @@ class SettingsScreen extends StatelessWidget {
     final config = context.watch<AppConfig>();
 
     return Scaffold(
-      appBar: const NxAppHeader.hub(),
+      appBar: const NxAppHeader(title: 'ตั้งค่า'),
       body: ListView(
-        padding: NxBreakpoint.of(context).scrollPadding(context, inShell: true),
+        padding: NxBreakpoint.of(context).scrollPadding(context),
         children: [
           Text(
             'About',
@@ -50,32 +51,59 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            'API',
+            'พื้นที่ทำงาน',
             style: theme.textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
           NxSurfaceCard(
-            onTap: canEditApiUrl ? () => _showEditApiUrlDialog(context, config) : null,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(NxI.buildings, color: colorScheme.primary),
+                  title: Text(config.session.businessName ?? 'ธุรกิจ'),
+                  subtitle: const Text('สลับธุรกิจ'),
+                  trailing: const Icon(NxI.caretRight),
+                  onTap: () => config.clearBusiness(),
+                ),
+                ListTile(
+                  leading: Icon(NxI.package, color: colorScheme.primary),
+                  title: Text('Package: ${(config.session.packageCode ?? '').isEmpty ? '—' : config.session.packageCode}'),
+                  subtitle: const Text('สลับ Package (เมนูเปลี่ยนตาม Package)'),
+                  trailing: const Icon(NxI.caretRight),
+                  onTap: () => config.clearPackage(),
+                ),
+                ListTile(
+                  leading: Icon(NxI.squaresFour, color: colorScheme.primary),
+                  title: const Text('ปรับแต่งเมนูล่าง'),
+                  subtitle: const Text('เลือกและเรียงแท็บที่ต้องการ'),
+                  trailing: const Icon(NxI.caretRight),
+                  onTap: () => context.push(AppRoutes.tabEditor),
+                ),
+                ListTile(
+                  leading: Icon(NxI.users, color: colorScheme.primary),
+                  title: const Text('บทบาทของฉัน'),
+                  subtitle: Text(roleSummary(config.shellConfig?.roles ?? const [])),
+                  trailing: const Icon(NxI.caretRight),
+                  onTap: () => context.push(AppRoutes.roleEditor),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'เซิร์ฟเวอร์',
+            style: theme.textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          NxSurfaceCard(
+            onTap: () => _changeServer(context, config),
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: ListTile(
-              leading: Icon(NxI.link, color: colorScheme.primary),
-              title: const Text('Base URL'),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(config.apiBaseUrl, style: theme.textTheme.bodySmall),
-                  const SizedBox(height: 2),
-                  Text(
-                    'ค่าเริ่มต้นคือเซิร์ฟเวอร์เว็บ MOAINEXT',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-              trailing: canEditApiUrl ? const Icon(NxI.pencilSimple) : null,
+              leading: Icon(NxI.globe, color: colorScheme.primary),
+              title: Text(serverLabel(config.apiBaseUrl)),
+              subtitle: const Text('ระบบ MOAI NEXT ที่เชื่อมต่ออยู่ · แตะเพื่อเปลี่ยน'),
+              trailing: const Icon(NxI.caretRight),
             ),
           ),
           const SizedBox(height: 20),
@@ -177,35 +205,21 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
-  static Future<void> _showEditApiUrlDialog(BuildContext context, AppConfig config) async {
-    final controller = TextEditingController(text: config.apiBaseUrl);
-    final result = await showDialog<String>(
+  /// Switching servers signs out (sessions belong to one server).
+  static Future<void> _changeServer(BuildContext context, AppConfig config) async {
+    final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('API Base URL'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: kDefaultApiBaseUrl,
-          ),
-          autofocus: true,
-          keyboardType: TextInputType.url,
-          onSubmitted: (_) => Navigator.pop(ctx, controller.text.trim()),
-        ),
+        title: const Text('เปลี่ยนเซิร์ฟเวอร์?'),
+        content: const Text('ต้องออกจากระบบก่อน แล้วเลือกเซิร์ฟเวอร์และเข้าสู่ระบบใหม่'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Save'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ออกและเปลี่ยน')),
         ],
       ),
     );
-    if (result != null && result.isNotEmpty) {
-      await config.setApiBaseUrl(result);
-    }
+    if (ok != true) return;
+    await config.logout();
+    await config.resetServerChoice();
   }
 }

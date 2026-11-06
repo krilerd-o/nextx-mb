@@ -31,6 +31,15 @@ import '../app_alice.dart';
 import '../app_config.dart';
 import '../push_navigation.dart';
 import 'app_routes.dart';
+import 'onboarding_redirect.dart';
+import '../shell_tabs.dart';
+import '../../screens/auth/server_screen.dart';
+import '../../screens/auth/welcome_screen.dart';
+import '../../screens/hr/hr_home_screen.dart';
+import '../../screens/hub/package_picker_screen.dart';
+import '../../screens/onboarding/role_setup_screen.dart';
+import '../../screens/onboarding/tab_setup_screen.dart';
+import '../../screens/settings_screen.dart';
 import 'notification_deep_link.dart';
 import 'route_access.dart';
 
@@ -48,25 +57,19 @@ GoRouter createAppRouter(AppConfig config) {
               state.uri.fragment.endsWith('debug/fields'))) {
         return null;
       }
-      if (!config.isReady) {
-        return loc == AppRoutes.splash ? null : AppRoutes.splash;
+      final step = onboardingRedirect(
+        loc: loc,
+        ready: config.isReady,
+        loggedIn: config.isLoggedIn,
+        serverConfirmed: config.serverConfirmed,
+        hasBusiness: config.hasBusinessContext,
+        hasPackage: config.hasPackage,
+        roleSetupDone: config.roleSetupDone,
+      );
+      if (step != null) return step;
+      if (!config.isLoggedIn || !config.hasBusinessContext || !config.hasPackage || !config.roleSetupDone) {
+        return null; // still in the sign-in / setup flow
       }
-      if (!config.isLoggedIn) {
-        return loc == AppRoutes.login ? null : AppRoutes.login;
-      }
-      if (!config.hasBusinessContext) {
-        return loc == AppRoutes.hub ? null : AppRoutes.hub;
-      }
-      if (!config.gettingStartedDone) {
-        return loc == AppRoutes.gettingStarted ? null : AppRoutes.gettingStarted;
-      }
-      const gated = [
-        AppRoutes.splash,
-        AppRoutes.login,
-        AppRoutes.hub,
-        AppRoutes.gettingStarted,
-      ];
-      if (gated.contains(loc)) return AppRoutes.mainShell;
       final pending = PushNavigation.instance.take();
       if (pending != null && pending.isNotEmpty && pending != loc) {
         return accessRedirectFor(config.session, pending) ?? pending;
@@ -82,6 +85,42 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.login,
         builder: (_, _) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.welcome,
+        builder: (_, _) => const WelcomeScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.server,
+        builder: (_, _) => const ServerScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.package,
+        builder: (_, _) => const PackagePickerScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.roleSetup,
+        builder: (_, _) => const RoleSetupScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.tabSetup,
+        builder: (_, state) => TabSetupScreen(initial: state.extra is ShellTabsConfig ? state.extra as ShellTabsConfig : null),
+      ),
+      GoRoute(
+        path: AppRoutes.tabEditor,
+        builder: (_, _) => const TabSetupScreen(fromSettings: true),
+      ),
+      GoRoute(
+        path: AppRoutes.roleEditor,
+        builder: (_, _) => const RoleSetupScreen(fromSettings: true),
+      ),
+      GoRoute(
+        path: AppRoutes.settings,
+        builder: (_, _) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.hrHome,
+        builder: (_, _) => const HrHomeScreen(standalone: true),
       ),
       GoRoute(
         path: AppRoutes.fieldGallery,

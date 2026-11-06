@@ -13,10 +13,19 @@ import '../../widgets/section_header.dart';
 import '../../widgets/nx_icons.dart';
 
 class HrHomeScreen extends StatelessWidget {
-  const HrHomeScreen({super.key});
+  const HrHomeScreen({super.key, this.standalone = false});
+
+  /// Opened from the "เมนู" tab (own page with back button) vs. as a bottom tab.
+  final bool standalone;
 
   @override
   Widget build(BuildContext context) {
+    if (standalone) {
+      return const Scaffold(
+        appBar: NxAppHeader(title: 'HR'),
+        body: _HrShortcuts(),
+      );
+    }
     return const Column(
       children: [
         NxAppHeader.hub(),

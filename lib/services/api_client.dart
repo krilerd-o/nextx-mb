@@ -103,14 +103,19 @@ class ApiClient {
           if (bid != null && bid.isNotEmpty) {
             options.headers['X-Business-Id'] = bid;
           }
+          // NEXTX menu/permission checks read the package from this header (like the web).
+          final pkg = _packageCode;
+          if (pkg != null && pkg.isNotEmpty) {
+            options.headers['X-Package-Code'] = pkg;
+          }
           handler.next(options);
         },
         onError: (err, handler) {
           final code = err.response?.statusCode;
           final path = err.requestOptions.path;
-          final isAuthCall = path.contains('/api/auth/login') ||
-              path.contains('/api/auth/register') ||
-              path.contains('/api/auth/otp/');
+          // Any /api/auth/* call (login, OTP, link, Google, register) may return 401
+          // for bad credentials — that must not log the current session out.
+          final isAuthCall = path.contains('/api/auth/');
           if (code == 401 && !isAuthCall) {
             _onUnauthorized?.call();
           }
@@ -137,6 +142,7 @@ class ApiClient {
   VoidCallback? _onUnauthorized;
   String? _accessToken;
   String? _businessId;
+  String? _packageCode;
 
   void setOnUnauthorized(VoidCallback? cb) => _onUnauthorized = cb;
 
@@ -149,16 +155,22 @@ class ApiClient {
     String? accessToken,
     String? userId,
     String? businessId,
+    String? packageCode,
   }) {
     final trimmed = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     _dio.options.baseUrl = resolveApiBaseUrl(trimmed);
     _accessToken = accessToken;
     _businessId = businessId;
+    _packageCode = packageCode;
   }
 
   String get baseUrl => _dio.options.baseUrl;
   String? get accessToken => _accessToken;
   String? get businessId => _businessId;
+  String? get packageCode => _packageCode;
+
+  /// Entry URL for LINE login, opened in an in-app WebView (see LineLoginScreen).
+  String get lineLoginUrl => '${_dio.options.baseUrl.replaceAll(RegExp(r'/+$'), '')}/api/auth/line';
 
   Future<Map<String, dynamic>> _send(
     String method,
@@ -269,6 +281,61 @@ class ApiClient {
       'email': email,
       'code': code,
       'remember': true,
+    }));
+  }
+
+  /// `{channel_id|null, redirect_uri}` — LINE login is configured when channel_id is set.
+  Future<Map<String, dynamic>> getLineCheck() async {
+    return _dataMap(await _send('GET', '/api/auth/line/check'));
+  }
+
+  /// `{client_id, enabled, sign_in_ready, ...}` — Google sign-in availability.
+  Future<Map<String, dynamic>> getGoogleOneTapConfig() async {
+    return _dataMap(await _send('GET', '/api/auth/google/one-tap-config'));
+  }
+
+  /// Google ID token → `{token,user,business}` or `{need_merge, merge_intent}`.
+  Future<Map<String, dynamic>> googleOneTap(String idToken) async {
+    return _dataMap(await _send('POST', '/api/auth/google/one-tap', data: {'credential': idToken}));
+  }
+
+  Future<Map<String, dynamic>> googleMergePreview(String intent) async {
+    return _dataMap(await _send('GET', '/api/auth/google/merge/preview', query: {'intent_token': intent}));
+  }
+
+  Future<Map<String, dynamic>> googleMergeConfirm(String intent) async {
+    return _dataMap(await _send('POST', '/api/auth/google/merge/confirm', data: {'intent_token': intent}));
+  }
+
+  /// Sign-in method linking (OTP etc. returns `needLinkConfirm` + `intentToken`).
+  Future<Map<String, dynamic>> linkPreview(String intent) async {
+    return _dataMap(await _send('GET', '/api/auth/link/preview', query: {'intent_token': intent}));
+  }
+
+  Future<Map<String, dynamic>> linkConfirm(String intent) async {
+    return _dataMap(await _send('POST', '/api/auth/link/confirm', data: {'intent_token': intent, 'remember': true}));
+  }
+
+  /// `signupType`: `with_key` (serial key) or `without_key` (needs admin approval).
+  Future<Map<String, dynamic>> register({
+    required String fullName,
+    required String email,
+    required String password,
+    required String signupType,
+    String? serialKey,
+    String? businessName,
+    String? businessCode,
+    String? inviteToken,
+  }) async {
+    return _dataMap(await _send('POST', '/api/auth/register', data: {
+      'fullName': fullName,
+      'email': email,
+      'password': password,
+      'signup_type': signupType,
+      if (serialKey != null && serialKey.isNotEmpty) 'serialKey': serialKey,
+      if (businessName != null && businessName.isNotEmpty) 'businessName': businessName,
+      if (businessCode != null && businessCode.isNotEmpty) 'businessCode': businessCode,
+      if (inviteToken != null && inviteToken.isNotEmpty) 'invite_token': inviteToken,
     }));
   }
 
@@ -426,6 +493,19 @@ class ApiClient {
       'limit': '$limit',
     });
     return extractMapList(env['data']);
+  }
+
+  /// Enabled packages of [businessId] (`{packages:[{id, code, name, ..., enabled}]}`).
+  Future<List<Map<String, dynamic>>> getPackagesFor(String businessId) async {
+    final env = await _send('GET', '/api/businesses/$businessId/packages');
+    return extractMapList(env['data']);
+  }
+
+  Future<void> setDefaultPackage({required String packageId, required String businessId}) async {
+    await _send('PUT', '/api/me/default-package', data: {
+      'package_id': int.tryParse(packageId) ?? packageId,
+      'business_id': int.tryParse(businessId) ?? businessId,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getBusinessPackages() async {

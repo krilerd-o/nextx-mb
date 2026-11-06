@@ -12,7 +12,11 @@ import '../services/device_push_service.dart';
 import '../services/offline_queue.dart';
 import '../services/realtime_service.dart';
 import '../services/unread_service.dart';
+import 'auth_errors.dart';
+import 'menu_access.dart';
+import 'server_profile.dart';
 import 'session_state.dart';
+import 'shell_tabs.dart';
 
 const String _keyApiBaseUrl = 'api_base_url';
 const String _keyThemeMode = 'theme_mode';
@@ -29,6 +33,10 @@ const String _keyAccentIndex = 'accent_index';
 const String _keyUiLocale = 'ui_locale';
 const String _keyDateFormat = 'date_format_pattern';
 const String _keyProfileAvatarB64 = 'profile_avatar_base64';
+const String _keyServerConfirmed = 'server_confirmed';
+const String _keyRecentServers = 'recent_servers';
+const String _keyPackageId = 'session_package_id';
+const String _keySessionExpired = 'session_expired_notice';
 
 const _secureTokenKey = 'access_token';
 const int _maxAvatarBytes = 400000;
@@ -61,6 +69,13 @@ class AppConfig extends ChangeNotifier {
   String _dateFormatPattern = 'dd/MM/yyyy HH:mm';
   String? _profileAvatarBase64;
   bool _loggingOut = false;
+  bool _serverConfirmed = false;
+  List<String> _recentServers = [];
+  String? _packageId;
+  ShellTabsConfig? _shell;
+  bool _sessionExpiredNotice = false;
+  bool _manualBusinessPick = false;
+  bool _manualPackagePick = false;
 
   String get apiBaseUrl => _apiBaseUrl;
   ThemeMode get themeMode => _themeMode;
@@ -77,6 +92,43 @@ class AppConfig extends ChangeNotifier {
   String get dateFormatPattern => _dateFormatPattern;
   String? get profileAvatarBase64 => _profileAvatarBase64;
 
+  /// The user picked/confirmed a NEXTX server (first-run step).
+  bool get serverConfirmed => _serverConfirmed;
+  List<String> get recentServers => List.unmodifiable(_recentServers);
+
+  /// Package chosen for the current business (`''` = business has no packages).
+  bool get hasPackage => _session.packageCode != null;
+  String? get packageId => _packageId;
+
+  /// User went back on purpose → show the list instead of auto-selecting.
+  bool get manualBusinessPick => _manualBusinessPick;
+  bool get manualPackagePick => _manualPackagePick;
+
+  /// Roles + bottom tabs for this user on this server (null = not set up yet).
+  ShellTabsConfig? get shellConfig => _shell;
+  bool get roleSetupDone => _shell != null;
+
+  /// Set when a 401 logged the user out, so the login screen can explain why.
+  bool get sessionExpiredNotice => _sessionExpiredNotice;
+  void clearSessionExpiredNotice() {
+    if (!_sessionExpiredNotice) return;
+    _sessionExpiredNotice = false;
+    SharedPreferences.getInstance().then((p) => p.remove(_keySessionExpired));
+    notifyListeners();
+  }
+
+  /// `host_userId` — keeps per-user settings apart across servers and accounts.
+  String get _userScope => '${serverLabel(_apiBaseUrl)}_${_session.userId ?? ''}';
+  String get _shellKey => 'shell_v1_$_userScope';
+  String _lastPackageKey(String businessId) => 'last_package_${serverLabel(_apiBaseUrl)}_${_session.userId ?? ''}_$businessId';
+
+  /// Bottom tabs for the current permissions (fixed "เมนู" tab not included).
+  List<String> get shellTabs => resolveShellTabs(
+        roles: _shell?.roles ?? const [],
+        custom: _shell?.tabs,
+        allowed: (keys) => MenuAccess.any(_session, keys),
+      );
+
   @visibleForTesting
   void debugOverrideSession(SessionState session) {
     _session = session;
@@ -89,6 +141,7 @@ class AppConfig extends ChangeNotifier {
       accessToken: _session.accessToken,
       userId: _session.userId,
       businessId: _session.businessId,
+      packageCode: _session.packageCode,
     );
     return _api;
   }
@@ -97,7 +150,8 @@ class AppConfig extends ChangeNotifier {
     if (!_ready) return 'splash';
     if (!_session.isLoggedIn) return 'login';
     if (!_session.hasBusinessContext) return 'hub';
-    if (!_gettingStartedDone) return 'gettingStarted';
+    if (!hasPackage) return 'package';
+    if (!roleSetupDone) return 'roleSetup';
     return 'main';
   }
 
@@ -125,6 +179,9 @@ class AppConfig extends ChangeNotifier {
     _accentIndex = rawAccent < 0 ? 0 : (rawAccent > maxA ? maxA : rawAccent);
     _uiLocaleCode = prefs.getString(_keyUiLocale) ?? 'th';
     _dateFormatPattern = prefs.getString(_keyDateFormat) ?? 'dd/MM/yyyy HH:mm';
+    _recentServers = prefs.getStringList(_keyRecentServers) ?? const [];
+    _sessionExpiredNotice = prefs.getBool(_keySessionExpired) ?? false;
+    _packageId = prefs.getString(_keyPackageId);
     var token = await _secure.read(key: _secureTokenKey);
     if (token == 'demo-token') {
       token = null;
@@ -159,7 +216,11 @@ class AppConfig extends ChangeNotifier {
       accessToken: token,
       userId: uid,
       businessId: bid,
+      packageCode: pkg,
     );
+    // Existing installs were already on a server: don't make them pick again.
+    _serverConfirmed = (prefs.getBool(_keyServerConfirmed) ?? false) || (token != null && token.isNotEmpty);
+    await _loadUserScoped(prefs);
     _ready = true;
     notifyListeners();
     if (_session.isLoggedIn) {
@@ -183,7 +244,61 @@ class AppConfig extends ChangeNotifier {
 
   void _handleUnauthorized() {
     if (_loggingOut || !_session.isLoggedIn) return;
+    _sessionExpiredNotice = true;
+    SharedPreferences.getInstance().then((p) => p.setBool(_keySessionExpired, true));
     logout();
+  }
+
+  Future<void> _loadUserScoped([SharedPreferences? p]) async {
+    final prefs = p ?? await SharedPreferences.getInstance();
+    final uid = _session.userId;
+    if (uid == null || uid.isEmpty) {
+      _shell = null;
+      return;
+    }
+    _shell = ShellTabsConfig.decode(prefs.getString(_shellKey));
+    // Users who finished the old "getting started" keep a working default bar.
+    if (_shell == null && _gettingStartedDone) {
+      _shell = const ShellTabsConfig(roles: ['general']);
+      await prefs.setString(_shellKey, _shell!.encode());
+    }
+  }
+
+  /// Saves roles/tabs for this user on this server.
+  Future<void> saveShellConfig(ShellTabsConfig config) async {
+    _shell = config;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_shellKey, config.encode());
+    notifyListeners();
+  }
+
+  /// Picks (and verifies) the NEXTX server. Switching servers signs out first.
+  Future<void> selectServer(String url) async {
+    final normalized = normalizeServerUrl(url);
+    if (normalized.isEmpty) return;
+    final changed = normalized != _apiBaseUrl;
+    if (changed && _session.isLoggedIn) await logout();
+    final prefs = await SharedPreferences.getInstance();
+    _recentServers = pushRecentServer(_recentServers, normalized);
+    await prefs.setStringList(_keyRecentServers, _recentServers);
+    await prefs.setBool(_keyServerConfirmed, true);
+    _serverConfirmed = true;
+    await setApiBaseUrl(normalized);
+  }
+
+  /// Back to the server step (from the login screen).
+  Future<void> resetServerChoice() async {
+    _serverConfirmed = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyServerConfirmed, false);
+    notifyListeners();
+  }
+
+  Future<void> forgetRecentServer(String url) async {
+    _recentServers = _recentServers.where((e) => e != url).toList();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_keyRecentServers, _recentServers);
+    notifyListeners();
   }
 
   void _connectRealtime() {
@@ -208,6 +323,7 @@ class AppConfig extends ChangeNotifier {
       accessToken: _session.accessToken,
       userId: _session.userId,
       businessId: _session.businessId,
+      packageCode: _session.packageCode,
     );
     notifyListeners();
   }
@@ -316,9 +432,7 @@ class AppConfig extends ChangeNotifier {
   Future<void> loginWithEmailOtp({required String email, required String code}) async {
     _api.attachSession(baseUrl: _apiBaseUrl);
     final data = await _api.verifyEmailOtp(email: email, code: code);
-    if (data['needLinkConfirm'] == true) {
-      throw ApiException(409, 'บัญชีนี้ต้องยืนยันการเชื่อมวิธีเข้าสู่ระบบบนเว็บก่อน แล้วจึงใช้ OTP บนมือถือได้');
-    }
+    _throwIfLinkNeeded(data);
     await _completeLogin(data, fallbackEmail: email);
   }
 
@@ -331,10 +445,71 @@ class AppConfig extends ChangeNotifier {
   Future<void> loginWithSmsOtp({required String phone, required String code}) async {
     _api.attachSession(baseUrl: _apiBaseUrl);
     final data = await _api.verifySmsOtp(phone: phone, code: code);
+    _throwIfLinkNeeded(data);
+    await _completeLogin(data, fallbackEmail: '');
+  }
+
+  void _throwIfLinkNeeded(Map<String, dynamic> data) {
     if (data['needLinkConfirm'] == true) {
-      throw ApiException(409, 'บัญชีนี้ต้องยืนยันการเชื่อมวิธีเข้าสู่ระบบบนเว็บก่อน แล้วจึงใช้ OTP บนมือถือได้');
+      throw LinkConfirmRequired(data['intentToken']?.toString() ?? '', method: data['method']?.toString());
+    }
+  }
+
+  /// Confirms linking a new sign-in method to an existing account.
+  Future<void> confirmLink(String intentToken) async {
+    _api.attachSession(baseUrl: _apiBaseUrl);
+    final data = await _api.linkConfirm(intentToken);
+    await _completeLogin(data, fallbackEmail: '');
+  }
+
+  /// Google ID token (from native Google Sign-In) → NEXTX session.
+  Future<void> loginWithGoogleIdToken(String idToken) async {
+    _api.attachSession(baseUrl: _apiBaseUrl);
+    final data = await _api.googleOneTap(idToken);
+    if (data['need_merge'] == true) {
+      throw GoogleMergeRequired(data['merge_intent']?.toString() ?? '');
     }
     await _completeLogin(data, fallbackEmail: '');
+  }
+
+  Future<void> confirmGoogleMerge(String intentToken) async {
+    _api.attachSession(baseUrl: _apiBaseUrl);
+    final data = await _api.googleMergeConfirm(intentToken);
+    await _completeLogin(data, fallbackEmail: '');
+  }
+
+  /// JWT captured from the LINE login redirect (`/login?token=`).
+  Future<void> loginWithToken(String token) async {
+    _api.attachSession(baseUrl: _apiBaseUrl, accessToken: token);
+    final me = await _api.getMe();
+    await _completeLogin({
+      'token': token,
+      'user': me['user'],
+      'business': me['business'],
+    }, fallbackEmail: '');
+  }
+
+  /// Register; returns true when the account still needs admin approval.
+  Future<bool> registerAccount({
+    required String fullName,
+    required String email,
+    required String password,
+    String? serialKey,
+    String? businessName,
+  }) async {
+    _api.attachSession(baseUrl: _apiBaseUrl);
+    final withKey = serialKey != null && serialKey.trim().isNotEmpty;
+    final data = await _api.register(
+      fullName: fullName,
+      email: email,
+      password: password,
+      signupType: withKey ? 'with_key' : 'without_key',
+      serialKey: serialKey?.trim(),
+      businessName: businessName,
+    );
+    if (data['pending'] == true || data['token'] == null) return true;
+    await _completeLogin(data, fallbackEmail: email);
+    return false;
   }
 
   /// Stores the session returned by any NEXTX login endpoint (`{token, user, business}`).
@@ -361,6 +536,13 @@ class AppConfig extends ChangeNotifier {
       await prefs.remove(_keyBusinessId);
       await prefs.remove(_keyBusinessName);
     }
+    // Package is chosen next (picker auto-selects the default / only one).
+    await prefs.remove(_keyPackageCode);
+    await prefs.remove(_keyPackageId);
+    await prefs.remove(_keyMenuKeys);
+    _packageId = null;
+    _sessionExpiredNotice = false;
+    await prefs.remove(_keySessionExpired);
     _session = SessionState(
       accessToken: token,
       userId: uid,
@@ -375,6 +557,7 @@ class AppConfig extends ChangeNotifier {
       userId: uid,
       businessId: bid,
     );
+    await _loadUserScoped(prefs);
     notifyListeners();
     await refreshSession();
     _connectRealtime();
@@ -395,6 +578,7 @@ class AppConfig extends ChangeNotifier {
       accessToken: _session.accessToken,
       userId: _session.userId,
       businessId: _session.businessId,
+      packageCode: _session.packageCode,
     );
     final me = await _api.getMe();
     final user = asStringKeyedMap(me['user']);
@@ -404,20 +588,20 @@ class AppConfig extends ChangeNotifier {
     final bid = business?['id']?.toString() ?? me['businessId']?.toString() ?? _session.businessId;
     final bname = business?['business_name']?.toString() ?? _session.businessName;
     List<String>? menus;
-    final allowed = me['allowed_menu_keys'];
-    if (allowed is List) {
-      menus = allowed.map((e) => e.toString()).toList();
-    }
     final superadmin = me['is_superadmin'] == true ||
         user?['is_superadmin'] == true ||
         user?['is_superadmin'] == 1;
-    final pkg = _session.packageCode ??
-        business?['default_package_code']?.toString();
-    if (menus == null && pkg != null && pkg.isNotEmpty && bid != null) {
+    // Package is picked explicitly (PackagePickerScreen); null = not chosen yet.
+    final pkg = _session.packageCode;
+    // Same as the web: menus = package ∩ role permissions (GET /api/me/menus?package=).
+    if (pkg != null && pkg.isNotEmpty && bid != null) {
       try {
-        final keys = await _api.getMenuKeys(packageCode: pkg);
-        if (keys.isNotEmpty) menus = keys;
+        menus = await _api.getMenuKeys(packageCode: pkg);
       } catch (_) {}
+    }
+    final allowed = me['allowed_menu_keys'];
+    if (menus == null && allowed is List) {
+      menus = allowed.map((e) => e.toString()).toList();
     }
     final prefs = await SharedPreferences.getInstance();
     if (uid != null) await prefs.setString(_keyUserId, uid);
@@ -453,19 +637,31 @@ class AppConfig extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyBusinessId, businessId);
     await prefs.setString(_keyBusinessName, businessName);
+    // A different business means a different package list → pick again.
+    _manualBusinessPick = false;
+    await prefs.remove(_keyPackageId);
     if (packageCode != null) {
       await prefs.setString(_keyPackageCode, packageCode);
+    } else {
+      await prefs.remove(_keyPackageCode);
     }
-    _session = _session.copyWith(
+    _packageId = null;
+    _session = SessionState(
+      accessToken: _session.accessToken,
+      userId: _session.userId,
       businessId: businessId,
       businessName: businessName,
-      packageCode: packageCode ?? _session.packageCode,
+      email: _session.email,
+      displayName: _session.displayName,
+      packageCode: packageCode,
+      isSuperadmin: _session.isSuperadmin,
     );
     _api.attachSession(
       baseUrl: _apiBaseUrl,
       accessToken: _session.accessToken,
       userId: _session.userId,
       businessId: businessId,
+      packageCode: packageCode,
     );
     notifyListeners();
     try {
@@ -475,6 +671,75 @@ class AppConfig extends ChangeNotifier {
       await apiClient.setDefaultBusiness(businessId);
     } catch (_) {}
     _connectRealtime();
+  }
+
+  /// Last package this user used in [businessId] on this server.
+  Future<String?> lastPackageFor(String businessId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lastPackageKey(businessId));
+  }
+
+  /// Enters [code] (empty = business without packages). Reloads menus for it.
+  Future<void> selectPackage({required String code, String? packageId, bool setDefault = false}) async {
+    final bid = _session.businessId;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyPackageCode, code);
+    if (packageId != null) {
+      await prefs.setString(_keyPackageId, packageId);
+    } else {
+      await prefs.remove(_keyPackageId);
+    }
+    if (bid != null && code.isNotEmpty) await prefs.setString(_lastPackageKey(bid), code);
+    _packageId = packageId;
+    _manualPackagePick = false;
+    _session = _session.copyWith(packageCode: code, menusLoaded: false, clearMenus: true);
+    notifyListeners();
+    try {
+      await refreshSession();
+    } catch (_) {}
+    if (setDefault && packageId != null && bid != null) {
+      try {
+        await apiClient.setDefaultPackage(packageId: packageId, businessId: bid);
+      } catch (_) {}
+    }
+  }
+
+  /// Back to the package picker for the current business (switch package).
+  Future<void> clearPackage() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyPackageCode);
+    await prefs.remove(_keyPackageId);
+    _packageId = null;
+    _manualPackagePick = true;
+    _session = SessionState(
+      accessToken: _session.accessToken,
+      userId: _session.userId,
+      businessId: _session.businessId,
+      businessName: _session.businessName,
+      email: _session.email,
+      displayName: _session.displayName,
+      isSuperadmin: _session.isSuperadmin,
+      businessRole: _session.businessRole,
+    );
+    notifyListeners();
+  }
+
+  /// Back to the business list (switch business).
+  Future<void> clearBusiness() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final k in [_keyBusinessId, _keyBusinessName, _keyPackageCode, _keyPackageId, _keyMenuKeys]) {
+      await prefs.remove(k);
+    }
+    _packageId = null;
+    _manualBusinessPick = true;
+    _session = SessionState(
+      accessToken: _session.accessToken,
+      userId: _session.userId,
+      email: _session.email,
+      displayName: _session.displayName,
+      isSuperadmin: _session.isSuperadmin,
+    );
+    notifyListeners();
   }
 
   Future<void> completeGettingStarted() async {
@@ -502,7 +767,10 @@ class AppConfig extends ChangeNotifier {
     await prefs.remove(_keyEmail);
     await prefs.remove(_keyDisplayName);
     await prefs.remove(_keyPackageCode);
+    await prefs.remove(_keyPackageId);
     await prefs.remove(_keyMenuKeys);
+    _packageId = null;
+    _shell = null;
     _session = const SessionState();
     _api.attachSession(baseUrl: _apiBaseUrl);
     _loggingOut = false;
