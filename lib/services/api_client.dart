@@ -631,8 +631,30 @@ class ApiClient {
   }
 
   Future<List<Map<String, dynamic>>> getNotifications({int limit = 50}) async {
-    final env = await _send('GET', '/api/notifications', query: {'limit': '$limit'});
-    return extractMapList(env['data']);
+    return (await getNotificationsPage(limit: limit)).items;
+  }
+
+  /// Cursor-paged notifications. [category] matches NEXTX categories
+  /// (work, case, calendar, chat, sales, quotation, job, mail, …).
+  Future<({List<Map<String, dynamic>> items, String? nextCursor})> getNotificationsPage({
+    int limit = 30,
+    String? cursor,
+    String? category,
+    bool unreadOnly = false,
+  }) async {
+    final env = await _send('GET', '/api/notifications', query: {
+      'limit': '$limit',
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      if (category != null && category != 'all') 'category': category,
+      if (unreadOnly) 'unread': '1',
+    });
+    final data = env['data'];
+    final next = data is Map ? data['next_cursor']?.toString() : null;
+    return (items: extractMapList(data), nextCursor: (next == null || next.isEmpty || next == 'null') ? null : next);
+  }
+
+  Future<void> deleteNotification(String id) async {
+    await _send('DELETE', '/api/notifications/$id');
   }
 
   Future<Map<String, dynamic>> getNotificationSummary() async {

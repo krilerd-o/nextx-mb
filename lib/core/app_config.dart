@@ -11,6 +11,7 @@ import '../services/api_client.dart';
 import '../services/device_push_service.dart';
 import '../services/offline_queue.dart';
 import '../services/realtime_service.dart';
+import '../services/unread_service.dart';
 import 'session_state.dart';
 
 const String _keyApiBaseUrl = 'api_base_url';
@@ -193,6 +194,7 @@ class AppConfig extends ChangeNotifier {
       token: token,
       businessId: _session.businessId,
     );
+    UnreadNotifications.instance.refresh(apiClient);
   }
 
   Future<void> setApiBaseUrl(String url) async {

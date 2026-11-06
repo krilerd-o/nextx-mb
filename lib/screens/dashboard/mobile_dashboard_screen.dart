@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../services/unread_service.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../services/api_client.dart';
@@ -54,16 +55,8 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
         pending = jobs.length;
       } catch (_) {}
       try {
-        final summary = await api.getNotificationSummary();
-        final list = extractMapList(summary);
-        for (final row in list) {
-          unread += (row['unread'] as num?)?.toInt() ??
-              (row['count'] as num?)?.toInt() ??
-              0;
-        }
-        if (list.isEmpty && summary['unread'] is num) {
-          unread = (summary['unread'] as num).toInt();
-        }
+        await UnreadNotifications.instance.refresh(api);
+        unread = UnreadNotifications.instance.count;
       } catch (_) {}
       if (!mounted) return;
       setState(() {
@@ -96,7 +89,6 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
     return Column(
       children: [
         NxAppHeader.hub(
-          unreadCount: _unread,
           actions: [
             IconButton(icon: const Icon(NxI.arrowCounterClockwise), tooltip: 'รีเฟรช', onPressed: _load),
           ],

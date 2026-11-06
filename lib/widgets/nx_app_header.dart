@@ -1,15 +1,16 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_config.dart';
 import '../core/entity_display.dart';
 import '../core/navigation/app_routes.dart';
-import '../services/api_client.dart';
 import 'nx_icons.dart';
 import 'nx_overlay_panel.dart';
+import '../services/unread_service.dart';
 
 class NxHeaderMenuItem {
   const NxHeaderMenuItem({
@@ -255,64 +256,25 @@ class _HubAvatar extends StatelessWidget {
   }
 }
 
-class _HubBell extends StatefulWidget {
+class _HubBell extends StatelessWidget {
   const _HubBell({this.unreadCount});
 
+  /// Explicit override (tests); otherwise the shared [UnreadNotifications] count.
   final int? unreadCount;
 
   @override
-  State<_HubBell> createState() => _HubBellState();
-}
-
-class _HubBellState extends State<_HubBell> {
-  int _unread = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _unread = widget.unreadCount ?? 0;
-    if (widget.unreadCount == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _HubBell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.unreadCount != null && widget.unreadCount != _unread) {
-      _unread = widget.unreadCount!;
-    }
-  }
-
-  Future<void> _load() async {
-    AppConfig? config;
-    try {
-      config = context.read<AppConfig>();
-    } catch (_) {
-      return;
-    }
-    if (!config.isLoggedIn) return;
-    try {
-      final summary = await config.apiClient.getNotificationSummary();
-      final list = extractMapList(summary);
-      var unread = 0;
-      for (final row in list) {
-        unread += (row['unread'] as num?)?.toInt() ?? (row['count'] as num?)?.toInt() ?? 0;
-      }
-      if (list.isEmpty && summary['unread'] is num) {
-        unread = (summary['unread'] as num).toInt();
-      }
-      if (mounted) setState(() => _unread = unread);
-    } catch (_) {}
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return _CircleBtn(
-      icon: NxI.bell,
-      tooltip: 'การแจ้งเตือน',
-      badgeCount: _unread,
-      onTap: () => GoRouter.maybeOf(context)?.push(AppRoutes.notifications),
+    return ListenableBuilder(
+      listenable: UnreadNotifications.instance,
+      builder: (context, _) => _CircleBtn(
+        icon: NxI.bell,
+        tooltip: 'การแจ้งเตือน',
+        badgeCount: unreadCount ?? UnreadNotifications.instance.count,
+        onTap: () async {
+          await GoRouter.maybeOf(context)?.push(AppRoutes.notifications);
+          await UnreadNotifications.instance.refreshIfBound();
+        },
+      ),
     );
   }
 }

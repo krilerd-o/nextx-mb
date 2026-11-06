@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'core/alice_debug_layer.dart';
 import 'core/app_config.dart';
+import 'services/unread_service.dart';
 import 'core/app_theme.dart';
 import 'core/navigation/app_router.dart';
 import 'widgets/nx_atmosphere.dart';
@@ -36,6 +37,7 @@ class _NextXMobileAppState extends State<NextXMobileApp> with WidgetsBindingObse
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       context.read<AppConfig>().flushOfflineQueue();
+      UnreadNotifications.instance.refreshIfBound();
     }
   }
 
