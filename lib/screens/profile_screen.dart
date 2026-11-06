@@ -12,6 +12,8 @@ import '../widgets/nx_app_header.dart';
 import '../widgets/nx_hero_cta.dart';
 import '../widgets/nx_surface_card.dart';
 import '../widgets/nx_icons.dart';
+import 'profile/my_signatures_screen.dart';
+import 'profile/phone_verify_screen.dart';
 import 'profile_edit_screen.dart';
 import 'settings_screen.dart';
 import '../core/nx_page_route.dart';
@@ -182,6 +184,20 @@ class ProfileScreen extends StatelessWidget {
           NxSurfaceCard(
             child: Column(
               children: [
+                ListTile(
+                  leading: const Icon(NxI.pencilSimple),
+                  title: const Text('ลายเซ็นของฉัน'),
+                  subtitle: const Text('ใช้บนใบเสนอราคาและเอกสาร (TH / EN)'),
+                  trailing: const Icon(NxI.caretRight),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MySignaturesScreen())),
+                ),
+                ListTile(
+                  leading: const Icon(NxI.phone),
+                  title: const Text('ยืนยันเบอร์มือถือ'),
+                  subtitle: const Text('ใช้เข้าสู่ระบบด้วย OTP SMS'),
+                  trailing: const Icon(NxI.caretRight),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneVerifyScreen())),
+                ),
                 ListTile(
                   leading: const Icon(NxI.password),
                   title: const Text('เปลี่ยนรหัสผ่าน'),

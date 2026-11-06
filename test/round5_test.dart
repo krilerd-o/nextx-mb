@@ -9,6 +9,9 @@ import 'package:nextx_mobile/core/error_reporting.dart';
 import 'package:nextx_mobile/core/invite_link.dart';
 import 'package:nextx_mobile/core/recent_accounts.dart';
 import 'package:nextx_mobile/screens/auth/register_screen.dart';
+import 'package:nextx_mobile/screens/dashboard/team_overview_card.dart';
+import 'package:nextx_mobile/screens/profile/phone_verify_screen.dart';
+import 'package:nextx_mobile/screens/workspace/smart_checklist_section.dart';
 import 'package:nextx_mobile/services/app_lock.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/core/shell_tabs.dart';
@@ -169,5 +172,68 @@ void main() {
     final call = adapter.calls.singleWhere((c) => c.path == '/api/auth/register');
     expect((call.data as Map)['invite_token'], 'inv-1');
     expect((call.data as Map)['signup_type'], 'with_key');
+  });
+
+  // ---- Round 5 D ----
+  test('sales / case dashboard figures', () {
+    expect(compactBaht(1250000), '฿1.3M');
+    expect(compactBaht(350000), '฿350k');
+    expect(compactBaht(900), '฿900');
+    final s = salesFigures({
+      'deal': {'openCount': 4, 'openAmount': 120000, 'wonCount': 2, 'wonAmount': 50000, 'winRate': 0.4, 'atRiskCount': 0},
+      'quotation': {'awaitingCount': 3, 'totalAmount': 80000},
+      'modules': ['deal', 'quotation'],
+    });
+    expect(s.map((f) => f.label), ['ดีลเปิดอยู่', 'ปิดได้', 'อัตราปิดได้', 'ใบเสนอรอตอบ']);
+    expect(s[2].value, '40%');
+    final onlyQuote = salesFigures({'deal': {}, 'quotation': {'awaitingCount': 1}, 'modules': ['quotation']});
+    expect(onlyQuote.single.label, 'ใบเสนอรอตอบ');
+    final c = caseFigures({'byStatus': [{'name': 'Open', 'value': 5}, {'name': 'Closed', 'value': '7'}]});
+    expect(c.first.value, '12');
+    expect(caseFigures({'byStatus': []}), isEmpty);
+  });
+
+  test('checklist progress ignores headers', () {
+    expect(checklistProgress([
+      {'item_kind': 'header', 'title': 'A'},
+      {'item_kind': 'item', 'status': 'done'},
+      {'item_kind': 'item', 'status': 'todo'},
+      {'status': 'done'},
+    ]), (2, 3));
+  });
+
+  testWidgets('phone verify: request then verify the code', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    final config = AppConfig();
+    await tester.runAsync(() async {
+      while (!config.isReady) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    config.debugOverrideSession(const SessionState(accessToken: 't', userId: '1', businessId: '1'));
+    final adapter = FakeNextxAdapter({
+      'POST /api/me/phone/otp/request': {'ref': 'AB12'},
+      'POST /api/me/phone/otp/verify': {'verified': true},
+    });
+    config.apiClient.debugSetHttpAdapter(adapter);
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: config, child: const MaterialApp(home: PhoneVerifyScreen())));
+    Future<void> settle() async {
+      await tester.pump(const Duration(milliseconds: 300));
+      for (var i = 0; i < 4; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+        await tester.pump();
+      }
+    }
+
+    await tester.enterText(find.byType(TextField).first, '0812345678');
+    await tester.tap(find.byType(NxHeroCta));
+    await settle();
+    expect(find.textContaining('AB12'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(1), '123456');
+    await tester.tap(find.byType(NxHeroCta));
+    await settle();
+    final verify = adapter.calls.singleWhere((c) => c.path == '/api/me/phone/otp/verify');
+    expect(verify.data, {'phone': '0812345678', 'code': '123456'});
   });
 }

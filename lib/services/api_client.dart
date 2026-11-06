@@ -688,6 +688,34 @@ class ApiClient {
     }));
   }
 
+  /// `GET /api/me/signatures` — TH/EN signature paths + public URLs.
+  Future<Map<String, dynamic>> getMySignatures() async => _dataMap(await _send('GET', '/api/me/signatures'));
+
+  /// `POST /api/uploads/signature` (PNG/JPEG ≤ 2 MB) → stored path `signatures/...`.
+  Future<String> uploadSignatureImage(List<int> bytes, String filename) async {
+    final form = FormData()..files.add(MapEntry('file', MultipartFile.fromBytes(bytes, filename: filename)));
+    final data = _dataMap(await _send('POST', '/api/uploads/signature', data: form));
+    final path = data['path']?.toString() ?? '';
+    if (path.isEmpty) throw ApiException(500, 'อัปโหลดลายเซ็นไม่สำเร็จ');
+    return path;
+  }
+
+  /// `PUT /api/me/signatures` — set a path or clear a slot.
+  Future<Map<String, dynamic>> saveMySignatures({String? th, String? en, bool clearTh = false, bool clearEn = false}) async =>
+      _dataMap(await _send('PUT', '/api/me/signatures', data: {
+        if (th != null) 'upload_signature_th': th,
+        if (en != null) 'upload_signature_en': en,
+        if (clearTh) 'clear_th': true,
+        if (clearEn) 'clear_en': true,
+      }));
+
+  /// `POST /api/me/phone/otp/request` — SMS code to bind/verify a mobile number.
+  Future<Map<String, dynamic>> requestPhoneBindOtp(String phone) async =>
+      _dataMap(await _send('POST', '/api/me/phone/otp/request', data: {'phone': phone}));
+
+  Future<Map<String, dynamic>> verifyPhoneBindOtp(String phone, String code) async =>
+      _dataMap(await _send('POST', '/api/me/phone/otp/verify', data: {'phone': phone, 'code': code}));
+
   Future<void> uploadActivityPhotos(String id, List<MultipartFile> files) async {
     final form = FormData();
     for (final f in files) {
@@ -749,6 +777,24 @@ class ApiClient {
   /// Soft-deletes a task (moved to the workspace trash on the server).
   Future<void> deleteBoardTask(String boardId, String taskId) async {
     await _send('DELETE', '/api/boards/$boardId/tasks/$taskId');
+  }
+
+  /// Smart checklist rows of a task (`{checklist, items, progress}` → items).
+  Future<List<Map<String, dynamic>>> getSmartChecklist(String boardId, String taskId) async {
+    final env = await _send('GET', '/api/boards/$boardId/items/task/$taskId/smart-checklist');
+    final data = env['data'];
+    return extractMapList(data is Map ? data['items'] : data);
+  }
+
+  Future<Map<String, dynamic>> addSmartChecklistItem(String boardId, String taskId, String title) async =>
+      _dataMap(await _send('POST', '/api/boards/$boardId/items/task/$taskId/smart-checklist/items',
+          data: {'title': title, 'item_kind': 'item', 'status': 'todo'}));
+
+  Future<Map<String, dynamic>> updateSmartChecklistItem(String boardId, String itemId, Map<String, dynamic> patch) async =>
+      _dataMap(await _send('PATCH', '/api/boards/$boardId/smart-checklist/items/$itemId', data: patch));
+
+  Future<void> deleteSmartChecklistItem(String boardId, String itemId) async {
+    await _send('DELETE', '/api/boards/$boardId/smart-checklist/items/$itemId');
   }
 
   Future<List<Map<String, dynamic>>> getTaskComments(String boardId, String taskId) async {
@@ -813,6 +859,12 @@ class ApiClient {
   Future<Map<String, dynamic>> getHomeSummary() async {
     return _dataMap(await _send('GET', '/api/dashboard/home-summary'));
   }
+
+  /// `GET /api/dashboard/sales` — deal + quotation pipeline (this year by default).
+  Future<Map<String, dynamic>> getSalesDashboard() async => _dataMap(await _send('GET', '/api/dashboard/sales'));
+
+  /// `GET /api/dashboard/case` — case counts by status / type / priority.
+  Future<Map<String, dynamic>> getCaseDashboard() async => _dataMap(await _send('GET', '/api/dashboard/case'));
 
   /// My workspace items grouped by due bucket (`GET /api/home/work`).
   /// `counts` holds overdue / today / upcoming / nodue.
@@ -1149,6 +1201,17 @@ class ApiClient {
 
   Future<void> deleteChatMessage(String roomId, String messageId) async {
     await _send('DELETE', '/api/chat/rooms/$roomId/messages/$messageId');
+  }
+
+  /// Pinned messages of a room: `[{message_id, pinned_by, pinned_at, message}]`.
+  Future<List<Map<String, dynamic>>> getChatPins(String roomId) async {
+    final env = await _send('GET', '/api/chat/rooms/$roomId/pins');
+    final data = env['data'];
+    return extractMapList(data is Map ? data['list'] : data);
+  }
+
+  Future<void> setChatPin(String roomId, String messageId, {required bool pinned}) async {
+    await _send(pinned ? 'POST' : 'DELETE', '/api/chat/rooms/$roomId/pins/$messageId');
   }
 
   Future<void> reactChatMessage(String roomId, String messageId, String emoji, {bool remove = false}) async {
