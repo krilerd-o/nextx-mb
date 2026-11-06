@@ -1,13 +1,6 @@
 # Mobile User Journey (MOAI NEXT)
 
-เอกสารนี้สรุป Journey และสถานะจริงในโค้ด **nextx-mb** (อัปเดตหลัง Flutter 3.47.9)
-
----
-
-## UX / UI หลัก
-
-- Mobile-first: การ์ดเป็นหลัก, full-page / bottom sheet
-- Adaptive: `NavigationBar` / `NavigationRail`
+สถานะจริงในโค้ด **nextx-mb** (เรียก NEXTX web API โดยตรง — ดู `lib/services/api_client.dart`)
 
 ---
 
@@ -15,83 +8,76 @@
 
 | หัวข้อ | สถานะ |
 |--------|--------|
-| Email/Password login | ใช้จริง (`POST /api/auth/login`) |
+| Email/Password login | ใช้จริง (`POST /api/auth/login`) + แสดง/ซ่อนรหัสผ่าน |
+| OTP ทางอีเมล | ใช้จริง (`/api/auth/otp/email/request|verify`) |
 | Forgot password | ใช้จริง |
-| LINE Login | **ยังไม่รองรับบนมือถือ** (ระบุบนหน้า Login) |
-| Hub / Getting Started | ใช้จริง + businesses จาก API |
-| Demo session | เฉพาะ debug ตามที่โค้ดกำหนด |
+| LINE / Google Login | **รอ backend** — callback ของเว็บยัง redirect กลับหน้าเว็บเท่านั้น |
+| Hub / Getting Started | ใช้จริง |
 
----
-
-## Phase 2 — Dashboard & Search & Notifications
+## Phase 2 — Dashboard, Search, Notifications
 
 | หัวข้อ | สถานะ |
 |--------|--------|
-| Dashboard | ใช้จริง (health/KPI ตามที่มี) |
-| Global Search | ใช้จริง + ประวัติ local |
-| Notification Center | ใช้ API + deep link ในแอป |
-| FCM | โค้ดพร้อม — ต้องวาง `google-services.json` / plist (ดู [PUSH_AND_RELEASE.md](PUSH_AND_RELEASE.md)) |
-| Foreground banner | local notifications |
-| OS App Links | ตั้ง intent-filter / URL scheme แล้ว — ต้อง verify โดเมนบนเซิร์ฟเวอร์ |
-
----
+| Dashboard | ลงเวลาวันนี้, ปุ่มลัดตามสิทธิ์, งานของฉัน (เลยกำหนด/วันนี้/กำลังมา), กิจกรรมถัดไป, ตัวเลขภาพรวม (`/api/dashboard/home-summary`, `/api/home/work`) |
+| Global Search | ค้นทุกโมดูลที่มีสิทธิ์พร้อมกัน + ประวัติในเครื่อง |
+| Notification Center | แบ่งหน้า (cursor), กรองหมวด/ยังไม่อ่าน, ปัดลบ, อัปเดตสด |
+| Badge แจ้งเตือน | ตัวนับเดียวทั้งแอป (`UnreadNotifications`) อัปเดตจาก socket |
+| FCM | พร้อม — ต้องวาง `google-services.json` / plist; token ที่เปลี่ยนจะลงทะเบียนใหม่อัตโนมัติ |
+| App Links | `/modules/...`, `/workspace/...`, `/calendar/...` → หน้าในแอป + ตรวจสิทธิ์เมนู; ต้องวาง `assetlinks.json` / AASA บนเว็บ |
 
 ## Phase 3 — HR
 
 | หัวข้อ | สถานะ |
 |--------|--------|
-| Clock in/out + GPS | ใช้จริง |
-| Leave balance / request / approve | ใช้จริง |
+| ลงเวลาเข้า-ออก + GPS | ใช้จริง (ส่ง `source=app`) |
+| การลา | สิทธิ์คงเหลือ (แถบ), ยื่นลา, ของฉัน (สถานะสี, ยกเลิกได้), อนุมัติพร้อมเหตุผล |
 
----
-
-## Phase 4 — CRM
+## Phase 4 — CRM / FSM / Commerce
 
 | หัวข้อ | สถานะ |
 |--------|--------|
-| Lead / Contact / Account / Case | entity list/detail/create |
-| Quotation lines / PDF / convert / approval | ใช้จริง + แชร์ PDF |
-| Call log | ใช้จริง (`CallLogScreen`) + โทร `tel:` / คัดลอกเบอร์ |
-
----
+| Lead / Contact / Account / Deal / Case / Quotation | list/detail/create/edit/delete, comments, tags, related |
+| ใบเสนอราคา | lines, PDF, convert, อนุมัติ, ส่งอีเมล |
+| FSM | jobs, inspection, parts, skills, manday |
+| รออนุมัติ | หน้ารวม: ใบเสนอราคาที่ถึงคิวเรา, การลา, คำขอเข้าร่วมธุรกิจ |
+| ร้านค้า | ออเดอร์ตามคิว + รับชำระ, สต็อก รับเข้า/จ่ายออก/ปรับยอด |
 
 ## Phase 5 — Workspace
 
 | หัวข้อ | สถานะ |
 |--------|--------|
-| Kanban / boards / tasks | ใช้จริง |
-| สร้างงาน | title + description |
-| Worklog | ใช้ API จริง |
-
----
+| Kanban / boards | ใช้จริง |
+| งาน | แก้ชื่อ/คำอธิบาย, ผู้รับผิดชอบ, กำหนดส่ง, ความสำคัญ, เสร็จแล้ว, ลบ, ความคิดเห็น, worklog |
 
 ## Phase 6 — Communication & AI
 
 | หัวข้อ | สถานะ |
 |--------|--------|
-| Chat rooms / messages / upload / DM | ใช้จริง; DM เลือกจากรายชื่อผู้ใช้ |
-| Realtime Socket.IO | client พร้อม (พึ่ง web API) |
-| AI chat | `POST /api/ai/chat` + ล้างประวัติในเครื่อง |
-| Mail | **อ่านอย่างเดียว** + ปุ่มเปิดเว็บสำหรับเขียน/ตอบ |
-| Files / Calendar / Jobs / FSM | ใช้จริงตาม ApiClient |
+| Chat | บับเบิล, realtime ทีละข้อความ, กำลังพิมพ์, แก้/ลบ/รีแอคชั่น, แนบรูป/ไฟล์, unread badge |
+| Mail (ภายใน) | เขียน/ตอบ/ส่งต่อ/ฉบับร่าง, กล่องเข้า/ส่งแล้ว/ร่าง/ถังขยะ, ลบ/กู้คืน |
+| Mail (Gmail/Outlook) | ยังเปิดผ่านเว็บ |
+| Files | โฟลเดอร์, อัปโหลดหลายไฟล์, เปิด/แชร์/เปลี่ยนชื่อ/ลบ |
+| Calendar | ตารางรายเดือนพร้อมจุดกิจกรรม, ใกล้ถึง/ค้าง, เช็คอิน GPS |
+| AI | ส่งประวัติบทสนทนา, จำแชทในเครื่อง, คำถามแนะนำ |
 
----
-
-## Phase 7 — Profile & Settings
+## Phase 7 — Profile, Settings, Quality
 
 | หัวข้อ | สถานะ |
 |--------|--------|
-| โปรไฟล์ / ธีม / accent / ภาษา | ใช้จริง |
-| เปลี่ยนรหัสผ่าน | ฟอร์ม current + new + confirm → `PUT /api/me/password` |
-| 2FA | ยังไม่มี endpoint — แสดงสถานะชัดเจน |
-| Release signing | เอกสาร + `key.properties.example` |
+| โปรไฟล์ | แก้ข้อมูลส่วนตัว, รูป, ธีม, ภาษาปฏิทิน |
+| เปลี่ยนรหัสผ่าน | ส่ง `current_password` — backend ตรวจเมื่อส่งมา |
+| Release | release build ล้มถ้าไม่มี `key.properties`; ล็อก Base URL บน release |
+| Error handling | `ErrorReporting.runGuarded` จับ error ทั้งแอป (ต่อ Crashlytics/Sentry ได้ที่ `ErrorReporting.sink`) |
+| Offline | check-in กิจกรรมเข้าคิว + แบนเนอร์ "รอส่ง" |
+| CI | `.github/workflows/flutter-ci.yml` (analyze, test, debug APK) |
 
 ---
 
-## สิ่งที่ยังขาด / นอกเครื่องนี้
+## สิ่งที่ยังขาด (ต้องทำนอกแอปหรือรอ backend)
 
-- LINE OAuth / 2FA endpoint จากเซิร์ฟเวอร์
-- Mail compose API
-- Firebase/keystore จริง (ไม่ commit)
-- iOS build บน Mac
-- Built-in Kotlin เมื่อปลั๊กอินอัปครบ
+- Refresh token, 2FA/TOTP, LINE/Google login สำหรับมือถือ (backend NEXTX)
+- OT / เบิกค่าใช้จ่าย / สลิปเงินเดือน / ประกาศบริษัท (ยังไม่มีโมดูลใน NEXTX)
+- `assetlinks.json` + `apple-app-site-association` บนโดเมนเว็บ
+- Firebase config จริง, keystore, iOS signing บน Mac
+- แปลข้อความทั้งแอปเป็นภาษาอังกฤษ (ตอนนี้ข้อความเป็นไทย; ภาษาเปลี่ยนได้เฉพาะส่วนของระบบ)
+- ลงเวลาแบบออฟไลน์ — ต้องให้ backend รับเวลาจากเครื่อง (ตอนนี้ใช้เวลาฝั่ง server)

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_config.dart';
+import '../core/app_version.dart';
 import '../core/navigation/app_routes.dart';
 import '../core/nx_breakpoint.dart';
 import '../services/api_client.dart';
@@ -15,8 +16,8 @@ import '../widgets/nx_icons.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  /// Keep in sync with `version:` in pubspec.yaml (or override with --dart-define=APP_VERSION=...).
-  static const String appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.2.0+2');
+  /// Installed app version (package_info_plus; `--dart-define=APP_VERSION=` overrides).
+  static String get appVersion => AppVersion.value;
 
   /// Release builds lock the API endpoint; QA builds can re-enable with
   /// `--dart-define=ALLOW_API_URL_EDIT=true`.
@@ -39,11 +40,11 @@ class SettingsScreen extends StatelessWidget {
             style: theme.textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
-          const NxSurfaceCard(
-            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          NxSurfaceCard(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: ListTile(
-              leading: NxAppLogo(size: 40),
-              title: Text('MOAI NEXT Mobile'),
+              leading: const NxAppLogo(size: 40),
+              title: const Text('MOAI NEXT Mobile'),
               subtitle: Text('Version $appVersion'),
             ),
           ),

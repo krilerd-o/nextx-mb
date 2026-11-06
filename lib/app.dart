@@ -49,7 +49,7 @@ class _NextXMobileAppState extends State<NextXMobileApp> with WidgetsBindingObse
         return MaterialApp.router(
           title: 'MOAI NEXT',
           debugShowCheckedModeBanner: false,
-          locale: const Locale('th', 'TH'),
+          locale: config.uiLocaleCode == 'en' ? const Locale('en', 'US') : const Locale('th', 'TH'),
           supportedLocales: const [Locale('th', 'TH'), Locale('en', 'US')],
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,

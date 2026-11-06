@@ -531,6 +531,13 @@ class AppConfig extends ChangeNotifier {
         if (type != 'checkin' || id.isEmpty) continue;
         if (lat == null || lng == null || (lat == 0 && lng == 0)) continue;
         await apiClient.activityCheckin(id, lat: lat, lng: lng);
+      } on ApiException catch (e) {
+        // Network still down → retry later; a real server rejection is dropped.
+        if (e.statusCode == 0) {
+          remain.add(item);
+        } else {
+          debugPrint('[offline] check-in ${item['id']} rejected: ${e.userMessage}');
+        }
       } catch (_) {
         remain.add(item);
       }

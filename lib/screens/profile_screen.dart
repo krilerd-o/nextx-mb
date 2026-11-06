@@ -111,7 +111,7 @@ class ProfileScreen extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  title: const Text('ภาษา UI (บันทึกในเครื่อง)'),
+                  title: const Text('ภาษาของปฏิทิน/ปุ่มระบบ'),
                   subtitle: Text(config.uiLocaleCode == 'th' ? 'ไทย' : 'English'),
                   trailing: DropdownButton<String>(
                     value: config.uiLocaleCode,

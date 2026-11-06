@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/app_config.dart';
 import '../core/menu_access.dart';
 import '../core/nx_breakpoint.dart';
+import '../services/offline_queue.dart';
 import '../widgets/nx_icons.dart';
 import '../widgets/nx_tab_nav.dart';
 import 'dashboard/mobile_dashboard_screen.dart';
@@ -75,7 +76,12 @@ class _AppShellState extends State<AppShell> {
       rail: bp.useRail,
     );
 
-    final stack = IndexedStack(index: selected, children: screens);
+    final stack = Column(
+      children: [
+        const _PendingSyncBanner(),
+        Expanded(child: IndexedStack(index: selected, children: screens)),
+      ],
+    );
 
     if (bp.useRail) {
       return Scaffold(
@@ -92,6 +98,37 @@ class _AppShellState extends State<AppShell> {
       extendBody: true,
       body: stack,
       bottomNavigationBar: nav,
+    );
+  }
+}
+
+/// Shown while offline check-ins are waiting to be sent.
+class _PendingSyncBanner extends StatelessWidget {
+  const _PendingSyncBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: OfflineQueue.pending,
+      builder: (context, n, _) {
+        if (n <= 0) return const SizedBox.shrink();
+        final cs = Theme.of(context).colorScheme;
+        return Material(
+          color: cs.tertiaryContainer,
+          child: SafeArea(
+            bottom: false,
+            child: ListTile(
+              dense: true,
+              leading: Icon(Icons.cloud_upload_outlined, color: cs.onTertiaryContainer),
+              title: Text('มี $n รายการรอส่ง (บันทึกตอนออฟไลน์)', style: TextStyle(color: cs.onTertiaryContainer)),
+              trailing: TextButton(
+                onPressed: () => context.read<AppConfig>().flushOfflineQueue(),
+                child: const Text('ส่งตอนนี้'),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
