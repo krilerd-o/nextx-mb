@@ -3,15 +3,27 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-Future<void> openPdfBytes(List<int> bytes, String filename) async {
-  if (kIsWeb) return;
+Future<File> _writeTempPdf(List<int> bytes, String filename) async {
   final dir = await getTemporaryDirectory();
   final safe = filename.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
   final file = File('${dir.path}/$safe');
   await file.writeAsBytes(bytes, flush: true);
+  return file;
+}
+
+Future<void> openPdfBytes(List<int> bytes, String filename) async {
+  if (kIsWeb) return;
+  final file = await _writeTempPdf(bytes, filename);
   await OpenFilex.open(file.path);
+}
+
+Future<void> sharePdfBytes(List<int> bytes, String filename) async {
+  if (kIsWeb) return;
+  final file = await _writeTempPdf(bytes, filename);
+  await Share.shareXFiles([XFile(file.path)], text: filename);
 }
 
 Future<bool> openFileRecord(Map<String, dynamic> file) async {

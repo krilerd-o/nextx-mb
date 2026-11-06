@@ -107,7 +107,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
                                 children: [
                                   CircleAvatar(
                                     radius: 20,
-                                    backgroundColor: nxAvatarColor(item.title).withOpacity(0.16),
+                                    backgroundColor: nxAvatarColor(item.title).withValues(alpha: 0.16),
                                     child: Icon(item.icon, color: nxAvatarColor(item.title), size: 20),
                                   ),
                                   const SizedBox(height: 12),

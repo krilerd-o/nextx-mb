@@ -22,7 +22,7 @@ class NxFieldStyle {
     return BoxDecoration(
       color: scheme.surface,
       borderRadius: BorderRadius.circular(radius),
-      border: Border.all(color: scheme.outline.withOpacity(0.85)),
+      border: Border.all(color: scheme.outline.withValues(alpha: 0.85)),
     );
   }
 
@@ -86,12 +86,12 @@ class NxFieldStyle {
       suffixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 22, maxHeight: 22),
       prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 22, maxHeight: 22),
       contentPadding: EdgeInsets.fromLTRB(16, tall ? 16 : 15, 12, tall ? 16 : 15),
-      border: border(scheme.outline.withOpacity(0.55)),
-      enabledBorder: border(scheme.outline.withOpacity(0.55)),
+      border: border(scheme.outline.withValues(alpha: 0.55)),
+      enabledBorder: border(scheme.outline.withValues(alpha: 0.55)),
       focusedBorder: border(scheme.primary, width: 1.5),
       errorBorder: border(scheme.error),
       focusedErrorBorder: border(scheme.error, width: 1.4),
-      disabledBorder: border(scheme.outline.withOpacity(0.4)),
+      disabledBorder: border(scheme.outline.withValues(alpha: 0.4)),
     );
   }
 
@@ -218,7 +218,7 @@ class NxDashedDropzone extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(NxFieldStyle.radius),
         child: CustomPaint(
-          painter: _DashBorderPainter(color: scheme.outline.withOpacity(0.7)),
+          painter: _DashBorderPainter(color: scheme.outline.withValues(alpha: 0.7)),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             child: child ??

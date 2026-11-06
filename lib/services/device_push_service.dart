@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,6 +10,10 @@ import '../core/navigation/notification_deep_link.dart';
 import '../core/push_navigation.dart';
 
 const _tokenKey = 'staff_device_push_token';
+const _androidChannelId = 'high_importance_channel';
+
+final FlutterLocalNotificationsPlugin _localNotifications =
+    FlutterLocalNotificationsPlugin();
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -21,12 +26,60 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   PushNavigation.instance.remember(loc);
 }
 
+Future<void> _ensureLocalNotifications() async {
+  const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const ios = DarwinInitializationSettings();
+  await _localNotifications.initialize(
+    const InitializationSettings(android: android, iOS: ios),
+    onDidReceiveNotificationResponse: (response) {
+      final payload = response.payload;
+      if (payload != null && payload.isNotEmpty) {
+        PushNavigation.instance.remember(payload);
+      }
+    },
+  );
+  final androidPlugin = _localNotifications.resolvePlatformSpecificImplementation<
+      AndroidFlutterLocalNotificationsPlugin>();
+  await androidPlugin?.createNotificationChannel(
+    const AndroidNotificationChannel(
+      _androidChannelId,
+      'MOAI NEXT',
+      description: 'แจ้งเตือนงานและแชท',
+      importance: Importance.high,
+    ),
+  );
+}
+
+Future<void> _showForegroundNotification(RemoteMessage message) async {
+  final n = message.notification;
+  final title = n?.title ?? message.data['title']?.toString() ?? 'MOAI NEXT';
+  final body = n?.body ?? message.data['body']?.toString() ?? '';
+  final loc = notificationDeepLinkFromData(Map<String, dynamic>.from(message.data));
+  await _localNotifications.show(
+    message.hashCode,
+    title,
+    body,
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        _androidChannelId,
+        'MOAI NEXT',
+        channelDescription: 'แจ้งเตือนงานและแชท',
+        importance: Importance.high,
+        priority: Priority.high,
+      ),
+      iOS: DarwinNotificationDetails(),
+    ),
+    payload: loc,
+  );
+}
+
 Future<void> initFirebasePush() async {
   if (kIsWeb) return;
   try {
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp();
     }
+    await _ensureLocalNotifications();
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     final initial = await FirebaseMessaging.instance.getInitialMessage();
     if (initial != null) {
@@ -40,9 +93,7 @@ Future<void> initFirebasePush() async {
       );
     });
     FirebaseMessaging.onMessage.listen((message) {
-      debugPrint(
-        '[push] foreground ${message.notification?.title} ${message.data}',
-      );
+      _showForegroundNotification(message);
     });
     FirebaseMessaging.instance.onTokenRefresh.listen((value) {
       DevicePushService.instance.saveToken(value);

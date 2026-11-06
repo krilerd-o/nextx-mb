@@ -115,7 +115,7 @@ class _CircleBtn extends StatelessWidget {
             color: fill,
             shape: const CircleBorder(),
             elevation: isDark ? 4 : 3,
-            shadowColor: Colors.black.withOpacity(isDark ? 0.5 : 0.22),
+            shadowColor: Colors.black.withValues(alpha: isDark ? 0.5 : 0.22),
             child: InkWell(
               customBorder: const CircleBorder(),
               onTap: onTap,
@@ -137,7 +137,7 @@ class _CircleBtn extends StatelessWidget {
                   border: Border.all(color: fill, width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.12),
+                      color: Colors.black.withValues(alpha: 0.12),
                       blurRadius: 4,
                       offset: const Offset(0, 1),
                     ),
@@ -237,7 +237,7 @@ class _HubAvatar extends StatelessWidget {
         height: NxAppHeader.controlSize,
         child: CircleAvatar(
           radius: NxAppHeader.controlSize / 2,
-          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.16),
+          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
           backgroundImage: image,
           child: image == null
               ? Text(

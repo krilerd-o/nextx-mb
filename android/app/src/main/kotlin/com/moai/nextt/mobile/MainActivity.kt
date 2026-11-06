@@ -1,4 +1,4 @@
-package com.example.nextx_mobile
+package com.moai.nextt.mobile
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

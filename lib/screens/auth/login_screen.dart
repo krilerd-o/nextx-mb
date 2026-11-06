@@ -75,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'เข้าสู่ระบบด้วยบัญชี MOAINEXT',
+                'เข้าสู่ระบบด้วยอีเมลและรหัสผ่าน\n(LINE Login ยังไม่รองรับบนแอปมือถือ)',
                 style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 20),

@@ -176,31 +176,75 @@ class ProfileScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(NxI.password),
                   title: const Text('เปลี่ยนรหัสผ่าน'),
-                  subtitle: const Text('PUT /api/me/password'),
+                  subtitle: const Text('รหัสปัจจุบัน + รหัสใหม่ (ยืนยัน)'),
                   onTap: () async {
-                    final pw = TextEditingController();
+                    final current = TextEditingController();
+                    final next = TextEditingController();
+                    final confirm = TextEditingController();
+                    final formKey = GlobalKey<FormState>();
                     final ok = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('รหัสผ่านใหม่'),
-                        content: TextField(controller: pw, obscureText: true),
+                        title: const Text('เปลี่ยนรหัสผ่าน'),
+                        content: Form(
+                          key: formKey,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              TextFormField(
+                                controller: current,
+                                obscureText: true,
+                                decoration: const InputDecoration(labelText: 'รหัสผ่านปัจจุบัน'),
+                                validator: (v) =>
+                                    (v == null || v.isEmpty) ? 'กรุณากรอก' : null,
+                              ),
+                              TextFormField(
+                                controller: next,
+                                obscureText: true,
+                                decoration: const InputDecoration(labelText: 'รหัสผ่านใหม่'),
+                                validator: (v) =>
+                                    (v == null || v.length < 6) ? 'อย่างน้อย 6 ตัวอักษร' : null,
+                              ),
+                              TextFormField(
+                                controller: confirm,
+                                obscureText: true,
+                                decoration: const InputDecoration(labelText: 'ยืนยันรหัสใหม่'),
+                                validator: (v) =>
+                                    v != next.text ? 'รหัสไม่ตรงกัน' : null,
+                              ),
+                            ],
+                          ),
+                        ),
                         actions: [
                           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('บันทึก')),
+                          FilledButton(
+                            onPressed: () {
+                              if (formKey.currentState?.validate() == true) {
+                                Navigator.pop(ctx, true);
+                              }
+                            },
+                            child: const Text('บันทึก'),
+                          ),
                         ],
                       ),
                     );
-                    final value = pw.text;
-                    pw.dispose();
-                    if (ok == true && value.length >= 6) {
+                    final value = next.text;
+                    current.dispose();
+                    next.dispose();
+                    confirm.dispose();
+                    if (ok == true) {
                       try {
                         await config.apiClient.changePassword(value);
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เปลี่ยนรหัสแล้ว')));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('เปลี่ยนรหัสแล้ว')),
+                          );
                         }
                       } catch (e) {
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(formatApiError(e))),
+                          );
                         }
                       }
                     }
@@ -242,10 +286,20 @@ class ProfileScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(NxI.shieldCheck),
                   title: const Text('Two-factor (2FA)'),
-                  subtitle: const Text('เชื่อม API ภายหลัง'),
+                  subtitle: const Text('ยังไม่เปิดใช้บนเซิร์ฟเวอร์มือถือ'),
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('รอการตั้งค่า 2FA จาก backend')),
+                    showDialog<void>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Two-factor authentication'),
+                        content: const Text(
+                          'แอปยังไม่มี endpoint 2FA จาก NEXTX web API '
+                          'เมื่อเซิร์ฟเวอร์เปิดใช้ จะเชื่อมจากหน้านี้',
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ปิด')),
+                        ],
+                      ),
                     );
                   },
                 ),

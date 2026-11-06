@@ -99,7 +99,7 @@ class _NxCanvasFieldState extends State<NxCanvasField> {
     _GridPainter(
       strokes: _strokes,
       color: scheme.onSurface,
-      grid: scheme.outline.withOpacity(0.25),
+      grid: scheme.outline.withValues(alpha: 0.25),
     ).paint(canvas, size);
     final picture = recorder.endRecording();
     final image = await picture.toImage(size.width.round(), size.height.round());
@@ -124,7 +124,7 @@ class _NxCanvasFieldState extends State<NxCanvasField> {
                 widget.value!,
                 height: 72,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             ),
           ),
@@ -160,7 +160,7 @@ class _NxCanvasFieldState extends State<NxCanvasField> {
                   if (_current.isNotEmpty) _current,
                 ],
                 color: scheme.onSurface,
-                grid: scheme.outline.withOpacity(0.25),
+                grid: scheme.outline.withValues(alpha: 0.25),
               ),
               child: const SizedBox.expand(),
             ),

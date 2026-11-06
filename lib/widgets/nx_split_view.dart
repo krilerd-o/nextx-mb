@@ -23,7 +23,7 @@ class NxSplitView extends StatelessWidget {
         child: Navigator(
           onGenerateRoute: (settings) => PageRouteBuilder<void>(
             settings: settings,
-            pageBuilder: (ctx, _, __) => const _ListProxy(),
+            pageBuilder: (ctx, _, _) => const _ListProxy(),
             transitionDuration: Duration.zero,
             reverseTransitionDuration: Duration.zero,
           ),
@@ -40,7 +40,7 @@ class NxSplitView extends StatelessWidget {
         VerticalDivider(
           width: 1,
           thickness: 1,
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.35),
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.35),
         ),
         Expanded(
           child: detail ??

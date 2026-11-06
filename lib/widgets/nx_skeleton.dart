@@ -40,9 +40,9 @@ class _NxSkeletonState extends State<NxSkeleton> with SingleTickerProviderStateM
               begin: Alignment(-1.2 + t * 2.4, 0),
               end: Alignment(-0.2 + t * 2.4, 0),
               colors: [
-                Colors.white.withOpacity(0.35),
+                Colors.white.withValues(alpha: 0.35),
                 Colors.white,
-                Colors.white.withOpacity(0.35),
+                Colors.white.withValues(alpha: 0.35),
               ],
             ).createShader(rect);
           },
@@ -69,7 +69,7 @@ class NxBone extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withOpacity(0.85),
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(radius),
       ),
     );

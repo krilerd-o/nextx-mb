@@ -42,7 +42,7 @@ class _NextXMobileAppState extends State<NextXMobileApp> with WidgetsBindingObse
   @override
   Widget build(BuildContext context) {
     return Consumer<AppConfig>(
-      builder: (_, config, __) {
+      builder: (_, config, _) {
         final accent = config.accentColor;
         return MaterialApp.router(
           title: 'MOAI NEXT',

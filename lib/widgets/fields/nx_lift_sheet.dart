@@ -38,7 +38,7 @@ Future<T?> showNxLiftSheet<T>({
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.outline.withOpacity(0.4),
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),
@@ -77,9 +77,9 @@ Future<T?> _showAnchoredPopover<T>({
     context: context,
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: Colors.black.withOpacity(0.18),
+    barrierColor: Colors.black.withValues(alpha: 0.18),
     transitionDuration: NxMotion.duration(context, 400),
-    pageBuilder: (ctx, _, __) {
+    pageBuilder: (ctx, _, _) {
       return _PopoverBody(
         left: left,
         top: top,

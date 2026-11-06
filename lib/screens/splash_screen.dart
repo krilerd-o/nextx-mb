@@ -38,7 +38,7 @@ class SplashScreen extends StatelessWidget {
                   child: LinearProgressIndicator(
                     minHeight: 3,
                     color: theme.colorScheme.primary,
-                    backgroundColor: theme.colorScheme.primary.withOpacity(0.16),
+                    backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.16),
                   ),
                 ),
               ),

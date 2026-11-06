@@ -38,7 +38,7 @@ class NxAvatar extends StatelessWidget {
     final bg = nxAvatarColor(label);
     return CircleAvatar(
       radius: size / 2,
-      backgroundColor: bg.withOpacity(0.18),
+      backgroundColor: bg.withValues(alpha: 0.18),
       child: Text(
         entityInitials(label),
         style: TextStyle(

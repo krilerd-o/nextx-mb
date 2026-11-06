@@ -188,7 +188,7 @@ class _HtmlBody extends StatelessWidget {
         final url = resolveHtmlUrl(src, baseUrl);
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Image.network(url, height: 160, fit: BoxFit.contain, errorBuilder: (_, __, ___) {
+          child: Image.network(url, height: 160, fit: BoxFit.contain, errorBuilder: (_, _, _) {
             return Text(node.attrs['alt'] ?? url, style: style);
           }),
         );

@@ -39,34 +39,93 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
           IconButton(
             icon: const Icon(NxI.userPlus),
             onPressed: () async {
-              final id = TextEditingController();
-              final ok = await showDialog<bool>(
+              final api = context.read<AppConfig>().apiClient;
+              List<Map<String, dynamic>> users = const [];
+              try {
+                users = await api.getUsers(limit: 80);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                }
+                return;
+              }
+              if (!mounted) return;
+              final selected = await showModalBottomSheet<Map<String, dynamic>>(
                 context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('แชทส่วนตัว'),
-                  content: TextField(
-                    controller: id,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'รหัสผู้ใช้'),
-                  ),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-                    FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('เปิด')),
-                  ],
-                ),
+                isScrollControlled: true,
+                builder: (ctx) {
+                  final q = TextEditingController();
+                  var filtered = users;
+                  return StatefulBuilder(
+                    builder: (ctx, setSheet) {
+                      return SafeArea(
+                        child: SizedBox(
+                          height: MediaQuery.of(ctx).size.height * 0.7,
+                          child: Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: TextField(
+                                  controller: q,
+                                  decoration: const InputDecoration(
+                                    labelText: 'ค้นหาผู้ใช้',
+                                    prefixIcon: Icon(NxI.magnifyingGlass),
+                                  ),
+                                  onChanged: (v) {
+                                    final needle = v.trim().toLowerCase();
+                                    setSheet(() {
+                                      filtered = users.where((u) {
+                                        final name = (u['name'] ?? u['full_name'] ?? '').toString().toLowerCase();
+                                        final email = (u['email'] ?? '').toString().toLowerCase();
+                                        final id = (u['id'] ?? '').toString();
+                                        return needle.isEmpty ||
+                                            name.contains(needle) ||
+                                            email.contains(needle) ||
+                                            id.contains(needle);
+                                      }).toList();
+                                    });
+                                  },
+                                ),
+                              ),
+                              Expanded(
+                                child: ListView.builder(
+                                  itemCount: filtered.length,
+                                  itemBuilder: (_, i) {
+                                    final u = filtered[i];
+                                    final name = u['name']?.toString() ??
+                                        u['full_name']?.toString() ??
+                                        u['email']?.toString() ??
+                                        'ผู้ใช้';
+                                    return ListTile(
+                                      leading: const Icon(NxI.user),
+                                      title: Text(name),
+                                      subtitle: Text(u['email']?.toString() ?? u['id']?.toString() ?? ''),
+                                      onTap: () => Navigator.pop(ctx, u),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
               );
-              final userId = id.text.trim();
-              id.dispose();
-              if (ok == true && userId.isNotEmpty) {
-                try {
-                  final room = await context.read<AppConfig>().apiClient.createChatDm(userId);
-                  if (!mounted) return;
-                  final map = room.isEmpty ? {'id': userId, 'name': 'DM'} : room;
-                  nxPush<void>(context, ChatRoomScreen(room: map));
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
-                  }
+              if (selected == null) return;
+              final userId = selected['id']?.toString() ?? '';
+              if (userId.isEmpty) return;
+              try {
+                final room = await api.createChatDm(userId);
+                if (!mounted) return;
+                final map = room.isEmpty
+                    ? {'id': userId, 'name': selected['name'] ?? 'DM'}
+                    : room;
+                nxPush<void>(context, ChatRoomScreen(room: map));
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
                 }
               }
             },

@@ -205,7 +205,7 @@ class _ModuleCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 22,
-            backgroundColor: color.withOpacity(0.16),
+            backgroundColor: color.withValues(alpha: 0.16),
             child: Icon(icon, color: color),
           ),
           const SizedBox(height: 14),
@@ -248,7 +248,7 @@ class _ToolCard extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 20,
-              backgroundColor: theme.colorScheme.primary.withOpacity(0.14),
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.14),
               child: Icon(icon, color: theme.colorScheme.primary),
             ),
             const SizedBox(width: 12),

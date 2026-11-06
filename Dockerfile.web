@@ -11,7 +11,7 @@ COPY assets/ assets/
 
 RUN flutter pub get \
   && flutter create . --platforms web \
-  && flutter build web --release --dart-define=API_BASE_URL=${API_BASE_URL}
+  && flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=${API_BASE_URL}
 
 # Stage 2: nginx + proxy /health /ready /api → Mobile API container
 FROM nginx:alpine

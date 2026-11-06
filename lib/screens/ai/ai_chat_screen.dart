@@ -70,7 +70,22 @@ class _AiChatScreenState extends State<AiChatScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: const NxAppHeader(title: 'AI Assistant'),
+      appBar: NxAppHeader(
+        title: 'AI Assistant',
+        actions: [
+          IconButton(
+            tooltip: 'ล้างประวัติในเครื่อง',
+            onPressed: _busy
+                ? null
+                : () => setState(() {
+                      _lines
+                        ..clear()
+                        ..add('ผู้ช่วย AI ของ MOAINEXT');
+                    }),
+            icon: const Icon(NxI.trash),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -86,7 +101,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: NxSurfaceCard(
-                        color: mine ? theme.colorScheme.primary.withOpacity(0.12) : null,
+                        color: mine ? theme.colorScheme.primary.withValues(alpha: 0.12) : null,
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         child: NxHtmlView(html: _lines[i], style: theme.textTheme.bodyMedium),
                       ),

@@ -50,7 +50,7 @@ class WorkspaceKanbanBoard extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           itemCount: keys.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (context, index) {
             final status = keys[index];
             final rows = grouped[status] ?? [];
@@ -68,10 +68,10 @@ class WorkspaceKanbanBoard extends StatelessWidget {
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: highlight ? theme.colorScheme.primary : theme.colorScheme.outline.withOpacity(0.3),
+                        color: highlight ? theme.colorScheme.primary : theme.colorScheme.outline.withValues(alpha: 0.3),
                         width: highlight ? 2 : 1,
                       ),
                     ),
@@ -96,7 +96,7 @@ class WorkspaceKanbanBoard extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.primaryContainer.withOpacity(0.5),
+                                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(

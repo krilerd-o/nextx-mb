@@ -69,87 +69,87 @@ GoRouter createAppRouter(AppConfig config) {
     routes: [
       GoRoute(
         path: AppRoutes.splash,
-        builder: (_, __) => const SplashScreen(),
+        builder: (_, _) => const SplashScreen(),
       ),
       GoRoute(
         path: AppRoutes.login,
-        builder: (_, __) => const LoginScreen(),
+        builder: (_, _) => const LoginScreen(),
       ),
       GoRoute(
         path: AppRoutes.fieldGallery,
-        builder: (_, __) => const FieldGalleryScreen(),
+        builder: (_, _) => const FieldGalleryScreen(),
       ),
       GoRoute(
         path: AppRoutes.hub,
-        builder: (_, __) => const BusinessHubScreen(),
+        builder: (_, _) => const BusinessHubScreen(),
       ),
       GoRoute(
         path: AppRoutes.gettingStarted,
-        builder: (_, __) => const GettingStartedScreen(),
+        builder: (_, _) => const GettingStartedScreen(),
       ),
       GoRoute(
         path: AppRoutes.mainShell,
-        builder: (_, __) => const AppShell(),
+        builder: (_, _) => const AppShell(),
       ),
       GoRoute(
         path: AppRoutes.notifications,
-        builder: (_, __) => const NotificationCenterScreen(),
+        builder: (_, _) => const NotificationCenterScreen(),
       ),
       GoRoute(
         path: AppRoutes.attendance,
-        builder: (_, __) => const AttendanceScreen(),
+        builder: (_, _) => const AttendanceScreen(),
       ),
       GoRoute(
         path: AppRoutes.leaveList,
-        builder: (_, __) => const LeaveScreen(),
+        builder: (_, _) => const LeaveScreen(),
       ),
       GoRoute(
         path: AppRoutes.moduleHub,
-        builder: (_, __) => const ModuleHubScreen(),
+        builder: (_, _) => const ModuleHubScreen(),
       ),
       GoRoute(
         path: AppRoutes.crmHome,
-        builder: (_, __) => const CrmHomeScreen(),
+        builder: (_, _) => const CrmHomeScreen(),
       ),
       GoRoute(
         path: AppRoutes.fsmHome,
-        builder: (_, __) => const FsmHomeScreen(),
+        builder: (_, _) => const FsmHomeScreen(),
       ),
       GoRoute(
         path: AppRoutes.workspaceHome,
-        builder: (_, __) => const WorkspaceHomeScreen(),
+        builder: (_, _) => const WorkspaceHomeScreen(),
       ),
       GoRoute(
         path: AppRoutes.chatHome,
-        builder: (_, __) => const ChatHomeScreen(),
+        builder: (_, _) => const ChatHomeScreen(),
       ),
       GoRoute(
         path: AppRoutes.aiChat,
-        builder: (_, __) => const AiChatScreen(),
+        builder: (_, _) => const AiChatScreen(),
       ),
       GoRoute(
         path: AppRoutes.profile,
-        builder: (_, __) => const ProfileScreen(),
+        builder: (_, _) => const ProfileScreen(),
       ),
       GoRoute(
         path: AppRoutes.calendar,
-        builder: (_, __) => const CalendarHomeScreen(),
+        builder: (_, _) => const CalendarHomeScreen(),
       ),
       GoRoute(
         path: AppRoutes.jobs,
-        builder: (_, __) => const MyJobsScreen(),
+        builder: (_, _) => const MyJobsScreen(),
       ),
       GoRoute(
         path: AppRoutes.globalSearch,
-        builder: (_, __) => const GlobalSearchScreen(),
+        builder: (_, _) => const GlobalSearchScreen(),
       ),
       GoRoute(
         path: AppRoutes.files,
-        builder: (_, __) => const FilesHomeScreen(),
+        builder: (_, _) => const FilesHomeScreen(),
       ),
       GoRoute(
         path: AppRoutes.mail,
-        builder: (_, __) => const MailHomeScreen(),
+        builder: (_, _) => const MailHomeScreen(),
       ),
       GoRoute(
         path: '/crm/:module/:id',

@@ -28,7 +28,7 @@ class NxAddButton extends StatelessWidget {
           color: scheme.primary,
           shape: const CircleBorder(),
           elevation: 2,
-          shadowColor: scheme.primary.withOpacity(0.35),
+          shadowColor: scheme.primary.withValues(alpha: 0.35),
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onPressed,

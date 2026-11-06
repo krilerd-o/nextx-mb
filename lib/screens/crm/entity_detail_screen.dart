@@ -163,12 +163,18 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         title: title,
         automaticallyImplyLeading: !widget.embedded,
         actions: [
-          if (widget.module == 'quotation' || widget.module == 'inspection' || widget.module == 'job')
+          if (widget.module == 'quotation' || widget.module == 'inspection' || widget.module == 'job') ...[
             IconButton(
-              tooltip: 'PDF',
+              tooltip: 'เปิด PDF',
               icon: const Icon(NxI.filePdf),
               onPressed: _openPdf,
             ),
+            IconButton(
+              tooltip: 'แชร์ PDF',
+              icon: const Icon(NxI.shareNetwork),
+              onPressed: _sharePdf,
+            ),
+          ],
           if (canEdit)
             IconButton(
               tooltip: 'แก้ไข',
@@ -547,22 +553,31 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     }
   }
 
+  Future<({List<int> bytes, String name})> _pdfPayload() async {
+    final api = context.read<AppConfig>().apiClient;
+    if (widget.module == 'inspection') {
+      return (bytes: await api.getInspectionPdf(_id), name: 'inspection-$_id.pdf');
+    }
+    if (widget.module == 'job') {
+      return (bytes: await api.downloadJobPdf(_id), name: 'job-$_id.pdf');
+    }
+    return (bytes: await api.getQuotationPdf(_id), name: 'quotation-$_id.pdf');
+  }
+
   Future<void> _openPdf() async {
     try {
-      final api = context.read<AppConfig>().apiClient;
-      final List<int> bytes;
-      final String name;
-      if (widget.module == 'inspection') {
-        bytes = await api.getInspectionPdf(_id);
-        name = 'inspection-$_id.pdf';
-      } else if (widget.module == 'job') {
-        bytes = await api.downloadJobPdf(_id);
-        name = 'job-$_id.pdf';
-      } else {
-        bytes = await api.getQuotationPdf(_id);
-        name = 'quotation-$_id.pdf';
-      }
-      await openPdfBytes(bytes, name);
+      final pdf = await _pdfPayload();
+      await openPdfBytes(pdf.bytes, pdf.name);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    }
+  }
+
+  Future<void> _sharePdf() async {
+    try {
+      final pdf = await _pdfPayload();
+      await sharePdfBytes(pdf.bytes, pdf.name);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));

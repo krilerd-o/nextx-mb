@@ -5,9 +5,13 @@
 .pub-cache/
 .pub/
 build/
+dist/
+*.apk
+*.aab
 *.iml
 *.ipr
 *.iws
+api_release_url.txt
 
 # Android
 android/.gradle/

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_config.dart';
 import '../../core/nx_page_route.dart';
@@ -16,14 +18,14 @@ import '../../widgets/nx_split_view.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../widgets/nx_icons.dart';
 
-class CallLogStubScreen extends StatefulWidget {
-  const CallLogStubScreen({super.key});
+class CallLogScreen extends StatefulWidget {
+  const CallLogScreen({super.key});
 
   @override
-  State<CallLogStubScreen> createState() => _CallLogStubScreenState();
+  State<CallLogScreen> createState() => _CallLogScreenState();
 }
 
-class _CallLogStubScreenState extends State<CallLogStubScreen> {
+class _CallLogScreenState extends State<CallLogScreen> {
   var _revision = 0;
   Map<String, dynamic>? _selected;
 
@@ -158,6 +160,48 @@ class _CallLogResultScreenState extends State<CallLogResultScreen> {
             onChanged: (v) => _notes.text = v?.toString() ?? '',
           ),
           const SizedBox(height: 16),
+          Builder(
+            builder: (context) {
+              final phone = (widget.row['phone'] ??
+                      widget.row['mobile'] ??
+                      widget.row['tel'] ??
+                      widget.row['contact_phone'])
+                  ?.toString()
+                  .trim();
+              if (phone == null || phone.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final uri = Uri(scheme: 'tel', path: phone);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri);
+                          }
+                        },
+                        icon: const Icon(NxI.phone),
+                        label: Text('โทร $phone'),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'คัดลอกเบอร์',
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: phone));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('คัดลอกเบอร์แล้ว')),
+                          );
+                        }
+                      },
+                      icon: const Icon(NxI.clipboard),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
           FilledButton(onPressed: _saving ? null : _save, child: const Text('บันทึกผล')),
         ],
       ),

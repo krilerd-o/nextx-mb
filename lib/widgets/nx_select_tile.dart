@@ -33,7 +33,7 @@ class NxSelectTile extends StatelessWidget {
         curve: NxMotion.settleCurve,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: selected ? cs.primary.withOpacity(0.10) : NxAtmosphereTokens.of(context).cardElevated,
+          color: selected ? cs.primary.withValues(alpha: 0.10) : NxAtmosphereTokens.of(context).cardElevated,
           borderRadius: BorderRadius.circular(AppTheme.cardRadius),
           boxShadow: NxSurfaceCard.shadows(theme.brightness == Brightness.dark),
         ),

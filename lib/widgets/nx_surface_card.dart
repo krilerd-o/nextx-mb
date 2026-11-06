@@ -28,7 +28,7 @@ class NxSurfaceCard extends StatelessWidget {
     if (dark) {
       return [
         BoxShadow(
-          color: Colors.black.withOpacity(0.40),
+          color: Colors.black.withValues(alpha: 0.40),
           offset: const Offset(0, 4),
           blurRadius: 10,
         ),
@@ -58,7 +58,7 @@ class NxSurfaceCard extends StatelessWidget {
         color: color ?? NxAtmosphereTokens.of(context).cardElevated,
         borderRadius: BorderRadius.circular(r),
         boxShadow: shadows(dark),
-        border: dark ? Border.all(color: Colors.white.withOpacity(0.08)) : null,
+        border: dark ? Border.all(color: Colors.white.withValues(alpha: 0.08)) : null,
       ),
       clipBehavior: Clip.antiAlias,
       child: padding == null ? child : Padding(padding: padding!, child: child),

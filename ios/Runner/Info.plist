@@ -62,5 +62,18 @@
 	</array>
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.moai.nextt.mobile</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>moainext</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

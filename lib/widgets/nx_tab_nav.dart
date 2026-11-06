@@ -181,7 +181,7 @@ class _Item extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final onBar = _onBar(context);
-    final color = selected ? onBar : onBar.withOpacity(0.55);
+    final color = selected ? onBar : onBar.withValues(alpha: 0.55);
     final icon = Icon(selected ? dest.selectedIcon : dest.icon, color: color, size: 22);
     // Lay text out at intrinsic width — AnimatedSize + ellipsis squashes Thai on web refresh.
     final label = Text(

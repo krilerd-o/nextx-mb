@@ -157,7 +157,7 @@ class NxFieldValueView extends StatelessWidget {
               decoration: BoxDecoration(
                 color: parsed,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.colorScheme.outline.withOpacity(0.4)),
+                border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.4)),
               ),
             ),
             const SizedBox(width: 8),
@@ -198,7 +198,7 @@ class NxFieldValueView extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: (color ?? Theme.of(context).colorScheme.surfaceContainerHighest).withOpacity(color == null ? 1 : 0.18),
+        color: (color ?? Theme.of(context).colorScheme.surfaceContainerHighest).withValues(alpha: color == null ? 1 : 0.18),
         borderRadius: BorderRadius.circular(NxFieldStyle.radius),
       ),
       child: Text(
@@ -258,7 +258,7 @@ class _LookupChipState extends State<_LookupChip> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: (widget.color ?? Theme.of(context).colorScheme.surfaceContainerHighest)
-            .withOpacity(widget.color == null ? 1 : 0.18),
+            .withValues(alpha: widget.color == null ? 1 : 0.18),
         borderRadius: BorderRadius.circular(NxFieldStyle.radius),
       ),
       child: Text(

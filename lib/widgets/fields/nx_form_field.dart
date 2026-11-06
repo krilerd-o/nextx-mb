@@ -1434,7 +1434,7 @@ class _ColorTrigger extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: parsed ?? Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Theme.of(context).colorScheme.outline.withOpacity(0.4)),
+                    border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1488,7 +1488,7 @@ class _MediaBox extends StatelessWidget {
                       width: 56,
                       height: 56,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Icon(icon),
+                      errorBuilder: (_, _, _) => Icon(icon),
                     ),
                   )
                 else
@@ -1581,7 +1581,7 @@ class _MiniMap extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: CustomPaint(
         painter: _MapPainter(
-          grid: scheme.outline.withOpacity(0.25),
+          grid: scheme.outline.withValues(alpha: 0.25),
           pin: scheme.primary,
           hasFix: lat != null && lng != null,
         ),
@@ -1647,7 +1647,7 @@ class _XyPad extends StatelessWidget {
           painter: _XyPainter(
             x: xy.x,
             y: xy.y,
-            grid: Theme.of(context).colorScheme.outline.withOpacity(0.25),
+            grid: Theme.of(context).colorScheme.outline.withValues(alpha: 0.25),
             pin: Theme.of(context).colorScheme.primary,
           ),
           child: const SizedBox.expand(),

@@ -25,7 +25,7 @@ class NxHeroCta extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: onPressed == null || busy
-                ? theme.colorScheme.primary.withOpacity(0.45)
+                ? theme.colorScheme.primary.withValues(alpha: 0.45)
                 : theme.colorScheme.primary,
             borderRadius: BorderRadius.circular(26),
           ),

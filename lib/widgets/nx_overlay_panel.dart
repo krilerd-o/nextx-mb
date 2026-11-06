@@ -13,9 +13,9 @@ Future<T?> showNxBlurPanel<T>({
     context: context,
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: Colors.black.withOpacity(0.28),
+    barrierColor: Colors.black.withValues(alpha: 0.28),
     transitionDuration: NxMotion.duration(context, 400),
-    pageBuilder: (ctx, _, __) {
+    pageBuilder: (ctx, _, _) {
       return SafeArea(
         child: Center(
           child: Padding(

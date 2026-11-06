@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_config.dart';
 import '../../core/nx_breakpoint.dart';
@@ -31,8 +32,18 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
     return Scaffold(
       appBar: NxAppHeader(
         title: 'เมล',
-        subtitle: 'อ่านอย่างเดียว',
+        subtitle: 'อ่านอย่างเดียว — เขียน/ตอบใช้เว็บ',
         actions: [
+          IconButton(
+            tooltip: 'เปิดเว็บเมล',
+            onPressed: () async {
+              final uri = Uri.parse('https://moainext.moai-crm.com/mail');
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            icon: const Icon(NxI.arrowSquareOut),
+          ),
           IconButton(
             onPressed: () => setState(() => _revision++),
             icon: const Icon(NxI.arrowCounterClockwise),

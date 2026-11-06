@@ -174,11 +174,11 @@ class AppTheme {
         filled: false,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outline.withOpacity(isDark ? 1 : 0.7)),
+          borderSide: BorderSide(color: scheme.outline.withValues(alpha: isDark ? 1 : 0.7)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outline.withOpacity(isDark ? 1 : 0.7)),
+          borderSide: BorderSide(color: scheme.outline.withValues(alpha: isDark ? 1 : 0.7)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),

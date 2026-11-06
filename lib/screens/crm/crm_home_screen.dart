@@ -12,7 +12,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_surface_card.dart';
-import 'call_log_stub_screen.dart';
+import 'call_log_screen.dart';
 import 'entity_list_screen.dart';
 import '../../widgets/nx_icons.dart';
 
@@ -145,7 +145,7 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
               icon: NxI.phoneCall,
               title: 'บันทึกการโทร',
               subtitle: 'ผลลัพธ์การโทรและงานที่เกี่ยวข้อง',
-              onTap: () => nxPush<void>(context, const CallLogStubScreen()),
+              onTap: () => nxPush<void>(context, const CallLogScreen()),
             ),
           ],
           const SizedBox(height: 12),
@@ -222,7 +222,7 @@ class _ModuleCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 22,
-            backgroundColor: color.withOpacity(0.16),
+            backgroundColor: color.withValues(alpha: 0.16),
             child: Icon(icon, color: color),
           ),
           const SizedBox(height: 14),
@@ -265,7 +265,7 @@ class _ToolCard extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 20,
-              backgroundColor: theme.colorScheme.primary.withOpacity(0.14),
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.14),
               child: Icon(icon, color: theme.colorScheme.primary),
             ),
             const SizedBox(width: 12),

@@ -113,7 +113,7 @@ class _ProgressBarState extends State<_ProgressBar> with SingleTickerProviderSta
             Container(
               height: 4,
               decoration: BoxDecoration(
-                color: cs.primary.withOpacity(0.16),
+                color: cs.primary.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(99),
               ),
             ),

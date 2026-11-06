@@ -175,7 +175,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: NxSurfaceCard(
-                    color: _tint(row['status']?.toString()).withOpacity(0.14),
+                    color: _tint(row['status']?.toString()).withValues(alpha: 0.14),
                     onTap: () {
                       nxPush<void>(context, ActivityDetailScreen(row: row))
                           .then((_) => setState(() => _revision++));

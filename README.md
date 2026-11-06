@@ -6,6 +6,7 @@
 
 - **App Store / Play Store** พร้อม Publish
 - **Flutter:** 3.47.9+ (stable) / Dart 3.13+ — ดู [FLUTTER_SETUP.md](FLUTTER_SETUP.md)
+- **FCM / Release:** ดู [PUSH_AND_RELEASE.md](PUSH_AND_RELEASE.md)
 - **Tech stack:** Flutter, Docker, PostgreSQL, MongoDB, Node.js
 - **สถาปัตยกรรม:** แอปสื่อสารกับ Database **ผ่าน API เท่านั้น** (ทั้งโปรเจค) — ไม่เชื่อม DB โดยตรง
 - **Scale:** ออกแบบให้รองรับผู้ใช้จำนวนมาก (หลักพันคน) — ดู [SCALING.md](SCALING.md)

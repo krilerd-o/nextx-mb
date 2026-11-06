@@ -122,11 +122,23 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
 
   Future<void> _createTask() async {
     final title = TextEditingController();
+    final description = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('งานใหม่'),
-        content: TextField(controller: title, decoration: const InputDecoration(labelText: 'ชื่อเรื่อง')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: title, decoration: const InputDecoration(labelText: 'ชื่อเรื่อง')),
+            const SizedBox(height: 12),
+            TextField(
+              controller: description,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'รายละเอียด (ไม่บังคับ)'),
+            ),
+          ],
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('สร้าง')),
@@ -134,10 +146,16 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
       ),
     );
     final text = title.text.trim();
+    final desc = description.text.trim();
     title.dispose();
+    description.dispose();
     if (ok == true && text.isNotEmpty) {
       try {
-        await context.read<AppConfig>().apiClient.postBoardTask(_boardId, title: text);
+        await context.read<AppConfig>().apiClient.postBoardTask(
+              _boardId,
+              title: text,
+              description: desc.isEmpty ? null : desc,
+            );
         await _load();
       } catch (e) {
         if (mounted) {

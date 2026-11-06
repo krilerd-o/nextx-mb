@@ -53,7 +53,7 @@ class _HrShortcuts extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         CircleAvatar(
-                          backgroundColor: nxAvatarColor('ลงเวลา').withOpacity(0.16),
+                          backgroundColor: nxAvatarColor('ลงเวลา').withValues(alpha: 0.16),
                           child: Icon(NxI.clock, color: nxAvatarColor('ลงเวลา')),
                         ),
                         const SizedBox(height: 12),
@@ -72,7 +72,7 @@ class _HrShortcuts extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         CircleAvatar(
-                          backgroundColor: nxAvatarColor('การลา').withOpacity(0.16),
+                          backgroundColor: nxAvatarColor('การลา').withValues(alpha: 0.16),
                           child: Icon(NxI.note, color: nxAvatarColor('การลา')),
                         ),
                         const SizedBox(height: 12),

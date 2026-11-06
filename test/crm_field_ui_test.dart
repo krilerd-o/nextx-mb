@@ -216,7 +216,7 @@ void main() {
               {'name': 'firstname', 'label_th': 'ชื่อ', 'uitype': 'Text', 'sequence': 1},
             ],
             values: const {},
-            onChanged: (_, __) {},
+            onChanged: (_, _) {},
           ),
         ),
       ),

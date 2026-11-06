@@ -114,7 +114,7 @@ class SettingsScreen extends StatelessWidget {
             child: ListTile(
               leading: Icon(NxI.user, color: colorScheme.primary),
               title: const Text('โปรไฟล์และความปลอดภัย'),
-              subtitle: const Text('ภาษา, รูปแบบวันที่, accent, รหัสผ่าน (placeholder)'),
+              subtitle: const Text('ภาษา, รูปแบบวันที่, accent, เปลี่ยนรหัสผ่าน'),
               trailing: const Icon(NxI.caretRight),
             ),
           ),

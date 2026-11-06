@@ -28,9 +28,9 @@ include ":app"
 gradle.beforeProject { project ->
     if (project.name == "geolocator_android" && !project.ext.has("flutter")) {
         project.ext.flutter = [
-            compileSdkVersion: 35,
+            compileSdkVersion: 36,
             minSdkVersion: 29,
-            targetSdkVersion: 35,
+            targetSdkVersion: 36,
         ]
     }
 }
