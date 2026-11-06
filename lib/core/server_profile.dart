@@ -6,12 +6,70 @@ import 'package:dio/dio.dart';
 /// `GET /api/health` answers `{app: 'MOAI NEXT API', signature: 'aisystem'}`
 /// (backend/src/index.js) is accepted.
 class ServerCheckResult {
-  const ServerCheckResult({required this.url, required this.ok, this.message, this.maintenance = false});
+  const ServerCheckResult({required this.url, required this.ok, this.message, this.maintenance = false, this.mobile});
 
   final String url;
   final bool ok;
   final String? message;
   final bool maintenance;
+
+  /// `data.mobile` of `/api/health`; null on servers older than the mobile support release.
+  final MobileServerInfo? mobile;
+}
+
+/// What a NEXTX server offers the app (`GET /api/health` → `data.mobile`).
+class MobileServerInfo {
+  const MobileServerInfo({this.minVersion, this.latestVersion, this.storeUrl, this.storeUrlIos, this.features = const {}});
+
+  final String? minVersion;
+  final String? latestVersion;
+  final String? storeUrl;
+  final String? storeUrlIos;
+  final Set<String> features;
+
+  bool has(String feature) => features.contains(feature);
+
+  static MobileServerInfo? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    String? str(Object? v) => v is String && v.trim().isNotEmpty ? v.trim() : null;
+    final f = raw['features'];
+    return MobileServerInfo(
+      minVersion: str(raw['min_version']),
+      latestVersion: str(raw['latest_version']),
+      storeUrl: str(raw['store_url']),
+      storeUrlIos: str(raw['store_url_ios']),
+      features: f is List ? f.map((e) => e.toString()).toSet() : const {},
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'min_version': minVersion,
+        'latest_version': latestVersion,
+        'store_url': storeUrl,
+        'store_url_ios': storeUrlIos,
+        'features': features.toList(),
+      };
+}
+
+/// `1.2.10+5` vs `1.2.9` → 1. Build numbers (`+5`) are ignored; missing parts count as 0.
+int compareVersions(String a, String b) {
+  List<int> parts(String v) =>
+      v.split('+').first.split('.').map((e) => int.tryParse(RegExp(r'\d+').stringMatch(e) ?? '') ?? 0).toList();
+  final x = parts(a), y = parts(b);
+  for (var i = 0; i < (x.length > y.length ? x.length : y.length); i++) {
+    final d = (i < x.length ? x[i] : 0) - (i < y.length ? y[i] : 0);
+    if (d != 0) return d.sign;
+  }
+  return 0;
+}
+
+enum UpdateNeed { none, optional, required }
+
+UpdateNeed updateNeedFor(MobileServerInfo? info, String appVersion) {
+  if (info == null) return UpdateNeed.none;
+  if (info.minVersion != null && compareVersions(appVersion, info.minVersion!) < 0) return UpdateNeed.required;
+  if (info.latestVersion != null && compareVersions(appVersion, info.latestVersion!) < 0) return UpdateNeed.optional;
+  return UpdateNeed.none;
 }
 
 const kNextxAppName = 'MOAI NEXT API';
@@ -63,7 +121,12 @@ Future<ServerCheckResult> verifyNextxServer(String input, {Dio? dio}) async {
     final body = res.data;
     if (isNextxHealth(body)) {
       final data = (body as Map)['data'] as Map;
-      return ServerCheckResult(url: url, ok: true, maintenance: data['maintenance'] == true);
+      return ServerCheckResult(
+        url: url,
+        ok: true,
+        maintenance: data['maintenance'] == true,
+        mobile: MobileServerInfo.fromJson(data['mobile']),
+      );
     }
     return ServerCheckResult(url: url, ok: false, message: 'เซิร์ฟเวอร์นี้ไม่ใช่ระบบ MOAI NEXT');
   } on DioException catch (e) {

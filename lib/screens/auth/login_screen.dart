@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_config.dart';
 import '../../core/auth_errors.dart';
@@ -93,6 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _run(Future<void> Function() action) async {
+    context.read<AppConfig>().clearAuthLinkError();
     setState(() {
       _loading = true;
       _error = null;
@@ -152,6 +154,15 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _line() async {
+    final config = context.read<AppConfig>();
+    // Newer servers send the browser back to moainext://app/login (LINE app sign-in,
+    // saved LINE session). The router hands that link to AppConfig.handleAuthDeepLink.
+    if (config.serverInfo?.has('line_app') ?? false) {
+      final uri = Uri.parse(config.apiClient.lineLoginUrlFor(app: true));
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (ok || !mounted) return;
+    }
+    if (!mounted) return;
     final result = await nxPush<String>(context, const LineLoginScreen());
     if (result == null || !mounted) return;
     if (result.startsWith('error:')) {
@@ -362,7 +373,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
                   ),
-                if (_error != null)
+                if (config.authLinkBusy)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(width: 10),
+                      Text('กำลังเข้าสู่ระบบด้วย LINE…'),
+                    ]),
+                  ),
+                if ((_error ?? config.authLinkError) != null)
                   Container(
                     margin: const EdgeInsets.only(top: 8, bottom: 4),
                     padding: const EdgeInsets.all(12),
@@ -371,7 +391,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Icon(NxI.warningCircle, color: cs.onErrorContainer, size: 20),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(_error!, style: TextStyle(color: cs.onErrorContainer))),
+                        Expanded(child: Text((_error ?? config.authLinkError)!, style: TextStyle(color: cs.onErrorContainer))),
                       ],
                     ),
                   ),

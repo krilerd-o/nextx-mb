@@ -10,6 +10,7 @@ import '../core/app_version.dart';
 import '../core/navigation/app_routes.dart';
 import '../core/nx_breakpoint.dart';
 import '../services/app_lock.dart';
+import 'update_required_screen.dart';
 import '../widgets/nx_app_header.dart';
 import '../widgets/nx_app_logo.dart';
 import '../widgets/nx_surface_card.dart';
@@ -91,6 +92,19 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
           ),
+          if (config.updateNeed == UpdateNeed.optional) ...[
+            const SizedBox(height: 20),
+            NxSurfaceCard(
+              onTap: storeUrlFor(config.serverInfo) == null ? null : () => openStore(config.serverInfo),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: ListTile(
+                leading: Icon(NxI.arrowsClockwise, color: colorScheme.primary),
+                title: Text('มีแอปเวอร์ชันใหม่ ${config.serverInfo?.latestVersion ?? ''}'),
+                subtitle: Text('เวอร์ชันในเครื่อง ${AppVersion.value}'),
+                trailing: storeUrlFor(config.serverInfo) == null ? null : const Icon(NxI.caretRight),
+              ),
+            ),
+          ],
           const _AppLockCard(),
           const SizedBox(height: 20),
           NxSurfaceCard(

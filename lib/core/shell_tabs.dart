@@ -146,6 +146,16 @@ class ShellTabsConfig {
     }
   }
 
+  /// `user.mobile_shell` from `GET /api/me`; null when unset or not usable.
+  static ShellTabsConfig? fromServer(Object? raw) {
+    if (raw is! Map) return null;
+    List<String>? list(Object? v) => v is List ? v.map((e) => e.toString()).toList() : null;
+    final roles = list(raw['roles']) ?? const [];
+    final tabs = list(raw['tabs']);
+    if (roles.isEmpty && (tabs == null || tabs.isEmpty)) return null;
+    return ShellTabsConfig(roles: roles, tabs: tabs);
+  }
+
   ShellTabsConfig copyWith({List<String>? roles, List<String>? tabs, bool clearTabs = false}) =>
       ShellTabsConfig(roles: roles ?? this.roles, tabs: clearTabs ? null : (tabs ?? this.tabs));
 }

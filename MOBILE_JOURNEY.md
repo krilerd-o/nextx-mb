@@ -13,7 +13,7 @@
 | เซิร์ฟเวอร์ | ใช้ได้ทุกเซิร์ฟเวอร์ MOAI NEXT — ตรวจ `GET /api/health` (`app: 'MOAI NEXT API'`, `signature: 'aisystem'`), จำเซิร์ฟเวอร์ล่าสุด, เปลี่ยนได้จากหน้า login / ตั้งค่า |
 | อีเมล/ชื่อผู้ใช้ + รหัสผ่าน | ใช้จริง (`POST /api/auth/login`) |
 | OTP อีเมล / SMS | ใช้จริง พร้อมยืนยันเชื่อมบัญชี (`needLinkConfirm` → `/api/auth/link/*`) |
-| LINE | WebView ในแอป ดัก `…/login?token=` จาก callback ของเว็บ (บัญชีต้องผูก LINE แล้ว) — แสดงปุ่มเมื่อ `/api/auth/line/check` มี `channel_id` |
+| LINE | เซิร์ฟเวอร์ใหม่ (feature `line_app`): เปิดเบราว์เซอร์ระบบ `/api/auth/line?app=1` แล้วกลับเข้าแอปทาง `moainext://app/login?token=`; เซิร์ฟเวอร์เดิม: WebView ในแอปดัก `…/login?token=` (บัญชีต้องผูก LINE แล้ว) — แสดงปุ่มเมื่อ `/api/auth/line/check` มี `channel_id` |
 | Google | Google Sign-In แบบ native → `POST /api/auth/google/one-tap` (+ merge บัญชี) — ต้องตั้งค่า OAuth client ใน GCP (ดู PUSH_AND_RELEASE.md) |
 | สมัครสมาชิก | มีรหัสเชิญ/ซีเรียล หรือสมัครรออนุมัติ (`POST /api/auth/register`) |
 | ลิงก์เชิญเข้าธุรกิจ | `…/register?invite=` หรือ `moainext://app/register?invite=` — ยังไม่มีบัญชี: สมัครด้วย `invite_token` เข้าธุรกิจทันที; มีบัญชีแล้ว: เข้าสู่ระบบแล้วถามเข้าร่วม (`POST /api/me/request-join`) |
@@ -27,7 +27,10 @@
 | เมนูล่าง | แนะนำจากบทบาท ∩ สิทธิ์ ปรับเอง/เรียงลำดับได้ (สูงสุด 4 + แท็บ "เมนู") เก็บแยกตามเซิร์ฟเวอร์+ผู้ใช้ในเครื่อง, จำแท็บล่าสุด |
 | สลับธุรกิจ/Package | ชิปบนหัวหน้าหลัก → เลือก Package อื่นหรือเปลี่ยนธุรกิจ; บทบาทติ๊กให้ตาม Package |
 | สิทธิ์เมนูใหม่ | กลับเข้าแอปโหลด `/api/me` + เมนูใหม่ (ไม่เกิน 1 ครั้ง/5 นาที) |
-| เซสชันหมดอายุ | แจ้ง "เซสชันหมดอายุ" บนหน้า login |
+| เซสชันหมดอายุ | แจ้ง "เซสชันหมดอายุ" บนหน้า login; เซิร์ฟเวอร์ใหม่ (feature `refresh`) ต่ออายุ token อัตโนมัติเมื่ออายุเกิน 1 วัน (`POST /api/auth/refresh`) |
+| ความสามารถเซิร์ฟเวอร์ | อ่าน `GET /api/health` → `mobile` (เวอร์ชันต่ำสุด/ล่าสุด, ลิงก์สโตร์, features) ทุกครั้งที่เปิดแอป/กลับเข้าแอป (ไม่เกิน 30 นาที/ครั้ง) — เซิร์ฟเวอร์เดิมไม่มีค่านี้ แอปทำงานแบบเดิม |
+| บังคับอัปเดต | ต่ำกว่า `min_version` → หน้า "กรุณาอัปเดตแอป"; ต่ำกว่า `latest_version` → แถบในตั้งค่า |
+| ซิงค์เมนูล่าง | เซิร์ฟเวอร์ใหม่ (feature `prefs_mobile`) เก็บบทบาท/แท็บใน `user_preferences.mobile_shell` — ล็อกอินเครื่องใหม่ได้เมนูเดิม |
 
 ## Phase 2 — Dashboard, Search, Notifications
 
@@ -92,7 +95,8 @@
 
 ## สิ่งที่ยังขาด (ต้องทำนอกแอปหรือรอ backend)
 
-- Refresh token, 2FA/TOTP, LINE/Google login สำหรับมือถือ (backend NEXTX)
+- 2FA/TOTP (backend NEXTX)
+- refresh token / LINE กลับเข้าแอป / ซิงค์เมนู: เขียนแล้วใน NEXTX branch `feature/mobile-app-support` (จาก `develop`) — รอ merge/deploy (ดู `docs/MOBILE_BACKEND.md` ใน NEXTX)
 - OT / เบิกค่าใช้จ่าย / สลิปเงินเดือน / ประกาศบริษัท (ยังไม่มีโมดูลใน NEXTX)
 - `assetlinks.json` + `apple-app-site-association` บนโดเมนเว็บ
 - Firebase config จริง, keystore, iOS signing บน Mac

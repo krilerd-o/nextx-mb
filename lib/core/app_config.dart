@@ -13,7 +13,10 @@ import '../services/device_push_service.dart';
 import '../services/offline_queue.dart';
 import '../services/realtime_service.dart';
 import '../services/unread_service.dart';
+import 'app_version.dart';
 import 'auth_errors.dart';
+import 'auth_redirect.dart';
+import 'jwt_info.dart';
 import 'menu_access.dart';
 import 'invite_link.dart';
 import 'recent_accounts.dart';
@@ -41,6 +44,7 @@ const String _keyRecentServers = 'recent_servers';
 const String _keyPackageId = 'session_package_id';
 const String _keySessionExpired = 'session_expired_notice';
 const String _keyRecentAccounts = 'recent_accounts_v1';
+const String _keyServerInfo = 'server_mobile_info_v1';
 
 const _secureTokenKey = 'access_token';
 const int _maxAvatarBytes = 400000;
@@ -123,6 +127,108 @@ class AppConfig extends ChangeNotifier {
 
   void clearPendingInvite() => _pendingInvite = null;
 
+  MobileServerInfo? _serverInfo;
+  DateTime? _serverInfoAt;
+
+  /// What this server offers the app (`/api/health` → `mobile`); null on older servers.
+  MobileServerInfo? get serverInfo => _serverInfo;
+
+  UpdateNeed get updateNeed => updateNeedFor(_serverInfo, AppVersion.value);
+
+  String get _serverInfoKey => '${_keyServerInfo}_${serverLabel(_apiBaseUrl)}';
+
+  /// Re-reads the server's mobile info (at most every 30 minutes unless [force]).
+  Future<void> refreshServerInfo({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force && _serverInfoAt != null && now.difference(_serverInfoAt!) < const Duration(minutes: 30)) return;
+    _serverInfoAt = now;
+    Object? body;
+    try {
+      body = await apiClient.getHealthRaw();
+    } catch (_) {
+      return; // offline / unreachable: keep the cached value
+    }
+    if (!isNextxHealth(body)) return;
+    final info = MobileServerInfo.fromJson(((body as Map)['data'] as Map)['mobile']);
+    final before = jsonEncode(_serverInfo?.toJson());
+    _serverInfo = info;
+    final prefs = await SharedPreferences.getInstance();
+    if (info == null) {
+      await prefs.remove(_serverInfoKey);
+    } else {
+      await prefs.setString(_serverInfoKey, jsonEncode(info.toJson()));
+    }
+    if (before != jsonEncode(_serverInfo?.toJson())) notifyListeners();
+  }
+
+  void _loadServerInfo(SharedPreferences prefs) {
+    final raw = prefs.getString(_serverInfoKey);
+    try {
+      _serverInfo = raw == null ? null : MobileServerInfo.fromJson(jsonDecode(raw));
+    } catch (_) {
+      _serverInfo = null;
+    }
+  }
+
+  /// Swaps the session token for a fresh one once it is a day old
+  /// (`POST /api/auth/refresh`, servers with feature `refresh`), so the app
+  /// stays signed in as long as it is opened now and then.
+  Future<void> renewTokenIfNeeded({DateTime? now}) async {
+    final token = _session.accessToken;
+    if (!_session.isLoggedIn || !(_serverInfo?.has('refresh') ?? false)) return;
+    if (!shouldRenewToken(token, now ?? DateTime.now().toUtc())) return;
+    try {
+      final data = await apiClient.refreshAuthToken();
+      final fresh = data['token']?.toString();
+      if (fresh == null || fresh.isEmpty || _session.accessToken != token) return;
+      await _secure.write(key: _secureTokenKey, value: fresh);
+      _session = _session.copyWith(accessToken: fresh);
+      _api.attachSession(
+        baseUrl: _apiBaseUrl,
+        accessToken: fresh,
+        userId: _session.userId,
+        businessId: _session.businessId,
+        packageCode: _session.packageCode,
+      );
+    } catch (e) {
+      debugPrint('token refresh: $e');
+    }
+  }
+
+  String? _authLinkError;
+
+  /// Error from a `moainext://app/login?error=` return (LINE in the system browser).
+  String? get authLinkError => _authLinkError;
+
+  void clearAuthLinkError() => _authLinkError = null;
+
+  bool _authLinkBusy = false;
+  bool get authLinkBusy => _authLinkBusy;
+
+  /// `moainext://app/login?token=…` from the LINE flow started with `?app=1`.
+  /// Called from the router redirect, so the work runs after the current frame.
+  void handleAuthDeepLink(AuthRedirect r) {
+    if (_session.isLoggedIn) return;
+    Future.microtask(() async {
+      if (r.token != null) {
+        _authLinkBusy = true;
+        _authLinkError = null;
+        notifyListeners();
+        try {
+          await loginWithToken(r.token!);
+        } catch (e) {
+          _authLinkError = authErrorMessage(e);
+        } finally {
+          _authLinkBusy = false;
+          notifyListeners();
+        }
+      } else if (r.error != null) {
+        _authLinkError = authRedirectErrorText(r.error!);
+        notifyListeners();
+      }
+    });
+  }
+
   /// Joins the business of an invite link with the signed-in account.
   Future<Map<String, dynamic>> joinWithInvite(String token) async {
     final data = await apiClient.requestJoin(inviteToken: token);
@@ -176,6 +282,8 @@ class AppConfig extends ChangeNotifier {
     if (!shouldRefreshSession(_lastRefreshAt, now, minGap)) return;
     _lastRefreshAt = now;
     try {
+      await refreshServerInfo();
+      await renewTokenIfNeeded();
       await refreshSession();
     } catch (_) {}
   }
@@ -282,8 +390,12 @@ class AppConfig extends ChangeNotifier {
     _serverConfirmed = (prefs.getBool(_keyServerConfirmed) ?? false) || (token != null && token.isNotEmpty);
     await _loadUserScoped(prefs);
     await AppLock.instance.load(loggedIn: _session.isLoggedIn);
+    _loadServerInfo(prefs);
     _ready = true;
     notifyListeners();
+    refreshServerInfo().then((_) => renewTokenIfNeeded()).catchError((Object e) {
+      debugPrint('server info: $e');
+    });
     if (_session.isLoggedIn) {
       try {
         await refreshSession();
@@ -332,6 +444,12 @@ class AppConfig extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_shellKey, config.encode());
     notifyListeners();
+    // Same roles / tabs on the user's other devices (servers with feature `prefs_mobile`).
+    if (_serverInfo?.has('prefs_mobile') ?? false) {
+      apiClient.saveMobileShell(config.toJson()).catchError((Object e) {
+        debugPrint('mobile_shell sync: $e');
+      });
+    }
   }
 
   /// Picks (and verifies) the NEXTX server. Switching servers signs out first.
@@ -346,6 +464,10 @@ class AppConfig extends ChangeNotifier {
     await prefs.setBool(_keyServerConfirmed, true);
     _serverConfirmed = true;
     await setApiBaseUrl(normalized);
+    _loadServerInfo(prefs);
+    refreshServerInfo(force: true).catchError((Object e) {
+      debugPrint('server info: $e');
+    });
   }
 
   /// Back to the server step (from the login screen).
@@ -697,6 +819,12 @@ class AppConfig extends ChangeNotifier {
       menusLoaded: true,
       businessRole: me['role']?.toString(),
     );
+    // New device: take the roles / tabs saved on the account (feature `prefs_mobile`).
+    final remote = ShellTabsConfig.fromServer(user?['mobile_shell']);
+    if (_shell == null && remote != null) {
+      _shell = remote;
+      await prefs.setString(_shellKey, remote.encode());
+    }
     notifyListeners();
   }
 

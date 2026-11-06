@@ -32,7 +32,10 @@ import '../app_config.dart';
 import '../push_navigation.dart';
 import 'app_routes.dart';
 import 'onboarding_redirect.dart';
+import '../auth_redirect.dart';
 import '../invite_link.dart';
+import '../server_profile.dart';
+import '../../screens/update_required_screen.dart';
 import '../shell_tabs.dart';
 import '../../screens/auth/server_screen.dart';
 import '../../screens/auth/welcome_screen.dart';
@@ -51,6 +54,16 @@ GoRouter createAppRouter(AppConfig config) {
     refreshListenable: Listenable.merge([config, PushNavigation.instance]),
     initialLocation: AppRoutes.splash,
     redirect: (context, state) {
+      // LINE started with ?app=1 comes back as moainext://app/login?token=… (or ?error=).
+      if (state.uri.path == AppRoutes.login && !config.isLoggedIn) {
+        final r = parseAuthRedirect(state.uri.toString());
+        if (r != null && (r.token != null || r.error != null)) config.handleAuthDeepLink(r);
+      }
+      // Server requires a newer app (GET /api/health → mobile.min_version).
+      if (config.isReady && config.updateNeed == UpdateNeed.required) {
+        return state.matchedLocation == AppRoutes.updateRequired ? null : AppRoutes.updateRequired;
+      }
+      if (state.matchedLocation == AppRoutes.updateRequired) return AppRoutes.splash;
       final invite = parseInviteLink(state.uri);
       if (invite != null) {
         config.stashInvite(invite);
@@ -86,6 +99,7 @@ GoRouter createAppRouter(AppConfig config) {
     errorBuilder: (context, state) => _RouteNotFoundScreen(location: state.uri.toString()),
     routes: [
       GoRoute(path: AppRoutes.register, redirect: (_, _) => AppRoutes.login),
+      GoRoute(path: AppRoutes.updateRequired, builder: (_, _) => const UpdateRequiredScreen()),
       GoRoute(
         path: AppRoutes.splash,
         builder: (_, _) => const SplashScreen(),

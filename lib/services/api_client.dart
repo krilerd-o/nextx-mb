@@ -95,6 +95,8 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
+          // Tells NEXTX this is the app: Bearer wins over any stray cookie (backend mobileSupport.js).
+          options.headers['X-Nextx-Client'] = 'mobile';
           final token = _accessToken;
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
@@ -171,6 +173,23 @@ class ApiClient {
 
   /// Entry URL for LINE login, opened in an in-app WebView (see LineLoginScreen).
   String get lineLoginUrl => '${_dio.options.baseUrl.replaceAll(RegExp(r'/+$'), '')}/api/auth/line';
+
+  /// `?app=1`: the server sends the browser back to `moainext://app/login?token=`.
+  String lineLoginUrlFor({required bool app}) => app ? '$lineLoginUrl?app=1' : lineLoginUrl;
+
+  /// Raw `GET /api/health` body (envelope) — server fingerprint + `data.mobile`.
+  Future<Object?> getHealthRaw() async {
+    final res = await _dio.get<dynamic>('/api/health', options: Options(validateStatus: (_) => true));
+    return res.data;
+  }
+
+  /// `POST /api/auth/refresh` → `{token, business_id, expires_at}` (servers with feature `refresh`).
+  Future<Map<String, dynamic>> refreshAuthToken() async => _dataMap(await _send('POST', '/api/auth/refresh'));
+
+  /// Saves the app's roles / bottom tabs on the account (feature `prefs_mobile`); `null` clears.
+  Future<void> saveMobileShell(Map<String, dynamic>? shell) async {
+    await _send('PATCH', '/api/me/preferences', data: {'mobile_shell': shell});
+  }
 
   Future<Map<String, dynamic>> _send(
     String method,

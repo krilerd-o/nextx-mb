@@ -16,6 +16,7 @@ class AppRoutes {
   static const String roleEditor = '/settings/role';
   static const String settings = '/settings';
   static const String diagnostics = '/settings/diagnostics';
+  static const String updateRequired = '/update-required';
   static const String hrHome = '/hr';
   static const String gettingStartedEdit = '/settings/appearance';
   static const String hub = '/hub';
