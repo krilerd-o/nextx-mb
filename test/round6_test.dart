@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/auth_redirect.dart';
-import 'package:nextx_mobile/core/jwt_info.dart';
 import 'package:nextx_mobile/core/server_profile.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/core/shell_tabs.dart';
@@ -52,27 +51,13 @@ void main() {
   });
 
   test('mobile info parses from health and older servers give null', () {
-    final m = MobileServerInfo.fromJson({'min_version': '1.0.0', 'store_url': '', 'features': ['refresh', 'line_app']})!;
+    final m = MobileServerInfo.fromJson({'min_version': '1.0.0', 'store_url': '', 'features': ['sliding_session', 'line_app']})!;
     expect(m.minVersion, '1.0.0');
     expect(m.storeUrl, isNull);
-    expect(m.has('refresh'), isTrue);
+    expect(m.has('line_app'), isTrue);
     expect(m.has('prefs_mobile'), isFalse);
     expect(MobileServerInfo.fromJson(null), isNull);
     expect(MobileServerInfo.fromJson(MobileServerInfo.fromJson(m.toJson())!.toJson())!.features, m.features);
-  });
-
-  test('token renewal window', () {
-    final now = DateTime.utc(2026, 11, 6, 12);
-    final fresh = _jwt({'iat': _secs(now.subtract(const Duration(hours: 2))), 'exp': _secs(now.add(const Duration(days: 29)))});
-    final dayOld = _jwt({'iat': _secs(now.subtract(const Duration(days: 2))), 'exp': _secs(now.add(const Duration(days: 5)))});
-    final nearExpiry = _jwt({'iat': _secs(now.subtract(const Duration(hours: 1))), 'exp': _secs(now.add(const Duration(days: 1)))});
-    final expired = _jwt({'iat': _secs(now.subtract(const Duration(days: 9))), 'exp': _secs(now.subtract(const Duration(days: 1)))});
-    expect(shouldRenewToken(fresh, now), isFalse);
-    expect(shouldRenewToken(dayOld, now), isTrue);
-    expect(shouldRenewToken(nearExpiry, now), isTrue);
-    expect(shouldRenewToken(expired, now), isFalse);
-    expect(shouldRenewToken('not-a-jwt', now), isFalse);
-    expect(decodeJwtTimes(fresh)!.expiresAt, now.add(const Duration(days: 29)));
   });
 
   test('app link from LINE is parsed like the web callback', () {
@@ -87,34 +72,51 @@ void main() {
     expect(ShellTabsConfig.fromServer('x'), isNull);
   });
 
-  test('old server: no mobile info, no refresh call, every request marks the app', () async {
+  test('old server: no mobile info, every request marks the app', () async {
     final adapter = FakeNextxAdapter({'GET /api/health': _health()});
     final config = await _readyConfig(adapter);
     await config.refreshServerInfo(force: true);
     expect(config.serverInfo, isNull);
     expect(config.updateNeed, UpdateNeed.none);
-    final dayOld = _jwt({'userId': 1, 'iat': _secs(DateTime.now().subtract(const Duration(days: 3)))});
-    config.debugOverrideSession(SessionState(accessToken: dayOld, userId: '1', businessId: '1'));
-    await config.renewTokenIfNeeded();
-    expect(adapter.callKeys, isNot(contains('POST /api/auth/refresh')));
     expect(adapter.calls.last.headers['X-Nextx-Client'], 'mobile');
   });
 
-  test('new server: forced update and token renewal', () async {
+  test('sliding session: a renewed token from X-Session-Token replaces the old one', () async {
+    final oldTok = _jwt({'userId': 1, 'iat': _secs(DateTime.now().subtract(const Duration(days: 2)))});
     final newTok = _jwt({'userId': 1, 'iat': _secs(DateTime.now())});
+    final adapter = FakeNextxAdapter(
+      {'GET /api/me': {'user': {'id': 1}}},
+      headersFor: {'GET /api/me': {'x-session-token': newTok}},
+    );
+    final config = await _readyConfig(adapter);
+    config.debugOverrideSession(SessionState(accessToken: oldTok, userId: '1', businessId: '1'));
+    await config.apiClient.getMe();
+    expect(config.session.accessToken, newTok);
+    expect(adapter.calls.last.headers['Authorization'], 'Bearer $oldTok');
+    await config.apiClient.getMe();
+    expect(adapter.calls.last.headers['Authorization'], 'Bearer $newTok');
+    expect(adapter.callKeys, isNot(contains('POST /api/auth/refresh')));
+  });
+
+  test('signed out: a late renewed token is ignored', () async {
+    final adapter = FakeNextxAdapter(
+      {'GET /api/health': _health()},
+      headersFor: {'GET /api/health': {'x-session-token': _jwt({'userId': 1})}},
+    );
+    final config = await _readyConfig(adapter);
+    await config.refreshServerInfo(force: true);
+    expect(config.session.accessToken, isNull);
+  });
+
+  test('new server: forced update and menu sync', () async {
     final adapter = FakeNextxAdapter({
-      'GET /api/health': _health(mobile: {'min_version': '99.0.0', 'features': ['refresh', 'prefs_mobile']}),
-      'POST /api/auth/refresh': {'token': newTok},
+      'GET /api/health': _health(mobile: {'min_version': '99.0.0', 'features': ['sliding_session', 'prefs_mobile']}),
       'PATCH /api/me/preferences': {'mobile_shell': null},
     });
     final config = await _readyConfig(adapter);
     await config.refreshServerInfo(force: true);
     expect(config.updateNeed, UpdateNeed.required);
-    final dayOld = _jwt({'userId': 1, 'iat': _secs(DateTime.now().subtract(const Duration(days: 2)))});
-    config.debugOverrideSession(SessionState(accessToken: dayOld, userId: '1', businessId: '1'));
-    await config.renewTokenIfNeeded();
-    expect(config.session.accessToken, newTok);
-    expect(adapter.calls.singleWhere((c) => c.path == '/api/auth/refresh').headers['Authorization'], 'Bearer $dayOld');
+    config.debugOverrideSession(const SessionState(accessToken: 't', userId: '1', businessId: '1'));
 
     await config.saveShellConfig(const ShellTabsConfig(roles: ['hr'], tabs: ['hr', 'chat']));
     await Future<void>.delayed(const Duration(milliseconds: 20));

@@ -16,7 +16,6 @@ import '../services/unread_service.dart';
 import 'app_version.dart';
 import 'auth_errors.dart';
 import 'auth_redirect.dart';
-import 'jwt_info.dart';
 import 'menu_access.dart';
 import 'invite_link.dart';
 import 'recent_accounts.dart';
@@ -52,6 +51,7 @@ const int _maxAvatarBytes = 400000;
 class AppConfig extends ChangeNotifier {
   AppConfig() {
     _api.setOnUnauthorized(_handleUnauthorized);
+    _api.setOnSessionToken(_adoptSessionToken);
     _load();
   }
 
@@ -170,28 +170,15 @@ class AppConfig extends ChangeNotifier {
     }
   }
 
-  /// Swaps the session token for a fresh one once it is a day old
-  /// (`POST /api/auth/refresh`, servers with feature `refresh`), so the app
-  /// stays signed in as long as it is opened now and then.
-  Future<void> renewTokenIfNeeded({DateTime? now}) async {
-    final token = _session.accessToken;
-    if (!_session.isLoggedIn || !(_serverInfo?.has('refresh') ?? false)) return;
-    if (!shouldRenewToken(token, now ?? DateTime.now().toUtc())) return;
+  /// Renewed token from the server (`X-Session-Token`): keep it so the session
+  /// only ends after 90 days without use (NEXTX sliding session).
+  Future<void> _adoptSessionToken(String fresh) async {
+    if (!_session.isLoggedIn || _session.accessToken == fresh) return;
+    _session = _session.copyWith(accessToken: fresh);
     try {
-      final data = await apiClient.refreshAuthToken();
-      final fresh = data['token']?.toString();
-      if (fresh == null || fresh.isEmpty || _session.accessToken != token) return;
       await _secure.write(key: _secureTokenKey, value: fresh);
-      _session = _session.copyWith(accessToken: fresh);
-      _api.attachSession(
-        baseUrl: _apiBaseUrl,
-        accessToken: fresh,
-        userId: _session.userId,
-        businessId: _session.businessId,
-        packageCode: _session.packageCode,
-      );
     } catch (e) {
-      debugPrint('token refresh: $e');
+      debugPrint('save renewed token: $e');
     }
   }
 
@@ -283,7 +270,6 @@ class AppConfig extends ChangeNotifier {
     _lastRefreshAt = now;
     try {
       await refreshServerInfo();
-      await renewTokenIfNeeded();
       await refreshSession();
     } catch (_) {}
   }
@@ -393,7 +379,7 @@ class AppConfig extends ChangeNotifier {
     _loadServerInfo(prefs);
     _ready = true;
     notifyListeners();
-    refreshServerInfo().then((_) => renewTokenIfNeeded()).catchError((Object e) {
+    refreshServerInfo().catchError((Object e) {
       debugPrint('server info: $e');
     });
     if (_session.isLoggedIn) {

@@ -112,6 +112,17 @@ class ApiClient {
           }
           handler.next(options);
         },
+        onResponse: (res, handler) {
+          // Sliding session (NEXTX middleware/jwt.js): signed in and in use → a fresh
+          // 90-day token arrives here; 90 days without any request → sign in again.
+          final fresh = res.headers.value('x-session-token');
+          final current = _accessToken;
+          if (fresh != null && fresh.isNotEmpty && current != null && current.isNotEmpty && fresh != current) {
+            _accessToken = fresh;
+            _onSessionToken?.call(fresh);
+          }
+          handler.next(res);
+        },
         onError: (err, handler) {
           final code = err.response?.statusCode;
           final path = err.requestOptions.path;
@@ -148,6 +159,11 @@ class ApiClient {
 
   void setOnUnauthorized(VoidCallback? cb) => _onUnauthorized = cb;
 
+  void Function(String token)? _onSessionToken;
+
+  /// Called with the renewed token from `X-Session-Token`.
+  void setOnSessionToken(void Function(String token)? cb) => _onSessionToken = cb;
+
   /// Widget tests route requests to a fake adapter instead of the network.
   @visibleForTesting
   void debugSetHttpAdapter(HttpClientAdapter adapter) => _dio.httpClientAdapter = adapter;
@@ -183,8 +199,6 @@ class ApiClient {
     return res.data;
   }
 
-  /// `POST /api/auth/refresh` → `{token, business_id, expires_at}` (servers with feature `refresh`).
-  Future<Map<String, dynamic>> refreshAuthToken() async => _dataMap(await _send('POST', '/api/auth/refresh'));
 
   /// Saves the app's roles / bottom tabs on the account (feature `prefs_mobile`); `null` clears.
   Future<void> saveMobileShell(Map<String, dynamic>? shell) async {
