@@ -30,6 +30,7 @@ class MenuAccess {
   static const mailbox = 'mailbox';
   static const files = 'file-manager';
   static const profile = 'profile';
+  static const pendingApprovals = 'pending-approvals';
 
   static const crmKeys = [
     lead,

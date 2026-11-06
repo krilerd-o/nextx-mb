@@ -27,6 +27,8 @@ List<String>? requiredMenusFor(String path) {
       return const [MenuAccess.chat];
     case 'ai':
       return const [MenuAccess.ai];
+    case 'approvals':
+      return const [MenuAccess.quotation, MenuAccess.leaveManagement, MenuAccess.pendingApprovals];
     case 'mail':
       return const [MenuAccess.mailbox];
     case 'files':

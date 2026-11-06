@@ -39,12 +39,12 @@ class SettingsScreen extends StatelessWidget {
             style: theme.textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
-          NxSurfaceCard(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          const NxSurfaceCard(
+            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: ListTile(
-              leading: const NxAppLogo(size: 40),
-              title: const Text('MOAI NEXT Mobile'),
-              subtitle: const Text('Version $appVersion'),
+              leading: NxAppLogo(size: 40),
+              title: Text('MOAI NEXT Mobile'),
+              subtitle: Text('Version $appVersion'),
             ),
           ),
           const SizedBox(height: 20),

@@ -595,6 +595,20 @@ class ApiClient {
     return _dataMap(await _send('PUT', '/api/boards/$boardId/tasks/$taskId', data: body));
   }
 
+  /// Soft-deletes a task (moved to the workspace trash on the server).
+  Future<void> deleteBoardTask(String boardId, String taskId) async {
+    await _send('DELETE', '/api/boards/$boardId/tasks/$taskId');
+  }
+
+  Future<List<Map<String, dynamic>>> getTaskComments(String boardId, String taskId) async {
+    final env = await _send('GET', '/api/boards/$boardId/tasks/$taskId/comments');
+    return extractMapList(env['data']);
+  }
+
+  Future<Map<String, dynamic>> postTaskComment(String boardId, String taskId, String body) async {
+    return _dataMap(await _send('POST', '/api/boards/$boardId/tasks/$taskId/comments', data: {'body': body}));
+  }
+
   Future<List<Map<String, dynamic>>> getTaskWorklogs(String boardId, String taskId) async {
     final env = await _send('GET', '/api/boards/$boardId/tasks/$taskId/worklogs');
     return extractMapList(env['data']);
@@ -965,6 +979,65 @@ class ApiClient {
   Future<Map<String, dynamic>> getMailItem(String id) async {
     return _dataMap(await _send('GET', '/api/mail/$id'));
   }
+  /// Internal NEXTX mail recipients (members of the current business).
+  Future<List<Map<String, dynamic>>> getMailUsers() async {
+    final env = await _send('GET', '/api/mail/users');
+    return extractMapList(env['data']);
+  }
+
+  /// Sends (or saves as draft) an internal mail. Recipients are NEXTX user ids.
+  Future<Map<String, dynamic>> sendMail({
+    required List<String> toUserIds,
+    List<String> ccUserIds = const [],
+    required String subject,
+    required String body,
+    String? bodyHtml,
+    bool isDraft = false,
+  }) async {
+    return _dataMap(await _send('POST', '/api/mail', data: {
+      'to_user_ids': toUserIds.map(int.tryParse).whereType<int>().toList(),
+      'cc_user_ids': ccUserIds.map(int.tryParse).whereType<int>().toList(),
+      'subject': subject,
+      'body': body,
+      if (bodyHtml != null) 'body_html': bodyHtml,
+      'is_draft': isDraft,
+    }));
+  }
+
+  /// Updates a draft. The server sends it when [isDraft] is false, so pass
+  /// `true` to keep it as a draft.
+  Future<Map<String, dynamic>> updateMailDraft(
+    String id, {
+    required List<String> toUserIds,
+    List<String> ccUserIds = const [],
+    required String subject,
+    required String body,
+    String? bodyHtml,
+    required bool isDraft,
+  }) async {
+    return _dataMap(await _send('PUT', '/api/mail/$id', data: {
+      'to_user_ids': toUserIds.map(int.tryParse).whereType<int>().toList(),
+      'cc_user_ids': ccUserIds.map(int.tryParse).whereType<int>().toList(),
+      'subject': subject,
+      'body': body,
+      if (bodyHtml != null) 'body_html': bodyHtml,
+      'is_draft': isDraft,
+    }));
+  }
+
+  Future<void> markMailRead(String id) async {
+    await _send('PUT', '/api/mail/$id/read');
+  }
+
+  /// Moves to trash; with [permanent] removes a message that is already in trash.
+  Future<void> deleteMail(String id, {bool permanent = false}) async {
+    await _send('DELETE', '/api/mail/$id', query: {if (permanent) 'permanent': '1'});
+  }
+
+  Future<void> restoreMail(String id) async {
+    await _send('PUT', '/api/mail/$id/restore');
+  }
+
 
   Future<Map<String, dynamic>> getEntityRelated(String module, String id) async {
     return _dataMap(await _send('GET', '/api/entity/$module/$id/related'));
@@ -998,6 +1071,29 @@ class ApiClient {
       if (reason != null && reason.isNotEmpty) 'reason': reason,
     }));
   }
+  /// Quotations in `approval_state = pending`. Narrow to the current approver
+  /// with `isAwaitingMyApproval` (lib/core/approval_queue.dart).
+  Future<List<Map<String, dynamic>>> getPendingQuotationApprovals({int limit = 100}) async {
+    final page = await getEntityList(
+      'quotation',
+      limit: limit,
+      extra: const {'filter_approval_state': 'pending', 'sort': 'id', 'order': 'desc'},
+    );
+    return page.items;
+  }
+
+  /// Requests to join a business the current user owns/administers.
+  Future<List<Map<String, dynamic>>> getJoinRequests() async {
+    final env = await _send('GET', '/api/pending-approvals/join-requests');
+    final data = env['data'];
+    if (data is Map && data['join_requests'] is List) return extractMapList(data['join_requests']);
+    return extractMapList(data);
+  }
+
+  Future<void> decideJoinRequest(String id, {required bool approve}) async {
+    await _send('POST', '/api/pending-approvals/join-requests/$id/${approve ? 'approve' : 'reject'}');
+  }
+
 
   Future<Map<String, dynamic>> reviseQuotation(String id) async {
     return _dataMap(await _send('POST', '/api/quotation/$id/revise'));

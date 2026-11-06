@@ -30,6 +30,9 @@ void main() {
     expect(accessRedirectFor(salesOnly, '/crm/deal/1'), AppRoutes.mainShell);
     expect(accessRedirectFor(salesOnly, '/chat/9'), AppRoutes.mainShell);
     expect(accessRedirectFor(salesOnly, AppRoutes.leaveRequest), AppRoutes.mainShell);
+    expect(accessRedirectFor(salesOnly, AppRoutes.approvals), AppRoutes.mainShell);
+    const approver = SessionState(accessToken: 't', menusLoaded: true, menuKeys: ['quotation']);
+    expect(accessRedirectFor(approver, AppRoutes.approvals), isNull);
   });
 
   test('does not block before menus load', () {

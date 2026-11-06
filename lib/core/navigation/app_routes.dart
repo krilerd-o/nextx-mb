@@ -26,6 +26,7 @@ class AppRoutes {
   static const String jobs = '/jobs';
   static const String files = '/files';
   static const String mail = '/mail';
+  static const String approvals = '/approvals';
 
   static String crmModule(String module) => '/crm/$module';
   static String crmRecord(String module, String id) => '/crm/$module/$id';

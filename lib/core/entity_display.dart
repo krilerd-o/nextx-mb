@@ -277,3 +277,28 @@ String lookupFallbackLabel(String module, String id) {
   if (id.isEmpty) return title.isEmpty ? 'รายการ' : title;
   return '${title.isEmpty ? 'รายการ' : title} #$id';
 }
+
+/// Display name for a NEXTX user row (`/api/users`, `/api/mail/users`, task assignee…).
+String userDisplayName(Map<String, dynamic> u) {
+  for (final key in const ['display', 'name', 'full_name', 'display_name']) {
+    final v = u[key]?.toString().trim() ?? '';
+    if (v.isNotEmpty) return v;
+  }
+  final joined = [u['first_name'], u['last_name']]
+      .map((e) => e?.toString().trim() ?? '')
+      .where((e) => e.isNotEmpty)
+      .join(' ');
+  if (joined.isNotEmpty) return joined;
+  for (final key in const ['email1', 'email', 'user_name']) {
+    final v = u[key]?.toString().trim() ?? '';
+    if (v.isNotEmpty) return v;
+  }
+  final id = u['id']?.toString() ?? '';
+  return id.isEmpty ? 'ผู้ใช้' : 'User #$id';
+}
+
+/// Email for a NEXTX user row, if any.
+String? userEmail(Map<String, dynamic> u) {
+  final v = (u['email1'] ?? u['email'])?.toString().trim() ?? '';
+  return v.isEmpty ? null : v;
+}

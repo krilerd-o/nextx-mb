@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/entity_display.dart';
 import '../../core/html_display.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../core/nx_page_route.dart';
@@ -75,8 +76,8 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                                     final needle = v.trim().toLowerCase();
                                     setSheet(() {
                                       filtered = users.where((u) {
-                                        final name = (u['name'] ?? u['full_name'] ?? '').toString().toLowerCase();
-                                        final email = (u['email'] ?? '').toString().toLowerCase();
+                                        final name = userDisplayName(u).toLowerCase();
+                                        final email = (userEmail(u) ?? '').toLowerCase();
                                         final id = (u['id'] ?? '').toString();
                                         return needle.isEmpty ||
                                             name.contains(needle) ||
@@ -92,14 +93,11 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                                   itemCount: filtered.length,
                                   itemBuilder: (_, i) {
                                     final u = filtered[i];
-                                    final name = u['name']?.toString() ??
-                                        u['full_name']?.toString() ??
-                                        u['email']?.toString() ??
-                                        'ผู้ใช้';
+                                    final name = userDisplayName(u);
                                     return ListTile(
                                       leading: const Icon(NxI.user),
                                       title: Text(name),
-                                      subtitle: Text(u['email']?.toString() ?? u['id']?.toString() ?? ''),
+                                      subtitle: Text(userEmail(u) ?? u['id']?.toString() ?? ''),
                                       onTap: () => Navigator.pop(ctx, u),
                                     );
                                   },

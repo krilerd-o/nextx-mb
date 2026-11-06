@@ -58,6 +58,10 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
     final bp = NxBreakpoint.of(context);
 
     final items = <_HubItem>[
+      if (MenuAccess.allow(session, MenuAccess.quotation) ||
+          MenuAccess.allow(session, MenuAccess.leaveManagement) ||
+          MenuAccess.allow(session, MenuAccess.pendingApprovals))
+        const _HubItem(NxI.checkCircle, 'รออนุมัติ', 'ใบเสนอราคา การลา คำขอเข้าร่วม', AppRoutes.approvals),
       if (MenuAccess.anyCrm(session))
         const _HubItem(NxI.users, 'CRM', 'ลูกค้า สินค้า และงานขาย', AppRoutes.crmHome),
       if (MenuAccess.anyCalendar(session))
@@ -73,7 +77,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
       if (MenuAccess.allow(session, MenuAccess.files))
         const _HubItem(NxI.folder, 'ไฟล์', 'กล้องและอัปโหลด', AppRoutes.files),
       if (MenuAccess.allow(session, MenuAccess.mailbox))
-        const _HubItem(NxI.envelope, 'เมล', 'อ่านอย่างเดียว', AppRoutes.mail),
+        const _HubItem(NxI.envelope, 'เมล', 'อ่าน เขียน และตอบกลับ', AppRoutes.mail),
     ];
 
     return Column(
