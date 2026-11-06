@@ -79,6 +79,8 @@ class NxI {
   static const xCircle = PhosphorIconsRegular.xCircle;
   static const password = PhosphorIconsRegular.password;
   static const shieldCheck = PhosphorIconsRegular.shieldCheck;
+  static const fingerprint = PhosphorIconsRegular.fingerprint;
+  static const pushPin = PhosphorIconsRegular.pushPin;
   static const info = PhosphorIconsRegular.info;
   static const link = PhosphorIconsRegular.link;
   static const palette = PhosphorIconsRegular.palette;

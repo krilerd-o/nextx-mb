@@ -59,3 +59,24 @@ jobs:
           name: app-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 7
+
+      # Small per-CPU release APKs for testers (~25 MB instead of the 176 MB
+      # debug build). Signed with the debug key — NOT for Play Store upload.
+      - name: Release APKs per CPU (tester build)
+        env:
+          NX_ALLOW_DEBUG_SIGNING: '1'
+        run: flutter build apk --release --split-per-abi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-arm64-apk
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-other-cpus
+          path: |
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            build/app/outputs/flutter-apk/app-x86_64-release.apk
+          retention-days: 7

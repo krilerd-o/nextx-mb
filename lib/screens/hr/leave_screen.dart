@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -5,6 +6,7 @@ import '../../core/app_config.dart';
 import '../../core/menu_access.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../services/api_client.dart';
+import '../../services/file_open.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_cached_future.dart';
 import '../../widgets/nx_hero_cta.dart';
@@ -100,6 +102,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
   int? _typeId;
   final _reason = TextEditingController();
   DateTimeRange? _range;
+  List<({List<int> bytes, String name})> _files = [];
   bool _loading = true;
   bool _saving = false;
   Object? _error;
@@ -157,16 +160,27 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
       return;
     }
     setState(() => _saving = true);
+    final api = context.read<AppConfig>().apiClient;
     try {
-      await context.read<AppConfig>().apiClient.postLeaveRequest(
+      final created = await api.postLeaveRequest(
             leaveTypeId: _typeId!,
             startDate: _ymd(_range!.start),
             endDate: _ymd(_range!.end),
             reason: _reason.text.trim().isEmpty ? null : _reason.text.trim(),
           );
+      var note = 'ส่งคำขอลาแล้ว';
+      final id = (asStringKeyedMap(created['request'])?['id'] ?? created['id'])?.toString();
+      if (_files.isNotEmpty && id != null) {
+        try {
+          await api.uploadLeaveAttachments(id, _files);
+        } catch (e) {
+          note = 'ส่งคำขอลาแล้ว แต่แนบไฟล์ไม่สำเร็จ (${formatApiError(e)}) — แนบเพิ่มได้ที่แท็บ "ของฉัน"';
+        }
+      }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ส่งคำขอลาแล้ว')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(note)));
         _reason.clear();
+        setState(() => _files = []);
         widget.onSubmitted();
       }
     } catch (e) {
@@ -223,6 +237,34 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
                 decoration: const InputDecoration(labelText: 'เหตุผล'),
                 maxLines: 3,
               ),
+              if (context.watch<AppConfig>().serverInfo?.has('leave_attachments') ?? false) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _saving || _files.length >= 5
+                        ? null
+                        : () async {
+                            final picked = await pickLeaveFiles(max: 5 - _files.length);
+                            if (picked.isNotEmpty && mounted) setState(() => _files = [..._files, ...picked]);
+                          },
+                    icon: const Icon(NxI.paperclip, size: 18),
+                    label: const Text('แนบไฟล์ (เช่น ใบรับรองแพทย์)'),
+                  ),
+                ),
+                if (_files.isNotEmpty)
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final f in _files)
+                        InputChip(
+                          label: Text(f.name, overflow: TextOverflow.ellipsis),
+                          onDeleted: () => setState(() => _files = _files.where((x) => !identical(x, f)).toList()),
+                        ),
+                    ],
+                  ),
+              ],
               const SizedBox(height: 16),
               NxHeroCta(
                 label: 'ส่งคำขอ',
@@ -290,6 +332,7 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
               _LeaveRequestCard(
                 row: p,
                 onCancel: p['status']?.toString() == 'Pending' ? () => _cancel(p) : null,
+                editableFiles: p['status']?.toString() == 'Pending',
               ),
           ],
         );
@@ -315,8 +358,11 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
 }
 
 class _LeaveRequestCard extends StatelessWidget {
-  const _LeaveRequestCard({required this.row, this.onCancel, this.trailing});
+  const _LeaveRequestCard({required this.row, this.onCancel, this.trailing, this.editableFiles = false});
   final Map<String, dynamic> row;
+
+  /// The requester's own Pending request: may add / remove files.
+  final bool editableFiles;
   final VoidCallback? onCancel;
   final Widget? trailing;
 
@@ -368,6 +414,7 @@ class _LeaveRequestCard extends StatelessWidget {
                   if (reason.isNotEmpty) Text('เหตุผล: $reason', style: theme.textTheme.bodySmall),
                   if (reject.isNotEmpty)
                     Text('เหตุผลที่ไม่อนุมัติ: $reject', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                  LeaveAttachments(row: row, editable: editableFiles),
                 ],
               ),
             ),
@@ -490,6 +537,97 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
           ],
         );
       },
+    );
+  }
+}
+
+/// Images / PDF for a leave request (≤ 10 MB each — the server checks too).
+Future<List<({List<int> bytes, String name})>> pickLeaveFiles({int max = 5}) async {
+  final picked = await FilePicker.platform.pickFiles(
+    withData: true,
+    allowMultiple: true,
+    type: FileType.custom,
+    allowedExtensions: const ['jpg', 'jpeg', 'png', 'heic', 'webp', 'pdf'],
+  );
+  return [
+    for (final f in (picked?.files ?? const <PlatformFile>[]).take(max))
+      if (f.bytes != null) (bytes: f.bytes!, name: f.name),
+  ];
+}
+
+/// Files attached to a leave request; opened through the API (permission-checked, not public).
+class LeaveAttachments extends StatefulWidget {
+  const LeaveAttachments({super.key, required this.row, this.editable = false});
+
+  final Map<String, dynamic> row;
+  final bool editable;
+
+  @override
+  State<LeaveAttachments> createState() => _LeaveAttachmentsState();
+}
+
+class _LeaveAttachmentsState extends State<LeaveAttachments> {
+  late List<Map<String, dynamic>> _files = extractMapList(widget.row['attachments']);
+  bool _busy = false;
+
+  String get _id => widget.row['id']?.toString() ?? '';
+
+  Future<void> _run(Future<List<Map<String, dynamic>>> Function() f) async {
+    setState(() => _busy = true);
+    try {
+      final next = await f();
+      if (mounted) setState(() => _files = next);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _open(Map<String, dynamic> f) async {
+    final api = context.read<AppConfig>().apiClient;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final bytes = await api.downloadLeaveAttachment(f['url'].toString());
+      await openFileBytes(bytes, f['name']?.toString() ?? 'file');
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final api = context.read<AppConfig>().apiClient;
+    final canAdd = widget.editable && _files.length < 5 && (context.watch<AppConfig>().serverInfo?.has('leave_attachments') ?? false);
+    if (_files.isEmpty && !canAdd) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final f in _files)
+            InputChip(
+              avatar: Icon((f['mime']?.toString() ?? '').startsWith('image/') ? NxI.image : NxI.file, size: 16),
+              label: Text(f['name']?.toString() ?? 'ไฟล์', overflow: TextOverflow.ellipsis),
+              onPressed: _busy ? null : () => _open(f),
+              onDeleted: widget.editable && !_busy ? () => _run(() => api.removeLeaveAttachment(_id, f['id'].toString())) : null,
+              deleteButtonTooltipMessage: 'เอาไฟล์ออก',
+            ),
+          if (canAdd)
+            ActionChip(
+              avatar: _busy ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.paperclip, size: 16),
+              label: const Text('แนบไฟล์'),
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      final picked = await pickLeaveFiles(max: 5 - _files.length);
+                      if (picked.isNotEmpty) await _run(() => api.uploadLeaveAttachments(_id, picked));
+                    },
+            ),
+        ],
+      ),
     );
   }
 }

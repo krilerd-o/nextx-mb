@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/app_version.dart';
+
 import '../widgets/nx_app_logo.dart';
 
 class SplashScreen extends StatelessWidget {
@@ -25,7 +27,7 @@ class SplashScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'v0.02.000',
+                'v${AppVersion.value}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

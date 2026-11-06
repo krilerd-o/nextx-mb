@@ -45,3 +45,20 @@
 ## หมายเหตุ Built-in Kotlin
 
 Flutter 3.47 แนะนำ Built-in Kotlin แต่ปลั๊กอินบางตัว (เช่น ที่มากับ `alice` / `package_info_plus`) ยัง apply KGP อยู่ — โปรเจกต์นี้ใช้ `android.builtInKotlin=false` ชั่วคราวจนกว่าจะอัปปลั๊กอินได้
+
+## เข้าสู่ระบบด้วย LINE / Google (ไม่ต้องแก้ backend)
+
+### LINE
+- แอปเปิด `{server}/api/auth/line` ใน WebView แล้วดัก URL `…/login?token=` ที่ backend redirect กลับมา
+- ปุ่ม LINE จะแสดงเมื่อ `GET /api/auth/line/check` ตอบ `channel_id` (ตั้งค่า LINE Login บนเซิร์ฟเวอร์นั้นแล้ว)
+- ใช้ได้กับบัญชีที่ผูก LINE แล้วเท่านั้น (บัญชีที่ยังไม่ผูก → ข้อความ "ยังไม่ได้ผูก LINE")
+
+### Google
+- แอปใช้ `google_sign_in` แล้วส่ง ID token ไป `POST /api/auth/google/one-tap`
+- `serverClientId` มาจาก `GET /api/auth/google/one-tap-config` → `client_id` (web client ของเซิร์ฟเวอร์นั้น)
+- **ต้องตั้งค่าใน Google Cloud (โปรเจคเดียวกับ web client ของแต่ละเซิร์ฟเวอร์):**
+  - Android: สร้าง OAuth client ชนิด Android — package `com.moai.nextt.mobile` + SHA-1 ของคีย์ที่ sign (debug และ release)
+  - iOS: สร้าง OAuth client ชนิด iOS (bundle `com.moai.nextt.mobile`) แล้วใส่ `GIDClientID` และ URL scheme (reversed client id) ใน `ios/Runner/Info.plist`
+    ทดสอบบนเครื่องจริง — backend ตรวจ `aud` ของ token เทียบกับ web client
+- ถ้ายังไม่ตั้งค่า ปุ่มจะกดแล้วแจ้ง error จาก Google ส่วนวิธีอื่นใช้ได้ตามปกติ
+- `google_sign_in` initialize ได้ครั้งเดียวต่อการเปิดแอป — เปลี่ยนเซิร์ฟเวอร์ที่ใช้ Google client อื่น ต้องปิด-เปิดแอปใหม่

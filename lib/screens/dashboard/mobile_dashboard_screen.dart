@@ -12,6 +12,8 @@ import '../../services/api_client.dart';
 import '../../services/unread_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_workspace_switcher.dart';
+import 'team_overview_card.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 
@@ -56,6 +58,8 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   Map<String, dynamic>? _attendance;
   Map<String, dynamic>? _summary;
   Map<String, dynamic>? _work;
+  Map<String, dynamic>? _sales;
+  Map<String, dynamic>? _cases;
   bool _loading = true;
   bool _refreshing = false;
   Object? _error;
@@ -91,12 +95,16 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       guard(api.getHomeSummary()),
       MenuAccess.allow(session, MenuAccess.workspace) ? guard(api.getHomeWork(limit: 8)) : Future<Object?>.value(),
       guard(UnreadNotifications.instance.refresh(api).then((_) => null)),
+      MenuAccess.any(session, const ['deal', 'quotation']) ? guard(api.getSalesDashboard()) : Future<Object?>.value(),
+      MenuAccess.allow(session, 'case') ? guard(api.getCaseDashboard()) : Future<Object?>.value(),
     ]);
     if (!mounted) return;
     setState(() {
       _attendance = results[0] as Map<String, dynamic>?;
       _summary = results[1] as Map<String, dynamic>?;
       _work = results[2] as Map<String, dynamic>?;
+      _sales = results[4] as Map<String, dynamic>?;
+      _cases = results[5] as Map<String, dynamic>?;
       _error = (_summary == null && _attendance == null && _work == null) ? firstError : null;
       _loading = false;
       _refreshing = false;
@@ -182,9 +190,11 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        [thaiLongDate(now), if (session.businessName != null) session.businessName!].join(' · '),
+                        thaiLongDate(now),
                         style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                       ),
+                      const SizedBox(height: 8),
+                      const NxWorkspaceSwitcher(),
                       if (_error != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
@@ -242,6 +252,16 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                                 ),
                               ),
                           ],
+                        ),
+                      ],
+                      if (salesFigures(_sales).isNotEmpty || caseFigures(_cases).isNotEmpty) ...[
+                        const SizedBox(height: 24),
+                        const _SectionTitle('ยอดขายและเคส'),
+                        TeamOverviewCard(
+                          sales: _sales,
+                          cases: _cases,
+                          onOpenSales: () => context.push(AppRoutes.crmModule('deal')),
+                          onOpenCases: () => context.push(AppRoutes.crmModule('case')),
                         ),
                       ],
                       const SizedBox(height: 24),

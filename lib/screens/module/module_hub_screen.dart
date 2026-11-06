@@ -86,6 +86,13 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
         const _HubItem(NxI.package, 'ร้านค้า', 'ออเดอร์และสต็อก', AppRoutes.commerce),
       if (MenuAccess.allow(session, MenuAccess.mailbox))
         const _HubItem(NxI.envelope, 'เมล', 'อ่าน เขียน และตอบกลับ', AppRoutes.mail),
+      if (MenuAccess.anyHr(session) || MenuAccess.allow(session, MenuAccess.leaveManagement))
+        const _HubItem(NxI.briefcase, 'HR', 'ลงเวลาและการลา', AppRoutes.hrHome),
+      if (MenuAccess.allow(session, MenuAccess.job))
+        const _HubItem(NxI.wrench, 'งานช่าง', 'งานบริการที่ได้รับมอบหมาย', AppRoutes.jobs),
+      const _HubItem(NxI.magnifyingGlass, 'ค้นหา', 'ค้นหาทุกโมดูล', AppRoutes.globalSearch),
+      const _HubItem(NxI.bell, 'แจ้งเตือน', 'การแจ้งเตือนทั้งหมด', AppRoutes.notifications),
+      const _HubItem(NxI.gear, 'ตั้งค่า', 'ธุรกิจ Package เมนูล่าง ธีม', AppRoutes.settings),
     ];
 
     return Column(

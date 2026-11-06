@@ -47,8 +47,8 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>ใช้ตำแหน่งเพื่อเช็คอินหน้างานและลงเวลา</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>ใช้ตำแหน่งเพื่อเช็คอินหน้างานและลงเวลา</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>ใช้ Face ID ปลดล็อกแอปแทนการเข้าสู่ระบบใหม่</string>
 	<key>NSCameraUsageDescription</key>
 	<string>ใช้กล้องถ่ายหลักฐานเช็คอินและใบตรวจ</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -62,6 +62,11 @@
 	</array>
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<true/>
+	<!-- Google Sign-In (iOS): add the iOS OAuth client from the server's GCP
+	     project before enabling Google on iPhone:
+	       <key>GIDClientID</key><string>XXXX.apps.googleusercontent.com</string>
+	     and a CFBundleURLSchemes entry with the reversed client id
+	     (com.googleusercontent.apps.XXXX). See PUSH_AND_RELEASE.md. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

@@ -16,6 +16,7 @@ import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../mail/mail_compose_screen.dart' show plainTextToHtml;
+import 'smart_checklist_section.dart';
 
 /// NEXTX board priorities (backend/src/routes/boards.js).
 const taskPriorities = <String, String>{
@@ -476,6 +477,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ],
                           ),
                         ),
+                        if (_boardId.isNotEmpty && _taskId.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          SmartChecklistSection(boardId: _boardId, taskId: _taskId),
+                        ],
                         const SizedBox(height: 12),
                         Row(
                           children: [

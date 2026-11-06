@@ -4,6 +4,21 @@ class AppRoutes {
 
   static const String splash = '/';
   static const String login = '/login';
+  static const String welcome = '/welcome';
+  static const String server = '/server';
+  static const String register = '/register';
+  static const String lineLogin = '/login/line';
+  static const String linkConfirm = '/login/link';
+  static const String package = '/package';
+  static const String roleSetup = '/setup/role';
+  static const String tabSetup = '/setup/tabs';
+  static const String tabEditor = '/settings/tabs';
+  static const String roleEditor = '/settings/role';
+  static const String settings = '/settings';
+  static const String diagnostics = '/settings/diagnostics';
+  static const String updateRequired = '/update-required';
+  static const String hrHome = '/hr';
+  static const String gettingStartedEdit = '/settings/appearance';
   static const String hub = '/hub';
   static const String gettingStarted = '/getting-started';
   static const String mainShell = '/main';

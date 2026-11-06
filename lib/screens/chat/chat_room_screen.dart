@@ -36,6 +36,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _controller = TextEditingController();
   final _scroll = ScrollController();
   List<Map<String, dynamic>> _messages = [];
+  List<Map<String, dynamic>> _pins = [];
   Map<String, List<String>> _readers = {};
   final Map<String, String> _typing = {};
   final Map<String, Timer> _typingExpiry = {};
@@ -178,11 +179,69 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       final lastId = list.isEmpty ? null : list.last['id']?.toString();
       if (lastId != null) _markRead(lastId);
       _scrollToBottom(jump: true);
+      _loadPins();
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
       _snack(formatApiError(e));
     }
+  }
+
+  Future<void> _loadPins() async {
+    try {
+      final pins = await context.read<AppConfig>().apiClient.getChatPins(_id);
+      if (mounted) setState(() => _pins = pins);
+    } catch (_) {
+      // Pins are optional (e.g. a server without the Mongo chat store).
+    }
+  }
+
+  bool _isPinned(Map<String, dynamic> m) => _pins.any((p) => p['message_id']?.toString() == m['id']?.toString());
+
+  Future<void> _togglePin(String messageId, {required bool pinned}) async {
+    try {
+      await context.read<AppConfig>().apiClient.setChatPin(_id, messageId, pinned: pinned);
+      _snack(pinned ? 'ปักหมุดแล้ว' : 'เลิกปักหมุดแล้ว');
+      await _loadPins();
+    } catch (e) {
+      _snack(formatApiError(e));
+    }
+  }
+
+  Future<void> _showPins() async {
+    final theme = Theme.of(context);
+    final unpin = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.6),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text('ข้อความที่ปักหมุด (${_pins.length})', style: theme.textTheme.titleMedium),
+              ),
+              for (final p in _pins)
+                ListTile(
+                  leading: const Icon(NxI.pushPin),
+                  title: Text(stripHtmlPreview(asStringKeyedMap(p['message'])?['body']?.toString() ?? '', maxLen: 160),
+                      maxLines: 3, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(_who(fillChatSender(asStringKeyedMap(p['message']) ?? <String, dynamic>{}, _messages))),
+                  trailing: IconButton(
+                    tooltip: 'เลิกปักหมุด',
+                    icon: const Icon(NxI.x, size: 18),
+                    onPressed: () => Navigator.pop(ctx, p['message_id']?.toString()),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (unpin != null && mounted) await _togglePin(unpin, pinned: false);
   }
 
   /// Picks up reaction counts on the newest page without losing scroll position.
@@ -345,6 +404,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             ),
             const Divider(),
             ListTile(leading: const Icon(NxI.clipboard), title: const Text('คัดลอก'), onTap: () => Navigator.pop(ctx, 'copy')),
+            ListTile(
+              leading: const Icon(NxI.pushPin),
+              title: Text(_isPinned(m) ? 'เลิกปักหมุด' : 'ปักหมุด'),
+              onTap: () => Navigator.pop(ctx, _isPinned(m) ? 'unpin' : 'pin'),
+            ),
             if (mine)
               ListTile(leading: const Icon(NxI.pencilSimple), title: const Text('แก้ไข'), onTap: () => Navigator.pop(ctx, 'edit')),
             if (mine)
@@ -369,6 +433,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       } catch (e) {
         _snack(formatApiError(e));
       }
+    } else if (action == 'pin' || action == 'unpin') {
+      await _togglePin(id, pinned: action == 'pin');
     } else if (action == 'copy') {
       await Clipboard.setData(ClipboardData(text: text));
       _snack('คัดลอกแล้ว');
@@ -611,6 +677,30 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       ),
       body: Column(
         children: [
+          if (_pins.isNotEmpty)
+            Material(
+              color: cs.primary.withValues(alpha: 0.08),
+              child: InkWell(
+                onTap: _showPins,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(children: [
+                    Icon(NxI.pushPin, size: 18, color: cs.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        stripHtmlPreview(asStringKeyedMap(_pins.first['message'])?['body']?.toString() ?? '', maxLen: 120),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                    if (_pins.length > 1)
+                      Text('+${_pins.length - 1}', style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
+                  ]),
+                ),
+              ),
+            ),
           Expanded(
             child: _loading && _messages.isEmpty
                 ? const NxSkeletonList(rows: 5)

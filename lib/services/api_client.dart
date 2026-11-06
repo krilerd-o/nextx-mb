@@ -95,6 +95,8 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
+          // Tells NEXTX this is the app: Bearer wins over any stray cookie (backend mobileSupport.js).
+          options.headers['X-Nextx-Client'] = 'mobile';
           final token = _accessToken;
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
@@ -103,14 +105,30 @@ class ApiClient {
           if (bid != null && bid.isNotEmpty) {
             options.headers['X-Business-Id'] = bid;
           }
+          // NEXTX menu/permission checks read the package from this header (like the web).
+          final pkg = _packageCode;
+          if (pkg != null && pkg.isNotEmpty) {
+            options.headers['X-Package-Code'] = pkg;
+          }
           handler.next(options);
+        },
+        onResponse: (res, handler) {
+          // Sliding session (NEXTX middleware/jwt.js): signed in and in use → a fresh
+          // 90-day token arrives here; 90 days without any request → sign in again.
+          final fresh = res.headers.value('x-session-token');
+          final current = _accessToken;
+          if (fresh != null && fresh.isNotEmpty && current != null && current.isNotEmpty && fresh != current) {
+            _accessToken = fresh;
+            _onSessionToken?.call(fresh);
+          }
+          handler.next(res);
         },
         onError: (err, handler) {
           final code = err.response?.statusCode;
           final path = err.requestOptions.path;
-          final isAuthCall = path.contains('/api/auth/login') ||
-              path.contains('/api/auth/register') ||
-              path.contains('/api/auth/otp/');
+          // Any /api/auth/* call (login, OTP, link, Google, register) may return 401
+          // for bad credentials — that must not log the current session out.
+          final isAuthCall = path.contains('/api/auth/');
           if (code == 401 && !isAuthCall) {
             _onUnauthorized?.call();
           }
@@ -137,8 +155,14 @@ class ApiClient {
   VoidCallback? _onUnauthorized;
   String? _accessToken;
   String? _businessId;
+  String? _packageCode;
 
   void setOnUnauthorized(VoidCallback? cb) => _onUnauthorized = cb;
+
+  void Function(String token)? _onSessionToken;
+
+  /// Called with the renewed token from `X-Session-Token`.
+  void setOnSessionToken(void Function(String token)? cb) => _onSessionToken = cb;
 
   /// Widget tests route requests to a fake adapter instead of the network.
   @visibleForTesting
@@ -149,16 +173,37 @@ class ApiClient {
     String? accessToken,
     String? userId,
     String? businessId,
+    String? packageCode,
   }) {
     final trimmed = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     _dio.options.baseUrl = resolveApiBaseUrl(trimmed);
     _accessToken = accessToken;
     _businessId = businessId;
+    _packageCode = packageCode;
   }
 
   String get baseUrl => _dio.options.baseUrl;
   String? get accessToken => _accessToken;
   String? get businessId => _businessId;
+  String? get packageCode => _packageCode;
+
+  /// Entry URL for LINE login, opened in an in-app WebView (see LineLoginScreen).
+  String get lineLoginUrl => '${_dio.options.baseUrl.replaceAll(RegExp(r'/+$'), '')}/api/auth/line';
+
+  /// `?app=1`: the server sends the browser back to `moainext://app/login?token=`.
+  String lineLoginUrlFor({required bool app}) => app ? '$lineLoginUrl?app=1' : lineLoginUrl;
+
+  /// Raw `GET /api/health` body (envelope) — server fingerprint + `data.mobile`.
+  Future<Object?> getHealthRaw() async {
+    final res = await _dio.get<dynamic>('/api/health', options: Options(validateStatus: (_) => true));
+    return res.data;
+  }
+
+
+  /// Saves the app's roles / bottom tabs on the account (feature `prefs_mobile`); `null` clears.
+  Future<void> saveMobileShell(Map<String, dynamic>? shell) async {
+    await _send('PATCH', '/api/me/preferences', data: {'mobile_shell': shell});
+  }
 
   Future<Map<String, dynamic>> _send(
     String method,
@@ -269,6 +314,69 @@ class ApiClient {
       'email': email,
       'code': code,
       'remember': true,
+    }));
+  }
+
+  /// `{channel_id|null, redirect_uri}` — LINE login is configured when channel_id is set.
+  Future<Map<String, dynamic>> getLineCheck() async {
+    return _dataMap(await _send('GET', '/api/auth/line/check'));
+  }
+
+  /// `{client_id, enabled, sign_in_ready, ...}` — Google sign-in availability.
+  Future<Map<String, dynamic>> getGoogleOneTapConfig() async {
+    return _dataMap(await _send('GET', '/api/auth/google/one-tap-config'));
+  }
+
+  /// Google ID token → `{token,user,business}` or `{need_merge, merge_intent}`.
+  Future<Map<String, dynamic>> googleOneTap(String idToken) async {
+    return _dataMap(await _send('POST', '/api/auth/google/one-tap', data: {'credential': idToken}));
+  }
+
+  Future<Map<String, dynamic>> googleMergePreview(String intent) async {
+    return _dataMap(await _send('GET', '/api/auth/google/merge/preview', query: {'intent_token': intent}));
+  }
+
+  Future<Map<String, dynamic>> googleMergeConfirm(String intent) async {
+    return _dataMap(await _send('POST', '/api/auth/google/merge/confirm', data: {'intent_token': intent}));
+  }
+
+  /// Sign-in method linking (OTP etc. returns `needLinkConfirm` + `intentToken`).
+  Future<Map<String, dynamic>> linkPreview(String intent) async {
+    return _dataMap(await _send('GET', '/api/auth/link/preview', query: {'intent_token': intent}));
+  }
+
+  Future<Map<String, dynamic>> linkConfirm(String intent) async {
+    return _dataMap(await _send('POST', '/api/auth/link/confirm', data: {'intent_token': intent, 'remember': true}));
+  }
+
+  /// `signupType`: `with_key` (serial key) or `without_key` (needs admin approval).
+  Future<Map<String, dynamic>> register({
+    required String fullName,
+    required String email,
+    required String password,
+    required String signupType,
+    String? serialKey,
+    String? businessName,
+    String? businessCode,
+    String? inviteToken,
+  }) async {
+    return _dataMap(await _send('POST', '/api/auth/register', data: {
+      'fullName': fullName,
+      'email': email,
+      'password': password,
+      'signup_type': signupType,
+      if (serialKey != null && serialKey.isNotEmpty) 'serialKey': serialKey,
+      if (businessName != null && businessName.isNotEmpty) 'businessName': businessName,
+      if (businessCode != null && businessCode.isNotEmpty) 'businessCode': businessCode,
+      if (inviteToken != null && inviteToken.isNotEmpty) 'invite_token': inviteToken,
+    }));
+  }
+
+  /// `POST /api/me/request-join` — join a business with an invite link token.
+  Future<Map<String, dynamic>> requestJoin({String? inviteToken, String? businessCode}) async {
+    return _dataMap(await _send('POST', '/api/me/request-join', data: {
+      if (inviteToken != null && inviteToken.isNotEmpty) 'invite_token': inviteToken,
+      if (businessCode != null && businessCode.isNotEmpty) 'business_code': businessCode,
     }));
   }
 
@@ -428,6 +536,19 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  /// Enabled packages of [businessId] (`{packages:[{id, code, name, ..., enabled}]}`).
+  Future<List<Map<String, dynamic>>> getPackagesFor(String businessId) async {
+    final env = await _send('GET', '/api/businesses/$businessId/packages');
+    return extractMapList(env['data']);
+  }
+
+  Future<void> setDefaultPackage({required String packageId, required String businessId}) async {
+    await _send('PUT', '/api/me/default-package', data: {
+      'package_id': int.tryParse(packageId) ?? packageId,
+      'business_id': int.tryParse(businessId) ?? businessId,
+    });
+  }
+
   Future<List<Map<String, dynamic>>> getBusinessPackages() async {
     final bid = _businessId;
     if (bid == null || bid.isEmpty) return [];
@@ -486,16 +607,20 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  /// [offlineAt]: the punch was made without network at this device time and is
+  /// sent later (servers with feature `offline_attendance`).
   Future<Map<String, dynamic>> clockIn({
     required double latitude,
     required double longitude,
     String? address,
+    DateTime? offlineAt,
   }) async {
     return _dataMap(await _send('POST', '/api/hr/attendance/clock-in', data: {
       'source': 'app',
       'latitude': latitude,
       'longitude': longitude,
       if (address != null) 'address': address,
+      if (offlineAt != null) ...{'offline': true, 'client_time': offlineAt.toUtc().toIso8601String()},
     }));
   }
 
@@ -503,11 +628,14 @@ class ApiClient {
     required double latitude,
     required double longitude,
     String? address,
+    DateTime? offlineAt,
   }) async {
     return _dataMap(await _send('POST', '/api/hr/attendance/clock-out', data: {
+      'source': 'app',
       'latitude': latitude,
       'longitude': longitude,
       if (address != null) 'address': address,
+      if (offlineAt != null) ...{'offline': true, 'client_time': offlineAt.toUtc().toIso8601String()},
     }));
   }
 
@@ -544,6 +672,25 @@ class ApiClient {
       if (reason != null) 'reason': reason,
     }));
   }
+
+  /// Attach images / PDF to the caller's own Pending leave request (feature `leave_attachments`).
+  Future<List<Map<String, dynamic>>> uploadLeaveAttachments(String requestId, List<({List<int> bytes, String name})> files) async {
+    final form = FormData();
+    for (final f in files) {
+      form.files.add(MapEntry('files[]', MultipartFile.fromBytes(f.bytes, filename: f.name)));
+    }
+    final data = _dataMap(await _send('POST', '/api/hr/leave-requests/$requestId/attachments', data: form));
+    return extractMapList(data['attachments']);
+  }
+
+  /// Removes it from the request (the server keeps the file — nothing is destroyed).
+  Future<List<Map<String, dynamic>>> removeLeaveAttachment(String requestId, String fileId) async {
+    final data = _dataMap(await _send('DELETE', '/api/hr/leave-requests/$requestId/attachments/${Uri.encodeComponent(fileId)}'));
+    return extractMapList(data['attachments']);
+  }
+
+  /// Bytes of an attachment (`url` from the list: `/api/hr/leave-requests/:id/attachments/:fileId`).
+  Future<List<int>> downloadLeaveAttachment(String url) => _downloadBytes(url);
 
   /// `{pending_leave_count, today_clocked_in_count, date}` for HR.
   Future<Map<String, dynamic>> getHrDashboard() async {
@@ -599,6 +746,34 @@ class ApiClient {
       'location': '$lat,$lng',
     }));
   }
+
+  /// `GET /api/me/signatures` — TH/EN signature paths + public URLs.
+  Future<Map<String, dynamic>> getMySignatures() async => _dataMap(await _send('GET', '/api/me/signatures'));
+
+  /// `POST /api/uploads/signature` (PNG/JPEG ≤ 2 MB) → stored path `signatures/...`.
+  Future<String> uploadSignatureImage(List<int> bytes, String filename) async {
+    final form = FormData()..files.add(MapEntry('file', MultipartFile.fromBytes(bytes, filename: filename)));
+    final data = _dataMap(await _send('POST', '/api/uploads/signature', data: form));
+    final path = data['path']?.toString() ?? '';
+    if (path.isEmpty) throw ApiException(500, 'อัปโหลดลายเซ็นไม่สำเร็จ');
+    return path;
+  }
+
+  /// `PUT /api/me/signatures` — set a path or clear a slot.
+  Future<Map<String, dynamic>> saveMySignatures({String? th, String? en, bool clearTh = false, bool clearEn = false}) async =>
+      _dataMap(await _send('PUT', '/api/me/signatures', data: {
+        if (th != null) 'upload_signature_th': th,
+        if (en != null) 'upload_signature_en': en,
+        if (clearTh) 'clear_th': true,
+        if (clearEn) 'clear_en': true,
+      }));
+
+  /// `POST /api/me/phone/otp/request` — SMS code to bind/verify a mobile number.
+  Future<Map<String, dynamic>> requestPhoneBindOtp(String phone) async =>
+      _dataMap(await _send('POST', '/api/me/phone/otp/request', data: {'phone': phone}));
+
+  Future<Map<String, dynamic>> verifyPhoneBindOtp(String phone, String code) async =>
+      _dataMap(await _send('POST', '/api/me/phone/otp/verify', data: {'phone': phone, 'code': code}));
 
   Future<void> uploadActivityPhotos(String id, List<MultipartFile> files) async {
     final form = FormData();
@@ -663,6 +838,24 @@ class ApiClient {
     await _send('DELETE', '/api/boards/$boardId/tasks/$taskId');
   }
 
+  /// Smart checklist rows of a task (`{checklist, items, progress}` → items).
+  Future<List<Map<String, dynamic>>> getSmartChecklist(String boardId, String taskId) async {
+    final env = await _send('GET', '/api/boards/$boardId/items/task/$taskId/smart-checklist');
+    final data = env['data'];
+    return extractMapList(data is Map ? data['items'] : data);
+  }
+
+  Future<Map<String, dynamic>> addSmartChecklistItem(String boardId, String taskId, String title) async =>
+      _dataMap(await _send('POST', '/api/boards/$boardId/items/task/$taskId/smart-checklist/items',
+          data: {'title': title, 'item_kind': 'item', 'status': 'todo'}));
+
+  Future<Map<String, dynamic>> updateSmartChecklistItem(String boardId, String itemId, Map<String, dynamic> patch) async =>
+      _dataMap(await _send('PATCH', '/api/boards/$boardId/smart-checklist/items/$itemId', data: patch));
+
+  Future<void> deleteSmartChecklistItem(String boardId, String itemId) async {
+    await _send('DELETE', '/api/boards/$boardId/smart-checklist/items/$itemId');
+  }
+
   Future<List<Map<String, dynamic>>> getTaskComments(String boardId, String taskId) async {
     final env = await _send('GET', '/api/boards/$boardId/tasks/$taskId/comments');
     return extractMapList(env['data']);
@@ -725,6 +918,12 @@ class ApiClient {
   Future<Map<String, dynamic>> getHomeSummary() async {
     return _dataMap(await _send('GET', '/api/dashboard/home-summary'));
   }
+
+  /// `GET /api/dashboard/sales` — deal + quotation pipeline (this year by default).
+  Future<Map<String, dynamic>> getSalesDashboard() async => _dataMap(await _send('GET', '/api/dashboard/sales'));
+
+  /// `GET /api/dashboard/case` — case counts by status / type / priority.
+  Future<Map<String, dynamic>> getCaseDashboard() async => _dataMap(await _send('GET', '/api/dashboard/case'));
 
   /// My workspace items grouped by due bucket (`GET /api/home/work`).
   /// `counts` holds overdue / today / upcoming / nodue.
@@ -1061,6 +1260,17 @@ class ApiClient {
 
   Future<void> deleteChatMessage(String roomId, String messageId) async {
     await _send('DELETE', '/api/chat/rooms/$roomId/messages/$messageId');
+  }
+
+  /// Pinned messages of a room: `[{message_id, pinned_by, pinned_at, message}]`.
+  Future<List<Map<String, dynamic>>> getChatPins(String roomId) async {
+    final env = await _send('GET', '/api/chat/rooms/$roomId/pins');
+    final data = env['data'];
+    return extractMapList(data is Map ? data['list'] : data);
+  }
+
+  Future<void> setChatPin(String roomId, String messageId, {required bool pinned}) async {
+    await _send(pinned ? 'POST' : 'DELETE', '/api/chat/rooms/$roomId/pins/$messageId');
   }
 
   Future<void> reactChatMessage(String roomId, String messageId, String emoji, {bool remove = false}) async {
