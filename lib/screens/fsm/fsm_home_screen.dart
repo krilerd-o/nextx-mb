@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/entity_modules.dart';
 import '../../core/menu_access.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
@@ -45,13 +46,23 @@ class _FsmHomeScreenState extends State<FsmHomeScreen> {
       'service_location',
       'skill',
     ];
-    for (final m in modules) {
+    final allowed = modules.where((m) => MenuAccess.allow(config.session, EntityModules.menuKeyOf(m))).toList();
+    // One round-trip per module, all in parallel instead of one after another.
+    final results = await Future.wait(allowed.map((m) async {
       try {
         final page = await api.getEntityList(m, limit: 1);
-        if (!mounted) return;
-        setState(() => _counts[m] = page.total ?? page.items.length);
-      } catch (_) {}
-    }
+        return MapEntry(m, page.total ?? page.items.length);
+      } catch (e) {
+        debugPrint('[counts] $m: $e');
+        return null;
+      }
+    }));
+    if (!mounted) return;
+    setState(() {
+      for (final e in results) {
+        if (e != null) _counts[e.key] = e.value;
+      }
+    });
   }
 
   void _pushList(String module, String title) {

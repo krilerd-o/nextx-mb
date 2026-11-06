@@ -79,7 +79,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     }
     return context.read<AppConfig>().apiClient.getEntityList(
           'activity',
-          limit: _mode == _CalMode.agenda ? 80 : 200,
+          limit: 200,
           extra: extra,
         ).then((p) => p.items);
   }
@@ -102,34 +102,6 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     return Scaffold(
       appBar: NxAppHeader(
         title: _title,
-        menu: [
-          NxHeaderMenuItem(
-            label: 'ปฏิทิน',
-            icon: NxI.calendarBlank,
-            onTap: () => setState(() {
-              _mode = _CalMode.agenda;
-              _revision++;
-            }),
-          ),
-          if (showIncoming)
-            NxHeaderMenuItem(
-              label: 'งานใกล้ถึง',
-              icon: NxI.clockCountdown,
-              onTap: () => setState(() {
-                _mode = _CalMode.incoming;
-                _revision++;
-              }),
-            ),
-          if (showPending)
-            NxHeaderMenuItem(
-              label: 'งานค้าง',
-              icon: NxI.warningCircle,
-              onTap: () => setState(() {
-                _mode = _CalMode.pending;
-                _revision++;
-              }),
-            ),
-        ],
         actions: [
           IconButton(
             tooltip: 'รีเฟรช',
@@ -145,27 +117,46 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
         skeleton: const NxSkeletonList(),
         builder: (context, list) {
           final dayKey = _ymd(_selectedDay);
-          final visible = _mode == _CalMode.agenda
-              ? list.where((row) {
-                  final start = row['date_start']?.toString() ?? '';
-                  return start.startsWith(dayKey);
-                }).toList()
-              : list;
+          final byDay = groupActivitiesByDay(list);
+          final visible = _mode == _CalMode.agenda ? (byDay[dayKey] ?? const <Map<String, dynamic>>[]) : list;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (_mode == _CalMode.agenda)
-                CalendarDatePicker(
-                  initialDate: _selectedDay,
-                  firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                  onDateChanged: (d) {
-                    final monthChanged =
-                        d.month != _selectedDay.month || d.year != _selectedDay.year;
-                    setState(() => _selectedDay = d);
-                    if (monthChanged) setState(() => _revision++);
-                  },
+              SegmentedButton<_CalMode>(
+                segments: [
+                  const ButtonSegment(value: _CalMode.agenda, label: Text('ปฏิทิน'), icon: Icon(NxI.calendarBlank)),
+                  if (showIncoming)
+                    const ButtonSegment(value: _CalMode.incoming, label: Text('ใกล้ถึง'), icon: Icon(NxI.clockCountdown)),
+                  if (showPending)
+                    const ButtonSegment(value: _CalMode.pending, label: Text('ค้าง'), icon: Icon(NxI.warningCircle)),
+                ],
+                selected: {_mode},
+                showSelectedIcon: false,
+                onSelectionChanged: (v) => setState(() {
+                  _mode = v.first;
+                  _revision++;
+                }),
+              ),
+              const SizedBox(height: 12),
+              if (_mode == _CalMode.agenda) ...[
+                NxMonthGrid(
+                  month: DateTime(_selectedDay.year, _selectedDay.month),
+                  selected: _selectedDay,
+                  counts: {for (final e in byDay.entries) e.key: e.value.length},
+                  onSelect: (d) => setState(() => _selectedDay = d),
+                  onMonthChange: (m) => setState(() {
+                    final now = DateTime.now();
+                    _selectedDay = (m.year == now.year && m.month == now.month) ? now : m;
+                    _revision++;
+                  }),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  '${_selectedDay.day}/${_selectedDay.month}/${_selectedDay.year + 543} · ${visible.length} กิจกรรม',
+                  style: theme.textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+              ],
               if (visible.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(24),
@@ -202,7 +193,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                               ),
                               Text(
                                 [
-                                  row['date_start'],
+                                  activityTimeLabel(row),
                                   row['status'],
                                   row['location'],
                                 ].where((e) => e != null && e.toString().isNotEmpty).join(' · '),
@@ -226,3 +217,148 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     );
   }
 }
+
+/// Local `yyyy-MM-dd` → activities starting that day (server sends UTC ISO).
+Map<String, List<Map<String, dynamic>>> groupActivitiesByDay(List<Map<String, dynamic>> rows) {
+  final out = <String, List<Map<String, dynamic>>>{};
+  for (final r in rows) {
+    final raw = r['date_start']?.toString() ?? '';
+    final d = DateTime.tryParse(raw);
+    final key = d == null
+        ? (raw.length >= 10 ? raw.substring(0, 10) : raw)
+        : _ymdOf(raw.length <= 10 ? d : d.toLocal());
+    if (key.isEmpty) continue;
+    (out[key] ??= []).add(r);
+  }
+  return out;
+}
+
+String _ymdOf(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// "09:30–10:30" (local) or the raw value when it cannot be parsed.
+String activityTimeLabel(Map<String, dynamic> row) {
+  String hm(dynamic v) {
+    final raw = v?.toString() ?? '';
+    final d = DateTime.tryParse(raw);
+    if (d == null || raw.length <= 10) return '';
+    final l = d.toLocal();
+    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
+
+  final a = hm(row['date_start']);
+  final b = hm(row['due_date'] ?? row['date_end']);
+  if (a.isEmpty) return row['date_start']?.toString() ?? '';
+  return b.isEmpty ? a : '$a–$b';
+}
+
+const _thMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+const _thWeek = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
+
+/// Month grid (Mon-first) with a dot per day that has activities.
+class NxMonthGrid extends StatelessWidget {
+  const NxMonthGrid({
+    super.key,
+    required this.month,
+    required this.selected,
+    required this.counts,
+    required this.onSelect,
+    required this.onMonthChange,
+  });
+
+  final DateTime month;
+  final DateTime selected;
+  final Map<String, int> counts;
+  final ValueChanged<DateTime> onSelect;
+  final ValueChanged<DateTime> onMonthChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final first = DateTime(month.year, month.month);
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    final lead = first.weekday - 1;
+    final now = DateTime.now();
+    final cells = <Widget>[
+      for (final w in _thWeek)
+        Center(child: Text(w, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
+      for (var i = 0; i < lead; i++) const SizedBox.shrink(),
+      for (var day = 1; day <= daysInMonth; day++)
+        Builder(builder: (context) {
+          final d = DateTime(month.year, month.month, day);
+          final isSel = d.year == selected.year && d.month == selected.month && d.day == selected.day;
+          final isToday = d.year == now.year && d.month == now.month && d.day == now.day;
+          final n = counts[_ymdOf(d)] ?? 0;
+          return InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => onSelect(d),
+            child: Container(
+              margin: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: isSel ? cs.primary : (isToday ? cs.primaryContainer : null),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '$day',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: isSel ? cs.onPrimary : null,
+                      fontWeight: isToday || isSel ? FontWeight.w700 : null,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: n == 0 ? Colors.transparent : (isSel ? cs.onPrimary : cs.primary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+    ];
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(NxI.caretLeft),
+                  onPressed: () => onMonthChange(DateTime(month.year, month.month - 1)),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text('${_thMonths[month.month - 1]} ${month.year + 543}', style: theme.textTheme.titleMedium),
+                  ),
+                ),
+                TextButton(onPressed: () => onMonthChange(DateTime(now.year, now.month)), child: const Text('วันนี้')),
+                IconButton(
+                  icon: const Icon(NxI.caretRight),
+                  onPressed: () => onMonthChange(DateTime(month.year, month.month + 1)),
+                ),
+              ],
+            ),
+            GridView.count(
+              crossAxisCount: 7,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: 1.05,
+              children: cells,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

@@ -45,15 +45,17 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     if (!mounted) return;
     setState(() => _searching = true);
     final api = config.apiClient;
-    final next = <_Hit>[];
-    for (final m in _modules) {
+    // Query every allowed module at once; keep module order in the results.
+    final pages = await Future.wait(_modules.map((m) async {
       try {
         final page = await api.getEntityList(m, limit: 8, q: query);
-        for (final row in page.items) {
-          next.add(_Hit(module: m, row: row));
-        }
-      } catch (_) {}
-    }
+        return [for (final row in page.items) _Hit(module: m, row: row)];
+      } catch (e) {
+        debugPrint('[search] $m: $e');
+        return const <_Hit>[];
+      }
+    }));
+    final next = [for (final hits in pages) ...hits];
     if (mounted) {
       setState(() {
         _results

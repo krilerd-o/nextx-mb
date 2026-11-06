@@ -12,6 +12,9 @@ import '../widgets/nx_app_header.dart';
 import '../widgets/nx_hero_cta.dart';
 import '../widgets/nx_surface_card.dart';
 import '../widgets/nx_icons.dart';
+import 'profile_edit_screen.dart';
+import 'settings_screen.dart';
+import '../core/nx_page_route.dart';
 
 /// Phase 7 — โปรไฟล์, ภาษา/รูปแบบวันที่, รหัสผ่าน/2FA placeholder, accent, avatar (C1)
 class ProfileScreen extends StatelessWidget {
@@ -61,7 +64,7 @@ class ProfileScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(email, style: theme.textTheme.titleMedium),
                 Text(
-                  'v0.02.000',
+                  'v${SettingsScreen.appVersion}',
                   style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 Text(
@@ -89,6 +92,12 @@ class ProfileScreen extends StatelessWidget {
                     onPressed: () => config.clearProfileAvatar(),
                     child: const Text('ลบรูป'),
                   ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => nxPush<bool>(context, const ProfileEditScreen()),
+                  icon: const Icon(NxI.pencilSimple),
+                  label: const Text('แก้ไขข้อมูลส่วนตัว'),
+                ),
               ],
             ),
           ),

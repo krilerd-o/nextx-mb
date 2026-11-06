@@ -715,13 +715,16 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  /// Multi-turn chat: send the conversation so far in [messages].
   Future<Map<String, dynamic>> postAiChat({
     required List<Map<String, dynamic>> messages,
     bool auto = true,
+    String? conversationId,
   }) async {
     return _dataMap(await _send('POST', '/api/ai/chat', data: {
       'messages': messages,
       'auto': auto,
+      if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
     }));
   }
 
@@ -1005,6 +1008,15 @@ class ApiClient {
       'new_password': newPassword,
       if (currentPassword != null && currentPassword.isNotEmpty) 'current_password': currentPassword,
     });
+  }
+
+  Future<Map<String, dynamic>> getMyProfile() async {
+    final data = _dataMap(await _send('GET', '/api/me/profile'));
+    return asStringKeyedMap(data['profile']) ?? data;
+  }
+
+  Future<Map<String, dynamic>> updateMyProfile(Map<String, dynamic> changes) async {
+    return _dataMap(await _send('PUT', '/api/me/profile', data: changes));
   }
 
   Future<Map<String, dynamic>> uploadAvatar(MultipartFile file) async {
