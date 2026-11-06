@@ -28,6 +28,8 @@ import '../app_alice.dart';
 import '../app_config.dart';
 import '../push_navigation.dart';
 import 'app_routes.dart';
+import 'notification_deep_link.dart';
+import 'route_access.dart';
 
 GoRouter createAppRouter(AppConfig config) {
   return GoRouter(
@@ -63,9 +65,12 @@ GoRouter createAppRouter(AppConfig config) {
       ];
       if (gated.contains(loc)) return AppRoutes.mainShell;
       final pending = PushNavigation.instance.take();
-      if (pending != null && pending.isNotEmpty && pending != loc) return pending;
-      return null;
+      if (pending != null && pending.isNotEmpty && pending != loc) {
+        return accessRedirectFor(config.session, pending) ?? pending;
+      }
+      return accessRedirectFor(config.session, loc);
     },
+    errorBuilder: (context, state) => _RouteNotFoundScreen(location: state.uri.toString()),
     routes: [
       GoRoute(
         path: AppRoutes.splash,
@@ -102,6 +107,10 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.leaveList,
         builder: (_, _) => const LeaveScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.leaveRequest,
+        builder: (_, _) => const LeaveScreen(initialTab: 1),
       ),
       GoRoute(
         path: AppRoutes.moduleHub,
@@ -151,6 +160,20 @@ GoRouter createAppRouter(AppConfig config) {
         path: AppRoutes.mail,
         builder: (_, _) => const MailHomeScreen(),
       ),
+      // Web-style URLs (`https://<host>/modules/...`) arriving via Android App Links /
+      // iOS Universal Links — reuse the push-payload mapper.
+      GoRoute(
+        path: '/modules/:module',
+        redirect: (_, state) => notificationDeepLink(state.uri.toString()),
+      ),
+      GoRoute(
+        path: '/modules/:module/view/:id',
+        redirect: (_, state) => notificationDeepLink(state.uri.toString()),
+      ),
+      GoRoute(
+        path: '/modules/:module/:id',
+        redirect: (_, state) => notificationDeepLink(state.uri.toString()),
+      ),
       GoRoute(
         path: '/crm/:module/:id',
         builder: (_, state) => EntityByIdLoader(
@@ -198,4 +221,41 @@ GoRouter createAppRouter(AppConfig config) {
       ),
     ],
   );
+}
+
+class _RouteNotFoundScreen extends StatelessWidget {
+  const _RouteNotFoundScreen({required this.location});
+  final String location;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('ไม่พบหน้า')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.link_off, size: 48, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(height: 12),
+              Text('ไม่พบหน้าที่ต้องการในแอป', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 4),
+              Text(
+                location,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => context.go(AppRoutes.mainShell),
+                child: const Text('กลับหน้าหลัก'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

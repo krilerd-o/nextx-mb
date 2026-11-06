@@ -14,7 +14,10 @@ import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 
 class LeaveScreen extends StatefulWidget {
-  const LeaveScreen({super.key});
+  const LeaveScreen({super.key, this.initialTab = 0});
+
+  /// 0 = balance, 1 = request form, 2 = mine, 3 = approve.
+  final int initialTab;
 
   @override
   State<LeaveScreen> createState() => _LeaveScreenState();
@@ -29,8 +32,10 @@ class _LeaveScreenState extends State<LeaveScreen> {
       context.watch<AppConfig>().session,
       MenuAccess.leaveManagement,
     );
+    final tabCount = canApprove ? 4 : 3;
     return DefaultTabController(
-      length: canApprove ? 4 : 3,
+      length: tabCount,
+      initialIndex: widget.initialTab.clamp(0, tabCount - 1),
       child: Scaffold(
         appBar: const NxAppHeader(title: 'การลา'),
         body: Column(

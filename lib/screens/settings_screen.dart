@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -14,7 +15,13 @@ import '../widgets/nx_icons.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  static const String appVersion = '0.02.000';
+  /// Keep in sync with `version:` in pubspec.yaml (or override with --dart-define=APP_VERSION=...).
+  static const String appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '0.2.0+2');
+
+  /// Release builds lock the API endpoint; QA builds can re-enable with
+  /// `--dart-define=ALLOW_API_URL_EDIT=true`.
+  static const bool _allowApiUrlEditInRelease = bool.fromEnvironment('ALLOW_API_URL_EDIT');
+  static bool get canEditApiUrl => !kReleaseMode || _allowApiUrlEditInRelease;
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +54,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           NxSurfaceCard(
-            onTap: () => _showEditApiUrlDialog(context, config),
+            onTap: canEditApiUrl ? () => _showEditApiUrlDialog(context, config) : null,
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: ListTile(
               leading: Icon(NxI.link, color: colorScheme.primary),
@@ -67,7 +74,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              trailing: const Icon(NxI.pencilSimple),
+              trailing: canEditApiUrl ? const Icon(NxI.pencilSimple) : null,
             ),
           ),
           const SizedBox(height: 20),

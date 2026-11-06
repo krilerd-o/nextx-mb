@@ -96,7 +96,7 @@ Future<void> initFirebasePush() async {
       _showForegroundNotification(message);
     });
     FirebaseMessaging.instance.onTokenRefresh.listen((value) {
-      DevicePushService.instance.saveToken(value);
+      DevicePushService.instance.onTokenRefreshed(value);
     });
   } catch (e) {
     debugPrint('[push] Firebase init skipped: $e');
@@ -111,7 +111,11 @@ class DevicePushService {
   String? lastToken;
   bool get isReady => lastToken != null && lastToken!.isNotEmpty;
 
+  /// Session the token was last registered for; used to re-register on rotation.
+  AppConfig? _boundConfig;
+
   Future<void> sync(AppConfig config) async {
+    _boundConfig = config;
     try {
       await _refreshFcmToken();
     } catch (e) {
@@ -132,7 +136,24 @@ class DevicePushService {
     }
   }
 
+  /// FCM rotated the token: persist it and tell the server, otherwise pushes stop arriving.
+  Future<void> onTokenRefreshed(String token) async {
+    await saveToken(token);
+    final config = _boundConfig;
+    if (config == null || !config.isLoggedIn) return;
+    try {
+      await config.apiClient.registerDeviceToken(
+        token: token,
+        platform: config.devicePlatform,
+        deviceName: defaultTargetPlatform.name,
+      );
+    } catch (e) {
+      debugPrint('[push] re-register: $e');
+    }
+  }
+
   Future<void> unregister(AppConfig config) async {
+    _boundConfig = null;
     final prefs = await SharedPreferences.getInstance();
     final token = lastToken ?? prefs.getString(_tokenKey);
     if (token == null || token.isEmpty) return;

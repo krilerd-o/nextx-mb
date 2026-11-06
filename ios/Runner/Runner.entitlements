@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push (FCM via APNs). Xcode switches this to "production" when exporting for App Store. -->
+	<key>aps-environment</key>
+	<string>development</string>
+	<!-- Universal Links — needs /.well-known/apple-app-site-association on the web host. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:moainext.moai-crm.com</string>
+	</array>
+</dict>
+</plist>

@@ -264,17 +264,104 @@ class TaskByIdLoader extends StatelessWidget {
     if (asItem != null) {
       return WorkspaceItemBySlugLoader(slug: asItem.value);
     }
-    return TaskDetailScreen(task: {'id': taskId, 'board_id': boardId});
+    return _TaskRecordLoader(boardId: boardId, taskId: taskId);
   }
 }
 
-class ChatByIdLoader extends StatelessWidget {
+/// Fetches the full task row so deep links show title/description, not an empty shell.
+class _TaskRecordLoader extends StatefulWidget {
+  const _TaskRecordLoader({required this.boardId, required this.taskId});
+  final String boardId;
+  final String taskId;
+
+  @override
+  State<_TaskRecordLoader> createState() => _TaskRecordLoaderState();
+}
+
+class _TaskRecordLoaderState extends State<_TaskRecordLoader> {
+  late Future<Map<String, dynamic>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _resolve();
+  }
+
+  Future<Map<String, dynamic>> _resolve() async {
+    final fallback = <String, dynamic>{'id': widget.taskId, 'board_id': widget.boardId};
+    try {
+      final rows = await context
+          .read<AppConfig>()
+          .apiClient
+          .getWorkspaceItems(boardIds: widget.boardId, limit: 200);
+      for (final row in rows) {
+        if (row['id']?.toString() == widget.taskId) {
+          return {...row, 'board_id': row['board_id'] ?? widget.boardId};
+        }
+      }
+    } catch (_) {
+      // Fall back to the minimal row; TaskDetailScreen still loads worklogs by id.
+    }
+    return fallback;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Scaffold(body: NxSkeletonList());
+        }
+        return TaskDetailScreen(
+          task: snap.data ?? {'id': widget.taskId, 'board_id': widget.boardId},
+        );
+      },
+    );
+  }
+}
+
+class ChatByIdLoader extends StatefulWidget {
   const ChatByIdLoader({super.key, required this.roomId});
   final String roomId;
 
   @override
+  State<ChatByIdLoader> createState() => _ChatByIdLoaderState();
+}
+
+class _ChatByIdLoaderState extends State<ChatByIdLoader> {
+  late Future<Map<String, dynamic>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _resolve();
+  }
+
+  Future<Map<String, dynamic>> _resolve() async {
+    final fallback = <String, dynamic>{'id': widget.roomId, 'name': 'แชท'};
+    try {
+      final rooms = await context.read<AppConfig>().apiClient.getChatRooms();
+      for (final room in rooms) {
+        if (room['id']?.toString() == widget.roomId) return room;
+      }
+    } catch (_) {
+      // Open the room anyway; messages are fetched by id.
+    }
+    return fallback;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ChatRoomScreen(room: {'id': roomId, 'name': 'แชท'});
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Scaffold(body: NxSkeletonList());
+        }
+        return ChatRoomScreen(room: snap.data ?? {'id': widget.roomId, 'name': 'แชท'});
+      },
+    );
   }
 }
 

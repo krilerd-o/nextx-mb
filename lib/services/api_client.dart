@@ -918,8 +918,13 @@ class ApiClient {
     await _send('POST', '/api/auth/forgot', data: {'email': email, 'locale': 'th'});
   }
 
-  Future<void> changePassword(String newPassword) async {
-    await _send('PUT', '/api/me/password', data: {'new_password': newPassword});
+  /// `current_password` is sent so the server can verify it (NEXTX should reject
+  /// a wrong current password once its `/api/me/password` check is in place).
+  Future<void> changePassword(String newPassword, {String? currentPassword}) async {
+    await _send('PUT', '/api/me/password', data: {
+      'new_password': newPassword,
+      if (currentPassword != null && currentPassword.isNotEmpty) 'current_password': currentPassword,
+    });
   }
 
   Future<Map<String, dynamic>> uploadAvatar(MultipartFile file) async {

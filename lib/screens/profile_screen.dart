@@ -229,12 +229,13 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     );
                     final value = next.text;
+                    final currentValue = current.text;
                     current.dispose();
                     next.dispose();
                     confirm.dispose();
                     if (ok == true) {
                       try {
-                        await config.apiClient.changePassword(value);
+                        await config.apiClient.changePassword(value, currentPassword: currentValue);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('เปลี่ยนรหัสแล้ว')),

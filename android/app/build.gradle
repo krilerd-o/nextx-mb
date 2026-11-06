@@ -47,7 +47,15 @@ android {
 
     buildTypes {
         release {
-            signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.release
+            } else if (System.getenv("NX_ALLOW_DEBUG_SIGNING") == "1") {
+                // Internal side-load builds only — never upload a debug-signed bundle to a store.
+                logger.warn("WARNING: android/key.properties missing — release build is signed with the DEBUG key (NX_ALLOW_DEBUG_SIGNING=1).")
+                signingConfig = signingConfigs.debug
+            } else {
+                signingConfig = null
+            }
         }
     }
 }
@@ -62,4 +70,15 @@ dependencies {
 
 if (file("google-services.json").exists()) {
     apply plugin: "com.google.gms.google-services"
+}
+
+// Fail fast instead of silently producing a debug-signed store build.
+gradle.taskGraph.whenReady { graph ->
+    def releaseTasks = graph.allTasks.findAll { it.project == project && it.name ==~ /(?i)(assemble|bundle|package)Release/ }
+    if (!releaseTasks.isEmpty() && !keystorePropertiesFile.exists() && System.getenv("NX_ALLOW_DEBUG_SIGNING") != "1") {
+        throw new GradleException(
+            "android/key.properties not found. Create it from key.properties.example for store builds, " +
+            "or set NX_ALLOW_DEBUG_SIGNING=1 for an internal debug-signed APK."
+        )
+    }
 }

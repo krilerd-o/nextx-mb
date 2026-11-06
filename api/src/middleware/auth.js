@@ -1,7 +1,7 @@
 const { createRemoteJWKSet, jwtVerify } = require('jose');
 const { sendError } = require('../utils/http');
 
-const AUTH_TRANSITION_MODE = (process.env.AUTH_TRANSITION_MODE || 'true').toLowerCase() === 'true';
+const AUTH_TRANSITION_MODE = (process.env.AUTH_TRANSITION_MODE || 'false').toLowerCase() === 'true';
 const AUTH_TRANSITION_DEADLINE = process.env.AUTH_TRANSITION_DEADLINE || '';
 const OAUTH_ISSUER = process.env.OAUTH_ISSUER || '';
 const OAUTH_AUDIENCE = process.env.OAUTH_AUDIENCE || '';

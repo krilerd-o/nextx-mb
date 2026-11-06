@@ -61,6 +61,10 @@ if /i "%ENABLE_ALICE%"=="1" (
   set "DART_DEFINES=!DART_DEFINES! --dart-define=ENABLE_ALICE=true"
   echo ENABLE_ALICE=true  ^(Alice HTTP Inspector ใน APK นี้^)
 )
+if not exist "%~dp0android\key.properties" (
+  echo WARNING: android\key.properties not found - APK will be signed with the DEBUG key ^(internal testing only, not for Play Store^)
+  set "NX_ALLOW_DEBUG_SIGNING=1"
+)
 echo.
 call flutter build apk --release !DART_DEFINES!
 if errorlevel 1 exit /b 1
