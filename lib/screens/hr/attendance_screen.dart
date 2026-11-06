@@ -237,8 +237,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                               Text(row['work_date']?.toString() ?? '', style: theme.textTheme.titleMedium),
                               Text(
                                 [
-                                  if (row['clock_in_at'] != null) 'เข้า ${row['clock_in_at']}',
-                                  if (row['clock_out_at'] != null) 'ออก ${row['clock_out_at']}',
+                                  if (row['clock_in_at'] != null) 'เข้า ${row['clock_in_at']}${offlinePunchFlags(row).$1 ? ' (ออฟไลน์)' : ''}',
+                                  if (row['clock_out_at'] != null) 'ออก ${row['clock_out_at']}${offlinePunchFlags(row).$2 ? ' (ออฟไลน์)' : ''}',
                                 ].join(' · '),
                                 style: theme.textTheme.bodySmall,
                               ),
@@ -267,4 +267,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
     );
   }
+}
+
+/// (clock-in, clock-out) sent later from the app without network — the server
+/// flags them (`clock_*_offline`, `source = app_offline`).
+(bool, bool) offlinePunchFlags(Map<String, dynamic> row) {
+  bool on(Object? v) => v == true || v?.toString() == '1';
+  return (
+    row['clock_in_at'] != null && (on(row['clock_in_offline']) || row['source'] == 'app_offline'),
+    row['clock_out_at'] != null && on(row['clock_out_offline']),
+  );
 }
