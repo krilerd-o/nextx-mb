@@ -51,6 +51,8 @@ class _HrShortcuts extends StatelessWidget {
         const _HrTile(NxI.note, 'การลาของฉัน', 'สิทธิ์คงเหลือและสถานะ', AppRoutes.leaveList),
       if (MenuAccess.allow(session, MenuAccess.leaveManagement))
         const _HrTile(NxI.checkCircle, 'อนุมัติการลา', 'คำขอที่รอคุณอนุมัติ', AppRoutes.approvals),
+      if (MenuAccess.any(session, const [MenuAccess.attendanceReport, MenuAccess.hrDashboard]))
+        const _HrTile(NxI.clipboardText, 'รายงานลงเวลา', 'ใครเข้า-ออกงานวันนี้', AppRoutes.attendanceReport),
     ];
     return ListView(
       padding: bp.scrollPadding(context, inShell: true),

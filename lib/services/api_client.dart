@@ -545,6 +545,17 @@ class ApiClient {
     }));
   }
 
+  /// `{pending_leave_count, today_clocked_in_count, date}` for HR.
+  Future<Map<String, dynamic>> getHrDashboard() async {
+    return _dataMap(await _send('GET', '/api/hr/dashboard'));
+  }
+
+  /// Everyone's punches for one day (`yyyy-MM-dd`).
+  Future<List<Map<String, dynamic>>> getAttendanceReport(String date) async {
+    final env = await _send('GET', '/api/hr/attendance/report', query: {'date': date});
+    return extractMapList(env['data']);
+  }
+
   /// Requester cancels their own Pending request (NEXTX `PUT /leave-requests/:id/cancel`).
   Future<void> cancelLeave(String id) async {
     await _send('PUT', '/api/hr/leave-requests/$id/cancel');
@@ -628,6 +639,23 @@ class ApiClient {
     Map<String, dynamic> body,
   ) async {
     return _dataMap(await _send('PUT', '/api/boards/$boardId/tasks/$taskId', data: body));
+  }
+
+  /// Uploads files to a board; returns `[{url, name, size, mime}]` to store on a task.
+  Future<List<Map<String, dynamic>>> uploadBoardAttachments(String boardId, List<MultipartFile> files) async {
+    final form = FormData();
+    for (final f in files) {
+      form.files.add(MapEntry('files', f));
+    }
+    final env = await _send('POST', '/api/boards/$boardId/attachments', data: form);
+    return extractMapList(env['data']);
+  }
+
+  /// Absolute URL for a relative upload path such as `/uploads/boards/1/a.png`.
+  String absoluteUrl(String url) {
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    final base = _dio.options.baseUrl.replaceAll(RegExp(r'/+$'), '');
+    return '$base${url.startsWith('/') ? '' : '/'}$url';
   }
 
   /// Soft-deletes a task (moved to the workspace trash on the server).
@@ -1261,6 +1289,12 @@ class ApiClient {
     final meta = data is Map && data['meta'] is Map ? Map<String, dynamic>.from(data['meta'] as Map) : <String, dynamic>{};
     return (items: extractMapList(data), meta: meta);
   }
+
+  /// Receipt PDF for a store order.
+  Future<List<int>> downloadOrderReceipt(String id) => _downloadBytes('/api/commercial/orders/$id/receipt');
+
+  /// Shipping label PDF (needs a booked delivery job).
+  Future<List<int>> downloadShippingLabel(String id) => _downloadBytes('/api/commercial/orders/$id/shipping-label');
 
   Future<void> markCommercialOrderPaid(String id) async {
     await _send('POST', '/api/commercial/orders/$id/mark-paid');

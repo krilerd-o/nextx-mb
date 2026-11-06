@@ -1,4 +1,9 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -20,6 +25,23 @@ const taskPriorities = <String, String>{
   'low': 'ต่ำ',
   'lowest': 'ต่ำสุด',
 };
+
+/// Task attachments arrive as a JSON array or a JSON string of one.
+List<Map<String, dynamic>> taskAttachments(dynamic raw) {
+  var v = raw;
+  if (v is String && v.trim().isNotEmpty) {
+    try {
+      v = jsonDecode(v);
+    } catch (_) {
+      return const [];
+    }
+  }
+  if (v is! List) return const [];
+  return [
+    for (final a in v)
+      if (a is Map && a['url'] != null) Map<String, dynamic>.from(a) else if (a is String) {'url': a, 'name': 'file'},
+  ];
+}
 
 /// `2026-11-06T00:00:00.000Z` / `2026-11-06` → `2026-11-06`.
 String? taskDateOnly(dynamic raw) {
@@ -294,6 +316,31 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
+  List<Map<String, dynamic>> get _attachments => taskAttachments(_task['attachments']);
+
+  Future<void> _addAttachment() async {
+    final picked = await FilePicker.platform.pickFiles(withData: true, allowMultiple: true);
+    final files = [
+      for (final f in picked?.files ?? const <PlatformFile>[])
+        if (f.bytes != null) MultipartFile.fromBytes(f.bytes!, filename: f.name),
+    ];
+    if (files.isEmpty || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      final uploaded = await context.read<AppConfig>().apiClient.uploadBoardAttachments(_boardId, files);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      await _update({'attachments': [..._attachments, ...uploaded]});
+    } catch (e) {
+      if (mounted) setState(() => _saving = false);
+      _snack(formatApiError(e));
+    }
+  }
+
+  Future<void> _removeAttachment(Map<String, dynamic> a) async {
+    await _update({'attachments': _attachments.where((x) => x['url'] != a['url']).toList()});
+  }
+
   String _assigneeLabel() {
     final name = _task['assignee_name']?.toString().trim() ?? '';
     if (name.isNotEmpty) return name;
@@ -429,6 +476,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ],
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(child: Text('ไฟล์แนบ (${_attachments.length})', style: theme.textTheme.titleSmall)),
+                            TextButton.icon(
+                              onPressed: _saving ? null : _addAttachment,
+                              icon: const Icon(NxI.paperclip, size: 18),
+                              label: const Text('แนบไฟล์'),
+                            ),
+                          ],
+                        ),
+                        for (final a in _attachments)
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon((a['mime']?.toString() ?? '').startsWith('image/') ? NxI.image : NxI.file),
+                            title: Text(a['name']?.toString() ?? 'ไฟล์', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            onTap: () {
+                              final uri = Uri.tryParse(context.read<AppConfig>().apiClient.absoluteUrl(a['url'].toString()));
+                              if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+                            },
+                            trailing: IconButton(
+                              tooltip: 'นำออก',
+                              icon: const Icon(NxI.x, size: 18),
+                              onPressed: _saving ? null : () => _removeAttachment(a),
+                            ),
+                          ),
                         const SizedBox(height: 12),
                         Wrap(
                           spacing: 8,

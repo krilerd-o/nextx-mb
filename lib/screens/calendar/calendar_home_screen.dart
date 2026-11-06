@@ -31,6 +31,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   var _revision = 0;
   _CalMode _mode = _CalMode.agenda;
   DateTime _selectedDay = DateTime.now();
+  bool _weekView = false;
   StreamSubscription<RealtimeEvent>? _live;
   Timer? _debounce;
 
@@ -95,8 +96,15 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
         extra['overdue'] = '1';
         break;
       case _CalMode.agenda:
-        final start = DateTime(_selectedDay.year, _selectedDay.month, 1);
-        final end = DateTime(_selectedDay.year, _selectedDay.month + 1, 0);
+        // Month range; in week view widen it when the week crosses a month edge.
+        final ws = weekStart(_selectedDay);
+        var start = DateTime(_selectedDay.year, _selectedDay.month, 1);
+        var end = DateTime(_selectedDay.year, _selectedDay.month + 1, 0);
+        if (_weekView) {
+          if (ws.isBefore(start)) start = ws;
+          final we = ws.add(const Duration(days: 6));
+          if (we.isAfter(end)) end = we;
+        }
         extra['calendar_from'] = _ymd(start);
         extra['calendar_to'] = _ymd(end);
         break;
@@ -163,6 +171,30 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
               ),
               const SizedBox(height: 12),
               if (_mode == _CalMode.agenda) ...[
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => setState(() {
+                      _weekView = !_weekView;
+                      _revision++;
+                    }),
+                    icon: Icon(_weekView ? NxI.calendarBlank : NxI.listBullets, size: 18),
+                    label: Text(_weekView ? 'ดูรายเดือน' : 'ดูรายสัปดาห์'),
+                  ),
+                ),
+                if (_weekView)
+                  NxWeekStrip(
+                    selected: _selectedDay,
+                    counts: {for (final e in byDay.entries) e.key: e.value.length},
+                    onSelect: (d) {
+                      final monthChanged = d.month != _selectedDay.month || d.year != _selectedDay.year;
+                      setState(() {
+                        _selectedDay = d;
+                        if (monthChanged) _revision++;
+                      });
+                    },
+                  )
+                else
                 NxMonthGrid(
                   month: DateTime(_selectedDay.year, _selectedDay.month),
                   selected: _selectedDay,
@@ -379,6 +411,71 @@ class NxMonthGrid extends StatelessWidget {
               childAspectRatio: 1.05,
               children: cells,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Monday of the week containing [d].
+DateTime weekStart(DateTime d) {
+  final day = DateTime(d.year, d.month, d.day);
+  return day.subtract(Duration(days: day.weekday - 1));
+}
+
+/// 7-day strip (Mon–Sun) with prev/next week and a dot per busy day.
+class NxWeekStrip extends StatelessWidget {
+  const NxWeekStrip({super.key, required this.selected, required this.counts, required this.onSelect});
+
+  final DateTime selected;
+  final Map<String, int> counts;
+  final ValueChanged<DateTime> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final start = weekStart(selected);
+    final now = DateTime.now();
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: Row(
+          children: [
+            IconButton(icon: const Icon(NxI.caretLeft), onPressed: () => onSelect(selected.subtract(const Duration(days: 7)))),
+            for (var i = 0; i < 7; i++)
+              Expanded(
+                child: Builder(builder: (context) {
+                  final d = start.add(Duration(days: i));
+                  final isSel = d.year == selected.year && d.month == selected.month && d.day == selected.day;
+                  final isToday = d.year == now.year && d.month == now.month && d.day == now.day;
+                  final n = counts[_ymdOf(d)] ?? 0;
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => onSelect(d),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSel ? cs.primary : (isToday ? cs.primaryContainer : null),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(_thWeek[i], style: theme.textTheme.labelSmall?.copyWith(color: isSel ? cs.onPrimary : cs.onSurfaceVariant)),
+                          Text('${d.day}', style: theme.textTheme.titleMedium?.copyWith(color: isSel ? cs.onPrimary : null)),
+                          Text(
+                            n == 0 ? ' ' : '$n',
+                            style: theme.textTheme.labelSmall?.copyWith(color: isSel ? cs.onPrimary : cs.primary, fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            IconButton(icon: const Icon(NxI.caretRight), onPressed: () => onSelect(selected.add(const Duration(days: 7)))),
           ],
         ),
       ),

@@ -13,6 +13,7 @@ class AppRoutes {
   static const String attendance = '/hr/attendance';
   static const String leaveList = '/hr/leave';
   static const String leaveRequest = '/hr/leave/request';
+  static const String attendanceReport = '/hr/attendance-report';
 
   static const String moduleHub = '/module-hub';
   static const String crmHome = '/crm';

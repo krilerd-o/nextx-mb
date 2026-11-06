@@ -32,6 +32,8 @@ class MenuAccess {
   static const profile = 'profile';
   static const pendingApprovals = 'pending-approvals';
   static const storeOrders = 'mini-store-orders';
+  static const attendanceReport = 'attendance-report';
+  static const hrDashboard = 'hr-dashboard';
   static const storeStock = 'mini-store-stock';
 
   static const crmKeys = [

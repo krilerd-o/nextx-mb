@@ -36,6 +36,9 @@ List<String>? requiredMenusFor(String path) {
     case 'files':
       return const [MenuAccess.files];
     case 'hr':
+      if (segs.length >= 2 && segs[1] == 'attendance-report') {
+        return const [MenuAccess.attendanceReport, MenuAccess.hrDashboard];
+      }
       if (segs.length >= 2 && segs[1] == 'attendance') return const [MenuAccess.attendance];
       if (segs.length >= 2 && segs[1] == 'leave') {
         return const [MenuAccess.leave, MenuAccess.leaveManagement];

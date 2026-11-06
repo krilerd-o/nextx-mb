@@ -14,6 +14,7 @@ import '../../screens/fsm/fsm_home_screen.dart';
 import '../../screens/crm/field_gallery_screen.dart';
 import '../../screens/hub/business_hub_screen.dart';
 import '../../screens/hr/attendance_screen.dart';
+import '../../screens/hr/attendance_report_screen.dart';
 import '../../screens/hr/leave_screen.dart';
 import '../../screens/jobs/my_jobs_screen.dart';
 import '../../screens/module/module_hub_screen.dart';
@@ -109,6 +110,10 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.leaveList,
         builder: (_, _) => const LeaveScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.attendanceReport,
+        builder: (_, _) => const AttendanceReportScreen(),
       ),
       GoRoute(
         path: AppRoutes.leaveRequest,

@@ -4,7 +4,10 @@ import 'package:nextx_mobile/screens/calendar/calendar_home_screen.dart';
 import 'package:nextx_mobile/screens/commerce/commerce_home_screen.dart';
 import 'package:nextx_mobile/screens/dashboard/mobile_dashboard_screen.dart';
 import 'package:nextx_mobile/screens/files/files_home_screen.dart';
+import 'package:nextx_mobile/screens/crm/order_summary_screen.dart';
+import 'package:nextx_mobile/screens/hr/attendance_report_screen.dart';
 import 'package:nextx_mobile/screens/profile_edit_screen.dart';
+import 'package:nextx_mobile/screens/workspace/task_detail_screen.dart';
 import 'package:nextx_mobile/widgets/nx_icons.dart';
 
 void main() {
@@ -74,5 +77,42 @@ void main() {
     expect(formatBaht(null), '');
     expect(paymentStatusLabel('paid'), 'ชำระแล้ว');
     expect(paymentStatusLabel(null), 'ยังไม่ชำระ');
+  });
+
+  test('order detail accepts {order, lines, address} and flat rows', () {
+    final d = parseOrderDetail({
+      'order': {'id': 3, 'order_number': 'SO-3'},
+      'lines': [
+        {'product_name': 'A'},
+      ],
+      'address': {'province': 'BKK'},
+    });
+    expect(d.order['order_number'], 'SO-3');
+    expect(d.lines.single['product_name'], 'A');
+    expect(d.address?['province'], 'BKK');
+    final flat = parseOrderDetail({'id': 4, 'order_number': 'SO-4'});
+    expect(flat.order['order_number'], 'SO-4');
+    expect(flat.lines, isEmpty);
+  });
+
+  test('week starts on Monday', () {
+    expect(weekStart(DateTime(2026, 11, 6)), DateTime(2026, 11, 2)); // Fri → Mon
+    expect(weekStart(DateTime(2026, 11, 2)), DateTime(2026, 11, 2));
+    expect(weekStart(DateTime(2026, 11, 8)), DateTime(2026, 11, 2)); // Sun → Mon
+  });
+
+  test('task attachments from list or JSON string', () {
+    expect(taskAttachments([
+      {'url': '/u/a.png', 'name': 'a.png'},
+    ]).single['name'], 'a.png');
+    expect(taskAttachments('[{"url":"/u/b.pdf","name":"b.pdf"}]').single['url'], '/u/b.pdf');
+    expect(taskAttachments(null), isEmpty);
+    expect(taskAttachments('not json'), isEmpty);
+  });
+
+  test('punch time shows local HH:mm or dash', () {
+    expect(punchTime(null), '—');
+    expect(punchTime('garbage'), '—');
+    expect(punchTime(DateTime(2026, 11, 6, 8, 5).toIso8601String()), '08:05');
   });
 }
