@@ -1,0 +1,40 @@
+/// Pure helpers to apply realtime chat events to a loaded message list.
+library;
+
+int _order(Map<String, dynamic> m) => int.tryParse(m['id']?.toString() ?? '') ?? 0;
+
+/// Inserts or replaces [msg] (by id), keeping ascending id order.
+/// Existing sender fields are kept when the event omits them.
+List<Map<String, dynamic>> upsertChatMessage(List<Map<String, dynamic>> list, Map<String, dynamic> msg) {
+  final id = msg['id']?.toString();
+  if (id == null || id.isEmpty) return list;
+  final out = [...list];
+  final i = out.indexWhere((m) => m['id']?.toString() == id);
+  if (i >= 0) {
+    out[i] = {...out[i], ...msg};
+  } else {
+    out.add(msg);
+    out.sort((a, b) => _order(a).compareTo(_order(b)));
+  }
+  return out;
+}
+
+List<Map<String, dynamic>> removeChatMessage(List<Map<String, dynamic>> list, String? id) {
+  if (id == null) return list;
+  return list.where((m) => m['id']?.toString() != id).toList();
+}
+
+/// Adds sender names to a realtime message by reusing what earlier messages from the same user carry.
+Map<String, dynamic> fillChatSender(Map<String, dynamic> msg, List<Map<String, dynamic>> known) {
+  if ((msg['first_name'] ?? msg['last_name']) != null) return msg;
+  final uid = msg['user_id']?.toString();
+  for (final m in known.reversed) {
+    if (m['user_id']?.toString() == uid && (m['first_name'] ?? m['last_name']) != null) {
+      return {...msg, 'first_name': m['first_name'], 'last_name': m['last_name']};
+    }
+  }
+  return msg;
+}
+
+bool isOwnChatMessage(Map<String, dynamic> m, String? myUserId) =>
+    myUserId != null && myUserId.isNotEmpty && m['user_id']?.toString() == myUserId;

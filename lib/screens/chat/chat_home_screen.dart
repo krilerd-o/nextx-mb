@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -12,6 +14,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_cached_future.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
+import '../../services/realtime_service.dart';
 import 'chat_room_screen.dart';
 import '../../widgets/nx_icons.dart';
 
@@ -24,7 +27,34 @@ class ChatHomeScreen extends StatefulWidget {
 
 class _ChatHomeScreenState extends State<ChatHomeScreen> {
   var _revision = 0;
+  var _query = '';
   Map<String, dynamic>? _selected;
+  StreamSubscription<RealtimeEvent>? _sub;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    // New messages anywhere → refresh unread counts (debounced for bursts).
+    _sub = RealtimeService.instance.on('new_message').listen((_) {
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 1500), () {
+        if (mounted) setState(() => _revision++);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _openRoom(Map<String, dynamic> room) async {
+    await nxPush<void>(context, ChatRoomScreen(room: room));
+    if (mounted) setState(() => _revision++);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,9 +148,9 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                 final room = await api.createChatDm(userId);
                 if (!mounted) return;
                 final map = room.isEmpty
-                    ? {'id': userId, 'name': selected['name'] ?? 'DM'}
+                    ? {'id': userId, 'name': userDisplayName(selected)}
                     : room;
-                nxPush<void>(context, ChatRoomScreen(room: map));
+                await _openRoom(map);
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
@@ -136,27 +166,72 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
         skeleton: const NxSkeletonList(),
         isEmpty: (list) => list.isEmpty,
         empty: const Center(child: Text('ยังไม่มีห้องแชท')),
-        builder: (context, rooms) {
-          final items = ListView(
-            padding: const EdgeInsets.all(16),
-            children: rooms.map((ch) {
-              final name = ch['name']?.toString() ?? 'ห้อง';
-              final preview = stripHtmlPreview(
-                ch['last_message']?.toString() ?? ch['topic']?.toString() ?? '',
-              );
-              return DenseCardTile(
-                title: name,
-                subtitle: preview,
-                leading: const CircleAvatar(child: Icon(NxI.tag)),
-                onTap: () {
-                  if (twoPane) {
-                    setState(() => _selected = ch);
-                    return;
-                  }
-                  nxPush<void>(context, ChatRoomScreen(room: ch));
-                },
-              );
-            }).toList(),
+        builder: (context, all) {
+          final theme = Theme.of(context);
+          final needle = _query.trim().toLowerCase();
+          final rooms = needle.isEmpty
+              ? all
+              : all.where((r) => (r['name']?.toString() ?? '').toLowerCase().contains(needle)).toList();
+          final items = RefreshIndicator(
+            onRefresh: () async => setState(() => _revision++),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              children: [
+                TextField(
+                  decoration: InputDecoration(
+                    hintText: 'ค้นหาห้อง',
+                    prefixIcon: const Icon(NxI.magnifyingGlass),
+                    filled: true,
+                    isDense: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                  ),
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+                const SizedBox(height: 12),
+                if (rooms.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('ไม่พบห้อง')),
+                  ),
+                for (final ch in rooms)
+                  Builder(builder: (context) {
+                    final name = ch['name']?.toString() ?? 'ห้อง';
+                    final unread = int.tryParse(ch['unread_count']?.toString() ?? '') ?? 0;
+                    final emoji = ch['icon_emoji']?.toString();
+                    final isDm = ch['room_type']?.toString() == 'dm';
+                    final preview = stripHtmlPreview(
+                      ch['last_message']?.toString() ?? ch['description']?.toString() ?? ch['topic']?.toString() ?? '',
+                    );
+                    return DenseCardTile(
+                      title: name,
+                      subtitle: [
+                        if (preview.isNotEmpty) preview,
+                        if (!isDm && ch['member_count'] != null) '${ch['member_count']} สมาชิก',
+                      ].join(' · '),
+                      leading: CircleAvatar(
+                        backgroundColor: theme.colorScheme.primaryContainer,
+                        child: emoji != null && emoji.isNotEmpty
+                            ? Text(emoji)
+                            : Icon(isDm ? NxI.user : NxI.chatCircle, color: theme.colorScheme.onPrimaryContainer),
+                      ),
+                      trailing: unread > 0
+                          ? Badge(
+                              label: Text(unread > 99 ? '99+' : '$unread'),
+                              backgroundColor: theme.colorScheme.primary,
+                            )
+                          : null,
+                      onTap: () {
+                        if (twoPane) {
+                          setState(() => _selected = ch);
+                          return;
+                        }
+                        _openRoom(ch);
+                      },
+                    );
+                  }),
+              ],
+            ),
           );
           return NxSplitView(
             list: items,

@@ -915,6 +915,32 @@ class ApiClient {
     ));
   }
 
+  Future<Map<String, dynamic>> editChatMessage(String roomId, String messageId, String body) async {
+    return _dataMap(await _send('PATCH', '/api/chat/rooms/$roomId/messages/$messageId', data: {'body': body}));
+  }
+
+  Future<void> deleteChatMessage(String roomId, String messageId) async {
+    await _send('DELETE', '/api/chat/rooms/$roomId/messages/$messageId');
+  }
+
+  Future<void> reactChatMessage(String roomId, String messageId, String emoji, {bool remove = false}) async {
+    await _send(
+      remove ? 'DELETE' : 'POST',
+      '/api/chat/rooms/$roomId/messages/$messageId/reactions',
+      data: {'emoji': emoji},
+      query: remove ? {'emoji': emoji} : null,
+    );
+  }
+
+  /// Public URL of an uploaded chat file (`file_path` like `chat/abc.png`).
+  String chatFileUrl(String? filePath) {
+    final p = (filePath ?? '').trim().replaceFirst(RegExp(r'^/+'), '').replaceFirst(RegExp(r'^uploads/+', caseSensitive: false), '');
+    if (p.isEmpty) return '';
+    if (p.startsWith('http://') || p.startsWith('https://')) return p;
+    final base = _dio.options.baseUrl.replaceAll(RegExp(r'/+$'), '');
+    return '$base/uploads/${p.split('/').map(Uri.encodeComponent).join('/')}';
+  }
+
   Future<Map<String, dynamic>> uploadChatFile(String roomId, MultipartFile file) async {
     final form = FormData.fromMap({'file': file});
     return _dataMap(await _send('POST', '/api/chat/rooms/$roomId/upload', data: form));
