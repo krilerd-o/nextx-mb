@@ -1,0 +1,54 @@
+# MOAI NEXT Mobile — API + Web เท่านั้น (ไม่มี Postgres/Mongo ในไฟล์นี้)
+# ใช้เมื่อ stack เว็บ (nextx) รัน Postgres + Mongo อยู่แล้ว — join network เดียวกัน
+#
+# ลำดับ: 1) รันโปรเจกต์ Web ให้ DB ขึ้นก่อน  2) รันไฟล์นี้
+# คำสั่ง: run-shared-db.cmd
+# หรือ: docker compose --env-file env.shared-db -f docker-compose.shared-db.yml up -d --build
+#
+# ตั้งค่า NEXTX_NETWORK / NEXTX_PG_HOST / NEXTX_MONGO_URI ให้ตรงกับ compose ของ Web
+# โปรเจกต์ NEXTX ใช้ service: postgres, mongo — MONGO ไม่ใช่ชื่อ mongodb
+# run-shared-db.ps1 จะตั้ง NEXTX_NETWORK อัตโนมัติจาก container moai-next-pg
+
+services:
+  moai-next-api-mb:
+    container_name: moai-next-api-mb
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT_MB:-4000}:4000"
+    environment:
+      PORT: 4000
+      PG_HOST: ${NEXTX_PG_HOST:-postgres}
+      PG_PORT: "5432"
+      PG_DATABASE: ${PG_DATABASE:-db_moai_next}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-postgres}
+      MONGO_URI: ${NEXTX_MONGO_URI:-mongodb://mongo:27017}
+      MONGO_DB: ${MONGO_DB:-moai_next}
+      MONGODB_URI: ${NEXTX_MONGO_URI:-mongodb://mongo:27017}
+      MONGODB_DB_NAME: ${MONGO_DB:-moai_next}
+    networks:
+      - nextx_shared
+    restart: unless-stopped
+
+  moai-next-web-mb:
+    container_name: moai-next-web-mb
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        API_BASE_URL: http://localhost:${WEB_PORT_MB:-8080}
+        BACKEND_HOST: moai-next-api-mb
+    ports:
+      - "${WEB_PORT_MB:-8080}:80"
+    depends_on:
+      - moai-next-api-mb
+    networks:
+      - nextx_shared
+    restart: unless-stopped
+
+networks:
+  nextx_shared:
+    external: true
+    name: ${NEXTX_NETWORK:-nextx_default}

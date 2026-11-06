@@ -1,0 +1,122 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../core/app_config.dart';
+import '../core/navigation/notification_deep_link.dart';
+import '../core/push_navigation.dart';
+
+const _tokenKey = 'staff_device_push_token';
+
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp();
+    }
+  } catch (_) {}
+  final loc = notificationDeepLinkFromData(Map<String, dynamic>.from(message.data));
+  PushNavigation.instance.remember(loc);
+}
+
+Future<void> initFirebasePush() async {
+  if (kIsWeb) return;
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp();
+    }
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    final initial = await FirebaseMessaging.instance.getInitialMessage();
+    if (initial != null) {
+      PushNavigation.instance.remember(
+        notificationDeepLinkFromData(Map<String, dynamic>.from(initial.data)),
+      );
+    }
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
+      PushNavigation.instance.remember(
+        notificationDeepLinkFromData(Map<String, dynamic>.from(message.data)),
+      );
+    });
+    FirebaseMessaging.onMessage.listen((message) {
+      debugPrint(
+        '[push] foreground ${message.notification?.title} ${message.data}',
+      );
+    });
+    FirebaseMessaging.instance.onTokenRefresh.listen((value) {
+      DevicePushService.instance.saveToken(value);
+    });
+  } catch (e) {
+    debugPrint('[push] Firebase init skipped: $e');
+  }
+}
+
+/// Registers this device with `/api/notifications/device-token` after FCM is ready.
+class DevicePushService {
+  DevicePushService._();
+  static final DevicePushService instance = DevicePushService._();
+
+  String? lastToken;
+  bool get isReady => lastToken != null && lastToken!.isNotEmpty;
+
+  Future<void> sync(AppConfig config) async {
+    try {
+      await _refreshFcmToken();
+    } catch (e) {
+      debugPrint('[push] token: $e');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final token = lastToken ?? prefs.getString(_tokenKey);
+    if (token == null || token.isEmpty) return;
+    lastToken = token;
+    try {
+      await config.apiClient.registerDeviceToken(
+        token: token,
+        platform: config.devicePlatform,
+        deviceName: defaultTargetPlatform.name,
+      );
+    } catch (e) {
+      debugPrint('[push] register: $e');
+    }
+  }
+
+  Future<void> unregister(AppConfig config) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = lastToken ?? prefs.getString(_tokenKey);
+    if (token == null || token.isEmpty) return;
+    try {
+      await config.apiClient.unregisterDeviceToken(token);
+    } catch (_) {}
+    await prefs.remove(_tokenKey);
+    lastToken = null;
+    try {
+      await FirebaseMessaging.instance.deleteToken();
+    } catch (_) {}
+  }
+
+  Future<void> saveToken(String token) async {
+    lastToken = token;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
+  }
+
+  Future<void> _refreshFcmToken() async {
+    if (kIsWeb || Firebase.apps.isEmpty) return;
+    final messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission(alert: true, badge: true, sound: true);
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      await Permission.notification.request();
+    }
+    await messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    final token = await messaging.getToken();
+    if (token != null && token.isNotEmpty) {
+      await saveToken(token);
+      debugPrint('[push] FCM token $token');
+    }
+  }
+}

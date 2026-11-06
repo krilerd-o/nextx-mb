@@ -1,0 +1,72 @@
+# MOAI NEXT Mobile - shared DB with web (PostgreSQL, MongoDB)
+# Use this when running API locally against same DB as MOAI NEXT web
+# Or point API to existing DB via .env
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${PG_USER:-postgres}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-postgres}
+      POSTGRES_DB: ${PG_DATABASE:-db_moai_next}
+    ports:
+      # Host port must match api/.env (PG_PORT / DB_PORT); default 15433 avoids clash with local Postgres
+      - "${PG_PORT:-15433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-4000}:4000"
+    environment:
+      PORT: 4000
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DATABASE: ${PG_DATABASE:-db_moai_next}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-postgres}
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB: ${MONGO_DB:-nextx}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  # Flutter web (build แล้ว serve ด้วย nginx) — เปิด http://localhost:8080
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # เบราว์เซอร์เรียก API ผ่าน nginx ที่พอร์ตเดียวกับเว็บ (proxy → service api)
+        API_BASE_URL: http://localhost:${WEB_PORT:-8080}
+        BACKEND_HOST: api
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  mongodata:

@@ -1,0 +1,52 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.layout.buildDirectory.value(rootProject.layout.buildDirectory.dir("../../build").get())
+
+subprojects {
+    project.layout.buildDirectory.value(rootProject.layout.buildDirectory.dir(project.name).get())
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+// Force compileSdk 36+ for plugins that still pin 34 (e.g. older file_picker metadata).
+def bumpCompileSdk = { Project project ->
+    if (!project.hasProperty("android")) return
+    try {
+        def androidExt = project.extensions.findByName("android")
+        if (androidExt == null) return
+        if (androidExt.hasProperty("compileSdkVersion")) {
+            def current = androidExt.compileSdkVersion
+            def asInt = (current instanceof Integer) ? current : (current?.toString()?.replaceAll("[^0-9]", "") as Integer)
+            if (asInt != null && asInt < 36) {
+                androidExt.compileSdkVersion = 36
+            }
+        }
+        if (androidExt.hasProperty("compileSdk")) {
+            try {
+                if ((androidExt.compileSdk as int) < 36) {
+                    androidExt.compileSdk = 36
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+    } catch (Throwable ignored) {
+    }
+}
+
+subprojects { project ->
+    if (project.state.executed) {
+        bumpCompileSdk(project)
+    } else {
+        project.afterEvaluate { bumpCompileSdk(project) }
+    }
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.layout.buildDirectory
+}

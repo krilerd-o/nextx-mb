@@ -1,0 +1,25 @@
+# Flutter / Dart
+.dart_tool/
+build/
+*.iml
+.pub-cache/
+.pub/
+
+# API (ไม่ใช้ใน build Flutter web)
+api/
+
+# Git / IDE
+.git/
+.idea/
+.vscode/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Docs / scripts (ไม่จำเป็นใน image)
+*.md
+*.cmd
+*.ps1
+terminals/

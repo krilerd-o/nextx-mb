@@ -1,0 +1,52 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+*.iml
+*.ipr
+*.iws
+
+# Android
+android/.gradle/
+android/local.properties
+android/**/gradle-wrapper.jar
+*.jks
+*-firebase-adminsdk-*.json
+fcm-sa.json
+android/app/google-services.json
+android/key.properties
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+*.mode1v3
+*.perspectivev3
+ios/Runner/GoogleService-Info.plist
+GoogleService-Info.plist
+
+# Node / API
+api/node_modules/
+api/.env
+api/npm-debug.log*
+
+# Env
+.env
+.env.local
+*.env
+env.shared-db
+
+# IDE / Cursor
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

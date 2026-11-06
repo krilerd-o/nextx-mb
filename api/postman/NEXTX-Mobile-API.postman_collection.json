@@ -1,0 +1,445 @@
+{
+  "info": {
+    "_postman_id": "b7e3c1a4-6f20-4d8a-9c51-nextx-mobile-api",
+    "name": "NEXTX Mobile API",
+    "description": "ทุกเส้นของ nextx-mobile-api (Express)\n\nBase URL ตั้งที่ตัวแปร collection `baseUrl` (default http://localhost:4000)\n\nAuth (transition mode):\n- Bearer {{accessToken}} ที่ระดับ collection (ใช้เมื่อมี OAuth)\n- Header X-User-Id / X-Business-Id สำหรับโหมด legacy (AUTH_TRANSITION_MODE)\n\nเส้น /health และ /ready ไม่ต้องมี auth\nPOST /api/auth/login ไม่ใช้ Bearer (ปิด auth ที่ request)\n\nโมดูลที่อนุญาต: users, business, leads, contacts, tasks",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": "1"
+    },
+    {
+      "key": "businessId",
+      "value": "1"
+    },
+    {
+      "key": "module",
+      "value": "leads"
+    },
+    {
+      "key": "entityId",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health",
+            "description": "Liveness. ไม่ผ่าน rate limiter. Response: status S, data.ok, postgres, mongodb"
+          }
+        },
+        {
+          "name": "GET /ready",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/ready",
+            "description": "Readiness. 200 เมื่อ Postgres และ Mongo พร้อม, 503 เมื่อยังไม่พร้อม"
+          }
+        },
+        {
+          "name": "GET /api/health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/health",
+            "description": "Health ภายใต้ /api (ผ่าน rate limiter). ไม่ต้อง auth"
+          }
+        },
+        {
+          "name": "GET /api/ready",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/ready",
+            "description": "Readiness ภายใต้ /api. 503 เมื่อ DB ยังไม่พร้อม"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /api/auth/login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"authorization_code_here\",\n  \"codeVerifier\": \"pkce_code_verifier\",\n  \"redirectUri\": \"http://localhost:8081/callback\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/auth/login",
+            "description": "แลก authorization code + PKCE เป็น token\n\nBody:\n- code (string, min 8) required\n- codeVerifier (string, min 8) required\n- redirectUri (url) optional — ถ้าไม่ส่งใช้ OAUTH_REDIRECT_URI\n\n201/200 data: token_type, access_token, expires_in, refresh_token, id_token, scope\n401 AUTH_LOGIN_EXCHANGE_FAILED"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Session",
+      "item": [
+        {
+          "name": "GET /api/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}",
+                "description": "ใช้เมื่อ AUTH_TRANSITION_MODE=true และยังไม่มี Bearer"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/me",
+            "description": "ผู้ใช้และธุรกิจปัจจุบันจาก aicrm_users / aicrm_business\nต้องมี Bearer (claim sub + business_id) หรือ header X-User-Id + X-Business-Id\n\nScope: ไม่ตรวจ scope แยก แค่ business context"
+          }
+        },
+        {
+          "name": "GET /api/admin/policy-check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/admin/policy-check",
+            "description": "ตรวจ policy admin. ต้องมี OAuth scope `admin` (legacy header ไม่ผ่านเส้นนี้)\n403 AUTH_SCOPE_REQUIRED ถ้าไม่มี scope"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Modules",
+      "item": [
+        {
+          "name": "GET /api/modules",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/modules",
+            "description": "รายการโมดูลที่อนุญาต\nScope: modules:read (legacy bypass ได้)\n\nResponse data: [{ module, table }]"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fields",
+      "item": [
+        {
+          "name": "GET /api/fields/:module",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/fields/{{module}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "fields", "{{module}}"]
+            },
+            "description": "คอลัมน์ของตารางโมดูลจาก information_schema\nScope: fields:read\nmodule: users | business | leads | contacts | tasks\n\nResponse data: { module, table, fields: [{ column_name, data_type }] }"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Picklists",
+      "item": [
+        {
+          "name": "GET /api/picklists",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/picklists?limit=20&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "picklists"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "1-100, default 20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": ">= 0, default 0"
+                }
+              ]
+            },
+            "description": "รายการ aicrm_picklists ของ business ปัจจุบัน\nScope: picklists:read\nถ้าตารางไม่มี (42P01) คืน items ว่าง\n\nResponse data: { items, limit, offset }"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Entity",
+      "item": [
+        {
+          "name": "GET /api/entity/:module",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/entity/{{module}}?limit=20&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "entity", "{{module}}"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "1-100, default 20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": ">= 0, default 0"
+                }
+              ]
+            },
+            "description": "รายการเรคคอร์ดของโมดูล กรองตาม business ของผู้ใช้\nScope: entity:read\n\nResponse data: { items, limit, offset }"
+          }
+        },
+        {
+          "name": "POST /api/entity/:module",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": {\n    \"name\": \"Lead from Postman\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/entity/{{module}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "entity", "{{module}}"]
+            },
+            "description": "สร้างเรคคอร์ด. คอลัมน์ที่ไม่ใช่ของตารางจะถูกตัดทิ้ง. business column ถูกบังคับจาก auth\nScope: entity:write หรือ entity:create\n201 + RETURNING *\n\nBody: { payload: { ...fields } } หรือส่ง field ตรง ๆ ที่ root ก็ได้"
+          }
+        },
+        {
+          "name": "PUT /api/entity/:module/:id",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": {\n    \"name\": \"Lead updated\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/entity/{{module}}/{{entityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "entity", "{{module}}", "{{entityId}}"]
+            },
+            "description": "อัปเดตเรคคอร์ดตาม id ภายใน business ปัจจุบัน\nScope: entity:write หรือ entity:update\nid เป็นจำนวนเต็มบวก\n400 ENTITY_UPDATE_EMPTY ถ้าไม่มีฟิลด์ที่อัปเดตได้\n404 ENTITY_NOT_FOUND"
+          }
+        },
+        {
+          "name": "DELETE /api/entity/:module/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/entity/{{module}}/{{entityId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "entity", "{{module}}", "{{entityId}}"]
+            },
+            "description": "ลบเรคคอร์ดตาม id ภายใน business ปัจจุบัน\nScope: entity:write หรือ entity:delete\nResponse data: { deletedId }"
+          }
+        },
+        {
+          "name": "POST /api/entity/:module/:id/duplicate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/entity/{{module}}/{{entityId}}/duplicate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "entity", "{{module}}", "{{entityId}}", "duplicate"]
+            },
+            "description": "คัดลอกเรคคอร์ด (ไม่รวม id) แล้ว INSERT\nScope: entity:write หรือ entity:create\n201 + แถวใหม่"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Examples",
+      "item": [
+        {
+          "name": "GET /api/example-pg",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/example-pg",
+            "description": "SELECT 1 as ok บน PostgreSQL. ต้องมี business context"
+          }
+        },
+        {
+          "name": "GET /api/example-mongo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "X-Business-Id",
+                "value": "{{businessId}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/example-mongo",
+            "description": "อ่านเอกสารจาก Mongo collection (MONGO_COLLECTION หรือ example) สูงสุด 10 รายการ\nต้อง login (authenticated) ไม่บังคับ business context"
+          }
+        }
+      ]
+    }
+  ]
+}

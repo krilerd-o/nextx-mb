@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "REPLACE_AFTER_DOWNLOAD",
+    "project_id": "moai-nextt",
+    "storage_bucket": "moai-nextt.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:REPLACE:android:REPLACE",
+        "android_client_info": {
+          "package_name": "com.moai.nextt.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "REPLACE_AFTER_DOWNLOAD"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

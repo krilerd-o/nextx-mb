@@ -1,0 +1,289 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../core/app_config.dart';
+import '../core/entity_modules.dart';
+import '../core/navigation/notification_deep_link.dart';
+import '../services/api_client.dart';
+import '../widgets/nx_cached_future.dart';
+import '../widgets/nx_skeleton.dart';
+import 'calendar/activity_detail_screen.dart';
+import 'chat/chat_room_screen.dart';
+import 'crm/entity_detail_screen.dart';
+import 'crm/entity_list_screen.dart';
+import 'workspace/task_detail_screen.dart';
+import 'workspace/workspace_board_screen.dart';
+
+class EntityListRoute extends StatelessWidget {
+  const EntityListRoute({super.key, required this.module});
+  final String module;
+
+  @override
+  Widget build(BuildContext context) {
+    return EntityListScreen(module: EntityModules.normalize(module), title: EntityModules.titleOf(module));
+  }
+}
+
+class EntityByIdLoader extends StatefulWidget {
+  const EntityByIdLoader({super.key, required this.module, required this.id});
+  final String module;
+  final String id;
+
+  @override
+  State<EntityByIdLoader> createState() => _EntityByIdLoaderState();
+}
+
+class _EntityByIdLoaderState extends State<EntityByIdLoader> {
+  late Future<Map<String, dynamic>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = context.read<AppConfig>().apiClient.getEntity(widget.module, widget.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Scaffold(body: NxSkeletonList());
+        }
+        if (snap.hasError) {
+          return Scaffold(body: Center(child: Text(formatApiError(snap.error!))));
+        }
+        final row = {...?snap.data, 'id': widget.id};
+        return EntityDetailScreen(
+          module: EntityModules.normalize(widget.module),
+          row: row,
+        );
+      },
+    );
+  }
+}
+
+class ActivityByIdLoader extends StatefulWidget {
+  const ActivityByIdLoader({super.key, required this.id});
+  final String id;
+
+  @override
+  State<ActivityByIdLoader> createState() => _ActivityByIdLoaderState();
+}
+
+class _ActivityByIdLoaderState extends State<ActivityByIdLoader> {
+  late Future<Map<String, dynamic>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = context.read<AppConfig>().apiClient.getEntity('activity', widget.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Scaffold(body: NxSkeletonList());
+        }
+        final row = {...?snap.data, 'id': widget.id};
+        return ActivityDetailScreen(row: row);
+      },
+    );
+  }
+}
+
+class BoardByIdLoader extends StatelessWidget {
+  const BoardByIdLoader({super.key, required this.boardId});
+  final String boardId;
+
+  @override
+  Widget build(BuildContext context) {
+    final slug = parseWorkspaceItemSlug(boardId);
+    if (slug != null) {
+      return WorkspaceItemBySlugLoader(slug: slug.value);
+    }
+    if (boardId.isNotEmpty && int.tryParse(boardId) == null) {
+      return BoardByCodeLoader(code: boardId);
+    }
+    return WorkspaceBoardScreen(board: {'id': boardId, 'name': 'บอร์ด'});
+  }
+}
+
+class BoardByCodeLoader extends StatefulWidget {
+  const BoardByCodeLoader({super.key, required this.code});
+  final String code;
+
+  @override
+  State<BoardByCodeLoader> createState() => _BoardByCodeLoaderState();
+}
+
+class _BoardByCodeLoaderState extends State<BoardByCodeLoader> {
+  late Future<Map<String, dynamic>?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _resolve();
+  }
+
+  Future<Map<String, dynamic>?> _resolve() async {
+    final want = widget.code.trim().toUpperCase();
+    final boards = await context.read<AppConfig>().apiClient.getBoards(q: want);
+    for (final b in boards) {
+      if ((b['code']?.toString() ?? '').trim().toUpperCase() == want) return b;
+    }
+    for (final b in boards) {
+      if ((b['code']?.toString() ?? '').trim().toUpperCase().contains(want)) return b;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Scaffold(body: NxSkeletonList());
+        }
+        if (snap.hasError) {
+          return Scaffold(body: NxErrorRetry(error: snap.error!, onRetry: () => setState(() => _future = _resolve())));
+        }
+        final board = snap.data;
+        if (board == null) {
+          return Scaffold(
+            body: Center(child: Text('ไม่พบบอร์ด ${widget.code}')),
+          );
+        }
+        return WorkspaceBoardScreen(board: board);
+      },
+    );
+  }
+}
+
+class WorkspaceItemBySlugLoader extends StatefulWidget {
+  const WorkspaceItemBySlugLoader({super.key, required this.slug});
+  final String slug;
+
+  @override
+  State<WorkspaceItemBySlugLoader> createState() => _WorkspaceItemBySlugLoaderState();
+}
+
+class _WorkspaceItemBySlugLoaderState extends State<WorkspaceItemBySlugLoader> {
+  late Future<Map<String, dynamic>?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _resolve();
+  }
+
+  Future<Map<String, dynamic>?> _resolve() async {
+    final parsed = parseWorkspaceItemSlug(widget.slug);
+    final api = context.read<AppConfig>().apiClient;
+    final items = await api.getWorkspaceItems(q: widget.slug, limit: 8);
+    Map<String, dynamic>? pick(List<Map<String, dynamic>> rows) {
+      if (parsed == null) return rows.isEmpty ? null : rows.first;
+      for (final row in rows) {
+        final code = (row['board_code'] ?? row['code'] ?? '').toString().trim().toUpperCase();
+        final no = int.tryParse(row['item_no']?.toString() ?? '');
+        if (code == parsed.boardCode && no == parsed.itemNo) return row;
+      }
+      return rows.isEmpty ? null : rows.first;
+    }
+
+    var hit = pick(items);
+    if (hit == null && parsed != null) {
+      final boards = await api.getBoards(q: parsed.boardCode);
+      Map<String, dynamic>? board;
+      for (final b in boards) {
+        if ((b['code']?.toString() ?? '').trim().toUpperCase() == parsed.boardCode) {
+          board = b;
+          break;
+        }
+      }
+      final boardId = board?['id']?.toString();
+      if (boardId != null && boardId.isNotEmpty) {
+        final scoped = await api.getWorkspaceItems(boardIds: boardId, q: widget.slug, limit: 20);
+        hit = pick(scoped);
+        if (hit == null) {
+          final all = await api.getWorkspaceItems(boardIds: boardId, limit: 200);
+          hit = pick(all);
+        }
+      }
+    }
+    return hit;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Scaffold(body: NxSkeletonList());
+        }
+        if (snap.hasError) {
+          return Scaffold(
+            body: NxErrorRetry(
+              error: snap.error!,
+              onRetry: () => setState(() => _future = _resolve()),
+            ),
+          );
+        }
+        final row = snap.data;
+        if (row == null) {
+          return Scaffold(
+            body: Center(child: Text('ไม่พบงาน ${widget.slug}')),
+          );
+        }
+        return TaskDetailScreen(task: row);
+      },
+    );
+  }
+}
+
+class TaskByIdLoader extends StatelessWidget {
+  const TaskByIdLoader({super.key, required this.boardId, required this.taskId});
+  final String boardId;
+  final String taskId;
+
+  @override
+  Widget build(BuildContext context) {
+    if (boardId == 'boards' && int.tryParse(taskId) != null) {
+      return BoardByIdLoader(boardId: taskId);
+    }
+    final nested = parseWorkspaceItemSlug(taskId);
+    if (nested != null) {
+      return WorkspaceItemBySlugLoader(slug: nested.value);
+    }
+    final asItem = parseWorkspaceItemSlug(boardId);
+    if (asItem != null) {
+      return WorkspaceItemBySlugLoader(slug: asItem.value);
+    }
+    return TaskDetailScreen(task: {'id': taskId, 'board_id': boardId});
+  }
+}
+
+class ChatByIdLoader extends StatelessWidget {
+  const ChatByIdLoader({super.key, required this.roomId});
+  final String roomId;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChatRoomScreen(room: {'id': roomId, 'name': 'แชท'});
+  }
+}
+
+class JobByIdLoader extends StatelessWidget {
+  const JobByIdLoader({super.key, required this.id});
+  final String id;
+
+  @override
+  Widget build(BuildContext context) {
+    return EntityDetailScreen(module: 'job', row: {'id': id});
+  }
+}
