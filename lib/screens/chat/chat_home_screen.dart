@@ -16,6 +16,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
 import '../../services/realtime_service.dart';
 import 'chat_room_screen.dart';
+import 'chat_search_screen.dart';
 import '../../widgets/nx_icons.dart';
 
 class ChatHomeScreen extends StatefulWidget {
@@ -29,6 +30,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
   var _revision = 0;
   var _query = '';
   Map<String, dynamic>? _selected;
+  List<Map<String, dynamic>> _rooms = const [];
   StreamSubscription<RealtimeEvent>? _sub;
   Timer? _debounce;
 
@@ -51,6 +53,33 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
     super.dispose();
   }
 
+  Future<void> _createGroup() async {
+    final api = context.read<AppConfig>().apiClient;
+    List<Map<String, dynamic>> users;
+    try {
+      users = await api.getUsers(limit: 200);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      return;
+    }
+    if (!mounted) return;
+    final me = context.read<AppConfig>().session.userId;
+    final result = await showModalBottomSheet<({String name, List<String> ids})>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _GroupCreateSheet(users: users.where((u) => u['id']?.toString() != me).toList()),
+    );
+    if (result == null || !mounted) return;
+    try {
+      final room = await api.createChatRoom(name: result.name, memberIds: result.ids);
+      if (!mounted) return;
+      setState(() => _revision++);
+      if (room['id'] != null) await _openRoom(room);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    }
+  }
+
   Future<void> _openRoom(Map<String, dynamic> room) async {
     await nxPush<void>(context, ChatRoomScreen(room: room));
     if (mounted) setState(() => _revision++);
@@ -64,10 +93,17 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
         title: 'แชททีม',
         actions: [
           IconButton(
-            icon: const Icon(NxI.arrowCounterClockwise),
-            onPressed: () => setState(() => _revision++),
+            tooltip: 'ค้นหาข้อความ',
+            icon: const Icon(NxI.magnifyingGlass),
+            onPressed: () => nxPush<void>(context, ChatSearchScreen(rooms: _rooms)),
           ),
           IconButton(
+            tooltip: 'สร้างห้องกลุ่ม',
+            icon: const Icon(NxI.users),
+            onPressed: _createGroup,
+          ),
+          IconButton(
+            tooltip: 'แชทส่วนตัว',
             icon: const Icon(NxI.userPlus),
             onPressed: () async {
               final api = context.read<AppConfig>().apiClient;
@@ -167,6 +203,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
         isEmpty: (list) => list.isEmpty,
         empty: const Center(child: Text('ยังไม่มีห้องแชท')),
         builder: (context, all) {
+          _rooms = all;
           final theme = Theme.of(context);
           final needle = _query.trim().toLowerCase();
           final rooms = needle.isEmpty
@@ -244,6 +281,89 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                   ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _GroupCreateSheet extends StatefulWidget {
+  const _GroupCreateSheet({required this.users});
+  final List<Map<String, dynamic>> users;
+
+  @override
+  State<_GroupCreateSheet> createState() => _GroupCreateSheetState();
+}
+
+class _GroupCreateSheetState extends State<_GroupCreateSheet> {
+  final _name = TextEditingController();
+  final Set<String> _picked = {};
+  var _needle = '';
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.users.where((u) {
+      if (_needle.isEmpty) return true;
+      return userDisplayName(u).toLowerCase().contains(_needle) || (userEmail(u) ?? '').toLowerCase().contains(_needle);
+    }).toList();
+    final canCreate = _name.text.trim().isNotEmpty && _picked.isNotEmpty;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.8,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: TextField(
+                  controller: _name,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'ชื่อห้อง', border: OutlineInputBorder()),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  decoration: const InputDecoration(hintText: 'ค้นหาสมาชิก', prefixIcon: Icon(NxI.magnifyingGlass), isDense: true),
+                  onChanged: (v) => setState(() => _needle = v.trim().toLowerCase()),
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) {
+                    final u = filtered[i];
+                    final id = u['id']?.toString() ?? '';
+                    return CheckboxListTile(
+                      value: _picked.contains(id),
+                      title: Text(userDisplayName(u)),
+                      subtitle: userEmail(u) == null ? null : Text(userEmail(u)!),
+                      onChanged: id.isEmpty
+                          ? null
+                          : (v) => setState(() => v == true ? _picked.add(id) : _picked.remove(id)),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: FilledButton(
+                  onPressed: canCreate
+                      ? () => Navigator.pop(context, (name: _name.text.trim(), ids: _picked.toList()))
+                      : null,
+                  child: Text('สร้างห้อง (${_picked.length} คน)'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

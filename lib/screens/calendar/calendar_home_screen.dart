@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../services/realtime_service.dart';
 import '../../core/entity_display.dart';
 import '../../core/menu_access.dart';
 import '../../core/nx_breakpoint.dart';
@@ -28,6 +31,27 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   var _revision = 0;
   _CalMode _mode = _CalMode.agenda;
   DateTime _selectedDay = DateTime.now();
+  StreamSubscription<RealtimeEvent>? _live;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    // Activity created/changed anywhere in the business → refresh.
+    _live = RealtimeService.instance.on('calendar:activity_upsert').listen((_) {
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 800), () {
+        if (mounted) setState(() => _revision++);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _live?.cancel();
+    _debounce?.cancel();
+    super.dispose();
+  }
 
   String _ymd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

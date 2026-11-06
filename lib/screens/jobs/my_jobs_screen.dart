@@ -24,6 +24,7 @@ class MyJobsScreen extends StatefulWidget {
 
 class _MyJobsScreenState extends State<MyJobsScreen> {
   var _revision = 0;
+  var _query = '';
   Map<String, dynamic>? _selected;
 
   @override
@@ -41,16 +42,41 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
       ),
       body: NxCachedFuture<List<Map<String, dynamic>>>(
         revision: _revision,
-        load: () => context.read<AppConfig>().apiClient.getMyJobs(),
+        // Server returns at most 100 assigned jobs (no offset) — fetch them all, filter locally.
+        load: () => context.read<AppConfig>().apiClient.getMyJobs(limit: 100),
         skeleton: const NxSkeletonList(),
         isEmpty: (list) => list.isEmpty,
         empty: const Center(child: Text('ไม่มีงานที่ได้รับมอบหมาย')),
-        builder: (context, list) {
-          final items = ListView.builder(
+        builder: (context, all) {
+          final needle = _query.trim().toLowerCase();
+          final list = needle.isEmpty
+              ? all
+              : all
+                  .where((r) => '${entityTitle(r, module: 'job')} ${entitySubtitle(r) ?? ''}'.toLowerCase().contains(needle))
+                  .toList();
+          final items = RefreshIndicator(
+            onRefresh: () async => setState(() => _revision++),
+            child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
-            itemCount: list.length,
-            itemBuilder: (context, i) {
-              final row = list[i];
+            itemCount: list.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'ค้นหางาน (${all.length})',
+                      prefixIcon: const Icon(NxI.magnifyingGlass),
+                      filled: true,
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                    ),
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                );
+              }
+              final row = list[index - 1];
               return DenseCardTile(
                 title: entityTitle(row, module: 'job'),
                 subtitle: entitySubtitle(row),
@@ -86,6 +112,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
                 ),
               );
             },
+          ),
           );
           return NxSplitView(
             list: items,

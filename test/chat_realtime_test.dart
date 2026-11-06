@@ -53,4 +53,26 @@ void main() {
     expect(rt.lastNotification?['id'], 'n');
     await sub.cancel();
   });
+
+  test('read receipts mark every message up to the id', () {
+    final msgs = [
+      {'id': 1, 'user_id': 5},
+      {'id': 2, 'user_id': 5},
+      {'id': 3, 'user_id': 9},
+    ];
+    var readers = applyReadReceipt({}, msgs, '9', '2');
+    expect(readers['1'], ['9']);
+    expect(readers['2'], ['9']);
+    expect(readers['3'], isNull);
+    readers = applyReadReceipt(readers, msgs, '9', '2');
+    expect(readers['2'], ['9']);
+    expect(readCountForLastOwn(msgs, readers, '5'), 1);
+    expect(readCountForLastOwn(msgs, readers, '7'), 0);
+  });
+
+  test('reactions accept reaction_summary and reactions', () {
+    expect(chatReactions({'reaction_summary': [{'emoji': '👍', 'count': 2}]}).single['count'], 2);
+    expect(chatReactions({'reactions': [{'emoji': '🎉'}]}).single['emoji'], '🎉');
+    expect(chatReactions({}), isEmpty);
+  });
 }

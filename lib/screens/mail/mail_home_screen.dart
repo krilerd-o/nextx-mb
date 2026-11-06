@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -16,6 +18,7 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_create_fab.dart';
 import 'mail_compose_screen.dart';
+import '../../services/realtime_service.dart';
 
 class MailHomeScreen extends StatefulWidget {
   const MailHomeScreen({super.key});
@@ -35,6 +38,31 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
   var _revision = 0;
   var _box = 'inbox';
   Map<String, dynamic>? _selected;
+  final _search = TextEditingController();
+  bool _searching = false;
+  String _query = '';
+  StreamSubscription<RealtimeEvent>? _live;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    // External mail → 'mail:new'; internal mail arrives as a mail notification.
+    _live = RealtimeService.instance.events.where(isMailRealtimeEvent).listen((_) {
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 800), () {
+        if (mounted && (_box == 'inbox' || _box == 'drafts') && _query.isEmpty) setState(() => _revision++);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _live?.cancel();
+    _debounce?.cancel();
+    _search.dispose();
+    super.dispose();
+  }
 
   void _reload() => setState(() {
         _revision++;
@@ -87,6 +115,18 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
         subtitle: 'เมลภายใน NEXTX',
         actions: [
           IconButton(
+            tooltip: _searching ? 'ปิดค้นหา' : 'ค้นหาเมล',
+            icon: Icon(_searching ? NxI.x : NxI.magnifyingGlass),
+            onPressed: () => setState(() {
+              _searching = !_searching;
+              if (!_searching) {
+                _search.clear();
+                _query = '';
+                _revision++;
+              }
+            }),
+          ),
+          IconButton(
             tooltip: 'เปิดเว็บเมล',
             onPressed: () async {
               final base = context.read<AppConfig>().apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
@@ -108,6 +148,28 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
       floatingActionButton: NxCreateFab(label: 'เขียน', onPressed: _compose),
       body: Column(
         children: [
+          if (_searching)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: TextField(
+                controller: _search,
+                autofocus: true,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'ค้นหาหัวข้อ เนื้อหา หรือผู้ส่ง',
+                  prefixIcon: const Icon(NxI.magnifyingGlass),
+                  filled: true,
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                ),
+                onSubmitted: (v) => setState(() {
+                  _query = v.trim();
+                  _selected = null;
+                  _revision++;
+                }),
+              ),
+            ),
+          if (_query.isEmpty)
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -132,12 +194,17 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
           ),
           Expanded(
             child: NxCachedFuture<List<Map<String, dynamic>>>(
-              key: ValueKey(_box),
+              key: ValueKey('$_box|$_query'),
               revision: _revision,
-              load: () => context.read<AppConfig>().apiClient.getMail(box: _box, limit: 100),
+              // Internal mail lists are capped at 200 by the server (no paging there).
+              load: () => _query.isNotEmpty
+                  ? context.read<AppConfig>().apiClient.searchMail(_query)
+                  : context.read<AppConfig>().apiClient.getMail(box: _box, limit: 200),
               skeleton: const NxSkeletonList(),
               isEmpty: (list) => list.isEmpty,
-              empty: Center(child: Text('ไม่มีจดหมายใน${_mailBoxes[_box]}')),
+              empty: Center(
+                child: Text(_query.isNotEmpty ? 'ไม่พบเมลที่ตรงกับ "$_query"' : 'ไม่มีจดหมายใน${_mailBoxes[_box]}'),
+              ),
               builder: (context, list) {
                 final items = RefreshIndicator(
                   onRefresh: () async => setState(() => _revision++),
@@ -198,7 +265,7 @@ String mailCounterparty(Map<String, dynamic> m, String box) {
     return to.isEmpty ? '' : 'ถึง $to';
   }
   final name = m['from_display']?.toString() ??
-      [m['from_first_name'], m['from_last_name']]
+      [m['from_first_name'] ?? m['first_name'], m['from_last_name'] ?? m['last_name']]
           .where((e) => e != null && e.toString().trim().isNotEmpty)
           .join(' ')
           .trim();
@@ -420,4 +487,12 @@ String _recipientsLine(Map<String, dynamic> m) {
     if (to.isNotEmpty) 'ถึง: $to',
     if (cc.isNotEmpty) 'สำเนา: $cc',
   ].join('  ');
+}
+
+/// Socket events that mean the mailbox may have changed.
+bool isMailRealtimeEvent(RealtimeEvent e) {
+  if (e.type == 'mail:new' || e.type == 'mail:updated') return true;
+  if (e.type != 'notification') return false;
+  final hint = '${e.data['type'] ?? ''} ${e.data['link_path'] ?? ''}'.toLowerCase();
+  return hint.contains('mail');
 }

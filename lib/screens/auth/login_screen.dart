@@ -26,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   bool _otpMode = false;
   bool _otpSent = false;
+  bool _otpSms = false;
   bool _obscure = true;
   String? _error;
 
@@ -40,7 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _sendOtp() async {
     final email = _email.text.trim();
     if (email.isEmpty) {
-      setState(() => _error = 'กรุณากรอกอีเมล');
+      setState(() => _error = _otpSms ? 'กรุณากรอกเบอร์มือถือ' : 'กรุณากรอกอีเมล');
       return;
     }
     setState(() {
@@ -48,7 +49,8 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      await context.read<AppConfig>().requestEmailOtp(email);
+      final config = context.read<AppConfig>();
+      _otpSms ? await config.requestSmsOtp(email) : await config.requestEmailOtp(email);
       if (!mounted) return;
       setState(() => _otpSent = true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -73,7 +75,10 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      await context.read<AppConfig>().loginWithEmailOtp(email: email, code: code);
+      final config = context.read<AppConfig>();
+      _otpSms
+          ? await config.loginWithSmsOtp(phone: email, code: code)
+          : await config.loginWithEmailOtp(email: email, code: code);
     } catch (e) {
       if (mounted) setState(() => _error = formatApiError(e));
     } finally {
@@ -124,7 +129,9 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                _otpMode ? 'เข้าสู่ระบบด้วยรหัส OTP ที่ส่งไปทางอีเมล' : 'เข้าสู่ระบบด้วยอีเมลและรหัสผ่าน',
+                _otpMode
+                    ? 'เข้าสู่ระบบด้วยรหัส OTP ที่ส่งไปทาง${_otpSms ? ' SMS' : 'อีเมล'}'
+                    : 'เข้าสู่ระบบด้วยอีเมลและรหัสผ่าน',
                 style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 20),
@@ -167,11 +174,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (_otpMode) ...[
+                      SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment(value: false, label: Text('อีเมล')),
+                          ButtonSegment(value: true, label: Text('SMS')),
+                        ],
+                        selected: {_otpSms},
+                        onSelectionChanged: _loading
+                            ? null
+                            : (v) => setState(() {
+                                  _otpSms = v.first;
+                                  _otpSent = false;
+                                  _error = null;
+                                }),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     TextField(
                       controller: _email,
-                      keyboardType: TextInputType.emailAddress,
-                      autofillHints: const [AutofillHints.username, AutofillHints.email],
-                      decoration: NxFieldStyle.decoration(context, label: 'อีเมล'),
+                      keyboardType: _otpMode && _otpSms ? TextInputType.phone : TextInputType.emailAddress,
+                      autofillHints: _otpMode && _otpSms
+                          ? const [AutofillHints.telephoneNumber]
+                          : const [AutofillHints.username, AutofillHints.email],
+                      decoration: NxFieldStyle.decoration(context, label: _otpMode && _otpSms ? 'เบอร์มือถือ' : 'อีเมล'),
                     ),
                     const SizedBox(height: 16),
                     if (!_otpMode)
@@ -219,7 +245,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 _otpSent = false;
                                 _error = null;
                               }),
-                      child: Text(_otpMode ? 'ใช้รหัสผ่านแทน' : 'เข้าสู่ระบบด้วยรหัส OTP ทางอีเมล'),
+                      child: Text(_otpMode ? 'ใช้รหัสผ่านแทน' : 'เข้าสู่ระบบด้วยรหัส OTP (อีเมล / SMS)'),
                     ),
                     if (!_otpMode)
                     TextButton(

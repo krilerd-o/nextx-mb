@@ -272,6 +272,18 @@ class ApiClient {
     }));
   }
 
+  Future<void> requestSmsOtp(String phone) async {
+    await _send('POST', '/api/auth/otp/sms/request', data: {'phone': phone});
+  }
+
+  Future<Map<String, dynamic>> verifySmsOtp({required String phone, required String code}) async {
+    return _dataMap(await _send('POST', '/api/auth/otp/sms/verify', data: {
+      'phone': phone,
+      'code': code,
+      'remember': true,
+    }));
+  }
+
   Future<void> logoutRemote() async {
     try {
       await _send('POST', '/api/auth/logout');
@@ -960,6 +972,46 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  /// Messages plus `read_receipts` ({messageId: [{user_id, read_at}]}).
+  Future<({List<Map<String, dynamic>> items, Map<String, List<String>> readers})> getChatMessagesPage(
+    String roomId, {
+    int limit = 50,
+    String? before,
+  }) async {
+    final env = await _send('GET', '/api/chat/rooms/$roomId/messages', query: {
+      'limit': '$limit',
+      if (before != null && before.isNotEmpty) 'before': before,
+    });
+    final data = env['data'];
+    final readers = <String, List<String>>{};
+    final rr = data is Map ? data['read_receipts'] : null;
+    if (rr is Map) {
+      rr.forEach((k, v) {
+        if (v is List) {
+          readers['$k'] = [for (final r in v) if (r is Map && r['user_id'] != null) '${r['user_id']}'];
+        }
+      });
+    }
+    return (items: extractMapList(data), readers: readers);
+  }
+
+  /// Full-text search across the rooms I belong to (`GET /api/chat/search`).
+  Future<List<Map<String, dynamic>>> searchChat(String q, {int limit = 30}) async {
+    final env = await _send('GET', '/api/chat/search', query: {'q': q, 'limit': '$limit'});
+    return extractMapList(env['data']);
+  }
+
+  /// Creates a group room with [memberIds] (the creator is added by the server).
+  Future<Map<String, dynamic>> createChatRoom({required String name, required List<String> memberIds, String? description}) async {
+    return _dataMap(await _send('POST', '/api/chat/rooms', data: {
+      'name': name,
+      if (description != null && description.isNotEmpty) 'description': description,
+      'member_ids': memberIds.map(int.tryParse).whereType<int>().toList(),
+      'room_type': 'channel',
+      'visibility': 'private',
+    }));
+  }
+
   Future<Map<String, dynamic>> postChatMessage(
     String roomId,
     String body, {
@@ -1121,6 +1173,12 @@ class ApiClient {
   Future<Map<String, dynamic>> getMailItem(String id) async {
     return _dataMap(await _send('GET', '/api/mail/$id'));
   }
+  /// Search internal mail (subject / body / sender) — `GET /api/mail/search?q=`.
+  Future<List<Map<String, dynamic>>> searchMail(String q) async {
+    final env = await _send('GET', '/api/mail/search', query: {'q': q});
+    return extractMapList(env['data']);
+  }
+
   /// Internal NEXTX mail recipients (members of the current business).
   Future<List<Map<String, dynamic>>> getMailUsers() async {
     final env = await _send('GET', '/api/mail/users');

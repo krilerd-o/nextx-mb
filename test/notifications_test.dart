@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nextx_mobile/screens/mail/mail_home_screen.dart';
 import 'package:nextx_mobile/screens/notifications/notification_center_screen.dart';
 import 'package:nextx_mobile/services/realtime_service.dart';
 import 'package:nextx_mobile/services/unread_service.dart';
@@ -43,5 +44,12 @@ void main() {
     expect(notificationIcon({'link_path': '/camp?room=1'}), NxI.chatCircle);
     expect(notificationIcon({'type': 'quotation_approval'}), NxI.receipt);
     expect(notificationIcon({}), NxI.bell);
+  });
+
+  test('mail realtime filter', () {
+    expect(isMailRealtimeEvent(const RealtimeEvent('mail:new', {})), isTrue);
+    expect(isMailRealtimeEvent(const RealtimeEvent('notification', {'link_path': '/mail?open=3'})), isTrue);
+    expect(isMailRealtimeEvent(const RealtimeEvent('notification', {'link_path': '/camp?room=1'})), isFalse);
+    expect(isMailRealtimeEvent(const RealtimeEvent('new_message', {})), isFalse);
   });
 }

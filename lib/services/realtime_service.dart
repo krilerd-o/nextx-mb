@@ -31,6 +31,12 @@ class RealtimeService extends ChangeNotifier {
     'calendar:activity_upsert',
     'mail:new',
     'mail:updated',
+    'workspace:item_created',
+    'workspace:item_updated',
+    'workspace:item_deleted',
+    'workspace:item_restored',
+    'workspace:comment_added',
+    'workspace:worklog_added',
   ];
 
   io.Socket? _socket;
@@ -105,6 +111,22 @@ class RealtimeService extends ChangeNotifier {
   void leaveChatRoom(String roomId) {
     if (_currentRoomId == roomId) _currentRoomId = null;
     _socket?.emit('leave_room', roomId);
+  }
+
+  /// Board room for `workspace:item_*` events (NEXTX `workspace:join`).
+  void joinWorkspaceBoard(String boardId, {String? businessId}) {
+    _socket?.emit('workspace:join', {
+      'boardId': int.tryParse(boardId) ?? boardId,
+      'businessId': int.tryParse(businessId ?? '') ?? 0,
+      'viewType': 'board',
+    });
+  }
+
+  void leaveWorkspaceBoard(String boardId, {String? businessId}) {
+    _socket?.emit('workspace:leave', {
+      'boardId': int.tryParse(boardId) ?? boardId,
+      'businessId': int.tryParse(businessId ?? '') ?? 0,
+    });
   }
 
   void typing(String roomId, {required bool active}) {

@@ -36,5 +36,41 @@ Map<String, dynamic> fillChatSender(Map<String, dynamic> msg, List<Map<String, d
   return msg;
 }
 
+/// Applies a `read_receipt` socket event: user [userId] has read up to [messageId].
+Map<String, List<String>> applyReadReceipt(
+  Map<String, List<String>> readers,
+  List<Map<String, dynamic>> messages,
+  String userId,
+  String messageId,
+) {
+  final upTo = int.tryParse(messageId) ?? 0;
+  final out = {for (final e in readers.entries) e.key: [...e.value]};
+  for (final m in messages) {
+    final id = m['id']?.toString();
+    if (id == null || (int.tryParse(id) ?? 0) > upTo) continue;
+    final list = out[id] ??= [];
+    if (!list.contains(userId)) list.add(userId);
+  }
+  return out;
+}
+
+/// How many other people have read my latest message (shown under it).
+int readCountForLastOwn(List<Map<String, dynamic>> messages, Map<String, List<String>> readers, String? me) {
+  for (final m in messages.reversed) {
+    if (isOwnChatMessage(m, me)) {
+      final ids = readers[m['id']?.toString()] ?? const [];
+      return ids.where((u) => u != me).length;
+    }
+  }
+  return 0;
+}
+
+/// Reactions in either the `reaction_summary` (Mongo chat) or `reactions` shape.
+List<Map<String, dynamic>> chatReactions(Map<String, dynamic> m) {
+  final raw = m['reaction_summary'] ?? m['reactions'];
+  if (raw is! List) return const [];
+  return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+}
+
 bool isOwnChatMessage(Map<String, dynamic> m, String? myUserId) =>
     myUserId != null && myUserId.isNotEmpty && m['user_id']?.toString() == myUserId;

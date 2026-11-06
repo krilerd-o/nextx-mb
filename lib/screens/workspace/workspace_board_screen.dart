@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../services/realtime_service.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../core/nx_page_route.dart';
 import '../../widgets/nx_create_fab.dart';
@@ -25,6 +28,9 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   Object? _error;
+  StreamSubscription<RealtimeEvent>? _live;
+  Timer? _debounce;
+  String? _businessId;
 
   String get _boardId => widget.board['id']?.toString() ?? '';
 
@@ -32,6 +38,23 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
   void initState() {
     super.initState();
     _load();
+    // Someone else edits the board on the web → reload (debounced for bursts).
+    _businessId = context.read<AppConfig>().session.businessId;
+    if (_boardId.isNotEmpty) RealtimeService.instance.joinWorkspaceBoard(_boardId, businessId: _businessId);
+    _live = RealtimeService.instance.events.where((e) => e.type.startsWith('workspace:item_')).listen((_) {
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 700), () {
+        if (mounted) _load();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _live?.cancel();
+    _debounce?.cancel();
+    if (_boardId.isNotEmpty) RealtimeService.instance.leaveWorkspaceBoard(_boardId, businessId: _businessId);
+    super.dispose();
   }
 
   Future<void> _load() async {

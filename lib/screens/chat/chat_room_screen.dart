@@ -36,6 +36,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _controller = TextEditingController();
   final _scroll = ScrollController();
   List<Map<String, dynamic>> _messages = [];
+  Map<String, List<String>> _readers = {};
   final Map<String, String> _typing = {};
   final Map<String, Timer> _typingExpiry = {};
   StreamSubscription<RealtimeEvent>? _sub;
@@ -103,6 +104,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           if (mounted) setState(() => _typing.remove(uid));
         });
         setState(() => _typing[uid] = e.data['display_name']?.toString() ?? 'มีคน');
+      case 'read_receipt':
+        final uid = e.data['user_id']?.toString();
+        final mid = e.data['message_id']?.toString();
+        if (uid == null || mid == null) return;
+        setState(() => _readers = applyReadReceipt(_readers, _messages, uid, mid));
       case 'user_stopped_typing':
         final uid = e.data['user_id']?.toString();
         if (uid != null && _typing.containsKey(uid)) setState(() => _typing.remove(uid));
@@ -151,6 +157,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   void _markRead(String messageId) {
+    RealtimeService.instance.markRead(_id, messageId);
     final api = context.read<AppConfig>().apiClient;
     api.markChatRead(_id, messageId).catchError((Object e) {
       debugPrint('[chat] mark read: $e');
@@ -159,10 +166,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   Future<void> _load() async {
     try {
-      final list = await context.read<AppConfig>().apiClient.getChatMessages(_id, limit: 50);
+      final page = await context.read<AppConfig>().apiClient.getChatMessagesPage(_id, limit: 50);
+      final list = page.items;
       if (!mounted) return;
       setState(() {
         _messages = list;
+        _readers = page.readers;
         _loading = false;
         _hasOlder = list.length >= 50;
       });
@@ -179,8 +188,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   /// Picks up reaction counts on the newest page without losing scroll position.
   Future<void> _refreshLatest() async {
     try {
-      final list = await context.read<AppConfig>().apiClient.getChatMessages(_id, limit: 50);
+      final page = await context.read<AppConfig>().apiClient.getChatMessagesPage(_id, limit: 50);
+      final list = page.items;
       if (!mounted) return;
+      _readers = {..._readers, ...page.readers};
       var merged = _messages;
       for (final m in list) {
         merged = upsertChatMessage(merged, m);
@@ -375,11 +386,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     }
   }
 
-  List<Map<String, dynamic>> _reactions(Map<String, dynamic> m) {
-    final raw = m['reactions'];
-    if (raw is! List) return const [];
-    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
-  }
+  List<Map<String, dynamic>> _reactions(Map<String, dynamic> m) => chatReactions(m);
 
   // ---- UI ---------------------------------------------------------------
 
@@ -579,6 +586,19 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       final lastOfRun = next == null || next['user_id']?.toString() != uid || _day(next['created_at']) != day;
       items.add(_bubble(m, showName: uid != prevUser, showAvatar: lastOfRun));
       prevUser = uid;
+    }
+    final seen = readCountForLastOwn(_messages, _readers, _me);
+    if (_messages.isNotEmpty && isOwnChatMessage(_messages.last, _me)) {
+      items.add(Padding(
+        padding: const EdgeInsets.only(top: 2, right: 4),
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            seen == 0 ? 'ส่งแล้ว' : 'อ่านแล้ว${seen > 1 ? ' $seen' : ''}',
+            style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+          ),
+        ),
+      ));
     }
 
     return Scaffold(

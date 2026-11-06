@@ -322,6 +322,21 @@ class AppConfig extends ChangeNotifier {
     await _completeLogin(data, fallbackEmail: email);
   }
 
+  /// Sends a sign-in code by SMS (`/api/auth/otp/sms/request`).
+  Future<void> requestSmsOtp(String phone) async {
+    _api.attachSession(baseUrl: _apiBaseUrl);
+    await _api.requestSmsOtp(phone);
+  }
+
+  Future<void> loginWithSmsOtp({required String phone, required String code}) async {
+    _api.attachSession(baseUrl: _apiBaseUrl);
+    final data = await _api.verifySmsOtp(phone: phone, code: code);
+    if (data['needLinkConfirm'] == true) {
+      throw ApiException(409, 'บัญชีนี้ต้องยืนยันการเชื่อมวิธีเข้าสู่ระบบบนเว็บก่อน แล้วจึงใช้ OTP บนมือถือได้');
+    }
+    await _completeLogin(data, fallbackEmail: '');
+  }
+
   /// Stores the session returned by any NEXTX login endpoint (`{token, user, business}`).
   Future<void> _completeLogin(Map<String, dynamic> data, {required String fallbackEmail}) async {
     final email = fallbackEmail;
