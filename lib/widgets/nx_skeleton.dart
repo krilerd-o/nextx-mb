@@ -83,8 +83,12 @@ class NxSkeletonList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // shrinkWrap so it also works nested inside another ListView while loading.
     return NxSkeleton(
       child: ListView(
+        shrinkWrap: true,
+        primary: false,
+        physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           for (var i = 0; i < rows; i++)

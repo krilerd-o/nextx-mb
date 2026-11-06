@@ -20,6 +20,7 @@ import '../deep_link_loaders.dart';
 import '../workspace/workspace_board_screen.dart';
 import 'entity_create_screen.dart';
 import 'order_summary_screen.dart';
+import '../../core/error_reporting.dart';
 
 typedef OpenEntityFn = void Function(String module, String id, {Map<String, dynamic>? row});
 
@@ -1262,16 +1263,22 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
       var catalog = <Map<String, dynamic>>[];
       try {
         catalog = (await api.getEntityList('skill', limit: 80)).items;
-      } catch (_) {}
+      } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
       final parts = await api.getJobParts(widget.id);
       Map<String, dynamic> sla = {};
       try {
         sla = await api.getJobSla(widget.id);
-      } catch (_) {}
+      } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
       var workspace = <Map<String, dynamic>>[];
       try {
         workspace = await api.getJobWorkspaceItems(widget.id);
-      } catch (_) {}
+      } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
       if (mounted) {
         setState(() {
           _skills = skills;
@@ -1511,7 +1518,9 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
           final warn = mm['mismatch'] == true || mm['has_mismatch'] == true || mm['warning'] != null;
           setState(() => _mismatch = warn ? (mm['message'] ?? mm['warning'] ?? 'ทักษะไม่ตรงทั้งหมด').toString() : null);
         }
-      } catch (_) {}
+      } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('มอบหมายให้ ${user['display_name'] ?? user['name'] ?? uid}')));
       }
@@ -1850,7 +1859,9 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
       var requests = <Map<String, dynamic>>[];
       try {
         requests = await api.getCaseMandayRequests(widget.id);
-      } catch (_) {}
+      } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
       if (mounted) {
         setState(() {
           _summary = summary;

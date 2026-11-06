@@ -101,6 +101,8 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
             onPressed: _reload,
             icon: const Icon(NxI.arrowCounterClockwise),
           ),
+          // The FAB hides on wide layouts; keep compose reachable on tablets.
+          if (twoPane) NxAddButton(tooltip: 'เขียนเมล', onPressed: _compose),
         ],
       ),
       floatingActionButton: NxCreateFab(label: 'เขียน', onPressed: _compose),

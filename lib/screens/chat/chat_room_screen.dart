@@ -19,6 +19,7 @@ import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/error_reporting.dart';
 
 const _quickReactions = ['👍', '❤️', '😂', '🎉', '🙏', '👀'];
 
@@ -185,7 +186,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         merged = upsertChatMessage(merged, m);
       }
       setState(() => _messages = merged);
-    } catch (_) {}
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
   }
 
   Future<void> _loadOlder() async {
@@ -424,11 +427,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             borderRadius: BorderRadius.circular(12),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 220, maxWidth: 240),
-              child: Image.network(
-                url,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const Padding(padding: EdgeInsets.all(12), child: Icon(NxI.image)),
-              ),
+              child: _FallbackNetworkImage(urls: api.chatFileUrls(a['file_path']?.toString() ?? a['url']?.toString())),
             ),
           ),
         ),
@@ -682,6 +681,37 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Tries each URL in turn until one loads.
+class _FallbackNetworkImage extends StatefulWidget {
+  const _FallbackNetworkImage({required this.urls});
+  final List<String> urls;
+
+  @override
+  State<_FallbackNetworkImage> createState() => _FallbackNetworkImageState();
+}
+
+class _FallbackNetworkImageState extends State<_FallbackNetworkImage> {
+  var _i = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_i >= widget.urls.length) {
+      return const Padding(padding: EdgeInsets.all(12), child: Icon(NxI.image));
+    }
+    return Image.network(
+      widget.urls[_i],
+      key: ValueKey(widget.urls[_i]),
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _i++);
+        });
+        return const SizedBox(width: 48, height: 48);
+      },
     );
   }
 }

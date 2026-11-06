@@ -140,6 +140,10 @@ class ApiClient {
 
   void setOnUnauthorized(VoidCallback? cb) => _onUnauthorized = cb;
 
+  /// Widget tests route requests to a fake adapter instead of the network.
+  @visibleForTesting
+  void debugSetHttpAdapter(HttpClientAdapter adapter) => _dio.httpClientAdapter = adapter;
+
   void attachSession({
     required String baseUrl,
     String? accessToken,
@@ -990,11 +994,19 @@ class ApiClient {
 
   /// Public URL of an uploaded chat file (`file_path` like `chat/abc.png`).
   String chatFileUrl(String? filePath) {
+    final urls = chatFileUrls(filePath);
+    return urls.isEmpty ? '' : urls.first;
+  }
+
+  /// Candidate URLs for a chat file: static `/uploads/...` first, then the
+  /// web app's `/api/chat/upload/...` route (`buildChatFileUrl` in NEXTX).
+  List<String> chatFileUrls(String? filePath) {
     final p = (filePath ?? '').trim().replaceFirst(RegExp(r'^/+'), '').replaceFirst(RegExp(r'^uploads/+', caseSensitive: false), '');
-    if (p.isEmpty) return '';
-    if (p.startsWith('http://') || p.startsWith('https://')) return p;
+    if (p.isEmpty) return const [];
+    if (p.startsWith('http://') || p.startsWith('https://')) return [p];
     final base = _dio.options.baseUrl.replaceAll(RegExp(r'/+$'), '');
-    return '$base/uploads/${p.split('/').map(Uri.encodeComponent).join('/')}';
+    final enc = p.split('/').map(Uri.encodeComponent).join('/');
+    return ['$base/uploads/$enc', '$base/api/chat/upload/$enc'];
   }
 
   Future<Map<String, dynamic>> uploadChatFile(String roomId, MultipartFile file) async {

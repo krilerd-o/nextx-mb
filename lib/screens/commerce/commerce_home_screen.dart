@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/menu_access.dart';
+import '../../core/nx_breakpoint.dart';
 import '../../core/nx_page_route.dart';
 import '../../services/api_client.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_split_view.dart';
 import '../../widgets/nx_icons.dart';
 import '../crm/order_summary_screen.dart';
 
@@ -56,14 +58,15 @@ class CommerceHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<AppConfig>().session;
+    // Stock endpoints are owner/admin only on the server (requireCommercialAdmin).
     final tabs = <(String, Widget)>[
       if (MenuAccess.allow(session, ordersMenu)) ('ออเดอร์', const _OrdersTab()),
-      if (MenuAccess.allow(session, stockMenu)) ('สต็อก', const _StockTab()),
+      if (MenuAccess.allow(session, stockMenu) && session.isBusinessAdmin) ('สต็อก', const _StockTab()),
     ];
     if (tabs.isEmpty) {
       return const Scaffold(
         appBar: NxAppHeader(title: 'ร้านค้า'),
-        body: Center(child: Text('ไม่มีสิทธิ์เข้าถึงร้านค้า')),
+        body: Center(child: Text('ไม่มีสิทธิ์เข้าถึงร้านค้า (สต็อกดูได้เฉพาะเจ้าของหรือแอดมิน)')),
       );
     }
     return DefaultTabController(
@@ -92,6 +95,7 @@ class _OrdersTabState extends State<_OrdersTab> {
   String _queue = 'new_today';
   List<Map<String, dynamic>> _items = [];
   Map<String, dynamic> _counts = {};
+  Map<String, dynamic>? _selected;
   bool _loading = true;
   Object? _error;
 
@@ -180,7 +184,15 @@ class _OrdersTabState extends State<_OrdersTab> {
           ),
         ),
         Expanded(
-          child: RefreshIndicator(
+          child: NxSplitView(
+            detail: _selected == null
+                ? null
+                : OrderSummaryScreen(
+                    key: ValueKey(_selected!['id']),
+                    orderId: _selected!['id'].toString(),
+                    preview: _selected!,
+                  ),
+            list: RefreshIndicator(
             onRefresh: _load,
             child: _loading
                 ? const NxSkeletonList()
@@ -212,21 +224,30 @@ class _OrdersTabState extends State<_OrdersTab> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(formatBaht(o['grand_total']), style: theme.textTheme.titleSmall),
-                                if ((o['payment_status']?.toString() ?? 'unpaid') != 'paid')
+                                if ((o['payment_status']?.toString() ?? 'unpaid') != 'paid' &&
+                                    context.read<AppConfig>().session.isBusinessAdmin)
                                   InkWell(
                                     onTap: () => _markPaid(o),
                                     child: Text('รับชำระ', style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
                                   ),
                               ],
                             ),
-                            onTap: () => nxPush<void>(
-                              context,
-                              OrderSummaryScreen(orderId: o['id'].toString(), preview: o),
-                            ),
+                            selected: _selected?['id'] == o['id'],
+                            onTap: () {
+                              if (NxBreakpoint.of(context).twoPane) {
+                                setState(() => _selected = o);
+                                return;
+                              }
+                              nxPush<void>(
+                                context,
+                                OrderSummaryScreen(orderId: o['id'].toString(), preview: o),
+                              );
+                            },
                           ),
                         ),
                     ],
                   ),
+          ),
           ),
         ),
       ],

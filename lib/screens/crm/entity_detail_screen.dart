@@ -22,6 +22,7 @@ import '../deep_link_loaders.dart';
 import '../jobs/job_inspection_screen.dart';
 import 'entity_create_screen.dart';
 import 'entity_ops.dart';
+import '../../core/error_reporting.dart';
 
 class EntityDetailScreen extends StatefulWidget {
   const EntityDetailScreen({
@@ -84,12 +85,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       var picklists = <String, List<Map<String, dynamic>>>{};
       try {
         catalog = await api.getTags(module: widget.module);
-      } catch (_) {}
+      } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
       try {
         final schema = await api.getFieldSchema(widget.module);
         fields = schema.fields;
         picklists = schema.picklists;
-      } catch (_) {}
+      } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
       if (!mounted) return;
       setState(() {
         if (record.isNotEmpty) _row = {..._row, ...record};

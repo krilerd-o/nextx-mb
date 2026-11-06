@@ -13,6 +13,7 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/error_reporting.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
   const ActivityDetailScreen({super.key, required this.row});
@@ -48,7 +49,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         lng: fix.longitude,
       );
       if (mounted) setState(() => _validate = v);
-    } catch (_) {}
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
   }
 
   Future<void> _loadVisit() async {
@@ -100,7 +103,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               const SnackBar(content: Text('ไม่มีสัญญาณ — คิวเช็คอินไว้แล้ว')),
             );
           }
-        } catch (_) {}
+        } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
       }
       if (mounted) setState(() => _error = e);
     } finally {

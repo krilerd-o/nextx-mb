@@ -14,6 +14,7 @@ class SessionState {
     this.menuKeys,
     this.isSuperadmin = false,
     this.menusLoaded = false,
+    this.businessRole,
   });
 
   final String? accessToken;
@@ -26,6 +27,14 @@ class SessionState {
   final List<String>? menuKeys;
   final bool isSuperadmin;
   final bool menusLoaded;
+
+  /// Role in the current business from `/api/me` (`owner` | `admin` | `member`).
+  final String? businessRole;
+
+  /// Owner/admin of the current business (or superadmin) — gates admin-only APIs
+  /// such as store stock and mark-paid.
+  bool get isBusinessAdmin =>
+      isSuperadmin || businessRole == 'owner' || businessRole == 'admin';
 
   bool get isLoggedIn => accessToken != null && accessToken!.isNotEmpty;
   bool get hasBusinessContext =>
@@ -53,6 +62,7 @@ class SessionState {
     List<String>? menuKeys,
     bool? isSuperadmin,
     bool? menusLoaded,
+    String? businessRole,
     bool clearToken = false,
     bool clearBusiness = false,
     bool clearMenus = false,
@@ -68,6 +78,7 @@ class SessionState {
       menuKeys: clearMenus ? null : (menuKeys ?? this.menuKeys),
       isSuperadmin: isSuperadmin ?? this.isSuperadmin,
       menusLoaded: menusLoaded ?? this.menusLoaded,
+      businessRole: clearBusiness ? null : (businessRole ?? this.businessRole),
     );
   }
 }

@@ -86,4 +86,16 @@ void main() {
     expect(parseWorkspaceItemSlug('NSMO-250')?.itemNo, 250);
     expect(parseWorkspaceItemSlug('12'), isNull);
   });
+
+  test('business admin = owner/admin role or superadmin', () {
+    expect(const SessionState(businessRole: 'owner').isBusinessAdmin, isTrue);
+    expect(const SessionState(businessRole: 'admin').isBusinessAdmin, isTrue);
+    expect(const SessionState(businessRole: 'member').isBusinessAdmin, isFalse);
+    expect(const SessionState().isBusinessAdmin, isFalse);
+    expect(const SessionState(isSuperadmin: true).isBusinessAdmin, isTrue);
+    expect(
+      const SessionState(businessRole: 'owner', businessId: '1').copyWith(clearBusiness: true).businessRole,
+      isNull,
+    );
+  });
 }

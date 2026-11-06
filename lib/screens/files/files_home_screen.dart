@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/nx_breakpoint.dart';
 import '../../services/api_client.dart';
 import '../../services/file_open.dart';
 import '../../widgets/nx_app_header.dart';
@@ -361,7 +362,10 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
       child: Scaffold(
         appBar: NxAppHeader(
           title: _breadcrumb.isEmpty ? 'ไฟล์' : (_breadcrumb.last['name']?.toString() ?? 'ไฟล์'),
-          actions: [IconButton(onPressed: _load, icon: const Icon(NxI.arrowCounterClockwise))],
+          actions: [
+            IconButton(onPressed: _load, icon: const Icon(NxI.arrowCounterClockwise)),
+            if (NxBreakpoint.of(context).twoPane) NxAddButton(tooltip: 'เพิ่ม', onPressed: _busy ? () {} : _addMenu),
+          ],
         ),
         floatingActionButton: NxCreateFab(label: 'เพิ่ม', onPressed: _busy ? () {} : _addMenu),
         body: Column(

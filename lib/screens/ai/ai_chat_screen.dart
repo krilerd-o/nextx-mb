@@ -10,6 +10,7 @@ import '../../services/api_client.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/error_reporting.dart';
 
 /// One turn in the AI conversation (OpenAI-style role/content).
 class AiTurn {
@@ -102,7 +103,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
         ];
       });
       _toBottom();
-    } catch (_) {}
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
   }
 
   Future<void> _persist() async {
@@ -113,7 +116,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
         _storeKey,
         jsonEncode({'conversation_id': _conversationId, 'turns': [for (final t in keep) t.toJson()]}),
       );
-    } catch (_) {}
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
   }
 
   void _toBottom() {
@@ -162,7 +167,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_storeKey);
-    } catch (_) {}
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
   }
 
   Widget _bubble(AiTurn t) {

@@ -9,6 +9,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
+import '../../core/error_reporting.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -53,7 +54,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       var history = <Map<String, dynamic>>[];
       try {
         history = await api.getAttendance(dateFrom: from, dateTo: to);
-      } catch (_) {}
+      } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
       if (mounted) {
         setState(() {
           _summary = summary;

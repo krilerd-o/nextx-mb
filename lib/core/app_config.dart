@@ -425,6 +425,7 @@ class AppConfig extends ChangeNotifier {
       menuKeys: menus,
       isSuperadmin: superadmin,
       menusLoaded: true,
+      businessRole: me['role']?.toString(),
     );
     notifyListeners();
   }

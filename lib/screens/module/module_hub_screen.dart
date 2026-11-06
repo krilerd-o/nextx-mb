@@ -12,6 +12,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/error_reporting.dart';
 
 class ModuleHubScreen extends StatefulWidget {
   const ModuleHubScreen({super.key});
@@ -40,13 +41,17 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
       for (final row in jobs.take(5)) {
         next.add({'module': 'job', 'row': row});
       }
-    } catch (_) {}
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
     try {
       final page = await api.getEntityList('activity', limit: 5);
       for (final row in page.items.take(5)) {
         next.add({'module': 'activity', 'row': row});
       }
-    } catch (_) {}
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
     if (!mounted) return;
     setState(() => _recent = next);
   }
@@ -76,7 +81,8 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
         const _HubItem(NxI.robot, 'AI', 'ผู้ช่วย', AppRoutes.aiChat),
       if (MenuAccess.allow(session, MenuAccess.files))
         const _HubItem(NxI.folder, 'ไฟล์', 'กล้องและอัปโหลด', AppRoutes.files),
-      if (MenuAccess.any(session, const [MenuAccess.storeOrders, MenuAccess.storeStock]))
+      if (MenuAccess.allow(session, MenuAccess.storeOrders) ||
+          (MenuAccess.allow(session, MenuAccess.storeStock) && session.isBusinessAdmin))
         const _HubItem(NxI.package, 'ร้านค้า', 'ออเดอร์และสต็อก', AppRoutes.commerce),
       if (MenuAccess.allow(session, MenuAccess.mailbox))
         const _HubItem(NxI.envelope, 'เมล', 'อ่าน เขียน และตอบกลับ', AppRoutes.mail),

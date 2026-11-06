@@ -3,6 +3,7 @@ import 'package:flutter/physics.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../services/api_client.dart';
 import '../../core/nx_motion.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_select_tile.dart';
@@ -247,7 +248,11 @@ class _ProfileStep extends StatelessWidget {
           onTap: () async {
             try {
               await config.uploadProfileAvatarToServer();
-            } catch (_) {}
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+              }
+            }
           },
         ),
       ],
