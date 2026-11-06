@@ -5,7 +5,6 @@ import '../../core/app_config.dart';
 import '../../core/menu_access.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../services/api_client.dart';
-import '../../widgets/dense_card_tile.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_cached_future.dart';
 import '../../widgets/nx_hero_cta.dart';
@@ -80,14 +79,7 @@ class _LeaveBalanceTab extends StatelessWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: NxBreakpoint.of(context).scrollPadding(context),
           children: [
-            for (final b in list)
-              DenseCardTile(
-                title: b['leave_type_name']?.toString() ?? '',
-                trailing: Text(
-                  '${b['used_days'] ?? 0}/${b['total_days'] ?? 0} วัน',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
+            for (final b in list) _BalanceCard(row: b),
           ],
         );
       },
@@ -245,14 +237,46 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
   }
 }
 
-class _LeaveMineTab extends StatelessWidget {
+class _LeaveMineTab extends StatefulWidget {
   const _LeaveMineTab({required this.revision});
   final int revision;
 
   @override
+  State<_LeaveMineTab> createState() => _LeaveMineTabState();
+}
+
+class _LeaveMineTabState extends State<_LeaveMineTab> {
+  var _local = 0;
+
+  Future<void> _cancel(Map<String, dynamic> p) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ยกเลิกคำขอลา?'),
+        content: Text('${p['leave_type_name'] ?? 'ลา'} ${p['start_date'] ?? ''} – ${p['end_date'] ?? ''}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ไม่')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ยกเลิกคำขอ')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await context.read<AppConfig>().apiClient.cancelLeave(p['id'].toString());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ยกเลิกคำขอลาแล้ว')));
+      setState(() => _local++);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return NxCachedFuture<List<Map<String, dynamic>>>(
-      revision: revision,
+      revision: widget.revision + _local,
       load: () => context.read<AppConfig>().apiClient.getLeaveRequests(),
       skeleton: const NxSkeletonList(rows: 4),
       isEmpty: (list) => list.isEmpty,
@@ -263,13 +287,134 @@ class _LeaveMineTab extends StatelessWidget {
           padding: NxBreakpoint.of(context).scrollPadding(context),
           children: [
             for (final p in list)
-              DenseCardTile(
-                title: p['leave_type_name']?.toString() ?? 'ลา',
-                subtitle: '${p['start_date'] ?? ''} – ${p['end_date'] ?? ''} · ${p['status'] ?? ''}',
+              _LeaveRequestCard(
+                row: p,
+                onCancel: p['status']?.toString() == 'Pending' ? () => _cancel(p) : null,
               ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Thai label + color for a NEXTX leave status.
+(String, Color) leaveStatusStyle(String? status, ColorScheme cs) {
+  switch (status) {
+    case 'Approved':
+      return ('อนุมัติแล้ว', const Color(0xFF16A34A));
+    case 'Rejected':
+      return ('ไม่อนุมัติ', cs.error);
+    case 'Cancelled':
+      return ('ยกเลิกแล้ว', cs.outline);
+    case 'Pending':
+      return ('รออนุมัติ', const Color(0xFFF59E0B));
+    default:
+      return (status ?? '—', cs.outline);
+  }
+}
+
+class _LeaveRequestCard extends StatelessWidget {
+  const _LeaveRequestCard({required this.row, this.onCancel, this.trailing});
+  final Map<String, dynamic> row;
+  final VoidCallback? onCancel;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final (label, color) = leaveStatusStyle(row['status']?.toString(), theme.colorScheme);
+    final who = row['user_name']?.toString();
+    final reason = row['reason']?.toString() ?? '';
+    final reject = row['reject_reason']?.toString() ?? '';
+    String d(dynamic v) => (v?.toString() ?? '').split('T').first;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          who != null && who.isNotEmpty ? who : (row['leave_type_name']?.toString() ?? 'ลา'),
+                          style: theme.textTheme.titleSmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
+                        child: Text(label, style: theme.textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    [
+                      if (who != null && who.isNotEmpty) row['leave_type_name']?.toString() ?? '',
+                      '${d(row['start_date'])} – ${d(row['end_date'])}',
+                      if (row['days'] != null) '${row['days']} วัน',
+                    ].where((e) => e.isNotEmpty).join(' · '),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  if (reason.isNotEmpty) Text('เหตุผล: $reason', style: theme.textTheme.bodySmall),
+                  if (reject.isNotEmpty)
+                    Text('เหตุผลที่ไม่อนุมัติ: $reject', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                ],
+              ),
+            ),
+            if (onCancel != null) TextButton(onPressed: onCancel, child: const Text('ยกเลิก')),
+            ?trailing,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({required this.row});
+  final Map<String, dynamic> row;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final used = num.tryParse(row['used_days']?.toString() ?? '') ?? 0;
+    final total = num.tryParse(row['total_days']?.toString() ?? '') ?? 0;
+    final left = total - used;
+    final ratio = total <= 0 ? 0.0 : (used / total).clamp(0, 1).toDouble();
+    String n(num v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text(row['leave_type_name']?.toString() ?? '', style: theme.textTheme.titleSmall)),
+                Text('คงเหลือ ${n(left < 0 ? 0 : left)} วัน', style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(value: ratio, minHeight: 8),
+            ),
+            const SizedBox(height: 4),
+            Text('ใช้ไป ${n(used)} จาก ${n(total)} วัน', style: theme.textTheme.bodySmall),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -285,8 +430,25 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
   var _revision = 0;
 
   Future<void> _act(String id, bool approve) async {
+    String? reason;
+    if (!approve) {
+      final ctrl = TextEditingController();
+      reason = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('เหตุผลที่ไม่อนุมัติ'),
+          content: TextField(controller: ctrl, autofocus: true, maxLines: 3, decoration: const InputDecoration(hintText: 'ไม่บังคับ')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('ไม่อนุมัติ')),
+          ],
+        ),
+      );
+      ctrl.dispose();
+      if (reason == null || !mounted) return;
+    }
     try {
-      await context.read<AppConfig>().apiClient.approveLeave(id, approve: approve);
+      await context.read<AppConfig>().apiClient.approveLeave(id, approve: approve, reason: reason);
       if (mounted) setState(() => _revision++);
     } catch (e) {
       if (mounted) {
@@ -309,9 +471,8 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
           padding: NxBreakpoint.of(context).scrollPadding(context),
           children: [
             for (final p in pending)
-              DenseCardTile(
-                title: p['user_name']?.toString() ?? p['leave_type_name']?.toString() ?? '',
-                subtitle: '${p['start_date'] ?? ''} – ${p['end_date'] ?? ''} · ${p['leave_type_name'] ?? ''}',
+              _LeaveRequestCard(
+                row: p,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

@@ -20,6 +20,12 @@ Future<void> openPdfBytes(List<int> bytes, String filename) async {
   await OpenFilex.open(file.path);
 }
 
+/// Writes [bytes] to a temp file and opens it with the system viewer.
+Future<void> openFileBytes(List<int> bytes, String filename) => openPdfBytes(bytes, filename);
+
+/// Writes [bytes] to a temp file and opens the share sheet.
+Future<void> shareFileBytes(List<int> bytes, String filename) => sharePdfBytes(bytes, filename);
+
 Future<void> sharePdfBytes(List<int> bytes, String filename) async {
   if (kIsWeb) return;
   final file = await _writeTempPdf(bytes, filename);

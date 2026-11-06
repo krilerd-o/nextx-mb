@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/app_config.dart';
+import '../../core/menu_access.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
-import '../../widgets/dense_card_tile.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_surface_card.dart';
@@ -18,12 +20,18 @@ class HrHomeScreen extends StatelessWidget {
     return const Column(
       children: [
         NxAppHeader.hub(),
-        Expanded(
-          child: _HrShortcuts(),
-        ),
+        Expanded(child: _HrShortcuts()),
       ],
     );
   }
+}
+
+class _HrTile {
+  const _HrTile(this.icon, this.title, this.subtitle, this.route);
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String route;
 }
 
 class _HrShortcuts extends StatelessWidget {
@@ -33,72 +41,58 @@ class _HrShortcuts extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bp = NxBreakpoint.of(context);
+    final session = context.watch<AppConfig>().session;
+    final tiles = <_HrTile>[
+      if (MenuAccess.allow(session, MenuAccess.attendance))
+        const _HrTile(NxI.clock, 'ลงเวลา', 'เข้า-ออกงานด้วย GPS', AppRoutes.attendance),
+      if (MenuAccess.allow(session, MenuAccess.leave))
+        const _HrTile(NxI.calendarCheck, 'ยื่นลา', 'ขอลาใหม่', AppRoutes.leaveRequest),
+      if (MenuAccess.allow(session, MenuAccess.leave) || MenuAccess.allow(session, MenuAccess.leaveManagement))
+        const _HrTile(NxI.note, 'การลาของฉัน', 'สิทธิ์คงเหลือและสถานะ', AppRoutes.leaveList),
+      if (MenuAccess.allow(session, MenuAccess.leaveManagement))
+        const _HrTile(NxI.checkCircle, 'อนุมัติการลา', 'คำขอที่รอคุณอนุมัติ', AppRoutes.approvals),
+    ];
     return ListView(
       padding: bp.scrollPadding(context, inShell: true),
       children: [
+        const SectionHeader('HR'),
+        if (tiles.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: Text('ไม่มีเมนู HR ที่เข้าถึงได้')),
+          ),
         LayoutBuilder(
           builder: (context, c) {
             const gap = 12.0;
-            final w = (c.maxWidth - gap) / 2;
+            final cols = c.maxWidth >= 640 ? 4 : 2;
+            final w = (c.maxWidth - gap * (cols - 1)) / cols;
             return Wrap(
               spacing: gap,
               runSpacing: gap,
               children: [
-                SizedBox(
-                  width: w,
-                  child: NxSurfaceCard(
-                    onTap: () => context.push(AppRoutes.attendance),
-                    padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: nxAvatarColor('ลงเวลา').withValues(alpha: 0.16),
-                          child: Icon(NxI.clock, color: nxAvatarColor('ลงเวลา')),
-                        ),
-                        const SizedBox(height: 12),
-                        Text('ลงเวลา', style: theme.textTheme.titleMedium),
-                        Text('GPS + ที่อยู่', style: theme.textTheme.bodySmall),
-                      ],
+                for (final t in tiles)
+                  SizedBox(
+                    width: w,
+                    child: NxSurfaceCard(
+                      onTap: () => context.push(t.route),
+                      padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: nxAvatarColor(t.title).withValues(alpha: 0.16),
+                            child: Icon(t.icon, color: nxAvatarColor(t.title)),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(t.title, style: theme.textTheme.titleMedium),
+                          Text(t.subtitle, style: theme.textTheme.bodySmall),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(
-                  width: w,
-                  child: NxSurfaceCard(
-                    onTap: () => context.push(AppRoutes.leaveList),
-                    padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: nxAvatarColor('การลา').withValues(alpha: 0.16),
-                          child: Icon(NxI.note, color: nxAvatarColor('การลา')),
-                        ),
-                        const SizedBox(height: 12),
-                        Text('การลา', style: theme.textTheme.titleMedium),
-                        Text('ยอดคงเหลือ / ยื่นลา', style: theme.textTheme.bodySmall),
-                      ],
-                    ),
-                  ),
-                ),
               ],
             );
           },
-        ),
-        const SizedBox(height: 24),
-        const SectionHeader('ทางลัด'),
-        DenseCardTile(
-          leading: const Icon(NxI.clock),
-          title: 'Clock In / Out',
-          subtitle: 'GPS + ที่อยู่',
-          onTap: () => context.push(AppRoutes.attendance),
-        ),
-        DenseCardTile(
-          leading: const Icon(NxI.note),
-          title: 'การลา',
-          subtitle: 'ยอดคงเหลือ / ยื่นลา / อนุมัติ',
-          onTap: () => context.push(AppRoutes.leaveList),
         ),
       ],
     );

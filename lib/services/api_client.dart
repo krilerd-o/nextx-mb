@@ -463,6 +463,7 @@ class ApiClient {
     String? address,
   }) async {
     return _dataMap(await _send('POST', '/api/hr/attendance/clock-in', data: {
+      'source': 'app',
       'latitude': latitude,
       'longitude': longitude,
       if (address != null) 'address': address,
@@ -513,6 +514,11 @@ class ApiClient {
       'end_date': endDate,
       if (reason != null) 'reason': reason,
     }));
+  }
+
+  /// Requester cancels their own Pending request (NEXTX `PUT /leave-requests/:id/cancel`).
+  Future<void> cancelLeave(String id) async {
+    await _send('PUT', '/api/hr/leave-requests/$id/cancel');
   }
 
   Future<Map<String, dynamic>> approveLeave(String id, {required bool approve, String? reason}) async {
@@ -655,6 +661,18 @@ class ApiClient {
 
   Future<void> deleteNotification(String id) async {
     await _send('DELETE', '/api/notifications/$id');
+  }
+
+  /// Module counts, recent records and upcoming activities for the home screen
+  /// (`GET /api/dashboard/home-summary`, already scoped to the user's menus).
+  Future<Map<String, dynamic>> getHomeSummary() async {
+    return _dataMap(await _send('GET', '/api/dashboard/home-summary'));
+  }
+
+  /// My workspace items grouped by due bucket (`GET /api/home/work`).
+  /// `counts` holds overdue / today / upcoming / nodue.
+  Future<Map<String, dynamic>> getHomeWork({String bucket = 'all', int limit = 10}) async {
+    return _dataMap(await _send('GET', '/api/home/work', query: {'bucket': bucket, 'limit': '$limit'}));
   }
 
   Future<Map<String, dynamic>> getNotificationSummary() async {
@@ -1000,16 +1018,55 @@ class ApiClient {
     });
   }
 
+  /// Files in the business root. `/api/files` returns `{folders, files, breadcrumb}`.
   Future<List<Map<String, dynamic>>> getFiles({int limit = 40, String? q}) async {
-    final env = await _send('GET', '/api/files', query: {
-      'limit': '$limit',
-      if (q != null && q.isNotEmpty) 'q': q,
-    });
-    return extractMapList(env['data']);
+    final listing = await getFolderListing();
+    return listing.files;
   }
 
-  Future<Map<String, dynamic>> uploadFiles(List<MultipartFile> files) async {
+  /// One folder level (root when [folderId] is null).
+  Future<({List<Map<String, dynamic>> folders, List<Map<String, dynamic>> files, List<Map<String, dynamic>> breadcrumb})>
+      getFolderListing({String? folderId}) async {
+    final env = await _send('GET', '/api/files', query: {
+      if (folderId != null && folderId.isNotEmpty) 'folder_id': folderId,
+    });
+    final data = env['data'];
+    if (data is! Map) return (folders: <Map<String, dynamic>>[], files: extractMapList(data), breadcrumb: <Map<String, dynamic>>[]);
+    return (
+      folders: extractMapList(data['folders']),
+      files: extractMapList(data['files']),
+      breadcrumb: extractMapList(data['breadcrumb']),
+    );
+  }
+
+  Future<Map<String, dynamic>> createFolder(String name, {String? parentId}) async {
+    return _dataMap(await _send('POST', '/api/files/folders', data: {
+      'name': name,
+      if (parentId != null && parentId.isNotEmpty) 'parent_id': int.tryParse(parentId) ?? parentId,
+    }));
+  }
+
+  Future<void> renameFolder(String id, String name) async {
+    await _send('PUT', '/api/files/folders/$id', data: {'name': name});
+  }
+
+  Future<void> deleteFolder(String id) async {
+    await _send('DELETE', '/api/files/folders/$id');
+  }
+
+  Future<void> renameFile(String id, String name) async {
+    await _send('PUT', '/api/files/$id', data: {'name': name});
+  }
+
+  Future<void> deleteFile(String id) async {
+    await _send('DELETE', '/api/files/$id');
+  }
+
+  Future<List<int>> downloadFile(String id) => _downloadBytes('/api/files/$id/download');
+
+  Future<Map<String, dynamic>> uploadFiles(List<MultipartFile> files, {String? folderId}) async {
     final form = FormData();
+    if (folderId != null && folderId.isNotEmpty) form.fields.add(MapEntry('folder_id', folderId));
     for (final f in files) {
       form.files.add(MapEntry('files', f));
     }
