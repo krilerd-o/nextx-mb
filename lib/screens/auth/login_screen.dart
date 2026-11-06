@@ -54,7 +54,17 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
       WidgetsBinding.instance.addPostFrameCallback((_) => config.clearSessionExpiredNotice());
     }
+    final recent = config.recentAccounts;
+    if (recent.isNotEmpty && !RegExp(r'^\+?[0-9 -]+$').hasMatch(recent.first.loginId)) _id.text = recent.first.loginId;
+    final invite = config.pendingInvite;
+    if (invite != null) WidgetsBinding.instance.addPostFrameCallback((_) => _openRegister());
     _loadSocial();
+  }
+
+  Future<void> _openRegister() async {
+    if (!mounted) return;
+    await nxPush<bool>(context, RegisterScreen(inviteToken: context.read<AppConfig>().pendingInvite?.token));
+    if (mounted) setState(() {});
   }
 
   @override
@@ -250,6 +260,43 @@ class _LoginScreenState extends State<LoginScreen> {
                   showSelectedIcon: false,
                   onSelectionChanged: _loading ? null : (v) => _setMode(v.first),
                 ),
+                if (config.pendingInvite != null) ...[
+                  const SizedBox(height: 14),
+                  Material(
+                    color: cs.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(14),
+                    child: ListTile(
+                      leading: Icon(NxI.envelope, color: cs.primary),
+                      title: const Text('คุณได้รับลิงก์เชิญเข้าธุรกิจ'),
+                      subtitle: const Text('ยังไม่มีบัญชี แตะเพื่อสมัคร · มีบัญชีแล้ว เข้าสู่ระบบเพื่อเข้าร่วม'),
+                      onTap: _loading ? null : _openRegister,
+                    ),
+                  ),
+                ],
+                if (config.recentAccounts.isNotEmpty && _mode != _Mode.otpSms) ...[
+                  const SizedBox(height: 14),
+                  Text('บัญชีที่เคยใช้', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      for (final a in config.recentAccounts)
+                        InputChip(
+                          avatar: CircleAvatar(
+                            child: Text((a.name.isNotEmpty ? a.name : a.loginId).characters.first.toUpperCase()),
+                          ),
+                          label: Text(a.name.isNotEmpty ? a.name : a.loginId, overflow: TextOverflow.ellipsis),
+                          tooltip: a.loginId,
+                          selected: _id.text.trim().toLowerCase() == a.loginId.toLowerCase(),
+                          showCheckmark: false,
+                          onPressed: _loading || (otp && _otpSent) ? null : () => setState(() => _id.text = a.loginId),
+                          onDeleted: _loading ? null : () => config.forgetRecentAccount(a),
+                          deleteButtonTooltipMessage: 'ลบออกจากเครื่องนี้',
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   controller: _id,
@@ -376,7 +423,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     Text('ยังไม่มีบัญชี?', style: theme.textTheme.bodyMedium),
                     TextButton(
-                      onPressed: _loading ? null : () => nxPush<bool>(context, const RegisterScreen()),
+                      onPressed: _loading ? null : _openRegister,
                       child: const Text('สมัครสมาชิก'),
                     ),
                   ],

@@ -5,6 +5,7 @@ import '../../core/app_config.dart';
 import '../../core/hub_selection.dart';
 import '../../services/api_client.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_invite_prompt.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_step_header.dart';
 
@@ -24,6 +25,9 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (mounted && await maybePromptInviteJoin(context)) await _load();
+    });
     _load();
   }
 

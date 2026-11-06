@@ -339,6 +339,14 @@ class ApiClient {
     }));
   }
 
+  /// `POST /api/me/request-join` — join a business with an invite link token.
+  Future<Map<String, dynamic>> requestJoin({String? inviteToken, String? businessCode}) async {
+    return _dataMap(await _send('POST', '/api/me/request-join', data: {
+      if (inviteToken != null && inviteToken.isNotEmpty) 'invite_token': inviteToken,
+      if (businessCode != null && businessCode.isNotEmpty) 'business_code': businessCode,
+    }));
+  }
+
   Future<void> requestSmsOtp(String phone) async {
     await _send('POST', '/api/auth/otp/sms/request', data: {'phone': phone});
   }

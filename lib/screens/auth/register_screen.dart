@@ -9,7 +9,10 @@ import '../../widgets/nx_icons.dart';
 /// Sign up (NEXTX `POST /api/auth/register`): with a serial/invite key the
 /// account is created right away; without one it waits for admin approval.
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  const RegisterScreen({super.key, this.inviteToken});
+
+  /// From a "join business" link — the account joins that business directly.
+  final String? inviteToken;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -28,6 +31,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscure = true;
   String? _error;
   bool _pendingDone = false;
+
+  bool get _invite => (widget.inviteToken ?? '').isNotEmpty;
 
   @override
   void dispose() {
@@ -48,8 +53,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             fullName: _name.text.trim(),
             email: _email.text.trim(),
             password: _password.text,
-            serialKey: _hasKey ? _key.text.trim() : null,
-            businessName: _business.text.trim(),
+            serialKey: !_invite && _hasKey ? _key.text.trim() : null,
+            businessName: _invite ? null : _business.text.trim(),
+            inviteToken: widget.inviteToken,
           );
       if (!mounted) return;
       if (pending) {
@@ -148,6 +154,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 validator: (v) => v != _password.text ? 'รหัสผ่านไม่ตรงกัน' : null,
               ),
               const SizedBox(height: 16),
+              if (_invite)
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(14)),
+                  child: Row(children: [
+                    Icon(NxI.checkCircleFill, color: cs.primary),
+                    const SizedBox(width: 10),
+                    const Expanded(child: Text('สมัครจากลิงก์เชิญ — เข้าธุรกิจได้ทันทีโดยไม่ต้องรออนุมัติ (ใช้อีเมลที่ได้รับคำเชิญ)')),
+                  ]),
+                ),
+              if (!_invite) ...[
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('ฉันมีรหัสเชิญ / ซีเรียลคีย์'),
@@ -166,6 +183,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 controller: _business,
                 decoration: _dec('ชื่อธุรกิจ (ถ้ามี)', NxI.buildings),
               ),
+              ],
               if (_error != null)
                 Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: TextStyle(color: cs.error))),
               const SizedBox(height: 24),

@@ -5,6 +5,7 @@ import '../core/app_config.dart';
 import '../core/nx_breakpoint.dart';
 import '../services/offline_queue.dart';
 import '../widgets/nx_icons.dart';
+import '../widgets/nx_invite_prompt.dart';
 import '../widgets/nx_tab_nav.dart';
 import '../core/shell_tabs.dart';
 import 'ai/ai_chat_screen.dart';
@@ -83,6 +84,13 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     final bp = NxBreakpoint.of(context);
     final config = context.watch<AppConfig>();
+    if (config.pendingInvite != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        // Joined → go pick the new business.
+        if (await maybePromptInviteJoin(context)) await config.clearBusiness();
+      });
+    }
     final ids = [...config.shellTabs, kMenuTabId];
     if (!ids.contains(_current)) {
       // Reopen the tab used last time if it's still allowed.

@@ -20,7 +20,7 @@ class ServerScreen extends StatefulWidget {
 
 class _ServerScreenState extends State<ServerScreen> {
   late final TextEditingController _url = TextEditingController(
-    text: serverLabel(context.read<AppConfig>().apiBaseUrl),
+    text: serverLabel(context.read<AppConfig>().pendingInvite?.server ?? context.read<AppConfig>().apiBaseUrl),
   );
   bool _busy = false;
   String? _error;

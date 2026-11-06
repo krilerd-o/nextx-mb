@@ -32,6 +32,7 @@ import '../app_config.dart';
 import '../push_navigation.dart';
 import 'app_routes.dart';
 import 'onboarding_redirect.dart';
+import '../invite_link.dart';
 import '../shell_tabs.dart';
 import '../../screens/auth/server_screen.dart';
 import '../../screens/auth/welcome_screen.dart';
@@ -50,6 +51,11 @@ GoRouter createAppRouter(AppConfig config) {
     refreshListenable: Listenable.merge([config, PushNavigation.instance]),
     initialLocation: AppRoutes.splash,
     redirect: (context, state) {
+      final invite = parseInviteLink(state.uri);
+      if (invite != null) {
+        config.stashInvite(invite);
+        return config.isLoggedIn ? AppRoutes.mainShell : AppRoutes.login;
+      }
       final loc = state.matchedLocation;
       if (kDebugMode &&
           (loc == AppRoutes.fieldGallery ||
@@ -79,6 +85,7 @@ GoRouter createAppRouter(AppConfig config) {
     },
     errorBuilder: (context, state) => _RouteNotFoundScreen(location: state.uri.toString()),
     routes: [
+      GoRoute(path: AppRoutes.register, redirect: (_, _) => AppRoutes.login),
       GoRoute(
         path: AppRoutes.splash,
         builder: (_, _) => const SplashScreen(),

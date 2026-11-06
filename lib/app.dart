@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 
 import 'core/alice_debug_layer.dart';
 import 'core/app_config.dart';
+import 'screens/auth/app_lock_screen.dart';
+import 'services/app_lock.dart';
 import 'services/unread_service.dart';
 import 'core/app_theme.dart';
 import 'core/navigation/app_router.dart';
@@ -35,7 +37,9 @@ class _NextXMobileAppState extends State<NextXMobileApp> with WidgetsBindingObse
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) AppLock.instance.onPaused();
     if (state == AppLifecycleState.resumed) {
+      AppLock.instance.onResumed(loggedIn: context.read<AppConfig>().isLoggedIn);
       context.read<AppConfig>().flushOfflineQueue();
       UnreadNotifications.instance.refreshIfBound();
       context.read<AppConfig>().refreshSessionIfStale();
@@ -61,7 +65,17 @@ class _NextXMobileAppState extends State<NextXMobileApp> with WidgetsBindingObse
           darkTheme: AppTheme.themed(brightness: Brightness.dark, accent: accent),
           themeMode: config.themeMode,
           builder: (context, child) => NxAtmosphere(
-            child: AliceDebugLayer(child: child),
+            child: AliceDebugLayer(
+              child: ListenableBuilder(
+                listenable: AppLock.instance,
+                builder: (context, _) => Stack(
+                  children: [
+                    ?child,
+                    if (AppLock.instance.locked && config.isLoggedIn) const Positioned.fill(child: AppLockScreen()),
+                  ],
+                ),
+              ),
+            ),
           ),
           routerConfig: _router,
         );

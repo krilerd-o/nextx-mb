@@ -9,6 +9,7 @@ import '../core/shell_tabs.dart';
 import '../core/app_version.dart';
 import '../core/navigation/app_routes.dart';
 import '../core/nx_breakpoint.dart';
+import '../services/app_lock.dart';
 import '../widgets/nx_app_header.dart';
 import '../widgets/nx_app_logo.dart';
 import '../widgets/nx_surface_card.dart';
@@ -90,6 +91,7 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
           ),
+          const _AppLockCard(),
           const SizedBox(height: 20),
           NxSurfaceCard(
             onTap: () => context.push(AppRoutes.diagnostics),
@@ -232,5 +234,56 @@ class SettingsScreen extends StatelessWidget {
     if (ok != true) return;
     await config.logout();
     await config.resetServerChoice();
+  }
+}
+
+/// "ปลดล็อกด้วยลายนิ้วมือ / ใบหน้า" — hidden on devices without it.
+class _AppLockCard extends StatefulWidget {
+  const _AppLockCard();
+
+  @override
+  State<_AppLockCard> createState() => _AppLockCardState();
+}
+
+class _AppLockCardState extends State<_AppLockCard> {
+  bool _supported = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    AppLock.instance.isSupported().then((v) {
+      if (mounted) setState(() => _supported = v);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_supported) return const SizedBox.shrink();
+    final lock = AppLock.instance;
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: NxSurfaceCard(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: ListenableBuilder(
+          listenable: lock,
+          builder: (context, _) => SwitchListTile(
+            secondary: Icon(NxI.fingerprint, color: Theme.of(context).colorScheme.primary),
+            title: const Text('ล็อกแอปด้วยลายนิ้วมือ / ใบหน้า'),
+            subtitle: const Text('ขอสแกนเมื่อเปิดแอป หรือกลับมาหลังพักเกิน 5 นาที'),
+            value: lock.enabled,
+            onChanged: _busy
+                ? null
+                : (v) async {
+                    setState(() => _busy = true);
+                    final messenger = ScaffoldMessenger.of(context);
+                    final ok = await lock.setEnabled(v);
+                    if (!ok) messenger.showSnackBar(const SnackBar(content: Text('ยืนยันตัวตนไม่สำเร็จ')));
+                    if (mounted) setState(() => _busy = false);
+                  },
+          ),
+        ),
+      ),
+    );
   }
 }

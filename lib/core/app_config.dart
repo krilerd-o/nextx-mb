@@ -8,12 +8,15 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_client.dart';
+import '../services/app_lock.dart';
 import '../services/device_push_service.dart';
 import '../services/offline_queue.dart';
 import '../services/realtime_service.dart';
 import '../services/unread_service.dart';
 import 'auth_errors.dart';
 import 'menu_access.dart';
+import 'invite_link.dart';
+import 'recent_accounts.dart';
 import 'server_profile.dart';
 import 'session_state.dart';
 import 'shell_tabs.dart';
@@ -37,6 +40,7 @@ const String _keyServerConfirmed = 'server_confirmed';
 const String _keyRecentServers = 'recent_servers';
 const String _keyPackageId = 'session_package_id';
 const String _keySessionExpired = 'session_expired_notice';
+const String _keyRecentAccounts = 'recent_accounts_v1';
 
 const _secureTokenKey = 'access_token';
 const int _maxAvatarBytes = 400000;
@@ -95,6 +99,36 @@ class AppConfig extends ChangeNotifier {
   /// The user picked/confirmed a NEXTX server (first-run step).
   bool get serverConfirmed => _serverConfirmed;
   List<String> get recentServers => List.unmodifiable(_recentServers);
+
+  List<RecentAccount> _recentAccounts = const [];
+
+  /// Accounts signed in on this server before (most recent first).
+  List<RecentAccount> get recentAccounts => recentAccountsFor(_recentAccounts, _apiBaseUrl);
+
+  Future<void> forgetRecentAccount(RecentAccount a) async {
+    _recentAccounts = removeRecentAccount(_recentAccounts, a);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyRecentAccounts, encodeRecentAccounts(_recentAccounts));
+    notifyListeners();
+  }
+
+  InviteLink? _pendingInvite;
+
+  /// Invite link opened before sign-in / setup finished; used by the
+  /// register screen (signed out) or the "join business" prompt (signed in).
+  InviteLink? get pendingInvite => _pendingInvite;
+
+  /// Called from the router redirect — no notify (would re-enter routing).
+  void stashInvite(InviteLink invite) => _pendingInvite = invite;
+
+  void clearPendingInvite() => _pendingInvite = null;
+
+  /// Joins the business of an invite link with the signed-in account.
+  Future<Map<String, dynamic>> joinWithInvite(String token) async {
+    final data = await apiClient.requestJoin(inviteToken: token);
+    _pendingInvite = null;
+    return data;
+  }
 
   /// Package chosen for the current business (`''` = business has no packages).
   bool get hasPackage => _session.packageCode != null;
@@ -205,6 +239,7 @@ class AppConfig extends ChangeNotifier {
     _uiLocaleCode = prefs.getString(_keyUiLocale) ?? 'th';
     _dateFormatPattern = prefs.getString(_keyDateFormat) ?? 'dd/MM/yyyy HH:mm';
     _recentServers = prefs.getStringList(_keyRecentServers) ?? const [];
+    _recentAccounts = decodeRecentAccounts(prefs.getString(_keyRecentAccounts));
     _sessionExpiredNotice = prefs.getBool(_keySessionExpired) ?? false;
     _packageId = prefs.getString(_keyPackageId);
     var token = await _secure.read(key: _secureTokenKey);
@@ -246,6 +281,7 @@ class AppConfig extends ChangeNotifier {
     // Existing installs were already on a server: don't make them pick again.
     _serverConfirmed = (prefs.getBool(_keyServerConfirmed) ?? false) || (token != null && token.isNotEmpty);
     await _loadUserScoped(prefs);
+    await AppLock.instance.load(loggedIn: _session.isLoggedIn);
     _ready = true;
     notifyListeners();
     if (_session.isLoggedIn) {
@@ -522,9 +558,10 @@ class AppConfig extends ChangeNotifier {
     required String password,
     String? serialKey,
     String? businessName,
+    String? inviteToken,
   }) async {
     _api.attachSession(baseUrl: _apiBaseUrl);
-    final withKey = serialKey != null && serialKey.trim().isNotEmpty;
+    final withKey = (serialKey != null && serialKey.trim().isNotEmpty) || (inviteToken ?? '').isNotEmpty;
     final data = await _api.register(
       fullName: fullName,
       email: email,
@@ -532,7 +569,9 @@ class AppConfig extends ChangeNotifier {
       signupType: withKey ? 'with_key' : 'without_key',
       serialKey: serialKey?.trim(),
       businessName: businessName,
+      inviteToken: inviteToken,
     );
+    if ((inviteToken ?? '').isNotEmpty) _pendingInvite = null;
     if (data['pending'] == true || data['token'] == null) return true;
     await _completeLogin(data, fallbackEmail: email);
     return false;
@@ -551,6 +590,12 @@ class AppConfig extends ChangeNotifier {
     final emailOut = user?['email1']?.toString() ?? email;
     await _secure.write(key: _secureTokenKey, value: token);
     final prefs = await SharedPreferences.getInstance();
+    final loginId = email.trim().isNotEmpty ? email.trim() : emailOut;
+    if (loginId.isNotEmpty) {
+      _recentAccounts = pushRecentAccount(
+          _recentAccounts, RecentAccount(server: _apiBaseUrl, loginId: loginId, name: _displayFromUser(user, emailOut)));
+      await prefs.setString(_keyRecentAccounts, encodeRecentAccounts(_recentAccounts));
+    }
     await prefs.setString(_keyUserId, uid);
     await prefs.setString(_keyEmail, emailOut);
     await prefs.setString(_keyDisplayName, _displayFromUser(user, emailOut));
@@ -799,6 +844,7 @@ class AppConfig extends ChangeNotifier {
     _shell = null;
     _session = const SessionState();
     _api.attachSession(baseUrl: _apiBaseUrl);
+    AppLock.instance.reset();
     _loggingOut = false;
     notifyListeners();
   }

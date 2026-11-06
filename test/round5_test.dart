@@ -6,8 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/error_reporting.dart';
+import 'package:nextx_mobile/core/invite_link.dart';
+import 'package:nextx_mobile/core/recent_accounts.dart';
+import 'package:nextx_mobile/screens/auth/register_screen.dart';
+import 'package:nextx_mobile/services/app_lock.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/core/shell_tabs.dart';
+import 'package:nextx_mobile/widgets/nx_hero_cta.dart';
 import 'package:nextx_mobile/widgets/nx_workspace_switcher.dart';
 
 import 'support/fake_api.dart';
@@ -91,5 +96,78 @@ void main() {
     }
     expect(find.text('NEXT H'), findsOneWidget);
     expect(find.text('เปลี่ยนธุรกิจ'), findsOneWidget);
+  });
+
+  // ---- Round 5 C ----
+  test('recent accounts: newest first, deduped per server, capped', () {
+    const s1 = 'https://a.com';
+    var list = <RecentAccount>[];
+    list = pushRecentAccount(list, const RecentAccount(server: s1, loginId: 'Ann@x.com', name: 'Ann'));
+    list = pushRecentAccount(list, const RecentAccount(server: s1, loginId: 'bob@x.com'));
+    list = pushRecentAccount(list, const RecentAccount(server: s1, loginId: 'ann@x.com', name: 'Ann B'));
+    list = pushRecentAccount(list, const RecentAccount(server: 'https://b.com', loginId: 'ann@x.com'));
+    expect(recentAccountsFor(list, s1).map((e) => e.name), ['Ann B', '']);
+    final back = decodeRecentAccounts(encodeRecentAccounts(list));
+    expect(back.length, 3);
+    expect(removeRecentAccount(back, back.first).length, 2);
+    expect(decodeRecentAccounts('not json'), isEmpty);
+    for (var i = 0; i < 9; i++) {
+      list = pushRecentAccount(list, RecentAccount(server: s1, loginId: 'u$i'));
+    }
+    expect(list.length, 5);
+  });
+
+  test('invite links from the web and the app scheme', () {
+    final web = parseInviteLink(Uri.parse('https://moainext.moai-crm.com/register?invite=abc123'))!;
+    expect(web.token, 'abc123');
+    expect(web.server, 'https://moainext.moai-crm.com');
+    final app = parseInviteLink(Uri.parse('moainext://app/register?invite=zz'))!;
+    expect(app.token, 'zz');
+    expect(app.server, isNull);
+    expect(parseInviteLink(Uri.parse('/register?invite=t'))!.token, 't');
+    expect(parseInviteLink(Uri.parse('https://x.com/register')), isNull);
+    expect(parseInviteLink(Uri.parse('https://x.com/login?invite=t')), isNull);
+  });
+
+  test('app lock asks again only after the idle time', () {
+    final now = DateTime(2026, 11, 6, 12);
+    expect(shouldLockOnResume(enabled: true, pausedAt: now.subtract(const Duration(minutes: 6)), now: now), isTrue);
+    expect(shouldLockOnResume(enabled: true, pausedAt: now.subtract(const Duration(minutes: 1)), now: now), isFalse);
+    expect(shouldLockOnResume(enabled: false, pausedAt: now.subtract(const Duration(hours: 1)), now: now), isFalse);
+    expect(shouldLockOnResume(enabled: true, pausedAt: null, now: now), isFalse);
+  });
+
+  testWidgets('register from an invite hides the serial key and sends invite_token', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    tester.view.physicalSize = const Size(430, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final config = AppConfig();
+    await tester.runAsync(() async {
+      while (!config.isReady) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    final adapter = FakeNextxAdapter({'POST /api/auth/register': {'pending': true}});
+    config.apiClient.debugSetHttpAdapter(adapter);
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: config, child: const MaterialApp(home: RegisterScreen(inviteToken: 'inv-1'))));
+    expect(find.textContaining('สมัครจากลิงก์เชิญ'), findsOneWidget);
+    expect(find.text('ฉันมีรหัสเชิญ / ซีเรียลคีย์'), findsNothing);
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'Ann Lee');
+    await tester.enterText(fields.at(1), 'ann@x.com');
+    await tester.enterText(fields.at(2), 'Passw0rd!x');
+    await tester.enterText(fields.at(3), 'Passw0rd!x');
+    await tester.tap(find.byType(NxHeroCta));
+    await tester.pump(const Duration(milliseconds: 300));
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 40)));
+      await tester.pump();
+    }
+    final call = adapter.calls.singleWhere((c) => c.path == '/api/auth/register');
+    expect((call.data as Map)['invite_token'], 'inv-1');
+    expect((call.data as Map)['signup_type'], 'with_key');
   });
 }
