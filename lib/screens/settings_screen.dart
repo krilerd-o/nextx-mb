@@ -91,6 +91,17 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
+          NxSurfaceCard(
+            onTap: () => context.push(AppRoutes.diagnostics),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: ListTile(
+              leading: Icon(NxI.warningCircle, color: colorScheme.primary),
+              title: const Text('บันทึกปัญหา'),
+              subtitle: const Text('ส่งข้อมูลให้ทีมพัฒนาเมื่อพบปัญหา'),
+              trailing: const Icon(NxI.caretRight),
+            ),
+          ),
+          const SizedBox(height: 20),
           Text(
             'เซิร์ฟเวอร์',
             style: theme.textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),

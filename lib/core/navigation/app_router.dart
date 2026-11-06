@@ -40,6 +40,7 @@ import '../../screens/hub/package_picker_screen.dart';
 import '../../screens/onboarding/role_setup_screen.dart';
 import '../../screens/onboarding/tab_setup_screen.dart';
 import '../../screens/settings_screen.dart';
+import '../../screens/settings/diagnostics_screen.dart';
 import 'notification_deep_link.dart';
 import 'route_access.dart';
 
@@ -117,6 +118,10 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.settings,
         builder: (_, _) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.diagnostics,
+        builder: (_, _) => const DiagnosticsScreen(),
       ),
       GoRoute(
         path: AppRoutes.hrHome,
