@@ -607,16 +607,20 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  /// [offlineAt]: the punch was made without network at this device time and is
+  /// sent later (servers with feature `offline_attendance`).
   Future<Map<String, dynamic>> clockIn({
     required double latitude,
     required double longitude,
     String? address,
+    DateTime? offlineAt,
   }) async {
     return _dataMap(await _send('POST', '/api/hr/attendance/clock-in', data: {
       'source': 'app',
       'latitude': latitude,
       'longitude': longitude,
       if (address != null) 'address': address,
+      if (offlineAt != null) ...{'offline': true, 'client_time': offlineAt.toUtc().toIso8601String()},
     }));
   }
 
@@ -624,11 +628,14 @@ class ApiClient {
     required double latitude,
     required double longitude,
     String? address,
+    DateTime? offlineAt,
   }) async {
     return _dataMap(await _send('POST', '/api/hr/attendance/clock-out', data: {
+      'source': 'app',
       'latitude': latitude,
       'longitude': longitude,
       if (address != null) 'address': address,
+      if (offlineAt != null) ...{'offline': true, 'client_time': offlineAt.toUtc().toIso8601String()},
     }));
   }
 
@@ -665,6 +672,25 @@ class ApiClient {
       if (reason != null) 'reason': reason,
     }));
   }
+
+  /// Attach images / PDF to the caller's own Pending leave request (feature `leave_attachments`).
+  Future<List<Map<String, dynamic>>> uploadLeaveAttachments(String requestId, List<({List<int> bytes, String name})> files) async {
+    final form = FormData();
+    for (final f in files) {
+      form.files.add(MapEntry('files[]', MultipartFile.fromBytes(f.bytes, filename: f.name)));
+    }
+    final data = _dataMap(await _send('POST', '/api/hr/leave-requests/$requestId/attachments', data: form));
+    return extractMapList(data['attachments']);
+  }
+
+  /// Removes it from the request (the server keeps the file — nothing is destroyed).
+  Future<List<Map<String, dynamic>>> removeLeaveAttachment(String requestId, String fileId) async {
+    final data = _dataMap(await _send('DELETE', '/api/hr/leave-requests/$requestId/attachments/${Uri.encodeComponent(fileId)}'));
+    return extractMapList(data['attachments']);
+  }
+
+  /// Bytes of an attachment (`url` from the list: `/api/hr/leave-requests/:id/attachments/:fileId`).
+  Future<List<int>> downloadLeaveAttachment(String url) => _downloadBytes(url);
 
   /// `{pending_leave_count, today_clocked_in_count, date}` for HR.
   Future<Map<String, dynamic>> getHrDashboard() async {

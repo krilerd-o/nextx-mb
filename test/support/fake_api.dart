@@ -5,7 +5,11 @@ import 'package:dio/dio.dart';
 
 /// Replies to `"METHOD /path"` with a NEXTX S/E envelope; records every call.
 class FakeNextxAdapter implements HttpClientAdapter {
-  FakeNextxAdapter(this.replies, {this.statusFor = const {}, this.headersFor = const {}});
+  FakeNextxAdapter(this.replies, {this.statusFor = const {}, this.headersFor = const {}, Set<String>? offline})
+      : offline = offline ?? <String>{};
+
+  /// `METHOD /path` that fail like a lost connection (no response). Mutable.
+  final Set<String> offline;
 
   final Map<String, Object?> replies;
   final Map<String, int> statusFor;
@@ -20,6 +24,9 @@ class FakeNextxAdapter implements HttpClientAdapter {
   Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     calls.add(options);
     final key = '${options.method.toUpperCase()} ${options.path}';
+    if (offline.contains(key)) {
+      throw DioException(requestOptions: options, type: DioExceptionType.connectionError, message: 'offline');
+    }
     final code = statusFor[key];
     final Object body;
     if (replies.containsKey(key)) {

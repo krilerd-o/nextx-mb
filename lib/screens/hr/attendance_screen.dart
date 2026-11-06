@@ -32,6 +32,22 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   void initState() {
     super.initState();
     _reload();
+    _loadPending();
+  }
+
+  List<Map<String, dynamic>> _pending = const [];
+
+  Future<void> _loadPending() async {
+    final config = context.read<AppConfig>();
+    await config.flushOfflineQueue();
+    final list = await config.pendingPunches();
+    if (mounted) setState(() => _pending = list);
+  }
+
+  static String _punchLabel(Map<String, dynamic> p) {
+    final at = DateTime.tryParse(p['at']?.toString() ?? '')?.toLocal();
+    final t = at == null ? '' : '${at.day}/${at.month} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+    return '${p['dir'] == 'out' ? 'ออก' : 'เข้า'} $t';
   }
 
   Future<void> _reload() async {
@@ -79,15 +95,21 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _busy = true;
       _error = null;
     });
-    final api = context.read<AppConfig>().apiClient;
+    final config = context.read<AppConfig>();
     try {
       final fix = await _location.currentFix();
       _fixLabel = '${fix.latitude.toStringAsFixed(5)}, ${fix.longitude.toStringAsFixed(5)}';
       _address = fix.address;
-      if (inn) {
-        await api.clockIn(latitude: fix.latitude, longitude: fix.longitude, address: fix.address);
-      } else {
-        await api.clockOut(latitude: fix.latitude, longitude: fix.longitude, address: fix.address);
+      final queued = await config.punch(clockIn: inn, lat: fix.latitude, lng: fix.longitude, address: fix.address);
+      if (queued) {
+        final now = TimeOfDay.now().format(context);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('ไม่มีอินเทอร์เน็ต — บันทึก${inn ? 'เวลาเข้า' : 'เวลาออก'} $now ไว้ในเครื่องแล้ว จะส่งอัตโนมัติเมื่อออนไลน์'),
+          ));
+        }
+        await _loadPending();
+        return;
       }
       await _reload();
       if (mounted) {
@@ -157,6 +179,43 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       ],
                     ),
                   ),
+                  if (_pending.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    NxSurfaceCard(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('รอส่ง (ลงเวลาตอนออฟไลน์)', style: theme.textTheme.titleSmall),
+                          const SizedBox(height: 4),
+                          Text(_pending.map(_punchLabel).join(' · '), style: theme.textTheme.bodySmall),
+                          Text('จะส่งด้วยเวลาตามที่กดในเครื่อง เมื่อมีอินเทอร์เน็ต', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                          TextButton(onPressed: _loadPending, child: const Text('ส่งตอนนี้')),
+                        ],
+                      ),
+                    ),
+                  ],
+                  for (final f in context.watch<AppConfig>().failedPunches) ...[
+                    const SizedBox(height: 12),
+                    NxSurfaceCard(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ส่งการลงเวลาไม่สำเร็จ: ${_punchLabel(f)}', style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.error)),
+                          Text(f['error']?.toString() ?? '', style: theme.textTheme.bodySmall),
+                          Text('แจ้ง HR พร้อมเวลานี้เพื่อแก้ไขในระบบ', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: () => context.read<AppConfig>().dismissFailedPunch(f),
+                              child: const Text('แจ้ง HR แล้ว'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
                     Text(formatApiError(_error!), style: TextStyle(color: theme.colorScheme.error)),

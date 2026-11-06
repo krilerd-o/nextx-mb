@@ -44,6 +44,7 @@ const String _keyPackageId = 'session_package_id';
 const String _keySessionExpired = 'session_expired_notice';
 const String _keyRecentAccounts = 'recent_accounts_v1';
 const String _keyServerInfo = 'server_mobile_info_v1';
+const String _keyPunchFailed = 'offline_punch_failed_v1';
 
 const _secureTokenKey = 'access_token';
 const int _maxAvatarBytes = 400000;
@@ -988,11 +989,106 @@ class AppConfig extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Offline punches the server refused (too old, already punched…). Kept on the
+  /// device and shown on the attendance screen so nothing disappears silently.
+  List<Map<String, dynamic>> _failedPunches = const [];
+  List<Map<String, dynamic>> get failedPunches => _failedPunches;
+
+  Future<void> _loadFailedPunches() async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final raw = prefs.getString(_keyPunchFailed);
+      final list = raw == null ? const [] : jsonDecode(raw);
+      _failedPunches = list is List ? list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : const [];
+    } catch (_) {
+      _failedPunches = const [];
+    }
+  }
+
+  Future<void> _saveFailedPunches(List<Map<String, dynamic>> list) async {
+    _failedPunches = list;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyPunchFailed, jsonEncode(list));
+    notifyListeners();
+  }
+
+  /// User read the problem (and told HR) — remove it from the list.
+  Future<void> dismissFailedPunch(Map<String, dynamic> item) =>
+      _saveFailedPunches(_failedPunches.where((e) => e['queued_at'] != item['queued_at']).toList());
+
+  /// Punches waiting to be sent (oldest first).
+  Future<List<Map<String, dynamic>>> pendingPunches() async =>
+      (await _offlineQueue.load()).where((e) => e['type'] == 'punch').toList();
+
+  /// Clock in/out. Without network, on a server with feature `offline_attendance`,
+  /// the device time is saved and sent later — returns `true` when queued.
+  Future<bool> punch({required bool clockIn, required double lat, required double lng, String? address}) async {
+    try {
+      if (clockIn) {
+        await apiClient.clockIn(latitude: lat, longitude: lng, address: address);
+      } else {
+        await apiClient.clockOut(latitude: lat, longitude: lng, address: address);
+      }
+      return false;
+    } on ApiException catch (e) {
+      if (e.statusCode != 0 || !(_serverInfo?.has('offline_attendance') ?? false)) rethrow;
+      await _offlineQueue.enqueue({
+        'type': 'punch',
+        'dir': clockIn ? 'in' : 'out',
+        'at': DateTime.now().toUtc().toIso8601String(),
+        'lat': lat,
+        'lng': lng,
+        'address': ?address,
+        'user_id': _session.userId,
+        'business_id': _session.businessId,
+      });
+      notifyListeners();
+      return true;
+    }
+  }
+
   Future<void> flushOfflineQueue() async {
+    if (_failedPunches.isEmpty) await _loadFailedPunches();
     final pending = await _offlineQueue.load();
     if (pending.isEmpty) return;
     final remain = <Map<String, dynamic>>[];
+    final failed = [..._failedPunches];
+    var offline = false;
     for (final item in pending) {
+      // Keep order (clock-in before clock-out): once the network is down, keep the rest as is.
+      if (offline) {
+        remain.add(item);
+        continue;
+      }
+      if (item['type'] == 'punch') {
+        // Another account / business on this phone: keep it for its owner, never send it as someone else.
+        if (item['user_id'] != _session.userId || item['business_id'] != _session.businessId) {
+          remain.add(item);
+          continue;
+        }
+        final at = DateTime.tryParse(item['at']?.toString() ?? '');
+        final lat = (item['lat'] as num?)?.toDouble() ?? 0;
+        final lng = (item['lng'] as num?)?.toDouble() ?? 0;
+        try {
+          if (at == null) throw ApiException(400, 'เวลาที่บันทึกไว้ไม่ถูกต้อง');
+          if (item['dir'] == 'out') {
+            await apiClient.clockOut(latitude: lat, longitude: lng, address: item['address']?.toString(), offlineAt: at);
+          } else {
+            await apiClient.clockIn(latitude: lat, longitude: lng, address: item['address']?.toString(), offlineAt: at);
+          }
+        } catch (e) {
+          final status = e is ApiException ? e.statusCode : (e is ApiEnvelopeException ? e.statusCode : 0);
+          if (status == 0 || status == 401) {
+            // No network / signed out: keep it (and everything after it) for later.
+            offline = true;
+            remain.add(item);
+          } else {
+            // The server refused it (too old, already punched…): keep it visible, never drop it.
+            failed.add({...item, 'error': formatApiError(e), 'failed_at': DateTime.now().toUtc().toIso8601String()});
+          }
+        }
+        continue;
+      }
       try {
         final type = item['type']?.toString();
         final id = item['id']?.toString() ?? '';
@@ -1013,6 +1109,8 @@ class AppConfig extends ChangeNotifier {
       }
     }
     await _offlineQueue.save(remain);
+    if (failed.length != _failedPunches.length) await _saveFailedPunches(failed);
+    notifyListeners();
   }
 
   Future<void> queueFieldAction(Map<String, dynamic> item) {
