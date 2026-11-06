@@ -84,7 +84,11 @@ class _AppShellState extends State<AppShell> {
     final bp = NxBreakpoint.of(context);
     final config = context.watch<AppConfig>();
     final ids = [...config.shellTabs, kMenuTabId];
-    if (!ids.contains(_current)) _current = ids.first;
+    if (!ids.contains(_current)) {
+      // Reopen the tab used last time if it's still allowed.
+      final last = config.lastTab;
+      _current = last != null && ids.contains(last) ? last : ids.first;
+    }
     final selected = ids.indexOf(_current);
     final destinations = [
       for (final id in ids)
@@ -100,7 +104,10 @@ class _AppShellState extends State<AppShell> {
     final nav = NxTabNav(
       destinations: destinations,
       selectedIndex: selected,
-      onSelect: (i) => setState(() => _current = ids[i]),
+      onSelect: (i) {
+        setState(() => _current = ids[i]);
+        config.setLastTab(ids[i]);
+      },
       rail: bp.useRail,
     );
 

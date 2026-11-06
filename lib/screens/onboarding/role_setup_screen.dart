@@ -20,7 +20,13 @@ class RoleSetupScreen extends StatefulWidget {
 }
 
 class _RoleSetupScreenState extends State<RoleSetupScreen> {
-  late final Set<String> _roles = {...?context.read<AppConfig>().shellConfig?.roles};
+  late final Set<String> _roles = () {
+    final config = context.read<AppConfig>();
+    final saved = config.shellConfig?.roles;
+    if (saved != null && saved.isNotEmpty) return {...saved};
+    // First time: pre-tick roles that fit the package (NEXT S → ทีมขาย …).
+    return {...suggestedRolesForPackage(config.session.packageCode)};
+  }();
 
   Future<void> _next() async {
     final config = context.read<AppConfig>();

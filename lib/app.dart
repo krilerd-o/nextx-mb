@@ -38,6 +38,7 @@ class _NextXMobileAppState extends State<NextXMobileApp> with WidgetsBindingObse
     if (state == AppLifecycleState.resumed) {
       context.read<AppConfig>().flushOfflineQueue();
       UnreadNotifications.instance.refreshIfBound();
+      context.read<AppConfig>().refreshSessionIfStale();
     }
   }
 

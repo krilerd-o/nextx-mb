@@ -120,6 +120,31 @@ class AppConfig extends ChangeNotifier {
   /// `host_userId` — keeps per-user settings apart across servers and accounts.
   String get _userScope => '${serverLabel(_apiBaseUrl)}_${_session.userId ?? ''}';
   String get _shellKey => 'shell_v1_$_userScope';
+  String get _lastTabKey => 'last_tab_$_userScope';
+  String? _lastTab;
+  DateTime? _lastRefreshAt;
+
+  /// Bottom tab open when the app was last used (per user/server).
+  String? get lastTab => _lastTab;
+
+  Future<void> setLastTab(String id) async {
+    if (_lastTab == id) return;
+    _lastTab = id;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastTabKey, id);
+  }
+
+  /// Re-reads /api/me + menus when coming back to the app, at most every
+  /// [minGap] — an admin's permission change then shows up without logout.
+  Future<void> refreshSessionIfStale({Duration minGap = const Duration(minutes: 5)}) async {
+    if (!_session.isLoggedIn || !_session.hasBusinessContext) return;
+    final now = DateTime.now();
+    if (!shouldRefreshSession(_lastRefreshAt, now, minGap)) return;
+    _lastRefreshAt = now;
+    try {
+      await refreshSession();
+    } catch (_) {}
+  }
   String _lastPackageKey(String businessId) => 'last_package_${serverLabel(_apiBaseUrl)}_${_session.userId ?? ''}_$businessId';
 
   /// Bottom tabs for the current permissions (fixed "เมนู" tab not included).
@@ -257,6 +282,7 @@ class AppConfig extends ChangeNotifier {
       return;
     }
     _shell = ShellTabsConfig.decode(prefs.getString(_shellKey));
+    _lastTab = prefs.getString(_lastTabKey);
     // Users who finished the old "getting started" keep a working default bar.
     if (_shell == null && _gettingStartedDone) {
       _shell = const ShellTabsConfig(roles: ['general']);
@@ -849,3 +875,7 @@ class AppConfig extends ChangeNotifier {
     }
   }
 }
+
+/// True when the last session refresh is older than [minGap] (or never ran).
+bool shouldRefreshSession(DateTime? last, DateTime now, Duration minGap) =>
+    last == null || now.difference(last) >= minGap;

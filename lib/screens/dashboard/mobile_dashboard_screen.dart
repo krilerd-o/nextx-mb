@@ -12,6 +12,7 @@ import '../../services/api_client.dart';
 import '../../services/unread_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_workspace_switcher.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 
@@ -182,9 +183,11 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        [thaiLongDate(now), if (session.businessName != null) session.businessName!].join(' · '),
+                        thaiLongDate(now),
                         style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                       ),
+                      const SizedBox(height: 8),
+                      const NxWorkspaceSwitcher(),
                       if (_error != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),

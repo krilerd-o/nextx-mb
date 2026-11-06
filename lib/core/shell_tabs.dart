@@ -155,3 +155,21 @@ String roleSummary(List<String> ids) {
   final names = [for (final r in workRoles) if (ids.contains(r.id)) r.label];
   return names.isEmpty ? 'ยังไม่ได้เลือก' : names.join(', ');
 }
+
+/// Roles pre-ticked on the role step from the chosen NEXTX package.
+List<String> suggestedRolesForPackage(String? code) {
+  switch (code) {
+    case 'next_s':
+      return const ['sales'];
+    case 'next_h':
+      return const ['hr'];
+    case 'next_c':
+      return const ['marketing'];
+    case 'next_o':
+      return const ['online'];
+    case 'next_t':
+      return const ['general'];
+    default:
+      return const [];
+  }
+}
