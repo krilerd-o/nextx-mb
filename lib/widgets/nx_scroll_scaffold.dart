@@ -86,8 +86,9 @@ class NxScrollScaffold extends StatelessWidget {
             left: 0,
             right: 0,
             bottom: 0,
-            height: 140 + MediaQuery.paddingOf(context).bottom,
-            child: const NxEdgeBlur(fromTop: false, solidFraction: 0.35),
+            // Just reaches past the floating bar's top edge (~14 px) — keeps content visible.
+            height: 100 + MediaQuery.paddingOf(context).bottom,
+            child: const NxEdgeBlur(fromTop: false, solidFraction: 0.5),
           ),
         ],
       );
@@ -134,11 +135,12 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
           left: 0,
           right: 0,
           top: 0,
-          height: top + preferredSize.height + (extend ? 72 : 0),
+          // A short tail below the header so the blur ends softly but takes little room.
+          height: top + preferredSize.height + (extend ? 24 : 0),
           child: NxEdgeBlur(
             fromTop: true,
             // Full blur over the status bar + most of the header, fade below.
-            solidFraction: extend ? (top + preferredSize.height * 0.7) / (top + preferredSize.height + 72) : 0.6,
+            solidFraction: extend ? (top + preferredSize.height * 0.5) / (top + preferredSize.height + 24) : 0.6,
           ),
         ),
         NxFloatingHeaderScope(

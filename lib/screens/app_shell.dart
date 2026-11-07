@@ -206,8 +206,9 @@ class _AppShellState extends State<AppShell> {
               left: 0,
               right: 0,
               bottom: 0,
-              height: 140 + MediaQuery.paddingOf(context).bottom,
-              child: const NxEdgeBlur(fromTop: false, solidFraction: 0.35),
+              // Just reaches past the floating bar's top edge (~14 px) — keeps content visible.
+            height: 100 + MediaQuery.paddingOf(context).bottom,
+              child: const NxEdgeBlur(fromTop: false, solidFraction: 0.5),
             ),
         ],
       ),
