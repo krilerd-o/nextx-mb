@@ -1,10 +1,13 @@
 import 'package:geolocator/geolocator.dart';
 
 class GeoFix {
-  const GeoFix({required this.latitude, required this.longitude, this.address});
+  const GeoFix({required this.latitude, required this.longitude, this.address, this.accuracy});
   final double latitude;
   final double longitude;
   final String? address;
+
+  /// Horizontal accuracy in metres (null when the platform doesn't say).
+  final double? accuracy;
 }
 
 class LocationService {
@@ -27,6 +30,6 @@ class LocationService {
         timeLimit: Duration(seconds: 15),
       ),
     );
-    return GeoFix(latitude: pos.latitude, longitude: pos.longitude);
+    return GeoFix(latitude: pos.latitude, longitude: pos.longitude, accuracy: pos.accuracy > 0 ? pos.accuracy : null);
   }
 }

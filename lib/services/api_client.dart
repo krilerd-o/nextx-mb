@@ -774,9 +774,11 @@ class ApiClient {
     String id, {
     required double lat,
     required double lng,
+    String? imagename,
   }) async {
     return _dataMap(await _send('POST', '/api/activity/$id/checkin', data: {
       'location': '$lat,$lng',
+      if (imagename != null && imagename.isNotEmpty) 'imagename': imagename,
     }));
   }
 
@@ -818,12 +820,15 @@ class ApiClient {
   Future<Map<String, dynamic>> verifyPhoneBindOtp(String phone, String code) async =>
       _dataMap(await _send('POST', '/api/me/phone/otp/verify', data: {'phone': phone, 'code': code}));
 
-  Future<void> uploadActivityPhotos(String id, List<MultipartFile> files) async {
+  /// `POST /api/activity/:id/photos` — multer field is `files` (not `files[]`).
+  /// Returns the stored photos (`{id, name, path, url?, mime, size}`).
+  Future<List<Map<String, dynamic>>> uploadActivityPhotos(String id, List<MultipartFile> files) async {
     final form = FormData();
     for (final f in files) {
-      form.files.add(MapEntry('files[]', f));
+      form.files.add(MapEntry('files', f));
     }
-    await _send('POST', '/api/activity/$id/photos', data: form);
+    final env = await _send('POST', '/api/activity/$id/photos', data: form);
+    return extractMapList(env['data']);
   }
 
   Future<List<Map<String, dynamic>>> getBoards({String? q}) async {

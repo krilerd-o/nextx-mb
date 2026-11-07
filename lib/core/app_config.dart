@@ -1094,9 +1094,13 @@ class AppConfig extends ChangeNotifier {
         final id = item['id']?.toString() ?? '';
         final lat = (item['lat'] as num?)?.toDouble();
         final lng = (item['lng'] as num?)?.toDouble();
-        if (type != 'checkin' || id.isEmpty) continue;
+        if ((type != 'checkin' && type != 'checkout') || id.isEmpty) continue;
         if (lat == null || lng == null || (lat == 0 && lng == 0)) continue;
-        await apiClient.activityCheckin(id, lat: lat, lng: lng);
+        if (type == 'checkout') {
+          await apiClient.activityCheckout(id, lat: lat, lng: lng);
+        } else {
+          await apiClient.activityCheckin(id, lat: lat, lng: lng);
+        }
       } on ApiException catch (e) {
         // Network still down → retry later; a real server rejection is dropped.
         if (e.statusCode == 0) {
@@ -1114,7 +1118,8 @@ class AppConfig extends ChangeNotifier {
   }
 
   Future<void> queueFieldAction(Map<String, dynamic> item) {
-    if (item['type']?.toString() != 'checkin') return Future.value();
+    final type = item['type']?.toString();
+    if (type != 'checkin' && type != 'checkout') return Future.value();
     final lat = (item['lat'] as num?)?.toDouble() ?? 0;
     final lng = (item['lng'] as num?)?.toDouble() ?? 0;
     if (lat == 0 && lng == 0) return Future.value();
