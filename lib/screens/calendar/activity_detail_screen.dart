@@ -12,7 +12,11 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
-import '../crm/entity_detail_parts.dart' show AttachmentStrip;
+import '../../core/error_reporting.dart';
+import '../../core/nx_page_route.dart';
+import '../../widgets/fields/field_ui_type.dart';
+import '../crm/entity_create_screen.dart';
+import '../crm/entity_detail_parts.dart';
 import 'visit_check_sheet.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
@@ -28,6 +32,12 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   Map<String, dynamic>? _visit;
   bool _busy = false;
   Object? _error;
+  late Map<String, dynamic> _row = Map<String, dynamic>.from(widget.row);
+  int _tab = 0;
+  List<Map<String, dynamic>> _comments = [];
+  List<Map<String, dynamic>> _timeline = [];
+  bool _timelineLoading = false;
+  bool _timelineLoaded = false;
 
   String get _id => strId(widget.row['id']);
 
@@ -35,11 +45,169 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   void initState() {
     super.initState();
     _loadVisit();
+    _loadRecord();
+  }
+
+  /// Callers often pass only `{id}` (FSM job, related lists) — load the full row.
+  Future<void> _loadRecord() async {
+    final api = context.read<AppConfig>().apiClient;
+    try {
+      final rec = await api.getEntity('activity', _id);
+      final comments = await api.getEntityComments('activity', _id);
+      if (!mounted) return;
+      setState(() {
+        if (rec.isNotEmpty) _row = {..._row, ...rec};
+        _comments = comments;
+      });
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
+  }
+
+  Future<void> _loadTimeline({bool force = false}) async {
+    if ((_timelineLoaded && !force) || _timelineLoading) return;
+    setState(() => _timelineLoading = true);
+    try {
+      final rows = await context.read<AppConfig>().apiClient.getEntityTimeline(
+        'activity',
+        _id,
+      );
+      if (mounted) {
+        setState(() {
+          _timeline = rows;
+          _timelineLoaded = true;
+        });
+      }
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    } finally {
+      if (mounted) setState(() => _timelineLoading = false);
+    }
+  }
+
+  Future<void> _edit() async {
+    final api = context.read<AppConfig>().apiClient;
+    try {
+      final schema = await api.getFieldSchema('activity');
+      if (!mounted) return;
+      final saved = await nxPush<bool>(
+        context,
+        EntityCreateScreen(
+          module: 'activity',
+          title: 'แก้ไขกิจกรรม',
+          recordId: _id,
+          initialValues: Map<String, dynamic>.from(_row),
+          fields: schema.fields
+              .where(
+                (f) =>
+                    !fieldIsReadonly(f) &&
+                    fieldName(f) != 'id' &&
+                    fieldName(f) != 'business_id',
+              )
+              .toList(),
+          picklists: schema.picklists,
+        ),
+      );
+      if (saved == true && mounted) {
+        _timelineLoaded = false;
+        await _loadRecord();
+      }
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    }
+  }
+
+  Future<void> _duplicate() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ทำซ้ำกิจกรรมนี้?'),
+        content: Text(
+          'สร้างนัดใหม่จาก "${entityTitle(_row, module: 'activity')}" (ไม่รวมการเช็คอิน)',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('ทำซ้ำ'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final newId = await context.read<AppConfig>().apiClient.duplicateEntity(
+        'activity',
+        _id,
+      );
+      if (!mounted || newId.isEmpty) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ทำซ้ำแล้ว — เปิดกิจกรรมใหม่')),
+      );
+      nxPush<void>(context, ActivityDetailScreen(row: {'id': newId}));
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    }
+  }
+
+  Future<void> _delete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ลบกิจกรรมนี้?'),
+        content: const Text('กด "เลิกทำ" ได้ภายใน 5 วินาที'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('ลบ'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final api = context.read<AppConfig>().apiClient;
+    PendingEntityDeletes.instance.schedule(
+      messenger: ScaffoldMessenger.of(context),
+      module: 'activity',
+      ids: [_id],
+      label: entityTitle(_row, module: 'activity'),
+      commit: () => api.deleteEntity('activity', _id),
+    );
+    Navigator.of(context).maybePop();
+  }
+
+  Future<void> _quickAttach() async {
+    final files = await pickAttachments(context);
+    if (files.isEmpty || !mounted) return;
+    final api = context.read<AppConfig>().apiClient;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final atts = await api.uploadCommentAttachments(files);
+      await api.postEntityComment('activity', _id, '', attachments: atts);
+      await _loadRecord();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    }
   }
 
   Future<void> _loadVisit() async {
     try {
-      final visit = await context.read<AppConfig>().apiClient.getActivityVisit(_id);
+      final visit = await context.read<AppConfig>().apiClient.getActivityVisit(
+        _id,
+      );
       if (mounted) setState(() => _visit = visit);
     } catch (e) {
       if (mounted) setState(() => _error = e);
@@ -47,7 +215,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   }
 
   Future<void> _check({required bool inn}) async {
-    final checkedAt = DateTime.tryParse(_visit?['checkindate']?.toString().replaceFirst(' ', 'T') ?? '');
+    final checkedAt = DateTime.tryParse(
+      _visit?['checkindate']?.toString().replaceFirst(' ', 'T') ?? '',
+    );
     final r = await showVisitCheckSheet(
       context,
       activityId: _id,
@@ -65,10 +235,16 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final picker = ImagePicker();
     final files = <XFile>[];
     if (camera) {
-      final shot = await picker.pickImage(source: ImageSource.camera, imageQuality: 80, maxWidth: 1600);
+      final shot = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+        maxWidth: 1600,
+      );
       if (shot != null) files.add(shot);
     } else {
-      files.addAll(await picker.pickMultiImage(imageQuality: 80, maxWidth: 1600));
+      files.addAll(
+        await picker.pickMultiImage(imageQuality: 80, maxWidth: 1600),
+      );
     }
     if (!mounted || files.isEmpty) return;
     setState(() => _busy = true);
@@ -92,7 +268,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     try {
       await context.read<AppConfig>().apiClient.activityRsvp(_id, response);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('RSVP: $response')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('RSVP: $response')));
       }
     } catch (e) {
       if (mounted) setState(() => _error = e);
@@ -101,7 +279,11 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     }
   }
 
-  static const _rsvpLabels = {'accepted': 'เข้าร่วม', 'tentative': 'ไม่แน่ใจ', 'declined': 'ไม่เข้าร่วม'};
+  static const _rsvpLabels = {
+    'accepted': 'เข้าร่วม',
+    'tentative': 'ไม่แน่ใจ',
+    'declined': 'ไม่เข้าร่วม',
+  };
 
   String _when(dynamic raw) {
     final d = DateTime.tryParse(raw?.toString().replaceFirst(' ', 'T') ?? '');
@@ -113,12 +295,38 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final row = widget.row;
-    final checkedIn = _visit?['checked_in'] == true || (_visit?['checkindate']?.toString().isNotEmpty ?? false);
-    final checkedOut = _visit?['checked_out'] == true || (_visit?['checkoutdate']?.toString().isNotEmpty ?? false);
+    final row = _row;
+    final checkedIn =
+        _visit?['checked_in'] == true ||
+        (_visit?['checkindate']?.toString().isNotEmpty ?? false);
+    final checkedOut =
+        _visit?['checked_out'] == true ||
+        (_visit?['checkoutdate']?.toString().isNotEmpty ?? false);
     final photos = extractMapList(_visit?['photos']);
     return Scaffold(
-      appBar: NxAppHeader(title: entityTitle(row, module: 'activity')),
+      appBar: NxAppHeader(
+        title: entityTitle(row, module: 'activity'),
+        actions: [
+          IconButton(
+            tooltip: 'แก้ไข',
+            icon: const Icon(NxI.pencilSimple),
+            onPressed: _edit,
+          ),
+        ],
+        menu: [
+          NxHeaderMenuItem(
+            label: 'ทำซ้ำ',
+            icon: NxI.copySimple,
+            onTap: _duplicate,
+          ),
+          NxHeaderMenuItem(
+            label: 'ถ่ายรูป / แนบไฟล์',
+            icon: NxI.camera,
+            onTap: _quickAttach,
+          ),
+          NxHeaderMenuItem(label: 'ลบ', icon: NxI.trash, onTap: _delete),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
@@ -128,67 +336,183 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(entityTitle(row, module: 'activity'), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                Text(
+                  entityTitle(row, module: 'activity'),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 const SizedBox(height: 10),
-                _line(context, NxI.calendarBlank, '${_when(row['date_start'])}  →  ${_when(row['date_end'])}'),
-                if ((row['location']?.toString() ?? '').isNotEmpty) _line(context, NxI.mapPin, row['location'].toString()),
-                if ((row['status']?.toString() ?? '').isNotEmpty) _line(context, NxI.flag, row['status'].toString()),
+                _line(
+                  context,
+                  NxI.calendarBlank,
+                  '${_when(row['date_start'])}  →  ${_when(row['date_end'])}',
+                ),
+                if ((row['location']?.toString() ?? '').isNotEmpty)
+                  _line(context, NxI.mapPin, row['location'].toString()),
+                if ((row['status']?.toString() ?? '').isNotEmpty)
+                  _line(context, NxI.flag, row['status'].toString()),
               ],
             ),
           ),
           if ((row['description']?.toString() ?? '').trim().isNotEmpty) ...[
             const SizedBox(height: 12),
-            NxSurfaceCard(padding: const EdgeInsets.all(16), child: NxHtmlView(html: row['description'].toString())),
+            NxSurfaceCard(
+              padding: const EdgeInsets.all(16),
+              child: NxHtmlView(html: row['description'].toString()),
+            ),
           ],
-          const SizedBox(height: 16),
-          Text('การเยี่ยม', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          NxSurfaceCard(
-            radius: 24,
-            padding: const EdgeInsets.all(16),
-            child: Column(
+          const SizedBox(height: 14),
+          NxSegmented(
+            labels: [
+              'ภาพรวม',
+              _comments.isEmpty
+                  ? 'ความคิดเห็น'
+                  : 'ความคิดเห็น ${_comments.length}',
+              'ไฟล์',
+              'ประวัติ',
+            ],
+            index: _tab,
+            onChanged: (i) {
+              setState(() => _tab = i);
+              if (i == 3) _loadTimeline();
+            },
+          ),
+          if (_tab == 1) ...[
+            const SizedBox(height: 14),
+            EntityCommentsPanel(
+              module: 'activity',
+              id: _id,
+              comments: _comments,
+              onChanged: _loadRecord,
+            ),
+          ],
+          if (_tab == 2) ...[
+            const SizedBox(height: 14),
+            EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
+          ],
+          if (_tab == 3) ...[
+            const SizedBox(height: 14),
+            EntityHistoryPanel(events: _timeline, loading: _timelineLoading),
+          ],
+          if (_tab == 0) ...[
+            const SizedBox(height: 16),
+            Text(
+              'การเยี่ยม',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            NxSurfaceCard(
+              radius: 24,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _stepRow(
+                    context,
+                    done: checkedIn,
+                    title: 'เช็คอิน',
+                    value: checkedIn
+                        ? _when(_visit?['checkindate'])
+                        : 'ยังไม่เช็คอิน',
+                  ),
+                  _stepRow(
+                    context,
+                    done: checkedOut,
+                    title: 'เช็คเอาท์',
+                    value: checkedOut
+                        ? _when(_visit?['checkoutdate'])
+                        : 'ยังไม่เช็คเอาท์',
+                    last: true,
+                  ),
+                  const SizedBox(height: 12),
+                  if (!checkedIn)
+                    NxHeroCta(
+                      label: 'เช็คอิน',
+                      busy: _busy,
+                      onPressed: _busy ? null : () => _check(inn: true),
+                    )
+                  else if (!checkedOut)
+                    NxHeroCta(
+                      label: 'เช็คเอาท์',
+                      busy: _busy,
+                      onPressed: _busy ? null : () => _check(inn: false),
+                    )
+                  else
+                    Text(
+                      'เยี่ยมเสร็จแล้ว',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: const Color(0xFF16A34A),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
               children: [
-                _stepRow(context, done: checkedIn, title: 'เช็คอิน', value: checkedIn ? _when(_visit?['checkindate']) : 'ยังไม่เช็คอิน'),
-                _stepRow(context, done: checkedOut, title: 'เช็คเอาท์', value: checkedOut ? _when(_visit?['checkoutdate']) : 'ยังไม่เช็คเอาท์', last: true),
-                const SizedBox(height: 12),
-                if (!checkedIn)
-                  NxHeroCta(label: 'เช็คอิน', busy: _busy, onPressed: _busy ? null : () => _check(inn: true))
-                else if (!checkedOut)
-                  NxHeroCta(label: 'เช็คเอาท์', busy: _busy, onPressed: _busy ? null : () => _check(inn: false))
-                else
-                  Text('เยี่ยมเสร็จแล้ว', style: theme.textTheme.titleSmall?.copyWith(color: const Color(0xFF16A34A))),
+                Expanded(
+                  child: Text(
+                    'รูปถ่าย (${photos.length})',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'ถ่ายรูป',
+                  icon: const Icon(NxI.camera),
+                  onPressed: _busy ? null : () => _pickPhotos(camera: true),
+                ),
+                IconButton(
+                  tooltip: 'แนบรูป',
+                  icon: const Icon(NxI.images),
+                  onPressed: _busy ? null : () => _pickPhotos(camera: false),
+                ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: Text('รูปถ่าย (${photos.length})', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
-              IconButton(tooltip: 'ถ่ายรูป', icon: const Icon(NxI.camera), onPressed: _busy ? null : () => _pickPhotos(camera: true)),
-              IconButton(tooltip: 'แนบรูป', icon: const Icon(NxI.images), onPressed: _busy ? null : () => _pickPhotos(camera: false)),
+            if (photos.isEmpty)
+              Text(
+                'ยังไม่มีรูป',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              )
+            else
+              AttachmentStrip(
+                items: [
+                  for (final p in photos)
+                    {
+                      'url': (p['url'] ?? '/uploads/${p['path']}').toString(),
+                      'name': p['name'],
+                      'mime': p['mime'] ?? 'image/jpeg',
+                    },
+                ],
+              ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(formatApiError(_error!), style: TextStyle(color: cs.error)),
             ],
-          ),
-          if (photos.isEmpty)
-            Text('ยังไม่มีรูป', style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
-          else
-            AttachmentStrip(items: [
-              for (final p in photos)
-                {'url': (p['url'] ?? '/uploads/${p['path']}').toString(), 'name': p['name'], 'mime': p['mime'] ?? 'image/jpeg'},
-            ]),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(formatApiError(_error!), style: TextStyle(color: cs.error)),
+            const SizedBox(height: 20),
+            Text(
+              'ตอบรับนัด',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final e in _rsvpLabels.entries)
+                  ActionChip(
+                    label: Text(e.value),
+                    onPressed: _busy ? null : () => _rsvp(e.key),
+                  ),
+              ],
+            ),
           ],
-          const SizedBox(height: 20),
-          Text('ตอบรับนัด', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final e in _rsvpLabels.entries)
-                ActionChip(label: Text(e.value), onPressed: _busy ? null : () => _rsvp(e.key)),
-            ],
-          ),
         ],
       ),
     );
@@ -208,7 +532,13 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     );
   }
 
-  Widget _stepRow(BuildContext context, {required bool done, required String title, required String value, bool last = false}) {
+  Widget _stepRow(
+    BuildContext context, {
+    required bool done,
+    required String title,
+    required String value,
+    bool last = false,
+  }) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     const green = Color(0xFF16A34A);
@@ -221,10 +551,23 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               Container(
                 width: 28,
                 height: 28,
-                decoration: BoxDecoration(color: done ? green : cs.surfaceContainerHighest, shape: BoxShape.circle),
-                child: Icon(done ? NxI.check : NxI.circle, size: 14, color: done ? Colors.white : cs.onSurfaceVariant),
+                decoration: BoxDecoration(
+                  color: done ? green : cs.surfaceContainerHighest,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  done ? NxI.check : NxI.circle,
+                  size: 14,
+                  color: done ? Colors.white : cs.onSurfaceVariant,
+                ),
               ),
-              if (!last) Expanded(child: Container(width: 2, color: done ? green : cs.outlineVariant)),
+              if (!last)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: done ? green : cs.outlineVariant,
+                  ),
+                ),
             ],
           ),
           const SizedBox(width: 12),
@@ -235,7 +578,12 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title, style: theme.textTheme.titleSmall),
-                  Text(value, style: theme.textTheme.bodyMedium?.copyWith(color: done ? null : cs.onSurfaceVariant)),
+                  Text(
+                    value,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: done ? null : cs.onSurfaceVariant,
+                    ),
+                  ),
                 ],
               ),
             ),

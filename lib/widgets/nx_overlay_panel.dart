@@ -30,7 +30,8 @@ Future<T?> showNxBlurPanel<T>({
                     borderRadius: BorderRadius.circular(AppTheme.cardRadius),
                     boxShadow: NxSurfaceCard.shadows(Theme.of(ctx).brightness == Brightness.dark),
                   ),
-                  child: builder(ctx),
+                  // Own transparent Material so ListTile ink shows above the card fill.
+                  child: Material(type: MaterialType.transparency, child: builder(ctx)),
                 ),
               ),
             ),

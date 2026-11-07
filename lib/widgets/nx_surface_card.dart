@@ -61,7 +61,11 @@ class NxSurfaceCard extends StatelessWidget {
         border: dark ? Border.all(color: Colors.white.withValues(alpha: 0.08)) : null,
       ),
       clipBehavior: Clip.antiAlias,
-      child: padding == null ? child : Padding(padding: padding!, child: child),
+      // Transparent Material: ListTile / InkWell ripples inside paint above the fill.
+      child: Material(
+        type: MaterialType.transparency,
+        child: padding == null ? child : Padding(padding: padding!, child: child),
+      ),
     );
     if (onTap == null && onLongPress == null) return card;
     return NxPressScale(

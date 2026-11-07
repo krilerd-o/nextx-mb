@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../services/api_exceptions.dart';
+import '../../widgets/app_bottom_sheet.dart';
+import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -124,6 +127,48 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     if (mounted) setState(() => _revision++);
   }
 
+  /// Long-press an appointment: duplicate or delete (with undo).
+  Future<void> _rowActions(Map<String, dynamic> row) async {
+    final id = row['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    final api = context.read<AppConfig>().apiClient;
+    final messenger = ScaffoldMessenger.of(context);
+    final pick = await showAppBottomSheet<String>(
+      context: context,
+      title: entityTitle(row, module: 'activity'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(leading: const Icon(NxI.copySimple), title: const Text('ทำซ้ำ'), onTap: () => Navigator.pop(context, 'dup')),
+          ListTile(leading: const Icon(NxI.trash), title: const Text('ลบ'), onTap: () => Navigator.pop(context, 'del')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (pick == 'dup') {
+      try {
+        final newId = await api.duplicateEntity('activity', id);
+        if (!mounted) return;
+        setState(() => _revision++);
+        if (newId.isNotEmpty) nxPush<void>(context, ActivityDetailScreen(row: {'id': newId}));
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      }
+    } else if (pick == 'del') {
+      PendingEntityDeletes.instance.schedule(
+        messenger: messenger,
+        module: 'activity',
+        ids: [id],
+        label: entityTitle(row, module: 'activity'),
+        commit: () async {
+          await api.deleteEntity('activity', id);
+          if (mounted) setState(() => _revision++);
+        },
+      );
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -219,6 +264,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                   child: Center(child: Text('ไม่มีกิจกรรม')),
                 ),
               for (final row in visible)
+                if (!PendingEntityDeletes.instance.isPending('activity', row['id']?.toString() ?? ''))
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: NxSurfaceCard(
@@ -227,6 +273,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                       nxPush<void>(context, ActivityDetailScreen(row: row))
                           .then((_) => setState(() => _revision++));
                     },
+                    onLongPress: () => _rowActions(row),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     child: Row(
                       children: [
