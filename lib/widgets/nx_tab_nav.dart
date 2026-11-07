@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../core/app_theme.dart';
-import '../core/nx_breakpoint.dart';
+import '../core/nx_motion.dart';
 import 'nx_press_scale.dart';
-import 'nx_surface_card.dart';
+import 'nx_glass.dart';
 
 class NxTabDestination {
   const NxTabDestination({
@@ -26,16 +25,22 @@ class NxTabNav extends StatelessWidget {
     required this.selectedIndex,
     required this.onSelect,
     this.rail = false,
+    this.badges = const {},
   });
 
-  static const double barHeight = 52;
-  static const double railWidth = 72;
-  static const double inset = 4;
+  /// Floating card height (icon circle + label) — matches the tab-setup preview.
+  static const double barHeight = 76;
+  static const double railWidth = 76;
+  static const double inset = 8;
+  static const double dot = 42;
 
   final List<NxTabDestination> destinations;
   final int selectedIndex;
-  final ValueChanged<int> onSelect;
+  final ValueChanged<int>? onSelect;
   final bool rail;
+
+  /// Unread counts per destination index (0 / missing = no badge).
+  final Map<int, int> badges;
 
   @override
   Widget build(BuildContext context) {
@@ -43,43 +48,50 @@ class NxTabNav extends StatelessWidget {
   }
 }
 
-Color _barFill(BuildContext context) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  return dark ? Colors.white : AppTheme.ink;
-}
+/// The bar body without the safe-area / floating padding — used live and in
+/// the onboarding preview so both always look the same.
+class NxTabBarCard extends StatelessWidget {
+  const NxTabBarCard({
+    super.key,
+    required this.destinations,
+    required this.selectedIndex,
+    this.onSelect,
+    this.badges = const {},
+  });
 
-Color _onBar(BuildContext context) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  return dark ? AppTheme.ink : Colors.white;
-}
+  final List<NxTabDestination> destinations;
+  final int selectedIndex;
+  final ValueChanged<int>? onSelect;
+  final Map<int, int> badges;
 
-Color _selectedPill(BuildContext context) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  return dark ? const Color(0xFFE8E8ED) : const Color(0xFF3A3A3C);
-}
-
-Widget _capsule({
-  required BuildContext context,
-  required Widget child,
-  double? width,
-  double? height,
-}) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  return DecoratedBox(
-    decoration: BoxDecoration(
-      color: _barFill(context),
-      borderRadius: BorderRadius.circular(999),
-      boxShadow: NxSurfaceCard.shadows(dark),
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(999),
+  @override
+  Widget build(BuildContext context) {
+    return NxGlass(
+      radius: 26,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: NxTabNav.inset),
       child: SizedBox(
-        width: width,
-        height: height,
-        child: child,
+        height: NxTabNav.barHeight - NxTabNav.inset * 2,
+        child: Row(
+          children: [
+            for (var i = 0; i < destinations.length; i++)
+              Expanded(
+                child: _Item(
+                  dest: destinations[i],
+                  selected: i == selectedIndex,
+                  badge: badges[i] ?? 0,
+                  onTap: onSelect == null
+                      ? null
+                      : () {
+                          HapticFeedback.selectionClick();
+                          onSelect!(i);
+                        },
+                ),
+              ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _Bar extends StatelessWidget {
@@ -89,34 +101,14 @@ class _Bar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pad = MediaQuery.paddingOf(context);
-    final n = nav.destinations.length;
-    final tight = NxBreakpoint.of(context).isMini;
+    final wide = MediaQuery.sizeOf(context).width;
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, 10 + pad.bottom),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: _capsule(
-          context: context,
-          height: NxTabNav.barHeight,
-          child: Padding(
-            padding: const EdgeInsets.all(NxTabNav.inset),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var i = 0; i < n; i++)
-                  _Item(
-                    dest: nav.destinations[i],
-                    selected: i == nav.selectedIndex,
-                    compact: tight,
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      nav.onSelect(i);
-                    },
-                  ),
-              ],
-            ),
-          ),
-        ),
+      padding: EdgeInsets.fromLTRB(wide > 560 ? (wide - 528) / 2 : 16, 0, wide > 560 ? (wide - 528) / 2 : 16, 10 + pad.bottom),
+      child: NxTabBarCard(
+        destinations: nav.destinations,
+        selectedIndex: nav.selectedIndex,
+        onSelect: nav.onSelect,
+        badges: nav.badges,
       ),
     );
   }
@@ -135,23 +127,28 @@ class _Rail extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(10, 12, 6, 12),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: _capsule(
-            context: context,
+          child: SizedBox(
             width: NxTabNav.railWidth,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: NxTabNav.inset),
+            child: NxGlass(
+              radius: 26,
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (var i = 0; i < n; i++)
-                    _Item(
-                      dest: nav.destinations[i],
-                      selected: i == nav.selectedIndex,
-                      vertical: true,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        nav.onSelect(i);
-                      },
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: _Item(
+                        dest: nav.destinations[i],
+                        selected: i == nav.selectedIndex,
+                        badge: nav.badges[i] ?? 0,
+                        onTap: nav.onSelect == null
+                            ? null
+                            : () {
+                                HapticFeedback.selectionClick();
+                                nav.onSelect!(i);
+                              },
+                      ),
                     ),
                 ],
               ),
@@ -168,70 +165,91 @@ class _Item extends StatelessWidget {
     required this.dest,
     required this.selected,
     required this.onTap,
-    this.vertical = false,
-    this.compact = false,
+    this.badge = 0,
   });
 
   final NxTabDestination dest;
   final bool selected;
-  final VoidCallback onTap;
-  final bool vertical;
-  final bool compact;
+  final VoidCallback? onTap;
+  final int badge;
 
   @override
   Widget build(BuildContext context) {
-    final onBar = _onBar(context);
-    final color = selected ? onBar : onBar.withValues(alpha: 0.55);
-    final icon = Icon(selected ? dest.selectedIcon : dest.icon, color: color, size: 22);
-    // Lay text out at intrinsic width — AnimatedSize + ellipsis squashes Thai on web refresh.
-    final label = Text(
-      dest.label,
-      softWrap: false,
-      maxLines: 1,
-      overflow: TextOverflow.visible,
-      textAlign: vertical ? TextAlign.center : TextAlign.start,
-      style: GoogleFonts.notoSansThai(
-        fontSize: vertical ? 11 : 13,
-        fontWeight: FontWeight.w500,
-        height: 1.25,
-        color: onBar,
+    final cs = Theme.of(context).colorScheme;
+    final d = NxMotion.duration(context, 360);
+    final circle = AnimatedContainer(
+      duration: d,
+      curve: NxMotion.settleCurve,
+      width: NxTabNav.dot,
+      height: NxTabNav.dot,
+      decoration: BoxDecoration(
+        color: selected ? cs.primary : cs.primary.withValues(alpha: 0),
+        shape: BoxShape.circle,
+        boxShadow: selected ? [BoxShadow(color: cs.primary.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))] : null,
+      ),
+      alignment: Alignment.center,
+      child: AnimatedSwitcher(
+        duration: d,
+        child: Icon(
+          selected ? dest.selectedIcon : dest.icon,
+          key: ValueKey(selected),
+          size: 20,
+          color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+        ),
       ),
     );
-    final inner = vertical
-        ? Column(
-            mainAxisSize: MainAxisSize.min,
+    final withBadge = badge <= 0
+        ? circle
+        : Stack(
+            clipBehavior: Clip.none,
             children: [
-              icon,
-              if (selected) ...[const SizedBox(height: 4), label],
-            ],
-          )
-        : Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              icon,
-              if (selected) ...[const SizedBox(width: 8), label],
+              circle,
+              Positioned(
+                right: -2,
+                top: -2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  constraints: const BoxConstraints(minWidth: 18),
+                  decoration: BoxDecoration(
+                    color: cs.error,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: cs.surface, width: 1.5),
+                  ),
+                  child: Text(
+                    badge > 99 ? '99+' : '$badge',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: cs.onError, fontSize: 10, fontWeight: FontWeight.w700, height: 1.3),
+                  ),
+                ),
+              ),
             ],
           );
-
-    final hPad = compact ? 8.0 : 12.0;
-    return NxPressScale(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: NxMotion.duration(context, 400),
-        curve: NxMotion.settleCurve,
-        width: vertical ? double.infinity : null,
-        height: vertical ? null : NxTabNav.barHeight - NxTabNav.inset * 2,
-        margin: vertical ? const EdgeInsets.symmetric(vertical: 2) : EdgeInsets.zero,
-        padding: selected
-            ? (vertical ? const EdgeInsets.fromLTRB(8, 10, 8, 10) : EdgeInsets.fromLTRB(hPad, 0, hPad + 2, 0))
-            : (vertical ? const EdgeInsets.symmetric(horizontal: 8, vertical: 10) : EdgeInsets.symmetric(horizontal: hPad)),
-        decoration: BoxDecoration(
-          color: selected ? _selectedPill(context) : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        alignment: Alignment.center,
-        child: inner,
+    final body = Semantics(
+      button: true,
+      selected: selected,
+      label: dest.label,
+      excludeSemantics: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          withBadge,
+          const SizedBox(height: 4),
+          Text(
+            dest.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.notoSansThai(
+              fontSize: 11,
+              height: 1.2,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? cs.onSurface : cs.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
+    if (onTap == null) return body;
+    return NxPressScale(onTap: onTap!, child: body);
   }
 }

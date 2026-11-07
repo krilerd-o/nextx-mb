@@ -9,6 +9,7 @@ import '../core/app_config.dart';
 import '../core/entity_display.dart';
 import '../core/navigation/app_routes.dart';
 import 'nx_icons.dart';
+import 'nx_notif_morph.dart';
 import 'nx_overlay_panel.dart';
 import '../services/unread_service.dart';
 
@@ -271,8 +272,13 @@ class _HubBell extends StatelessWidget {
         tooltip: 'การแจ้งเตือน',
         badgeCount: unreadCount ?? UnreadNotifications.instance.count,
         onTap: () async {
-          await GoRouter.maybeOf(context)?.push(AppRoutes.notifications);
-          await UnreadNotifications.instance.refreshIfBound();
+          final box = context.findRenderObject() as RenderBox?;
+          if (box == null || !box.hasSize) {
+            await GoRouter.maybeOf(context)?.push(AppRoutes.notifications);
+            await UnreadNotifications.instance.refreshIfBound();
+            return;
+          }
+          await showNotifMorph(context, box.localToGlobal(Offset.zero) & box.size);
         },
       ),
     );

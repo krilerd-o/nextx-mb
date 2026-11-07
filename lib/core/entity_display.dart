@@ -146,6 +146,9 @@ String entityTitle(Map<String, dynamic> row, {String? module}) {
     ['first_name', 'last_name'],
   ]);
   if (combined.isNotEmpty) return combined;
+  // Unnamed record → its running number (e.g. L26110700001) before a raw id.
+  final no = module == null ? '' : _plain(row['${module}_no']);
+  if (no.isNotEmpty) return no;
   if (module != null && row['id'] != null) return '$module #${row['id']}';
   return row['id'] != null ? 'ID ${row['id']}' : 'รายการ';
 }

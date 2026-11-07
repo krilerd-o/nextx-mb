@@ -16,6 +16,7 @@ import '../../widgets/nx_workspace_switcher.dart';
 import 'team_overview_card.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_streaming_text.dart';
 
 /// Thai greeting for the hour of day.
 String greetingFor(DateTime now) {
@@ -130,6 +131,25 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
         .toList();
   }
 
+  /// Short plain-language summary of the day (streamed word by word).
+  String _brief(Map<String, dynamic>? counts, dynamic clockIn) {
+    final parts = <String>[];
+    final overdue = _count(counts, 'overdue');
+    final today = _count(counts, 'today');
+    final next = _upcoming();
+    if (clockIn == null && MenuAccess.allow(context.read<AppConfig>().session, MenuAccess.attendance)) {
+      parts.add('ยังไม่ได้ลงเวลาเข้างาน');
+    }
+    if (today > 0) parts.add('มีงานครบกำหนดวันนี้ $today รายการ');
+    if (overdue > 0) parts.add('งานเลยกำหนด $overdue รายการ ควรเคลียร์ก่อน');
+    if (next.isNotEmpty) {
+      final a = next.first;
+      parts.add('นัดถัดไป "${a['subject'] ?? 'กิจกรรม'}" เวลา ${_hhmm(a['date_start'])}');
+    }
+    if (parts.isEmpty) return 'วันนี้ยังไม่มีงานค้างหรือนัดหมาย ลองถาม AI ให้ช่วยวางแผนหรือสรุปลูกค้าที่ควรติดตาม';
+    return parts.join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -163,7 +183,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
           (e.key, e.value, _count(stats, e.key)),
     ];
 
-    return Column(
+    return Stack(
+      children: [
+        const Positioned(top: 0, left: 0, right: 0, height: 320, child: _PastelHero()),
+        Column(
       children: [
         NxAppHeader.hub(
           actions: [
@@ -200,9 +223,20 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                           padding: const EdgeInsets.only(top: 12),
                           child: Text(formatApiError(_error!), style: theme.textTheme.bodySmall?.copyWith(color: cs.error)),
                         ),
-                      if (MenuAccess.allow(session, MenuAccess.attendance)) ...[
-                        const SizedBox(height: 16),
-                        _AttendanceCard(clockIn: clockIn, clockOut: clockOut),
+                      const SizedBox(height: 16),
+                      _TodayCard(
+                        showAttendance: MenuAccess.allow(session, MenuAccess.attendance),
+                        clockIn: clockIn,
+                        clockOut: clockOut,
+                        next: _upcoming().isEmpty ? null : _upcoming().first,
+                        overdue: _count(counts, 'overdue'),
+                        today: _count(counts, 'today'),
+                        upcoming: _count(counts, 'upcoming'),
+                        hasWork: counts != null,
+                      ),
+                      if (MenuAccess.allow(session, MenuAccess.ai)) ...[
+                        const SizedBox(height: 12),
+                        _AiBriefCard(text: _brief(counts, clockIn)),
                       ],
                       if (quick.isNotEmpty) ...[
                         const SizedBox(height: 20),
@@ -211,22 +245,12 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                       if (counts != null) ...[
                         const SizedBox(height: 24),
                         _SectionTitle('งานของฉัน', action: 'ทั้งหมด', onAction: () => context.push(AppRoutes.workspaceHome)),
-                        Row(
-                          children: [
-                            Expanded(child: _CountPill('เลยกำหนด', _count(counts, 'overdue'), cs.error)),
-                            const SizedBox(width: 8),
-                            Expanded(child: _CountPill('วันนี้', _count(counts, 'today'), const Color(0xFFF59E0B))),
-                            const SizedBox(width: 8),
-                            Expanded(child: _CountPill('กำลังมา', _count(counts, 'upcoming'), cs.primary)),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
                         for (final it in _workItems()) _WorkRow(item: it),
                       ],
-                      if (_upcoming().isNotEmpty) ...[
+                      if (_upcoming().length > 1) ...[
                         const SizedBox(height: 24),
                         _SectionTitle('กิจกรรมถัดไป', action: 'ปฏิทิน', onAction: () => context.push(AppRoutes.calendar)),
-                        for (final a in _upcoming())
+                        for (final a in _upcoming().skip(1))
                           _ListRow(
                             icon: NxI.calendarBlank,
                             title: a['subject']?.toString() ?? entityTitle(a, module: 'activity'),
@@ -270,14 +294,87 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                 ),
         ),
       ],
+        ),
+      ],
     );
   }
 }
 
-class _AttendanceCard extends StatelessWidget {
-  const _AttendanceCard({this.clockIn, this.clockOut});
+/// Soft pastel cloud behind the greeting (reference: onboarding video).
+class _PastelHero extends StatelessWidget {
+  const _PastelHero();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final a = dark ? 0.22 : 0.32;
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [bg.withValues(alpha: 0), bg],
+            stops: const [0.45, 1],
+          ),
+        ),
+        position: DecorationPosition.foreground,
+        child: Stack(
+          children: [
+            Positioned(
+              top: -80,
+              left: -60,
+              child: _blob(280, const Color(0xFFF9A8D4).withValues(alpha: a)),
+            ),
+            Positioned(
+              top: -40,
+              right: -70,
+              child: _blob(260, cs.primary.withValues(alpha: a * 0.9)),
+            ),
+            Positioned(
+              top: 120,
+              left: 80,
+              child: _blob(220, const Color(0xFF93C5FD).withValues(alpha: a * 0.8)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _blob(double size, Color c) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(colors: [c, c.withValues(alpha: 0)]),
+        ),
+      );
+}
+
+/// One card for "today": attendance, next appointment and work counts.
+class _TodayCard extends StatelessWidget {
+  const _TodayCard({
+    required this.showAttendance,
+    required this.clockIn,
+    required this.clockOut,
+    required this.next,
+    required this.overdue,
+    required this.today,
+    required this.upcoming,
+    required this.hasWork,
+  });
+
+  final bool showAttendance;
   final dynamic clockIn;
   final dynamic clockOut;
+  final Map<String, dynamic>? next;
+  final int overdue;
+  final int today;
+  final int upcoming;
+  final bool hasWork;
 
   @override
   Widget build(BuildContext context) {
@@ -291,45 +388,132 @@ class _AttendanceCard extends StatelessWidget {
       status = 'ยังไม่ได้ลงเวลาเข้างาน';
       cta = 'ลงเวลาเข้า';
     } else if (clockOut == null) {
-      status = 'เข้างานเวลา $inAt';
+      status = 'เข้างาน $inAt';
       cta = 'ลงเวลาออก';
     } else {
       status = 'เข้า $inAt · ออก $outAt';
-      cta = 'ดูประวัติ';
+      cta = 'ประวัติ';
     }
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          colors: [cs.primary, Color.lerp(cs.primary, cs.tertiary, 0.6)!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Row(
+    final rows = <Widget>[];
+    if (showAttendance) {
+      rows.add(Row(
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: cs.onPrimary.withValues(alpha: 0.18),
-            child: Icon(NxI.clock, color: cs.onPrimary),
-          ),
+          _dot(cs.primary, NxI.clock, cs),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('ลงเวลาวันนี้', style: theme.textTheme.labelLarge?.copyWith(color: cs.onPrimary.withValues(alpha: 0.85))),
-                const SizedBox(height: 2),
-                Text(status, style: theme.textTheme.titleMedium?.copyWith(color: cs.onPrimary, fontWeight: FontWeight.w700)),
+                Text('ลงเวลาวันนี้', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                Text(status, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
               ],
             ),
           ),
-          FilledButton.tonal(
-            style: FilledButton.styleFrom(backgroundColor: cs.onPrimary, foregroundColor: cs.primary),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: cs.onSurface,
+              foregroundColor: cs.surface,
+              shape: const StadiumBorder(),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              minimumSize: const Size(0, 40),
+            ),
             onPressed: () => context.push(AppRoutes.attendance),
             child: Text(cta),
           ),
+        ],
+      ));
+    }
+    final n = next;
+    if (n != null) {
+      if (rows.isNotEmpty) rows.add(const Divider(height: 24));
+      rows.add(InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: n['id'] == null ? null : () => context.push(AppRoutes.activity(n['id'].toString())),
+        child: Row(
+          children: [
+            _dot(const Color(0xFFF59E0B), NxI.calendarBlank, cs),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('นัดถัดไป · ${_hhmm(n['date_start'])}', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                  Text(
+                    n['subject']?.toString() ?? entityTitle(n, module: 'activity'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  if ((n['location']?.toString() ?? '').isNotEmpty)
+                    Text(n['location'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                ],
+              ),
+            ),
+            Icon(NxI.caretRight, size: 18, color: cs.onSurfaceVariant),
+          ],
+        ),
+      ));
+    }
+    if (hasWork) {
+      if (rows.isNotEmpty) rows.add(const SizedBox(height: 14));
+      rows.add(Row(
+        children: [
+          Expanded(child: _CountPill('เลยกำหนด', overdue, cs.error)),
+          const SizedBox(width: 8),
+          Expanded(child: _CountPill('วันนี้', today, const Color(0xFFF59E0B))),
+          const SizedBox(width: 8),
+          Expanded(child: _CountPill('กำลังมา', upcoming, cs.primary)),
+        ],
+      ));
+    }
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return NxSurfaceCard(
+      radius: 24,
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
+    );
+  }
+
+  static Widget _dot(Color c, IconData icon, ColorScheme cs) => Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(color: c.withValues(alpha: 0.12), shape: BoxShape.circle),
+        child: Icon(icon, color: c, size: 20),
+      );
+}
+
+/// Day summary that streams in word by word, with a shortcut to the AI chat.
+class _AiBriefCard extends StatelessWidget {
+  const _AiBriefCard({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return NxSurfaceCard(
+      radius: 24,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      onTap: () => context.push(AppRoutes.aiChat),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ShaderMask(
+                shaderCallback: (r) => const LinearGradient(colors: [Color(0xFFEC4899), Color(0xFF6366F1)]).createShader(r),
+                child: const Icon(NxI.sparkleFill, color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 6),
+              Text('สรุปวันนี้', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+              const Spacer(),
+              Text('ถาม AI', style: theme.textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w600)),
+              Icon(NxI.caretRight, size: 14, color: cs.primary),
+            ],
+          ),
+          const SizedBox(height: 8),
+          NxStreamingText(text, style: theme.textTheme.bodyMedium?.copyWith(height: 1.5)),
+          const SizedBox(height: 4),
         ],
       ),
     );
