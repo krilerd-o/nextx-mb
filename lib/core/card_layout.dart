@@ -168,7 +168,11 @@ class CardFieldContext {
     required List<Map<String, dynamic>> fields,
     this.picklists = const {},
     this.users = const {},
-  }) : fields = {for (final f in fields) f['name']?.toString() ?? '': f};
+  }) : fields = {
+          // Same rule as the record view: hidden / disabled fields never show.
+          for (final f in fields)
+            if (f['access'] != 'hidden' && '${f['presence'] ?? 1}' != '0') f['name']?.toString() ?? '': f,
+        };
 
   final Map<String, Map<String, dynamic>> fields;
   final Map<String, List<Map<String, dynamic>>> picklists;
@@ -212,6 +216,8 @@ class CardFieldContext {
   /// Text for [name] on [row], formatted by the field's type.
   String text(Map<String, dynamic> row, String? name, {bool money = false}) {
     if (name == null || name.isEmpty) return '';
+    // A slot saved earlier for a field the user may no longer see stays empty.
+    if (!fields.containsKey(name) && !metaLabels.containsKey(name)) return '';
     final raw = row[name];
     if (raw == null) return '';
     var s = raw is List ? raw.join(', ') : '$raw'.trim();

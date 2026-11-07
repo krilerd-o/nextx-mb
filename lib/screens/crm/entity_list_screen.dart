@@ -195,7 +195,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
       }
       final picks = <NxFilterGroup>[];
       for (final f in schema.fields) {
-        if (f['access'] == 'hidden' || !_isPicklist(f, schema.picklists)) continue;
+        if (f['access'] == 'hidden' || '${f['presence'] ?? 1}' == '0' || !_isPicklist(f, schema.picklists)) continue;
         final name = f['name'].toString();
         picks.add(NxFilterGroup(
           key: 'pl:$name',

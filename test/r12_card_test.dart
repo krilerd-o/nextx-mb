@@ -28,6 +28,17 @@ void main() {
     expect(round.subtitleMode, 'never');
   });
 
+  test('hidden or disabled fields never reach a card', () {
+    final ctx = CardFieldContext(fields: [
+      {'name': 'secret', 'access': 'hidden'},
+      {'name': 'off', 'presence': 0},
+      {'name': 'ok'},
+    ]);
+    expect(ctx.text({'secret': 'x', 'off': 'y', 'ok': 'z'}, 'secret'), '');
+    expect(ctx.text({'secret': 'x', 'off': 'y', 'ok': 'z'}, 'off'), '');
+    expect(ctx.text({'secret': 'x', 'off': 'y', 'ok': 'z'}, 'ok'), 'z');
+  });
+
   testWidgets('card renders formatted slots', (tester) async {
     final ctx = CardFieldContext(
       fields: fields,
