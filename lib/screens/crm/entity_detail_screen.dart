@@ -70,7 +70,15 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     _row = Map<String, dynamic>.from(widget.row);
     _reload();
     if (widget.module == 'case') _loadFollow();
+    if (context.read<AppConfig>().isLoggedIn) {
+      context.read<AppConfig>().apiClient.getUsersCached().then((u) {
+        if (mounted) setState(() => _users = u);
+      }).catchError((_) {});
+    }
   }
+
+  /// Business users (cached) so owner/assignee fields show names, not ids.
+  List<Map<String, dynamic>> _users = const [];
 
   final _heroScroll = ScrollController();
 
@@ -776,7 +784,17 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     }
     _allFieldCount = keys.length;
     // Default: only fields that have a value; "ทั้งหมด" shows every field.
-    if (!_showAllFields) keys.removeWhere((k) => !_hasValue(_row[k]));
+    if (!_showAllFields) {
+      keys.removeWhere((k) {
+        final f = byName[k];
+        // A yes/no left at "no" is the default, not information.
+        if (f != null && resolveFieldUiType(f) == FieldUiType.yesNo) {
+          final v = '${_row[k] ?? ''}'.toLowerCase();
+          return v.isEmpty || v == '0' || v == 'false' || v == 'no';
+        }
+        return !_hasValue(_row[k]);
+      });
+    }
     if (keys.isEmpty) {
       return [Padding(padding: const EdgeInsets.all(8), child: Text(tr('ยังไม่มีข้อมูล — แตะ "ทั้งหมด" เพื่อดูทุกฟิลด์')))];
     }
@@ -800,6 +818,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
               for (final o
                   in _picklists[name] ?? const <Map<String, dynamic>>[])
                 NxPickOption.fromMap(o),
+              // Owner / assignee ids → names.
+              if (uiType == FieldUiType.picklistUser || uiType == FieldUiType.multiPicklistUser || uiType == FieldUiType.owner || name == 'smownerid')
+                for (final u in _users) NxPickOption.fromMap(u),
               if (_row['${name}_name'] != null && _row[name] != null)
                 NxPickOption(
                   value: _row[name].toString(),

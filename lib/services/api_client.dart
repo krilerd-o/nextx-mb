@@ -695,6 +695,19 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  ({DateTime at, String biz, List<Map<String, dynamic>> users})? _usersCache;
+
+  /// Business users for id → name labels; cached 10 minutes per business.
+  Future<List<Map<String, dynamic>>> getUsersCached() async {
+    final c = _usersCache;
+    if (c != null && c.biz == (_businessId ?? '') && DateTime.now().difference(c.at) < const Duration(minutes: 10)) {
+      return c.users;
+    }
+    final users = await getUsers(limit: 500);
+    _usersCache = (at: DateTime.now(), biz: _businessId ?? '', users: users);
+    return users;
+  }
+
   Future<List<Map<String, dynamic>>> getUsers({String? q, int limit = 80}) async {
     final env = await _send('GET', '/api/users', query: {
       if (q != null && q.trim().isNotEmpty) 'q': q.trim(),

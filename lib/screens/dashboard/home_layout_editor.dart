@@ -52,6 +52,7 @@ class _HomeLayoutEditorScreenState extends State<HomeLayoutEditorScreen> {
         children: [
           Expanded(
             child: ReorderableListView.builder(
+              buildDefaultDragHandles: false,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               itemCount: _order.length,
               onReorder: (a, b) {

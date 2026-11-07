@@ -1197,6 +1197,7 @@ const Map<String, String> enStrings = {
   'งาน Workspace': 'Workspace tasks',
   'วิดเจ็ท': 'Widgets',
   'เรียงและซ่อน/แสดงกล่องบนหน้าหลัก': 'Reorder and show/hide Home boxes',
+  'ไม่มีงานค้าง — เคลียร์ครบแล้ว': 'Nothing pending — all clear',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

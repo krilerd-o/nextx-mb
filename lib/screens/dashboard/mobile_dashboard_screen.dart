@@ -122,11 +122,16 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
 
   /// Overdue appointments (same query as Calendar → ค้าง), newest-due first.
   List<Map<String, dynamic>> _overdue = const [];
+  bool _pendingLoaded = false;
   int _overdueTotal = 0;
 
   Future<void> _loadOverdue() async {
     final config = context.read<AppConfig>();
-    if (!MenuAccess.any(config.session, const [MenuAccess.calendar, MenuAccess.pending])) return;
+    if (!MenuAccess.any(config.session, const [MenuAccess.calendar, MenuAccess.pending])) {
+      // Workspace-only users still get the (empty or task-only) box.
+      if (MenuAccess.allow(config.session, MenuAccess.workspace) && mounted) setState(() => _pendingLoaded = true);
+      return;
+    }
     try {
       final page = await config.apiClient.getEntityList('activity', limit: 10, extra: const {
         'overdue': '1',
@@ -139,6 +144,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       setState(() {
         _overdue = page.items;
         _overdueTotal = page.total ?? page.items.length;
+        _pendingLoaded = true;
       });
     } catch (_) {}
   }
@@ -407,6 +413,9 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
               if (_pendingItems().isNotEmpty) ...[
                 const SizedBox(height: 20),
                 _PendingBox(items: _pendingItems(), total: _pendingTotal()),
+              ] else if (_pendingLoaded) ...[
+                const SizedBox(height: 20),
+                const _NoPending(),
               ],
             ],
             'ai': [
@@ -1253,7 +1262,7 @@ class _StatCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            tr('+${spark!.fold(0, (a, b) => a + b)} ใน 7 วัน'),
+                            '+${spark!.fold(0, (a, b) => a + b)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(
@@ -1464,6 +1473,33 @@ class _PendingBoxState extends State<_PendingBox> {
                 TextButton(onPressed: () => context.push(AppRoutes.workspaceHome), child: Text(tr('งาน Workspace'))),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Empty state of the pending box: nothing overdue.
+class _NoPending extends StatelessWidget {
+  const _NoPending();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const green = Color(0xFF10B981);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: green.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: green.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(NxI.checkCircle, color: green),
+          const SizedBox(width: 10),
+          Expanded(child: Text(tr('ไม่มีงานค้าง — เคลียร์ครบแล้ว'), style: theme.textTheme.titleSmall)),
         ],
       ),
     );
