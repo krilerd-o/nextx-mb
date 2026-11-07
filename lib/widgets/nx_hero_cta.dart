@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'nx_press_scale.dart';
+import '../core/i18n.dart';
 
 class NxHeroCta extends StatelessWidget {
   const NxHeroCta({
@@ -37,7 +38,7 @@ class NxHeroCta extends StatelessWidget {
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
                 : Text(
-                    label,
+                    tr(label),
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w600,

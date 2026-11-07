@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'nx_icons.dart';
+import '../core/i18n.dart';
 
 /// One floating "app card" in the hero art.
 class NxHeroChip {
@@ -152,11 +153,11 @@ class _HeroChipCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(chip.title,
+                Text(tr(chip.title),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
-                Text(chip.subtitle,
+                Text(tr(chip.subtitle),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),

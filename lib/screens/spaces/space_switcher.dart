@@ -9,6 +9,7 @@ import '../../core/spaces.dart';
 import '../../services/unread_service.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 /// Rounded-square Space logo (initials on the Space colour).
 class SpaceAvatar extends StatelessWidget {
@@ -42,7 +43,7 @@ class SpaceAvatar extends StatelessWidget {
           ),
         ),
         child: Text(
-          space.initials,
+          tr(space.initials),
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: size * 0.34),
         ),
       ),
@@ -64,7 +65,7 @@ class SpaceAvatar extends StatelessWidget {
               border: Border.all(color: cs.surface, width: 2),
             ),
             child: Text(
-              badge > 99 ? '99+' : '$badge',
+              tr(badge > 99 ? '99+' : '$badge'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
             ),
@@ -144,17 +145,17 @@ class _SpaceSheetState extends State<_SpaceSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(leading: const Icon(NxI.pencilSimple), title: const Text('แก้ไขชื่อ / สี'), onTap: () => Navigator.pop(context, 'edit')),
+          ListTile(leading: const Icon(NxI.pencilSimple), title: Text(tr('แก้ไขชื่อ / สี')), onTap: () => Navigator.pop(context, 'edit')),
           ListTile(
             leading: const Icon(NxI.copySimple),
-            title: const Text('ทำซ้ำ'),
-            subtitle: Text('เพิ่มอีกบัญชีใน ${sp.host}'),
+            title: Text(tr('ทำซ้ำ')),
+            subtitle: Text(tr('เพิ่มอีกบัญชีใน ${sp.host}')),
             onTap: () => Navigator.pop(context, 'dup'),
           ),
           ListTile(
             leading: Icon(NxI.signOut, color: Theme.of(context).colorScheme.error),
-            title: Text('ออกจากระบบ', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            subtitle: const Text('ลบ Space นี้ออกจากเครื่อง (Space อื่นยังใช้งานได้)'),
+            title: Text(tr('ออกจากระบบ'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            subtitle: Text(tr('ลบ Space นี้ออกจากเครื่อง (Space อื่นยังใช้งานได้)')),
             onTap: () => Navigator.pop(context, 'out'),
           ),
         ],
@@ -171,11 +172,11 @@ class _SpaceSheetState extends State<_SpaceSheet> {
         final ok = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text('ออกจาก ${sp.title}?'),
-            content: Text('${sp.host}\n${sp.email ?? ''}\nข้อมูลบนเซิร์ฟเวอร์ไม่ถูกลบ เพิ่มกลับได้ด้วยการเข้าสู่ระบบอีกครั้ง'),
+            title: Text(tr('ออกจาก ${sp.title}?')),
+            content: Text(tr('${sp.host}\n${sp.email ?? ''}\nข้อมูลบนเซิร์ฟเวอร์ไม่ถูกลบ เพิ่มกลับได้ด้วยการเข้าสู่ระบบอีกครั้ง')),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ออกจากระบบ')),
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ออกจากระบบ'))),
             ],
           ),
         );
@@ -225,17 +226,17 @@ class _SpaceSheetState extends State<_SpaceSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(sp.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                      Text(sp.host, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                      Text(tr(sp.title), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(tr(sp.host), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                       if ((sp.email ?? '').isNotEmpty)
-                        Text(sp.email!, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(tr(sp.email!), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                     ],
                   ),
                 ),
                 if (_editing)
                   ReorderableDragStartListener(index: i, child: const Padding(padding: EdgeInsets.all(12), child: Icon(NxI.grip)))
                 else
-                  IconButton(tooltip: 'ตัวเลือก', icon: const Icon(NxI.dotsThreeVertical), onPressed: () => _menu(sp)),
+                  IconButton(tooltip: tr('ตัวเลือก'), icon: const Icon(NxI.dotsThreeVertical), onPressed: () => _menu(sp)),
               ],
             ),
           ),
@@ -249,10 +250,10 @@ class _SpaceSheetState extends State<_SpaceSheet> {
           padding: const EdgeInsets.fromLTRB(20, 4, 8, 4),
           child: Row(
             children: [
-              Expanded(child: Text('Space ของฉัน', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700))),
+              Expanded(child: Text(tr('Space ของฉัน'), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700))),
               TextButton(
                 onPressed: spaces.length < 2 ? null : () => setState(() => _editing = !_editing),
-                child: Text(_editing ? 'เสร็จ' : 'แก้ไข'),
+                child: Text(tr(_editing ? 'เสร็จ' : 'แก้ไข')),
               ),
             ],
           ),
@@ -287,10 +288,10 @@ class _SpaceSheetState extends State<_SpaceSheet> {
           top: false,
           child: Column(
             children: [
-              ListTile(leading: const Icon(NxI.plus), title: const Text('เพิ่ม Space'), subtitle: const Text('โดเมนอื่น หรือบัญชีอื่น'), onTap: () => _add()),
+              ListTile(leading: const Icon(NxI.plus), title: Text(tr('เพิ่ม Space')), subtitle: Text(tr('โดเมนอื่น หรือบัญชีอื่น')), onTap: () => _add()),
               ListTile(
                 leading: const Icon(NxI.deviceMobile),
-                title: const Text('อุปกรณ์ที่เข้าใช้งาน'),
+                title: Text(tr('อุปกรณ์ที่เข้าใช้งาน')),
                 onTap: () {
                   final router = GoRouter.of(widget.hostContext);
                   Navigator.pop(context);
@@ -299,7 +300,7 @@ class _SpaceSheetState extends State<_SpaceSheet> {
               ),
               ListTile(
                 leading: const Icon(NxI.gear),
-                title: const Text('ตั้งค่า'),
+                title: Text(tr('ตั้งค่า')),
                 onTap: () {
                   final router = GoRouter.of(widget.hostContext);
                   Navigator.pop(context);
@@ -330,7 +331,7 @@ Future<void> showSpaceEditor(BuildContext context, Space sp) async {
           const SizedBox(height: 16),
           TextField(
             controller: name,
-            decoration: InputDecoration(labelText: 'ชื่อที่แสดง', hintText: sp.businessName ?? sp.host),
+            decoration: InputDecoration(labelText: tr('ชื่อที่แสดง'), hintText: trn(sp.businessName ?? sp.host)),
             onChanged: (_) => set(() {}),
           ),
           const SizedBox(height: 16),
@@ -360,7 +361,7 @@ Future<void> showSpaceEditor(BuildContext context, Space sp) async {
               await ctx.read<AppConfig>().updateSpace(sp.id, label: name.text, colorValue: color);
               if (ctx.mounted) Navigator.pop(ctx);
             },
-            child: const Text('บันทึก'),
+            child: Text(tr('บันทึก')),
           ),
         ],
       ),
@@ -409,12 +410,12 @@ Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Fu
                             height: 76,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(22)),
-                            child: Text(sp.initials, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
+                            child: Text(tr(sp.initials), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
                           ),
                           const SizedBox(height: 14),
-                          Text(sp.title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, decoration: TextDecoration.none)),
+                          Text(tr(sp.title), style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, decoration: TextDecoration.none)),
                           const SizedBox(height: 4),
-                          Text(sp.host, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14, fontWeight: FontWeight.w400, decoration: TextDecoration.none)),
+                          Text(tr(sp.host), style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14, fontWeight: FontWeight.w400, decoration: TextDecoration.none)),
                         ],
                       ),
                     ),

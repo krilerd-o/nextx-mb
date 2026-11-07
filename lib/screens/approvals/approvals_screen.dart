@@ -14,6 +14,7 @@ import '../../widgets/dense_card_tile.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../core/i18n.dart';
 
 /// Everything waiting for the current user's decision, gathered from the
 /// NEXTX endpoints that already exist (quotation approval chain, HR leave,
@@ -40,16 +41,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     final reason = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('เหตุผลที่ไม่อนุมัติ'),
+        title: Text(tr('เหตุผลที่ไม่อนุมัติ')),
         content: TextField(
           controller: ctrl,
           autofocus: true,
           maxLines: 3,
-          decoration: const InputDecoration(hintText: 'ไม่บังคับ'),
+          decoration: InputDecoration(hintText: tr('ไม่บังคับ')),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('ไม่อนุมัติ')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('ไม่อนุมัติ'))),
         ],
       ),
     );
@@ -61,11 +62,11 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     try {
       await action();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(done)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(done))));
       setState(() => _revision++);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -121,7 +122,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         ],
       ),
       body: sections.isEmpty
-          ? const Center(child: Text('ไม่มีสิทธิ์อนุมัติรายการใด'))
+          ? Center(child: Text(tr('ไม่มีสิทธิ์อนุมัติรายการใด')))
           : RefreshIndicator(
               onRefresh: () async => setState(() => _revision++),
               child: ListView(
@@ -197,10 +198,10 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
             children: [
               Icon(widget.section.icon, size: 18, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
-              Text(widget.section.title, style: theme.textTheme.titleSmall),
+              Text(tr(widget.section.title), style: theme.textTheme.titleSmall),
               if (snap.hasData) ...[
                 const SizedBox(width: 8),
-                Text('(${snap.data!.length})', style: theme.textTheme.bodySmall),
+                Text(tr('(${snap.data!.length})'), style: theme.textTheme.bodySmall),
               ],
             ],
           ),
@@ -209,11 +210,11 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
         if (snap.connectionState != ConnectionState.done) {
           body = const NxSkeletonList(rows: 2);
         } else if (snap.hasError) {
-          body = Text(formatApiError(snap.error!), style: TextStyle(color: theme.colorScheme.error));
+          body = Text(tr(formatApiError(snap.error!)), style: TextStyle(color: theme.colorScheme.error));
         } else if (snap.data!.isEmpty) {
           body = Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: Text('ไม่มีรายการรออนุมัติ', style: theme.textTheme.bodySmall),
+            child: Text(tr('ไม่มีรายการรออนุมัติ'), style: theme.textTheme.bodySmall),
           );
         } else {
           body = Column(
@@ -241,12 +242,12 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                tooltip: 'อนุมัติ',
+                                tooltip: tr('อนุมัติ'),
                                 icon: const Icon(NxI.checkCircle, color: Colors.green),
                                 onPressed: () => act(true),
                               ),
                               IconButton(
-                                tooltip: 'ไม่อนุมัติ',
+                                tooltip: tr('ไม่อนุมัติ'),
                                 icon: const Icon(NxI.xCircle, color: Colors.red),
                                 onPressed: () => act(false),
                               ),

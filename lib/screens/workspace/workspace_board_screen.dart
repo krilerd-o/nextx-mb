@@ -15,6 +15,7 @@ import '../../widgets/nx_skeleton.dart';
 import 'task_detail_screen.dart';
 import 'workspace_kanban_board.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class WorkspaceBoardScreen extends StatefulWidget {
   const WorkspaceBoardScreen({super.key, required this.board});
@@ -139,7 +140,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
       await _load();
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -150,22 +151,22 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('งานใหม่'),
+        title: Text(tr('งานใหม่')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: title, decoration: const InputDecoration(labelText: 'ชื่อเรื่อง')),
+            TextField(controller: title, decoration: InputDecoration(labelText: tr('ชื่อเรื่อง'))),
             const SizedBox(height: 12),
             TextField(
               controller: description,
               maxLines: 3,
-              decoration: const InputDecoration(labelText: 'รายละเอียด (ไม่บังคับ)'),
+              decoration: InputDecoration(labelText: tr('รายละเอียด (ไม่บังคับ)')),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('สร้าง')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('สร้าง'))),
         ],
       ),
     );
@@ -183,7 +184,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
         await _load();
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
         }
       }
     }
@@ -198,7 +199,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
         title: name,
         actions: [
           IconButton(
-            tooltip: 'รีเฟรช',
+            tooltip: tr('รีเฟรช'),
             icon: const Icon(NxI.arrowCounterClockwise),
             onPressed: _load,
           ),
@@ -209,7 +210,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
       body: _loading
           ? const NxSkeletonList()
           : _error != null
-              ? Center(child: Text(formatApiError(_error!)))
+              ? Center(child: Text(tr(formatApiError(_error!))))
               : WorkspaceKanbanBoard(
                   grouped: _group(),
                   onTaskTap: (row) {

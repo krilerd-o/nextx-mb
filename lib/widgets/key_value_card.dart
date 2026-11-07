@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/i18n.dart';
 
 /// แสดงฟิลด์ entity แบบ key/value ในการ์ด
 class KeyValueCard extends StatelessWidget {
@@ -25,7 +26,7 @@ class KeyValueCard extends StatelessWidget {
                   SizedBox(
                     width: 120,
                     child: Text(
-                      entries[i].key,
+                      tr(entries[i].key),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -33,7 +34,7 @@ class KeyValueCard extends StatelessWidget {
                   ),
                   Expanded(
                     child: SelectableText(
-                      entries[i].value,
+                      tr(entries[i].value),
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),

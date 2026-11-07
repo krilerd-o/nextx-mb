@@ -10,6 +10,7 @@ import '../../services/api_client.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
+import '../../core/i18n.dart';
 
 /// "ลายเซ็นของฉัน" — TH / EN signature used on quotations and documents
 /// (`/api/me/signatures` + `POST /api/uploads/signature`).
@@ -56,9 +57,9 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
       final path = await _api.uploadSignatureImage(bytes, filename);
       await _api.saveMySignatures(th: slot == 'th' ? path : null, en: slot == 'en' ? path : null);
       await _load();
-      messenger.showSnackBar(const SnackBar(content: Text('บันทึกลายเซ็นแล้ว')));
+      messenger.showSnackBar(SnackBar(content: Text(tr('บันทึกลายเซ็นแล้ว'))));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busySlot = null);
     }
@@ -83,7 +84,7 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
       await _api.saveMySignatures(clearTh: slot == 'th', clearEn: slot == 'en');
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busySlot = null);
     }
@@ -99,7 +100,7 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(children: [
-            Expanded(child: Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+            Expanded(child: Text(tr(title), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
             if (busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
           ]),
           const SizedBox(height: 12),
@@ -112,7 +113,7 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
             ),
             alignment: Alignment.center,
             child: url == null
-                ? Text('ยังไม่มีลายเซ็น', style: theme.textTheme.bodySmall?.copyWith(color: Colors.black54))
+                ? Text(tr('ยังไม่มีลายเซ็น'), style: theme.textTheme.bodySmall?.copyWith(color: Colors.black54))
                 : Image.network(url, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(NxI.image)),
           ),
           const SizedBox(height: 8),
@@ -120,15 +121,15 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
             FilledButton.tonalIcon(
               onPressed: _busySlot != null ? null : () => _draw(slot),
               icon: const Icon(NxI.pencilSimple, size: 18),
-              label: const Text('เซ็นบนจอ'),
+              label: Text(tr('เซ็นบนจอ')),
             ),
             OutlinedButton.icon(
               onPressed: _busySlot != null ? null : () => _pick(slot),
               icon: const Icon(NxI.image, size: 18),
-              label: const Text('เลือกรูป'),
+              label: Text(tr('เลือกรูป')),
             ),
             if (url != null)
-              TextButton(onPressed: _busySlot != null ? null : () => _clear(slot), child: const Text('ลบ')),
+              TextButton(onPressed: _busySlot != null ? null : () => _clear(slot), child: Text(tr('ลบ'))),
           ]),
         ],
       ),
@@ -143,12 +144,12 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
           ? Center(
               child: _error == null
                   ? const CircularProgressIndicator()
-                  : Padding(padding: const EdgeInsets.all(24), child: Text(formatApiError(_error!), textAlign: TextAlign.center)),
+                  : Padding(padding: const EdgeInsets.all(24), child: Text(tr(formatApiError(_error!)), textAlign: TextAlign.center)),
             )
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Text('ใช้แสดงบนใบเสนอราคาและเอกสารที่ออกจากระบบ', style: Theme.of(context).textTheme.bodyMedium),
+                Text(tr('ใช้แสดงบนใบเสนอราคาและเอกสารที่ออกจากระบบ'), style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 16),
                 _slot('th', 'ลายเซ็น (ภาษาไทย)'),
                 const SizedBox(height: 12),
@@ -186,10 +187,10 @@ class _SignaturePadScreenState extends State<SignaturePadScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('เซ็นชื่อ'),
+        title: Text(tr('เซ็นชื่อ')),
         actions: [
-          TextButton(onPressed: _strokes.isEmpty || _saving ? null : () => setState(_strokes.clear), child: const Text('ล้าง')),
-          TextButton(onPressed: _strokes.isEmpty || _saving ? null : _done, child: const Text('บันทึก')),
+          TextButton(onPressed: _strokes.isEmpty || _saving ? null : () => setState(_strokes.clear), child: Text(tr('ล้าง'))),
+          TextButton(onPressed: _strokes.isEmpty || _saving ? null : _done, child: Text(tr('บันทึก'))),
         ],
       ),
       body: Padding(
@@ -215,7 +216,7 @@ class _SignaturePadScreenState extends State<SignaturePadScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text('เซ็นในกรอบด้านบน', style: Theme.of(context).textTheme.bodySmall),
+            Text(tr('เซ็นในกรอบด้านบน'), style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       ),

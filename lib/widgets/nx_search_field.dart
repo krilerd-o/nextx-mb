@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'nx_icons.dart';
+import '../core/i18n.dart';
 
 class NxSearchField extends StatelessWidget {
   const NxSearchField({
@@ -22,7 +23,7 @@ class NxSearchField extends StatelessWidget {
       textInputAction: TextInputAction.search,
       onSubmitted: onSubmitted,
       decoration: InputDecoration(
-        hintText: hint,
+        hintText: trn(hint),
         prefixIcon: const Icon(NxI.magnifyingGlass),
         suffixIcon: suffix,
         isDense: true,

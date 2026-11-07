@@ -19,6 +19,7 @@ import '../../widgets/nx_icons.dart';
 import '../mail/mail_compose_screen.dart' show plainTextToHtml;
 import 'smart_checklist_section.dart';
 import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 /// NEXTX board priorities (backend/src/routes/boards.js).
 const taskPriorities = <String, String>{
@@ -94,7 +95,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   void _snack(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(text))));
   }
 
   Future<void> _loadLogs() async {
@@ -191,19 +192,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('แก้ไขงาน'),
+        title: Text(tr('แก้ไขงาน')),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: title,
-                decoration: const InputDecoration(labelText: 'ชื่องาน'),
+                decoration: InputDecoration(labelText: tr('ชื่องาน')),
               ),
               const SizedBox(height: 12),
               if (richDesc)
                 Text(
-                  'คำอธิบายมีรูปแบบ (rich text) — แก้ไขบนเว็บเพื่อไม่ให้รูปแบบหาย',
+                  tr('คำอธิบายมีรูปแบบ (rich text) — แก้ไขบนเว็บเพื่อไม่ให้รูปแบบหาย'),
                   style: Theme.of(ctx).textTheme.bodySmall,
                 )
               else
@@ -211,14 +212,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   controller: description,
                   minLines: 3,
                   maxLines: 8,
-                  decoration: const InputDecoration(labelText: 'คำอธิบาย', border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: tr('คำอธิบาย'), border: OutlineInputBorder()),
                 ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('บันทึก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('บันทึก'))),
         ],
       ),
     );
@@ -286,7 +287,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 leading: Icon(
                   e.key == _task['priority'] ? NxI.radioOn : NxI.radioOff,
                 ),
-                title: Text(e.value),
+                title: Text(tr(e.value)),
                 onTap: () => Navigator.pop(ctx, e.key),
               ),
           ],
@@ -300,11 +301,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ลบงานนี้?'),
-        content: const Text('งานจะถูกย้ายไปถังขยะของ Workspace'),
+        title: Text(tr('ลบงานนี้?')),
+        content: Text(tr('งานจะถูกย้ายไปถังขยะของ Workspace')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ลบ')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ลบ'))),
         ],
       ),
     );
@@ -379,7 +380,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
                 ),
               IconButton(
-                tooltip: 'แก้ไข',
+                tooltip: tr('แก้ไข'),
                 icon: const Icon(NxI.pencilSimple),
                 onPressed: _saving ? null : _edit,
               ),
@@ -395,7 +396,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         children: [
                           ListTile(
                             leading: const Icon(NxI.timer),
-                            title: const Text('ลง worklog'),
+                            title: Text(tr('ลง worklog')),
                             onTap: () {
                               Navigator.pop(ctx);
                               DefaultTabController.of(context).animateTo(2);
@@ -403,7 +404,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           ),
                           ListTile(
                             leading: Icon(NxI.trash, color: theme.colorScheme.error),
-                            title: Text('ลบงาน', style: TextStyle(color: theme.colorScheme.error)),
+                            title: Text(tr('ลบงาน'), style: TextStyle(color: theme.colorScheme.error)),
                             onTap: () {
                               Navigator.pop(ctx);
                               _delete();
@@ -411,7 +412,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           ),
                           ListTile(
                             leading: const Icon(NxI.x),
-                            title: const Text('ปิด'),
+                            title: Text(tr('ปิด')),
                             onTap: () => Navigator.pop(ctx),
                           ),
                         ],
@@ -441,7 +442,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           NxHtmlView(html: desc, style: theme.textTheme.bodyLarge)
                         else
                           Text(
-                            'ไม่มีคำอธิบาย',
+                            tr('ไม่มีคำอธิบาย'),
                             style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                           ),
                         const SizedBox(height: 16),
@@ -451,28 +452,28 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             children: [
                               ListTile(
                                 leading: const Icon(NxI.user),
-                                title: const Text('ผู้รับผิดชอบ'),
-                                subtitle: Text(_assigneeLabel()),
+                                title: Text(tr('ผู้รับผิดชอบ')),
+                                subtitle: Text(tr(_assigneeLabel())),
                                 trailing: const Icon(NxI.caretRight),
                                 onTap: _saving ? null : _pickAssignee,
                               ),
                               ListTile(
                                 leading: const Icon(NxI.calendarBlank),
-                                title: const Text('กำหนดส่ง'),
-                                subtitle: Text(due ?? 'ไม่กำหนด'),
+                                title: Text(tr('กำหนดส่ง')),
+                                subtitle: Text(tr(due ?? 'ไม่กำหนด')),
                                 trailing: const Icon(NxI.caretRight),
                                 onTap: _saving ? null : _pickDueDate,
                               ),
                               ListTile(
                                 leading: const Icon(NxI.flag),
-                                title: const Text('ความสำคัญ'),
-                                subtitle: Text(priority),
+                                title: Text(tr('ความสำคัญ')),
+                                subtitle: Text(tr(priority)),
                                 trailing: const Icon(NxI.caretRight),
                                 onTap: _saving ? null : _pickPriority,
                               ),
                               SwitchListTile(
                                 secondary: const Icon(NxI.checkCircle),
-                                title: const Text('เสร็จแล้ว'),
+                                title: Text(tr('เสร็จแล้ว')),
                                 value: _completed,
                                 onChanged: _saving ? null : (v) => _update({'is_completed': v}),
                               ),
@@ -486,11 +487,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            Expanded(child: Text('ไฟล์แนบ (${_attachments.length})', style: theme.textTheme.titleSmall)),
+                            Expanded(child: Text(tr('ไฟล์แนบ (${_attachments.length})'), style: theme.textTheme.titleSmall)),
                             TextButton.icon(
                               onPressed: _saving ? null : _addAttachment,
                               icon: const Icon(NxI.paperclip, size: 18),
-                              label: const Text('แนบไฟล์'),
+                              label: Text(tr('แนบไฟล์')),
                             ),
                           ],
                         ),
@@ -498,13 +499,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: Icon((a['mime']?.toString() ?? '').startsWith('image/') ? NxI.image : NxI.file),
-                            title: Text(a['name']?.toString() ?? 'ไฟล์', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            title: Text(tr(a['name']?.toString() ?? 'ไฟล์'), maxLines: 1, overflow: TextOverflow.ellipsis),
                             onTap: () {
                               final uri = Uri.tryParse(context.read<AppConfig>().apiClient.absoluteUrl(a['url'].toString()));
                               if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
                             },
                             trailing: IconButton(
-                              tooltip: 'นำออก',
+                              tooltip: tr('นำออก'),
                               icon: const Icon(NxI.x, size: 18),
                               onPressed: _saving ? null : () => _removeAttachment(a),
                             ),
@@ -513,8 +514,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         Wrap(
                           spacing: 8,
                           children: [
-                            Chip(label: Text('สถานะ: ${_task['status'] ?? _task['status_name'] ?? '—'}')),
-                            if (_task['id'] != null) Chip(label: Text('id: ${_task['id']}')),
+                            Chip(label: Text(tr('สถานะ: ${_task['status'] ?? _task['status_name'] ?? '—'}'))),
+                            if (_task['id'] != null) Chip(label: Text(tr('id: ${_task['id']}'))),
                           ],
                         ),
                       ],
@@ -533,20 +534,20 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                   Padding(
                                     padding: const EdgeInsets.symmetric(vertical: 24),
                                     child: Center(
-                                      child: Text('ยังไม่มีความคิดเห็น', style: theme.textTheme.bodyMedium),
+                                      child: Text(tr('ยังไม่มีความคิดเห็น'), style: theme.textTheme.bodyMedium),
                                     ),
                                   ),
                                 for (final c in _comments)
                                   ListTile(
                                     contentPadding: EdgeInsets.zero,
                                     leading: const Icon(NxI.chatCircle),
-                                    title: Text(c['user_name']?.toString() ?? 'ผู้ใช้'),
+                                    title: Text(tr(c['user_name']?.toString() ?? 'ผู้ใช้')),
                                     subtitle: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         NxHtmlView(html: c['body']?.toString() ?? ''),
                                         if (c['created_at'] != null)
-                                          Text('${c['created_at']}', style: theme.textTheme.bodySmall),
+                                          Text(tr('${c['created_at']}'), style: theme.textTheme.bodySmall),
                                       ],
                                     ),
                                   ),
@@ -565,15 +566,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                     controller: _commentController,
                                     minLines: 1,
                                     maxLines: 4,
-                                    decoration: const InputDecoration(
-                                      hintText: 'เขียนความคิดเห็น…',
+                                    decoration: InputDecoration(
+                                      hintText: tr('เขียนความคิดเห็น…'),
                                       border: OutlineInputBorder(),
                                       isDense: true,
                                     ),
                                   ),
                                 ),
                                 IconButton(
-                                  tooltip: 'ส่ง',
+                                  tooltip: tr('ส่ง'),
                                   onPressed: _addComment,
                                   icon: const Icon(NxI.paperPlaneTilt),
                                 ),
@@ -589,7 +590,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         if (_loading && _logs.isEmpty) const NxSkeletonList(rows: 3),
                         for (final log in _logs)
                           ListTile(
-                            title: Text('${log['time_spent_minutes'] ?? 0} นาที'),
+                            title: Text(tr('${log['time_spent_minutes'] ?? 0} นาที')),
                             subtitle: NxHtmlView(
                               html: log['work_description']?.toString() ?? log['created_at']?.toString() ?? '',
                             ),
@@ -598,21 +599,21 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         TextField(
                           controller: _minutesController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'นาทีที่ลง',
+                          decoration: InputDecoration(
+                            labelText: tr('นาทีที่ลง'),
                             border: OutlineInputBorder(),
                           ),
                         ),
                         const SizedBox(height: 8),
                         TextField(
                           controller: _noteController,
-                          decoration: const InputDecoration(
-                            labelText: 'รายละเอียดงาน',
+                          decoration: InputDecoration(
+                            labelText: tr('รายละเอียดงาน'),
                             border: OutlineInputBorder(),
                           ),
                         ),
                         const SizedBox(height: 8),
-                        FilledButton(onPressed: _addLog, child: const Text('บันทึก worklog')),
+                        FilledButton(onPressed: _addLog, child: Text(tr('บันทึก worklog'))),
                       ],
                     ),
                   ],
@@ -652,8 +653,8 @@ class _UserPickerSheetState extends State<_UserPickerSheet> {
               padding: const EdgeInsets.all(16),
               child: TextField(
                 autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'ค้นหาผู้ใช้',
+                decoration: InputDecoration(
+                  labelText: tr('ค้นหาผู้ใช้'),
                   prefixIcon: Icon(NxI.magnifyingGlass),
                 ),
                 onChanged: (v) => setState(() => _needle = v.trim().toLowerCase()),
@@ -661,7 +662,7 @@ class _UserPickerSheetState extends State<_UserPickerSheet> {
             ),
             ListTile(
               leading: const Icon(NxI.x),
-              title: const Text('ไม่มอบหมาย'),
+              title: Text(tr('ไม่มอบหมาย')),
               onTap: () => Navigator.pop(context, <String, dynamic>{'id': null}),
             ),
             const Divider(height: 1),
@@ -672,8 +673,8 @@ class _UserPickerSheetState extends State<_UserPickerSheet> {
                   final u = filtered[i];
                   return ListTile(
                     leading: const Icon(NxI.user),
-                    title: Text(userDisplayName(u)),
-                    subtitle: userEmail(u) == null ? null : Text(userEmail(u)!),
+                    title: Text(tr(userDisplayName(u))),
+                    subtitle: userEmail(u) == null ? null : Text(tr(userEmail(u)!)),
                     onTap: () => Navigator.pop(context, u),
                   );
                 },

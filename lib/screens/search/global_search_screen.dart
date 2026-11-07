@@ -17,6 +17,7 @@ import '../../widgets/nx_search_field.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../crm/entity_detail_screen.dart';
 import 'search_modules.dart';
+import '../../core/i18n.dart';
 
 class GlobalSearchScreen extends StatefulWidget {
   const GlobalSearchScreen({super.key});
@@ -115,13 +116,13 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('ล่าสุด', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              Text(tr('ล่าสุด'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
               TextButton(
                 onPressed: () async {
                   await config.clearSearchHistory();
                   setState(() {});
                 },
-                child: const Text('ล้าง'),
+                child: Text(tr('ล้าง')),
               ),
             ],
           ),

@@ -9,6 +9,7 @@ import '../../widgets/fields/nx_form_field.dart';
 import '../../widgets/fields/nx_pick_option.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 /// Debug gallery of every CRM UI type (light/dark toggle).
 class FieldGalleryScreen extends StatefulWidget {
@@ -57,7 +58,7 @@ class _FieldGalleryScreenState extends State<FieldGalleryScreen> {
           title: 'UI Type',
           actions: [
             IconButton(
-              tooltip: 'สลับธีม',
+              tooltip: tr('สลับธีม'),
               onPressed: () => setState(() => _dark = !_dark),
               icon: Icon(_dark ? NxI.sun : NxI.moon),
             ),

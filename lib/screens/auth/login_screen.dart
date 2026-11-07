@@ -18,6 +18,7 @@ import '../crm/field_gallery_screen.dart';
 import 'line_login_screen.dart';
 import 'link_confirm_screen.dart';
 import 'register_screen.dart';
+import '../../core/i18n.dart';
 
 enum _Mode { password, otpEmail, otpSms }
 
@@ -141,7 +142,7 @@ class _LoginScreenState extends State<LoginScreen> {
             sms ? await config.requestSmsOtp(id) : await config.requestEmailOtp(id);
             if (mounted) {
               setState(() => _otpSent = true);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ส่งรหัส OTP ไปที่ $id แล้ว')));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ส่งรหัส OTP ไปที่ $id แล้ว'))));
             }
           });
         } else {
@@ -194,7 +195,7 @@ class _LoginScreenState extends State<LoginScreen> {
     await _run(() async {
       await context.read<AppConfig>().apiClient.forgotPassword(email);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ถ้าอีเมลนี้มีในระบบ จะได้รับลิงก์ตั้งรหัสผ่านใหม่')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ถ้าอีเมลนี้มีในระบบ จะได้รับลิงก์ตั้งรหัสผ่านใหม่'))));
       }
     });
   }
@@ -207,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
   InputDecoration _dec(String label, IconData icon) => InputDecoration(
-        labelText: label,
+        labelText: trn(label),
         prefixIcon: Icon(icon),
         filled: true,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
@@ -239,8 +240,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     alignment: Alignment.topRight,
                     child: ActionChip(
                       avatar: const Icon(NxI.globe, size: 16),
-                      label: Text(serverLabel(config.apiBaseUrl), overflow: TextOverflow.ellipsis),
-                      tooltip: 'เปลี่ยนเซิร์ฟเวอร์',
+                      label: Text(tr(serverLabel(config.apiBaseUrl)), overflow: TextOverflow.ellipsis),
+                      tooltip: tr('เปลี่ยนเซิร์ฟเวอร์'),
                       onPressed: _loading
                           ? null
                           : () async {
@@ -258,16 +259,16 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('ยินดีต้อนรับกลับ', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                Text(tr('ยินดีต้อนรับกลับ'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                Text('เข้าสู่ระบบ MOAI NEXT ของธุรกิจคุณ',
+                Text(tr('เข้าสู่ระบบ MOAI NEXT ของธุรกิจคุณ'),
                     textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                 const SizedBox(height: 20),
                 SegmentedButton<_Mode>(
-                  segments: const [
-                    ButtonSegment(value: _Mode.password, label: Text('รหัสผ่าน')),
-                    ButtonSegment(value: _Mode.otpEmail, label: Text('OTP อีเมล')),
-                    ButtonSegment(value: _Mode.otpSms, label: Text('OTP SMS')),
+                  segments: [
+                    ButtonSegment(value: _Mode.password, label: Text(tr('รหัสผ่าน'))),
+                    ButtonSegment(value: _Mode.otpEmail, label: Text(tr('OTP อีเมล'))),
+                    ButtonSegment(value: _Mode.otpSms, label: Text(tr('OTP SMS'))),
                   ],
                   selected: {_mode},
                   showSelectedIcon: false,
@@ -280,15 +281,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(14),
                     child: ListTile(
                       leading: Icon(NxI.envelope, color: cs.primary),
-                      title: const Text('คุณได้รับลิงก์เชิญเข้าธุรกิจ'),
-                      subtitle: const Text('ยังไม่มีบัญชี แตะเพื่อสมัคร · มีบัญชีแล้ว เข้าสู่ระบบเพื่อเข้าร่วม'),
+                      title: Text(tr('คุณได้รับลิงก์เชิญเข้าธุรกิจ')),
+                      subtitle: Text(tr('ยังไม่มีบัญชี แตะเพื่อสมัคร · มีบัญชีแล้ว เข้าสู่ระบบเพื่อเข้าร่วม')),
                       onTap: _loading ? null : _openRegister,
                     ),
                   ),
                 ],
                 if (config.recentAccounts.isNotEmpty && _mode != _Mode.otpSms) ...[
                   const SizedBox(height: 14),
-                  Text('บัญชีที่เคยใช้', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                  Text(tr('บัญชีที่เคยใช้'), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
@@ -297,10 +298,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       for (final a in config.recentAccounts)
                         InputChip(
                           avatar: CircleAvatar(
-                            child: Text((a.name.isNotEmpty ? a.name : a.loginId).characters.first.toUpperCase()),
+                            child: Text(tr((a.name.isNotEmpty ? a.name : a.loginId).characters.first.toUpperCase())),
                           ),
-                          label: Text(a.name.isNotEmpty ? a.name : a.loginId, overflow: TextOverflow.ellipsis),
-                          tooltip: a.loginId,
+                          label: Text(tr(a.name.isNotEmpty ? a.name : a.loginId), overflow: TextOverflow.ellipsis),
+                          tooltip: trn(a.loginId),
                           selected: _id.text.trim().toLowerCase() == a.loginId.toLowerCase(),
                           showCheckmark: false,
                           onPressed: _loading || (otp && _otpSent) ? null : () => setState(() => _id.text = a.loginId),
@@ -332,7 +333,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onSubmitted: (_) => _loading ? null : _primary(),
                     decoration: _dec('รหัสผ่าน', NxI.password).copyWith(
                       suffixIcon: IconButton(
-                        tooltip: _obscure ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน',
+                        tooltip: trn(_obscure ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน'),
                         icon: Icon(_obscure ? NxI.eye : NxI.eyeOff),
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
@@ -354,7 +355,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (!otp)
                   Align(
                     alignment: Alignment.centerRight,
-                    child: TextButton(onPressed: _loading ? null : _forgot, child: const Text('ลืมรหัสผ่าน?')),
+                    child: TextButton(onPressed: _loading ? null : _forgot, child: Text(tr('ลืมรหัสผ่าน?'))),
                   ),
                 if (otp && _otpSent)
                   Row(
@@ -362,7 +363,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       TextButton(
                         onPressed: _loading ? null : () => setState(() => _otpSent = false),
-                        child: Text(sms ? 'เปลี่ยนเบอร์' : 'เปลี่ยนอีเมล'),
+                        child: Text(tr(sms ? 'เปลี่ยนเบอร์' : 'เปลี่ยนอีเมล')),
                       ),
                       TextButton(
                         onPressed: _loading
@@ -371,17 +372,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                 setState(() => _otpSent = false);
                                 _primary();
                               },
-                        child: const Text('ส่งรหัสอีกครั้ง'),
+                        child: Text(tr('ส่งรหัสอีกครั้ง')),
                       ),
                     ],
                   ),
                 if (config.authLinkBusy)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 8),
                     child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                       SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                       SizedBox(width: 10),
-                      Text('กำลังเข้าสู่ระบบด้วย LINE…'),
+                      Text(tr('กำลังเข้าสู่ระบบด้วย LINE…')),
                     ]),
                   ),
                 if ((_error ?? config.authLinkError) != null)
@@ -393,7 +394,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Icon(NxI.warningCircle, color: cs.onErrorContainer, size: 20),
                         const SizedBox(width: 8),
-                        Expanded(child: Text((_error ?? config.authLinkError)!, style: TextStyle(color: cs.onErrorContainer))),
+                        Expanded(child: Text(tr((_error ?? config.authLinkError)!), style: TextStyle(color: cs.onErrorContainer))),
                       ],
                     ),
                   ),
@@ -406,7 +407,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Expanded(child: Divider()),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('หรือเข้าสู่ระบบด้วย', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                        child: Text(tr('หรือเข้าสู่ระบบด้วย'), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                       ),
                       const Expanded(child: Divider()),
                     ],
@@ -432,7 +433,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             background: cs.surface,
                             foreground: cs.onSurface,
                             border: cs.outlineVariant,
-                            leading: const Text('G', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: Color(0xFF4285F4))),
+                            leading: Text(tr('G'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: Color(0xFF4285F4))),
                             onPressed: _loading ? null : _google,
                           ),
                         ),
@@ -443,17 +444,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('ยังไม่มีบัญชี?', style: theme.textTheme.bodyMedium),
+                    Text(tr('ยังไม่มีบัญชี?'), style: theme.textTheme.bodyMedium),
                     TextButton(
                       onPressed: _loading ? null : _openRegister,
-                      child: const Text('สมัครสมาชิก'),
+                      child: Text(tr('สมัครสมาชิก')),
                     ),
                   ],
                 ),
                 if (kDebugMode)
                   TextButton(
                     onPressed: () => nxPush<void>(context, const FieldGalleryScreen()),
-                    child: const Text('พรีวิว UI Type'),
+                    child: Text(tr('พรีวิว UI Type')),
                   ),
               ],
             ),
@@ -500,7 +501,7 @@ class _SocialButton extends StatelessWidget {
           children: [
             leading ?? Icon(icon, size: 20),
             const SizedBox(width: 8),
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(tr(label), style: const TextStyle(fontWeight: FontWeight.w700)),
           ],
         ),
       ),

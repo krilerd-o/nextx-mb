@@ -20,6 +20,7 @@ import '../crm/entity_create_screen.dart';
 import '../crm/entity_detail_parts.dart';
 import 'visit_check_sheet.dart';
 import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
   const ActivityDetailScreen({super.key, required this.row});
@@ -118,7 +119,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
       if (mounted)
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -126,18 +127,18 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ทำซ้ำกิจกรรมนี้?'),
+        title: Text(tr('ทำซ้ำกิจกรรมนี้?')),
         content: Text(
-          'สร้างนัดใหม่จาก "${entityTitle(_row, module: 'activity')}" (ไม่รวมการเช็คอิน)',
+          tr('สร้างนัดใหม่จาก "${entityTitle(_row, module: 'activity')}" (ไม่รวมการเช็คอิน)'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ยกเลิก'),
+            child: Text(tr('ยกเลิก')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ทำซ้ำ'),
+            child: Text(tr('ทำซ้ำ')),
           ),
         ],
       ),
@@ -150,14 +151,14 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
       );
       if (!mounted || newId.isEmpty) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ทำซ้ำแล้ว — เปิดกิจกรรมใหม่')),
+        SnackBar(content: Text(tr('ทำซ้ำแล้ว — เปิดกิจกรรมใหม่'))),
       );
       nxPush<void>(context, ActivityDetailScreen(row: {'id': newId}));
     } catch (e) {
       if (mounted)
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -165,16 +166,16 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ลบกิจกรรมนี้?'),
-        content: const Text('กด "เลิกทำ" ได้ภายใน 5 วินาที'),
+        title: Text(tr('ลบกิจกรรมนี้?')),
+        content: Text(tr('กด "เลิกทำ" ได้ภายใน 5 วินาที')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ยกเลิก'),
+            child: Text(tr('ยกเลิก')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ลบ'),
+            child: Text(tr('ลบ')),
           ),
         ],
       ),
@@ -201,7 +202,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
       await api.postEntityComment('activity', _id, '', attachments: atts);
       await _loadRecord();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -270,7 +271,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('RSVP: $response')));
+        ).showSnackBar(SnackBar(content: Text(tr('RSVP: $response'))));
       }
     } catch (e) {
       if (mounted) setState(() => _error = e);
@@ -309,7 +310,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         title: entityTitle(row, module: 'activity'),
         actions: [
           IconButton(
-            tooltip: 'แก้ไข',
+            tooltip: tr('แก้ไข'),
             icon: const Icon(NxI.pencilSimple),
             onPressed: _edit,
           ),
@@ -344,7 +345,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    entityTitle(row, module: 'activity'),
+                    tr(entityTitle(row, module: 'activity')),
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -405,7 +406,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
             if (_tab == 0) ...[
               const SizedBox(height: 16),
               Text(
-                'การเยี่ยม',
+                tr('การเยี่ยม'),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -448,7 +449,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                       )
                     else
                       Text(
-                        'เยี่ยมเสร็จแล้ว',
+                        tr('เยี่ยมเสร็จแล้ว'),
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: const Color(0xFF16A34A),
                         ),
@@ -461,19 +462,19 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      'รูปถ่าย (${photos.length})',
+                      tr('รูปถ่าย (${photos.length})'),
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                   IconButton(
-                    tooltip: 'ถ่ายรูป',
+                    tooltip: tr('ถ่ายรูป'),
                     icon: const Icon(NxI.camera),
                     onPressed: _busy ? null : () => _pickPhotos(camera: true),
                   ),
                   IconButton(
-                    tooltip: 'แนบรูป',
+                    tooltip: tr('แนบรูป'),
                     icon: const Icon(NxI.images),
                     onPressed: _busy ? null : () => _pickPhotos(camera: false),
                   ),
@@ -481,7 +482,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               ),
               if (photos.isEmpty)
                 Text(
-                  'ยังไม่มีรูป',
+                  tr('ยังไม่มีรูป'),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: cs.onSurfaceVariant,
                   ),
@@ -500,13 +501,13 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  formatApiError(_error!),
+                  tr(formatApiError(_error!)),
                   style: TextStyle(color: cs.error),
                 ),
               ],
               const SizedBox(height: 20),
               Text(
-                'ตอบรับนัด',
+                tr('ตอบรับนัด'),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -517,7 +518,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 children: [
                   for (final e in _rsvpLabels.entries)
                     ActionChip(
-                      label: Text(e.value),
+                      label: Text(tr(e.value)),
                       onPressed: _busy ? null : () => _rsvp(e.key),
                     ),
                 ],
@@ -537,7 +538,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         children: [
           Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
-          Expanded(child: Text(text, style: theme.textTheme.bodyMedium)),
+          Expanded(child: Text(tr(text), style: theme.textTheme.bodyMedium)),
         ],
       ),
     );
@@ -588,9 +589,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: theme.textTheme.titleSmall),
+                  Text(tr(title), style: theme.textTheme.titleSmall),
                   Text(
-                    value,
+                    tr(value),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: done ? null : cs.onSurfaceVariant,
                     ),

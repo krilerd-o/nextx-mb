@@ -15,6 +15,7 @@ import '../calendar/activity_detail_screen.dart';
 import '../crm/entity_detail_screen.dart';
 import 'job_inspection_screen.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class MyJobsScreen extends StatefulWidget {
   const MyJobsScreen({super.key});
@@ -47,7 +48,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
         load: () => context.read<AppConfig>().apiClient.getMyJobs(limit: 100),
         skeleton: const NxSkeletonList(),
         isEmpty: (list) => list.isEmpty,
-        empty: const Center(child: Text('ไม่มีงานที่ได้รับมอบหมาย')),
+        empty: Center(child: Text(tr('ไม่มีงานที่ได้รับมอบหมาย'))),
         builder: (context, all) {
           final needle = _query.trim().toLowerCase();
           final list = needle.isEmpty
@@ -67,7 +68,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: TextField(
                     decoration: InputDecoration(
-                      hintText: 'ค้นหางาน (${all.length})',
+                      hintText: tr('ค้นหางาน (${all.length})'),
                       prefixIcon: const Icon(NxI.magnifyingGlass),
                       filled: true,
                       isDense: true,
@@ -94,7 +95,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
                   children: [
                     if (strId(row['related_activity_id']).isNotEmpty)
                       IconButton(
-                        tooltip: 'เช็คอิน',
+                        tooltip: tr('เช็คอิน'),
                         icon: const Icon(NxI.clock),
                         onPressed: () {
                           nxPush<void>(

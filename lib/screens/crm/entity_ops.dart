@@ -22,6 +22,7 @@ import 'entity_create_screen.dart';
 import 'order_summary_screen.dart';
 import '../../core/error_reporting.dart';
 import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 typedef OpenEntityFn = void Function(String module, String id, {Map<String, dynamic>? row});
 
@@ -211,11 +212,11 @@ class _QuotationLinesPanelState extends State<QuotationLinesPanel> {
       final saved = await context.read<AppConfig>().apiClient.putQuotationLines(widget.id, payload);
       if (mounted) {
         setState(() => _lines = saved.isEmpty ? _lines : saved.map((e) => Map<String, dynamic>.from(e)).toList());
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกบรรทัดแล้ว')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกบรรทัดแล้ว'))));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -313,7 +314,7 @@ class _QuoteLineEditor extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleSmall),
+            Text(tr(title), style: Theme.of(context).textTheme.titleSmall),
             if (canEdit)
               Wrap(
                 spacing: 8,
@@ -321,19 +322,19 @@ class _QuoteLineEditor extends StatelessWidget {
                   TextButton.icon(
                     onPressed: () => _pickCatalog(context, 'product'),
                     icon: const Icon(NxI.package, size: 18),
-                    label: const Text('เลือกสินค้า'),
+                    label: Text(tr('เลือกสินค้า')),
                   ),
                   TextButton.icon(
                     onPressed: () => _pickCatalog(context, 'service'),
                     icon: const Icon(NxI.wrench, size: 18),
-                    label: const Text('เลือกบริการ'),
+                    label: Text(tr('เลือกบริการ')),
                   ),
                 ],
               ),
             TextFormField(
               enabled: canEdit,
               initialValue: line['description']?.toString() ?? title,
-              decoration: const InputDecoration(labelText: 'รายละเอียด'),
+              decoration: InputDecoration(labelText: tr('รายละเอียด')),
               onChanged: (v) => onChanged({...line, 'description': v}),
             ),
             Row(
@@ -342,7 +343,7 @@ class _QuoteLineEditor extends StatelessWidget {
                   child: TextFormField(
                     enabled: canEdit,
                     initialValue: '${line['quantity'] ?? line['qty'] ?? ''}',
-                    decoration: const InputDecoration(labelText: 'จำนวน'),
+                    decoration: InputDecoration(labelText: tr('จำนวน')),
                     keyboardType: TextInputType.number,
                     onChanged: (v) => onChanged({...line, 'quantity': v, 'qty': v}),
                   ),
@@ -352,7 +353,7 @@ class _QuoteLineEditor extends StatelessWidget {
                   child: TextFormField(
                     enabled: canEdit,
                     initialValue: '${line['unit_price'] ?? ''}',
-                    decoration: const InputDecoration(labelText: 'ราคา'),
+                    decoration: InputDecoration(labelText: tr('ราคา')),
                     keyboardType: TextInputType.number,
                     onChanged: (v) => onChanged({...line, 'unit_price': v}),
                   ),
@@ -382,14 +383,14 @@ class QuotationConvertBar extends StatelessWidget {
     try {
       final data = await fn(context.read<AppConfig>().apiClient);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(ok))));
       if (module.isNotEmpty) {
         final nextId = pickRecordId(data, idKeys);
         if (nextId.isNotEmpty) onOpen(module, nextId, row: data);
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -404,14 +405,14 @@ class QuotationConvertBar extends StatelessWidget {
             try {
               final data = await context.read<AppConfig>().apiClient.convertQuotationToOrder(id);
               if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('แปลงเป็นออเดอร์แล้ว')));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('แปลงเป็นออเดอร์แล้ว'))));
               final orderId = pickRecordId(data, const ['commercial_order_id', 'order_id', 'id']);
               if (orderId.isNotEmpty) {
                 nxPush<void>(context, OrderSummaryScreen(orderId: orderId, preview: data));
               }
             } catch (e) {
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
               }
             }
           },
@@ -429,7 +430,7 @@ class QuotationConvertBar extends StatelessWidget {
             minimumSize: const Size.fromHeight(48),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
           ),
-          child: const Text('แปลงเป็นสัญญาบริการ'),
+          child: Text(tr('แปลงเป็นสัญญาบริการ')),
         ),
       ],
     );
@@ -486,11 +487,11 @@ class _DealLinesPanelState extends State<DealLinesPanel> {
       final saved = await context.read<AppConfig>().apiClient.putDealLines(widget.id, payload);
       if (mounted) {
         setState(() => _lines = saved.isEmpty ? _lines : saved.map((e) => Map<String, dynamic>.from(e)).toList());
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกบรรทัดดีลแล้ว')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกบรรทัดดีลแล้ว'))));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -585,7 +586,7 @@ class _DealContactsPanelState extends State<DealContactsPanel> {
       if (mounted) setState(() => _items = saved.isEmpty ? _items : saved);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -597,7 +598,7 @@ class _DealContactsPanelState extends State<DealContactsPanel> {
       loading: _loading,
       empty: _items.isEmpty,
       actions: widget.canEdit
-          ? [TextButton.icon(onPressed: () => _add(context), icon: const Icon(NxI.plus), label: const Text('เพิ่ม'))]
+          ? [TextButton.icon(onPressed: () => _add(context), icon: const Icon(NxI.plus), label: Text(tr('เพิ่ม')))]
           : const [],
       children: [
         for (final row in _items)
@@ -627,12 +628,12 @@ class DealQuoteBar extends StatelessWidget {
         try {
           final data = await context.read<AppConfig>().apiClient.createDealQuotation(id);
           if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('สร้างใบเสนอราคาแล้ว')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างใบเสนอราคาแล้ว'))));
           final nextId = pickRecordId(data, const ['quotation_id', 'id']);
           if (nextId.isNotEmpty) onOpen('quotation', nextId, row: data);
         } catch (e) {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
           }
         }
       },
@@ -702,16 +703,16 @@ class _DealPrimaryQuoteBarState extends State<DealPrimaryQuoteBar> {
                       try {
                         await context.read<AppConfig>().apiClient.setDealPrimaryQuotation(widget.id, qid);
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ตั้งเป็นใบเสนอหลักแล้ว')));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ตั้งเป็นใบเสนอหลักแล้ว'))));
                           _load();
                         }
                       } catch (e) {
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                         }
                       }
                     },
-                    child: const Text('ตั้งหลัก'),
+                    child: Text(tr('ตั้งหลัก')),
                   )
                 : null,
           ),
@@ -735,9 +736,9 @@ class QuotationMailApprovalBar extends StatelessWidget {
           controller: scroll,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
           children: [
-            Text('ส่งอีเมลใบเสนอราคา', style: Theme.of(ctx).textTheme.titleMedium),
-            TextField(controller: to, decoration: const InputDecoration(labelText: 'ถึง (อีเมล)')),
-            TextField(controller: message, decoration: const InputDecoration(labelText: 'ข้อความ'), maxLines: 3),
+            Text(tr('ส่งอีเมลใบเสนอราคา'), style: Theme.of(ctx).textTheme.titleMedium),
+            TextField(controller: to, decoration: InputDecoration(labelText: tr('ถึง (อีเมล)'))),
+            TextField(controller: message, decoration: InputDecoration(labelText: tr('ข้อความ')), maxLines: 3),
             const SizedBox(height: 12),
             NxHeroCta(
               label: 'ส่ง',
@@ -755,11 +756,11 @@ class QuotationMailApprovalBar extends StatelessWidget {
     try {
       await context.read<AppConfig>().apiClient.sendQuotationEmail(id, to: to.text.trim(), message: message.text.trim());
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ส่งอีเมลแล้ว')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ส่งอีเมลแล้ว'))));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       to.dispose();
@@ -774,7 +775,7 @@ class QuotationMailApprovalBar extends StatelessWidget {
         OutlinedButton(
           onPressed: () => _email(context),
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          child: const Text('ส่งอีเมลใบเสนอราคา'),
+          child: Text(tr('ส่งอีเมลใบเสนอราคา')),
         ),
         const SizedBox(height: 8),
         OutlinedButton(
@@ -782,16 +783,16 @@ class QuotationMailApprovalBar extends StatelessWidget {
             try {
               await context.read<AppConfig>().apiClient.submitQuotationApproval(id);
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ส่งขออนุมัติแล้ว')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ส่งขออนุมัติแล้ว'))));
               }
             } catch (e) {
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
               }
             }
           },
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          child: const Text('ส่งขออนุมัติ'),
+          child: Text(tr('ส่งขออนุมัติ')),
         ),
         const SizedBox(height: 8),
         Row(
@@ -802,15 +803,15 @@ class QuotationMailApprovalBar extends StatelessWidget {
                   try {
                     await context.read<AppConfig>().apiClient.approveQuotation(id);
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('อนุมัติแล้ว')));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('อนุมัติแล้ว'))));
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                     }
                   }
                 },
-                child: const Text('อนุมัติ'),
+                child: Text(tr('อนุมัติ')),
               ),
             ),
             const SizedBox(width: 8),
@@ -820,15 +821,15 @@ class QuotationMailApprovalBar extends StatelessWidget {
                   try {
                     await context.read<AppConfig>().apiClient.rejectQuotation(id);
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ปฏิเสธแล้ว')));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ปฏิเสธแล้ว'))));
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                     }
                   }
                 },
-                child: const Text('ปฏิเสธ'),
+                child: Text(tr('ปฏิเสธ')),
               ),
             ),
           ],
@@ -839,17 +840,17 @@ class QuotationMailApprovalBar extends StatelessWidget {
             try {
               final data = await context.read<AppConfig>().apiClient.reviseQuotation(id);
               if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('สร้างฉบับแก้ไขแล้ว')));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างฉบับแก้ไขแล้ว'))));
               final nextId = pickRecordId(data, const ['quotation_id', 'id', 'new_id']);
               if (nextId.isNotEmpty) onOpen('quotation', nextId, row: data);
             } catch (e) {
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
               }
             }
           },
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          child: const Text('สร้างฉบับแก้ไข'),
+          child: Text(tr('สร้างฉบับแก้ไข')),
         ),
       ],
     );
@@ -881,7 +882,7 @@ class LeadConvertBar extends StatelessWidget {
       preview = await context.read<AppConfig>().apiClient.previewLeadConvert(id);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
       return;
     }
@@ -904,19 +905,19 @@ class LeadConvertBar extends StatelessWidget {
           controller: scroll,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
           children: [
-            Text('แปลงลีด', style: Theme.of(ctx).textTheme.titleMedium),
+            Text(tr('แปลงลีด'), style: Theme.of(ctx).textTheme.titleMedium),
             const SizedBox(height: 8),
-            Text(preview['lead_name']?.toString() ?? entityTitle(row, module: 'lead')),
-            if (defaults['account_name'] != null) Text('บัญชี: ${defaults['account_name']}'),
+            Text(tr(preview['lead_name']?.toString() ?? entityTitle(row, module: 'lead'))),
+            if (defaults['account_name'] != null) Text(tr('บัญชี: ${defaults['account_name']}')),
             if (defaults['contact_firstname'] != null || defaults['contact_lastname'] != null)
-              Text('ผู้ติดต่อ: ${defaults['contact_firstname'] ?? ''} ${defaults['contact_lastname'] ?? ''}'),
+              Text(tr('ผู้ติดต่อ: ${defaults['contact_firstname'] ?? ''} ${defaults['contact_lastname'] ?? ''}')),
             const SizedBox(height: 8),
             StatefulBuilder(
               builder: (context, setLocal) {
                 return Column(
                   children: [
                     SwitchListTile(
-                      title: const Text('สร้างบัญชีลูกค้า'),
+                      title: Text(tr('สร้างบัญชีลูกค้า')),
                       value: createAccount,
                       onChanged: (v) => setLocal(() {
                         createAccount = v;
@@ -924,7 +925,7 @@ class LeadConvertBar extends StatelessWidget {
                       }),
                     ),
                     SwitchListTile(
-                      title: const Text('สร้างผู้ติดต่อ'),
+                      title: Text(tr('สร้างผู้ติดต่อ')),
                       value: createContact,
                       onChanged: (v) => setLocal(() {
                         createContact = v;
@@ -932,20 +933,20 @@ class LeadConvertBar extends StatelessWidget {
                       }),
                     ),
                     SwitchListTile(
-                      title: const Text('สร้างดีล'),
+                      title: Text(tr('สร้างดีล')),
                       value: createDeal,
                       onChanged: (v) => setLocal(() => createDeal = v),
                     ),
                     SwitchListTile(
-                      title: const Text('คัดลอกประวัติ'),
+                      title: Text(tr('คัดลอกประวัติ')),
                       value: copyHistory,
                       onChanged: (v) => setLocal(() => copyHistory = v),
                     ),
                     if (dupAccounts.isNotEmpty) ...[
-                      const Align(alignment: Alignment.centerLeft, child: Text('บัญชีที่อาจซ้ำ')),
+                      Align(alignment: Alignment.centerLeft, child: Text(tr('บัญชีที่อาจซ้ำ'))),
                       for (final a in dupAccounts)
                         RadioListTile<String>(
-                          title: Text(entityTitle(a, module: 'account')),
+                          title: Text(tr(entityTitle(a, module: 'account'))),
                           value: strId(a['id']),
                           groupValue: linkAccountId,
                           onChanged: (v) => setLocal(() {
@@ -955,10 +956,10 @@ class LeadConvertBar extends StatelessWidget {
                         ),
                     ],
                     if (dupContacts.isNotEmpty) ...[
-                      const Align(alignment: Alignment.centerLeft, child: Text('ผู้ติดต่อที่อาจซ้ำ')),
+                      Align(alignment: Alignment.centerLeft, child: Text(tr('ผู้ติดต่อที่อาจซ้ำ'))),
                       for (final c in dupContacts)
                         RadioListTile<String>(
-                          title: Text(entityTitle(c, module: 'contact')),
+                          title: Text(tr(entityTitle(c, module: 'contact'))),
                           value: strId(c['id']),
                           groupValue: linkContactId,
                           onChanged: (v) => setLocal(() {
@@ -1014,7 +1015,7 @@ class LeadConvertBar extends StatelessWidget {
         ...defaults,
       });
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('แปลงลีดแล้ว')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('แปลงลีดแล้ว'))));
       final accountId = pickRecordId(data, const ['account_id']);
       final contactId = pickRecordId(data, const ['contact_id']);
       final dealId = pickRecordId(data, const ['deal_id']);
@@ -1025,7 +1026,7 @@ class LeadConvertBar extends StatelessWidget {
             controller: scroll,
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             children: [
-              Text('เปิดรายการที่แปลงแล้ว', style: Theme.of(ctx).textTheme.titleMedium),
+              Text(tr('เปิดรายการที่แปลงแล้ว'), style: Theme.of(ctx).textTheme.titleMedium),
               if (accountId.isNotEmpty)
                 DenseCardTile(
                   title: 'บัญชีลูกค้า',
@@ -1056,7 +1057,7 @@ class LeadConvertBar extends StatelessWidget {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -1066,7 +1067,7 @@ class LeadConvertBar extends StatelessWidget {
     if (_converted) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text('ลีดนี้แปลงแล้ว', style: Theme.of(context).textTheme.bodyMedium),
+        child: Text(tr('ลีดนี้แปลงแล้ว'), style: Theme.of(context).textTheme.bodyMedium),
       );
     }
     return NxHeroCta(label: 'แปลงลีด', onPressed: () => _openPreview(context));
@@ -1130,11 +1131,11 @@ class _InspectionLinesPanelState extends State<InspectionLinesPanel> {
       final saved = await context.read<AppConfig>().apiClient.putInspectionLines(widget.id, payload);
       if (mounted) {
         setState(() => _lines = saved.isEmpty ? _lines : saved.map((e) => Map<String, dynamic>.from(e)).toList());
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกผลตรวจแล้ว')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกผลตรวจแล้ว'))));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1162,11 +1163,11 @@ class _InspectionLinesPanelState extends State<InspectionLinesPanel> {
             await openPdfBytes(bytes, 'inspection-${widget.id}.pdf');
           } catch (e) {
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
             }
           }
         },
-        child: const Text('เปิด PDF'),
+        child: Text(tr('เปิด PDF')),
       ),
       children: [
         for (var i = 0; i < _lines.length; i++)
@@ -1180,17 +1181,17 @@ class _InspectionLinesPanelState extends State<InspectionLinesPanel> {
                   TextFormField(
                     enabled: widget.canEdit,
                     initialValue: _lines[i]['item_label']?.toString() ?? _lines[i]['label']?.toString() ?? '',
-                    decoration: const InputDecoration(labelText: 'รายการ'),
+                    decoration: InputDecoration(labelText: tr('รายการ')),
                     onChanged: (v) => _lines[i]['item_label'] = v,
                   ),
                   DropdownButtonFormField<String>(
                     value: _inspectionResult(_lines[i]),
-                    decoration: const InputDecoration(labelText: 'ผลตรวจ'),
-                    items: const [
-                      DropdownMenuItem(value: '', child: Text('—')),
-                      DropdownMenuItem(value: 'pass', child: Text('Pass')),
-                      DropdownMenuItem(value: 'fail', child: Text('Fail')),
-                      DropdownMenuItem(value: 'na', child: Text('N/A')),
+                    decoration: InputDecoration(labelText: tr('ผลตรวจ')),
+                    items: [
+                      DropdownMenuItem(value: '', child: Text(tr('—'))),
+                      DropdownMenuItem(value: 'pass', child: Text(tr('Pass'))),
+                      DropdownMenuItem(value: 'fail', child: Text(tr('Fail'))),
+                      DropdownMenuItem(value: 'na', child: Text(tr('N/A'))),
                     ],
                     onChanged: widget.canEdit
                         ? (v) => setState(() {
@@ -1202,7 +1203,7 @@ class _InspectionLinesPanelState extends State<InspectionLinesPanel> {
                   TextFormField(
                     enabled: widget.canEdit,
                     initialValue: _lines[i]['remark']?.toString() ?? '',
-                    decoration: const InputDecoration(labelText: 'หมายเหตุ'),
+                    decoration: InputDecoration(labelText: tr('หมายเหตุ')),
                     onChanged: (v) => _lines[i]['remark'] = v,
                   ),
                 ],
@@ -1302,7 +1303,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
       if (mounted) setState(() => _skills = saved.isEmpty ? _skills : saved);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1315,7 +1316,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('งานสนาม', style: theme.textTheme.titleMedium),
+        Text(tr('งานสนาม'), style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         if (_sla.isNotEmpty)
           Padding(
@@ -1326,9 +1327,9 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
               child: Padding(
                 padding: const EdgeInsets.all(10),
                 child: Text(
-                  _sla['overdue'] == true || _sla['is_overdue'] == true
+                  tr(_sla['overdue'] == true || _sla['is_overdue'] == true
                       ? 'SLA เกินกำหนด${_sla['message'] != null ? ' · ${_sla['message']}' : ''}'
-                      : (_sla['remaining_text'] ?? _sla['message'] ?? _sla['status'] ?? 'SLA').toString(),
+                      : (_sla['remaining_text'] ?? _sla['message'] ?? _sla['status'] ?? 'SLA').toString()),
                 ),
               ),
             ),
@@ -1336,7 +1337,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
         if (_mismatch != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text(_mismatch!, style: TextStyle(color: theme.colorScheme.error)),
+            child: Text(tr(_mismatch!), style: TextStyle(color: theme.colorScheme.error)),
           ),
         Wrap(
           spacing: 8,
@@ -1349,17 +1350,17 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
                   await openPdfBytes(bytes, 'job-${widget.id}.pdf');
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                   }
                 }
               },
               icon: const Icon(NxI.filePdf),
-              label: const Text('PDF ใบสั่งงาน'),
+              label: Text(tr('PDF ใบสั่งงาน')),
             ),
             OutlinedButton.icon(
               onPressed: _busy ? null : () => _schedule(context),
               icon: const Icon(NxI.calendarBlank),
-              label: const Text('นัดหมาย'),
+              label: Text(tr('นัดหมาย')),
             ),
             if (strId(widget.row['related_activity_id']).isNotEmpty)
               OutlinedButton.icon(
@@ -1370,7 +1371,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
                   );
                 },
                 icon: const Icon(NxI.clock),
-                label: const Text('เช็คอิน'),
+                label: Text(tr('เช็คอิน')),
               ),
             if (_workspace.isNotEmpty)
               OutlinedButton.icon(
@@ -1381,7 +1382,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
                   nxPush<void>(context, WorkspaceBoardScreen(board: {'id': boardId, 'name': item['board_name'] ?? 'บอร์ด'}));
                 },
                 icon: const Icon(NxI.kanban),
-                label: const Text('เปิดบอร์ด'),
+                label: Text(tr('เปิดบอร์ด')),
               ),
             OutlinedButton(
               onPressed: _busy
@@ -1393,18 +1394,18 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
                         if (mounted) setState(() => _matches = extractMapList(data));
                       } catch (e) {
                         if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                       } finally {
                         if (mounted) setState(() => _busy = false);
                       }
                     },
-              child: const Text('ช่างที่ตรงทักษะ'),
+              child: Text(tr('ช่างที่ตรงทักษะ')),
             ),
           ],
         ),
         const SizedBox(height: 12),
         if (_loading) const LinearProgressIndicator(minHeight: 2),
-        Text('ทักษะงาน', style: theme.textTheme.titleSmall),
+        Text(tr('ทักษะงาน'), style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
@@ -1412,7 +1413,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
           children: [
             for (final skill in _catalog)
               FilterChip(
-                label: Text(entityTitle(skill, module: 'skill')),
+                label: Text(tr(entityTitle(skill, module: 'skill'))),
                 selected: _skillIds.contains(strId(skill['id'])),
                 onSelected: widget.canEdit && !_busy
                     ? (on) {
@@ -1429,7 +1430,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
               ),
             if (_catalog.isEmpty && _skills.isNotEmpty)
               for (final s in _skills)
-                Chip(label: Text(s['skill_name']?.toString() ?? s['skill_code']?.toString() ?? 'ทักษะ')),
+                Chip(label: Text(tr(s['skill_name']?.toString() ?? s['skill_code']?.toString() ?? 'ทักษะ'))),
           ],
         ),
         if (_matches.isNotEmpty) ...[
@@ -1442,10 +1443,10 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
             ),
         ],
         const SizedBox(height: 12),
-        Text('อะไหล่', style: theme.textTheme.titleSmall),
+        Text(tr('อะไหล่'), style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
         if (_parts.isEmpty)
-          Text('ยังไม่มีอะไหล่', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text(tr('ยังไม่มีอะไหล่'), style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         for (final part in _parts)
           DenseCardTile(
             title: part['description']?.toString() ?? part['product_name']?.toString() ?? 'อะไหล่',
@@ -1461,7 +1462,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
                         await _load();
                       } catch (e) {
                         if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                       }
                     },
                   )
@@ -1471,7 +1472,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
           TextButton.icon(
             onPressed: () => _addPart(context),
             icon: const Icon(NxI.plus),
-            label: const Text('เพิ่มอะไหล่'),
+            label: Text(tr('เพิ่มอะไหล่')),
           ),
       ],
     );
@@ -1492,14 +1493,14 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
     try {
       final data = await context.read<AppConfig>().apiClient.scheduleJob(widget.id, when: when.toIso8601String());
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('สร้างนัดหมายแล้ว')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างนัดหมายแล้ว'))));
       final actId = pickRecordId(data, const ['activity_id', 'related_activity_id']);
       if (actId.isNotEmpty) {
         nxPush<void>(context, ActivityByIdLoader(id: actId));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1523,11 +1524,11 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
       ErrorReporting.report(e, s);
     }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('มอบหมายให้ ${user['display_name'] ?? user['name'] ?? uid}')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('มอบหมายให้ ${user['display_name'] ?? user['name'] ?? uid}'))));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1540,21 +1541,21 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('เพิ่มอะไหล่'),
+        title: Text(tr('เพิ่มอะไหล่')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: desc, decoration: const InputDecoration(labelText: 'รายละเอียด')),
+            TextField(controller: desc, decoration: InputDecoration(labelText: tr('รายละเอียด'))),
             TextField(
               controller: qty,
-              decoration: const InputDecoration(labelText: 'จำนวน'),
+              decoration: InputDecoration(labelText: tr('จำนวน')),
               keyboardType: TextInputType.number,
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('บันทึก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('บันทึก'))),
         ],
       ),
     );
@@ -1571,7 +1572,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
       await _load();
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       desc.dispose();
@@ -1595,7 +1596,7 @@ class AssetGenerateJobsBar extends StatelessWidget {
           if (!context.mounted) return;
           final created = extractMapList(data['created'] ?? data);
           final count = data['count'] ?? created.length;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('สร้างใบสั่งงาน $count รายการ')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างใบสั่งงาน $count รายการ'))));
           if (created.isEmpty) return;
           await showNxLiftSheet<void>(
             context: context,
@@ -1604,7 +1605,7 @@ class AssetGenerateJobsBar extends StatelessWidget {
                 controller: scroll,
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                 children: [
-                  Text('งานที่สร้าง', style: Theme.of(ctx).textTheme.titleMedium),
+                  Text(tr('งานที่สร้าง'), style: Theme.of(ctx).textTheme.titleMedium),
                   for (final job in created)
                     DenseCardTile(
                       title: entityTitle(job, module: 'job'),
@@ -1620,7 +1621,7 @@ class AssetGenerateJobsBar extends StatelessWidget {
           );
         } catch (e) {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
           }
         }
       },
@@ -1648,12 +1649,12 @@ class CreateJobFromParentBar extends StatelessWidget {
         try {
           final data = await create(context.read<AppConfig>().apiClient);
           if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$labelแล้ว')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('$labelแล้ว'))));
           final jobId = pickRecordId(data, const ['job_id', 'id']);
           if (jobId.isNotEmpty) onOpen('job', jobId, row: data);
         } catch (e) {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
           }
         }
       },
@@ -1702,21 +1703,21 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('เพิ่ม manday'),
+        title: Text(tr('เพิ่ม manday')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: qty,
-              decoration: const InputDecoration(labelText: 'จำนวน'),
+              decoration: InputDecoration(labelText: tr('จำนวน')),
               keyboardType: TextInputType.number,
             ),
-            TextField(controller: note, decoration: const InputDecoration(labelText: 'หมายเหตุ')),
+            TextField(controller: note, decoration: InputDecoration(labelText: tr('หมายเหตุ'))),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('บันทึก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('บันทึก'))),
         ],
       ),
     );
@@ -1733,7 +1734,7 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
       await _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       qty.dispose();
@@ -1748,7 +1749,7 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ปรับ manday'),
+        title: Text(tr('ปรับ manday')),
         content: StatefulBuilder(
           builder: (context, setLocal) {
             return Column(
@@ -1756,25 +1757,25 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
               children: [
                 DropdownButtonFormField<String>(
                   value: direction,
-                  items: const [
-                    DropdownMenuItem(value: 'debit', child: Text('หัก')),
-                    DropdownMenuItem(value: 'credit', child: Text('เพิ่ม')),
+                  items: [
+                    DropdownMenuItem(value: 'debit', child: Text(tr('หัก'))),
+                    DropdownMenuItem(value: 'credit', child: Text(tr('เพิ่ม'))),
                   ],
                   onChanged: (v) => setLocal(() => direction = v ?? 'debit'),
                 ),
                 TextField(
                   controller: qty,
-                  decoration: const InputDecoration(labelText: 'จำนวน'),
+                  decoration: InputDecoration(labelText: tr('จำนวน')),
                   keyboardType: TextInputType.number,
                 ),
-                TextField(controller: note, decoration: const InputDecoration(labelText: 'หมายเหตุ')),
+                TextField(controller: note, decoration: InputDecoration(labelText: tr('หมายเหตุ'))),
               ],
             );
           },
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('บันทึก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('บันทึก'))),
         ],
       ),
     );
@@ -1792,7 +1793,7 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
       await _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       qty.dispose();
@@ -1807,11 +1808,11 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
       title: 'สมุด manday',
       loading: _loading,
       empty: _rows.isEmpty,
-      trailing: remain != null ? Text('คงเหลือ $remain ชม.') : null,
+      trailing: remain != null ? Text(tr('คงเหลือ $remain ชม.')) : null,
       actions: widget.canEdit
           ? [
-              TextButton(onPressed: _add, child: const Text('เพิ่ม')),
-              TextButton(onPressed: _adjust, child: const Text('ปรับ')),
+              TextButton(onPressed: _add, child: Text(tr('เพิ่ม'))),
+              TextButton(onPressed: _adjust, child: Text(tr('ปรับ'))),
             ]
           : const [],
       children: [
@@ -1881,21 +1882,21 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ขอ manday'),
+        title: Text(tr('ขอ manday')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: qty,
-              decoration: const InputDecoration(labelText: 'จำนวน'),
+              decoration: InputDecoration(labelText: tr('จำนวน')),
               keyboardType: TextInputType.number,
             ),
-            TextField(controller: note, decoration: const InputDecoration(labelText: 'หมายเหตุ')),
+            TextField(controller: note, decoration: InputDecoration(labelText: tr('หมายเหตุ'))),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ส่ง')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ส่ง'))),
         ],
       ),
     );
@@ -1912,7 +1913,7 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
       await _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       qty.dispose();
@@ -1927,9 +1928,9 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
       loading: _loading,
       empty: _summary.isEmpty && _requests.isEmpty,
       trailing: _summary['remain_hours'] != null || _summary['md_remain_hours'] != null
-          ? Text('คงเหลือ ${_summary['remain_hours'] ?? _summary['md_remain_hours']} ชม.')
+          ? Text(tr('คงเหลือ ${_summary['remain_hours'] ?? _summary['md_remain_hours']} ชม.'))
           : null,
-      actions: widget.canEdit ? [TextButton(onPressed: _request, child: const Text('ขอ manday'))] : const [],
+      actions: widget.canEdit ? [TextButton(onPressed: _request, child: Text(tr('ขอ manday')))] : const [],
       children: [
         if (_summary.isNotEmpty)
           DenseCardTile(
@@ -1959,11 +1960,11 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
                             await _load();
                           } catch (e) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                             }
                           }
                         },
-                        child: const Text('อนุมัติ'),
+                        child: Text(tr('อนุมัติ')),
                       ),
                       TextButton(
                         onPressed: () async {
@@ -1974,11 +1975,11 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
                             await _load();
                           } catch (e) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                             }
                           }
                         },
-                        child: const Text('ปฏิเสธ'),
+                        child: Text(tr('ปฏิเสธ')),
                       ),
                       TextButton(
                         onPressed: () async {
@@ -1989,11 +1990,11 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
                             await _load();
                           } catch (e) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                             }
                           }
                         },
-                        child: const Text('ยกเลิก'),
+                        child: Text(tr('ยกเลิก')),
                       ),
                     ],
                   )
@@ -2022,11 +2023,11 @@ class CreateActivityFromCaseBar extends StatelessWidget {
           ),
         );
         if (saved == true && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('สร้างนัดหมายแล้ว')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างนัดหมายแล้ว'))));
         }
       },
       style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-      child: const Text('สร้างนัดหมายจากเคส'),
+      child: Text(tr('สร้างนัดหมายจากเคส')),
     );
   }
 }
@@ -2070,17 +2071,17 @@ class _AccountMandayPanelState extends State<AccountMandayPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('เพิ่มพูล manday'),
+        title: Text(tr('เพิ่มพูล manday')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: qty, decoration: const InputDecoration(labelText: 'จำนวน'), keyboardType: TextInputType.number),
-            TextField(controller: note, decoration: const InputDecoration(labelText: 'หมายเหตุ')),
+            TextField(controller: qty, decoration: InputDecoration(labelText: tr('จำนวน')), keyboardType: TextInputType.number),
+            TextField(controller: note, decoration: InputDecoration(labelText: tr('หมายเหตุ'))),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('บันทึก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('บันทึก'))),
         ],
       ),
     );
@@ -2097,7 +2098,7 @@ class _AccountMandayPanelState extends State<AccountMandayPanel> {
       await _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       qty.dispose();
@@ -2112,9 +2113,9 @@ class _AccountMandayPanelState extends State<AccountMandayPanel> {
       loading: _loading,
       empty: _summary.isEmpty,
       trailing: _summary['remain_hours'] != null || _summary['md_remain_hours'] != null
-          ? Text('คงเหลือ ${_summary['remain_hours'] ?? _summary['md_remain_hours']} ชม.')
+          ? Text(tr('คงเหลือ ${_summary['remain_hours'] ?? _summary['md_remain_hours']} ชม.'))
           : null,
-      actions: widget.canEdit ? [TextButton(onPressed: _add, child: const Text('เพิ่ม'))] : const [],
+      actions: widget.canEdit ? [TextButton(onPressed: _add, child: Text(tr('เพิ่ม')))] : const [],
       children: [
         if (_summary.isNotEmpty)
           DenseCardTile(
@@ -2373,7 +2374,7 @@ class _RelatedRecordsPanelState extends State<_RelatedRecordsPanel> {
               TextButton.icon(
                 onPressed: _create,
                 icon: const Icon(NxI.plus),
-                label: const Text('สร้าง'),
+                label: Text(tr('สร้าง')),
               ),
             ]
           : const [],
@@ -2421,7 +2422,7 @@ class _LinesCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(title, style: theme.textTheme.titleMedium),
+        Text(tr(title), style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         NxSurfaceCard(
           padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
@@ -2432,7 +2433,7 @@ class _LinesCard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.all(8),
                   child: Text(
-                    'ไม่มีรายการ',
+                    tr('ไม่มีรายการ'),
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ),
@@ -2442,7 +2443,7 @@ class _LinesCard extends StatelessWidget {
                   TextButton.icon(
                     onPressed: onAdd,
                     icon: const Icon(NxI.plus),
-                    label: const Text('เพิ่มบรรทัด'),
+                    label: Text(tr('เพิ่มบรรทัด')),
                   ),
                 if (onSave != null) NxHeroCta(label: 'บันทึกบรรทัด', busy: saving, onPressed: saving ? null : onSave),
               ],
@@ -2483,7 +2484,7 @@ class _RelatedCard extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
+            Expanded(child: Text(tr(title), style: theme.textTheme.titleMedium)),
             if (trailing != null) trailing!,
             ...actions,
           ],
@@ -2494,7 +2495,7 @@ class _RelatedCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
-              'ยังไม่มีรายการ',
+              tr('ยังไม่มีรายการ'),
               style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ),

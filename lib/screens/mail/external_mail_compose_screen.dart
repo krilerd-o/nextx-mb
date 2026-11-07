@@ -8,6 +8,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../crm/entity_detail_parts.dart' show pickAttachments;
 import 'mail_compose_screen.dart' show MailComposeMode, escapeHtml, plainTextToHtml;
+import '../../core/i18n.dart';
 
 final _emailRe = RegExp(r'^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$');
 
@@ -92,7 +93,7 @@ class _ExternalMailComposeScreenState extends State<ExternalMailComposeScreen> {
       final atts = await context.read<AppConfig>().apiClient.uploadCommentAttachments(picked);
       setState(() => _files.addAll(atts));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -101,7 +102,7 @@ class _ExternalMailComposeScreenState extends State<ExternalMailComposeScreen> {
   Future<void> _send() async {
     final to = parseEmails(_to.text);
     if (to.isEmpty && widget.mode != MailComposeMode.forward) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาใส่อีเมลผู้รับ')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('กรุณาใส่อีเมลผู้รับ'))));
       return;
     }
     setState(() => _busy = true);
@@ -122,10 +123,10 @@ class _ExternalMailComposeScreenState extends State<ExternalMailComposeScreen> {
             ],
           );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ส่งเมลแล้ว')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ส่งเมลแล้ว'))));
       Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -139,15 +140,15 @@ class _ExternalMailComposeScreenState extends State<ExternalMailComposeScreen> {
       _ => 'เขียนเมล',
     };
     final theme = Theme.of(context);
-    InputDecoration deco(String label) => InputDecoration(labelText: label, border: InputBorder.none, filled: false);
+    InputDecoration deco(String label) => InputDecoration(labelText: trn(label), border: InputBorder.none, filled: false);
     return Scaffold(
       appBar: NxAppHeader(
         title: title,
         subtitle: 'จาก ${widget.account.email}',
         actions: [
-          IconButton(tooltip: 'แนบไฟล์', icon: const Icon(NxI.paperclip), onPressed: _busy ? null : _attach),
+          IconButton(tooltip: tr('แนบไฟล์'), icon: const Icon(NxI.paperclip), onPressed: _busy ? null : _attach),
           IconButton(
-            tooltip: 'ส่ง',
+            tooltip: tr('ส่ง'),
             icon: _busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.paperPlaneTilt),
             onPressed: _busy ? null : _send,
           ),
@@ -159,7 +160,7 @@ class _ExternalMailComposeScreenState extends State<ExternalMailComposeScreen> {
           Row(
             children: [
               Expanded(child: TextField(controller: _to, keyboardType: TextInputType.emailAddress, decoration: deco('ถึง (คั่นด้วย ,)'))),
-              TextButton(onPressed: () => setState(() => _showCc = !_showCc), child: const Text('Cc/Bcc')),
+              TextButton(onPressed: () => setState(() => _showCc = !_showCc), child: Text(tr('Cc/Bcc'))),
             ],
           ),
           if (_showCc) ...[
@@ -181,7 +182,7 @@ class _ExternalMailComposeScreenState extends State<ExternalMailComposeScreen> {
                   for (final f in _files)
                     InputChip(
                       avatar: const Icon(NxI.paperclip, size: 16),
-                      label: Text(f['name']?.toString() ?? 'file'),
+                      label: Text(tr(f['name']?.toString() ?? 'file')),
                       onDeleted: () => setState(() => _files.remove(f)),
                     ),
                 ],
@@ -191,11 +192,11 @@ class _ExternalMailComposeScreenState extends State<ExternalMailComposeScreen> {
             controller: _body,
             minLines: 8,
             maxLines: null,
-            decoration: const InputDecoration(hintText: 'เขียนข้อความ', border: InputBorder.none, filled: false),
+            decoration: InputDecoration(hintText: tr('เขียนข้อความ'), border: InputBorder.none, filled: false),
           ),
           if (_seed.quoted.isNotEmpty)
             Text(
-              widget.mode == MailComposeMode.reply ? 'ข้อความเดิมจะแนบท้ายให้อัตโนมัติ' : 'ข้อความที่ส่งต่อจะแนบท้ายให้อัตโนมัติ',
+              tr(widget.mode == MailComposeMode.reply ? 'ข้อความเดิมจะแนบท้ายให้อัตโนมัติ' : 'ข้อความที่ส่งต่อจะแนบท้ายให้อัตโนมัติ'),
               style: theme.textTheme.bodySmall,
             ),
           const SizedBox(height: 40),

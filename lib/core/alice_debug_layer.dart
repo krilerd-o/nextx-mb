@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'app_alice.dart';
 import '../widgets/nx_icons.dart';
+import 'i18n.dart';
 
 /// ครอบ [MaterialApp] เพื่อขอสิทธิ์แจ้งเตือน (Alice ใช้แจ้งเตือนเมื่อมี HTTP) + ปุ่มเปิด Inspector
 class AliceDebugLayer extends StatefulWidget {
@@ -43,13 +44,13 @@ class _AliceDebugLayerState extends State<AliceDebugLayer> {
       fit: StackFit.expand,
       children: [
         child,
-        const Positioned(
+        Positioned(
           right: 8,
           bottom: 8,
           child: SafeArea(
             child: FloatingActionButton.small(
               heroTag: 'moai_alice_http_inspector',
-              tooltip: 'Alice — ดู HTTP API',
+              tooltip: tr('Alice — ดู HTTP API'),
               onPressed: showAliceInspector,
               child: Icon(NxI.globe),
             ),

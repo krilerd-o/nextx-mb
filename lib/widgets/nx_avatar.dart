@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/entity_display.dart';
+import '../core/i18n.dart';
 
 const _palette = <Color>[
   Color(0xFF6366F1),
@@ -40,7 +41,7 @@ class NxAvatar extends StatelessWidget {
       radius: size / 2,
       backgroundColor: bg.withValues(alpha: 0.18),
       child: Text(
-        entityInitials(label),
+        tr(entityInitials(label)),
         style: TextStyle(
           color: bg,
           fontWeight: FontWeight.w700,

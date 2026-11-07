@@ -10,6 +10,7 @@ import '../../widgets/nx_cached_future.dart';
 import '../../widgets/nx_skeleton.dart';
 import 'workspace_board_screen.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class WorkspaceHomeScreen extends StatefulWidget {
   const WorkspaceHomeScreen({super.key});
@@ -38,7 +39,7 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
         load: () => context.read<AppConfig>().apiClient.getBoards(),
         skeleton: const NxSkeletonList(),
         isEmpty: (list) => list.isEmpty,
-        empty: const Center(child: Text('ยังไม่มีบอร์ด')),
+        empty: Center(child: Text(tr('ยังไม่มีบอร์ด'))),
         builder: (context, boards) {
           return ListView.builder(
             padding: const EdgeInsets.all(16),

@@ -29,7 +29,7 @@ void main() {
   testWidgets('streaming text ends with the full sentence', (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.light,
-      home: const Scaffold(body: NxStreamingText('มีงานวันนี้ 3 รายการ')),
+      home: Scaffold(body: NxStreamingText('มีงานวันนี้ 3 รายการ')),
     ));
     await tester.pumpAndSettle();
     final rich = tester.widget<Text>(find.byType(Text).first);

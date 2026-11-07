@@ -50,6 +50,7 @@ import '../../screens/settings_screen.dart';
 import '../../screens/settings/diagnostics_screen.dart';
 import 'notification_deep_link.dart';
 import 'route_access.dart';
+import '../i18n.dart';
 
 GoRouter createAppRouter(AppConfig config) {
   return GoRouter(
@@ -322,7 +323,7 @@ class _RouteNotFoundScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('ไม่พบหน้า')),
+      appBar: AppBar(title: Text(tr('ไม่พบหน้า'))),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -331,17 +332,17 @@ class _RouteNotFoundScreen extends StatelessWidget {
             children: [
               Icon(NxI.unlink, size: 48, color: theme.colorScheme.onSurfaceVariant),
               const SizedBox(height: 12),
-              Text('ไม่พบหน้าที่ต้องการในแอป', style: theme.textTheme.titleMedium),
+              Text(tr('ไม่พบหน้าที่ต้องการในแอป'), style: theme.textTheme.titleMedium),
               const SizedBox(height: 4),
               Text(
-                location,
+                tr(location),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () => context.go(AppRoutes.mainShell),
-                child: const Text('กลับหน้าหลัก'),
+                child: Text(tr('กลับหน้าหลัก')),
               ),
             ],
           ),

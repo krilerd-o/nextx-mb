@@ -9,6 +9,7 @@ import '../../services/api_client.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_step_header.dart';
+import '../../core/i18n.dart';
 
 /// "เชื่อมต่อระบบ" — any NEXTX server, verified via /api/health signature.
 class ServerScreen extends StatefulWidget {
@@ -50,7 +51,7 @@ class _ServerScreenState extends State<ServerScreen> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (result.maintenance) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เซิร์ฟเวอร์อยู่ระหว่างปรับปรุง บางฟังก์ชันอาจใช้ไม่ได้')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('เซิร์ฟเวอร์อยู่ระหว่างปรับปรุง บางฟังก์ชันอาจใช้ไม่ได้'))));
     }
     context.go(AppRoutes.login);
   }
@@ -79,11 +80,11 @@ class _ServerScreenState extends State<ServerScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text('เชื่อมต่อระบบของคุณ',
+                  Text(tr('เชื่อมต่อระบบของคุณ'),
                       textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   Text(
-                    'ใช้เซิร์ฟเวอร์ MOAI NEXT ของธุรกิจคุณ\nถ้าไม่แน่ใจ ใช้ค่าเริ่มต้นได้เลย',
+                    tr('ใช้เซิร์ฟเวอร์ MOAI NEXT ของธุรกิจคุณ\nถ้าไม่แน่ใจ ใช้ค่าเริ่มต้นได้เลย'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.5),
                   ),
@@ -115,11 +116,11 @@ class _ServerScreenState extends State<ServerScreen> {
                     onChanged: (_) => setState(() => _error = null),
                     onSubmitted: (_) => _connect(),
                     decoration: InputDecoration(
-                      labelText: 'หรือใส่ที่อยู่เซิร์ฟเวอร์อื่น',
-                      hintText: 'crm.yourcompany.com',
+                      labelText: tr('หรือใส่ที่อยู่เซิร์ฟเวอร์อื่น'),
+                      hintText: tr('crm.yourcompany.com'),
                       prefixIcon: const Icon(NxI.link),
                       filled: true,
-                      errorText: _error,
+                      errorText: trn(_error),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                     ),
                   ),
@@ -129,7 +130,7 @@ class _ServerScreenState extends State<ServerScreen> {
                       Icon(NxI.shieldCheck, size: 16, color: cs.onSurfaceVariant),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: Text('แอปตรวจสอบก่อนว่าเป็นระบบ MOAI NEXT จริง',
+                        child: Text(tr('แอปตรวจสอบก่อนว่าเป็นระบบ MOAI NEXT จริง'),
                             style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                       ),
                     ],

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../core/effects.dart';
+import '../core/i18n.dart';
 
 /// Bottom sheet route whose barrier blurs the page behind (expo-backdrop),
 /// falling back to a plain dim on lite/off devices.
@@ -78,7 +79,7 @@ class NxSheetBody extends StatelessWidget {
           if (title != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
-              child: Text(title!, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+              child: Text(tr(title!), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
             ),
           Flexible(child: Padding(padding: padding ?? EdgeInsets.zero, child: child)),
         ],

@@ -11,6 +11,8 @@ import 'services/unread_service.dart';
 import 'core/app_theme.dart';
 import 'core/navigation/app_router.dart';
 import 'widgets/nx_atmosphere.dart';
+import 'widgets/nx_language_switch.dart';
+import 'core/i18n.dart';
 
 class NextXMobileApp extends StatefulWidget {
   const NextXMobileApp({super.key});
@@ -79,16 +81,18 @@ class _NextXMobileAppState extends State<NextXMobileApp>
           themeMode: sel.$2,
           builder: (context, child) => BackdropGroup(
             child: NxAtmosphere(
-              child: AliceDebugLayer(
-                child: ListenableBuilder(
-                  listenable: AppLock.instance,
-                  builder: (context, _) => Stack(
-                    children: [
-                      ?child,
-                      if (AppLock.instance.locked && sel.$4)
-                        const Positioned.fill(child: AppLockScreen()),
-                      if (!sel.$4) const _AddSpaceCancelPill(),
-                    ],
+              child: NxLanguageSwitchLayer(
+                child: AliceDebugLayer(
+                  child: ListenableBuilder(
+                    listenable: AppLock.instance,
+                    builder: (context, _) => Stack(
+                      children: [
+                        ?child,
+                        if (AppLock.instance.locked && sel.$4)
+                          const Positioned.fill(child: AppLockScreen()),
+                        if (!sel.$4) const _AddSpaceCancelPill(),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -124,7 +128,7 @@ class _AddSpaceCancelPill extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               child: Text(
-                'ยกเลิกการเพิ่ม Space',
+                tr('ยกเลิกการเพิ่ม Space'),
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onInverseSurface,
                   fontWeight: FontWeight.w600,

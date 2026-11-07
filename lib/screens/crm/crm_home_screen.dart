@@ -17,6 +17,7 @@ import '../../widgets/nx_surface_card.dart';
 import 'call_log_screen.dart';
 import 'entity_list_screen.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class CrmHomeScreen extends StatefulWidget {
   const CrmHomeScreen({super.key});
@@ -82,7 +83,7 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
           children: [
             ListTile(
               leading: const Icon(NxI.arrowSquareOut),
-              title: const Text('เปิดรายการ'),
+              title: Text(tr('เปิดรายการ')),
               onTap: () {
                 Navigator.pop(ctx);
                 _pushList(m.key, m.title);
@@ -90,13 +91,13 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
             ),
             ListTile(
               leading: const Icon(NxI.shareNetwork),
-              title: const Text('แชร์ลิงก์'),
+              title: Text(tr('แชร์ลิงก์')),
               onTap: () async {
                 await Clipboard.setData(ClipboardData(text: AppRoutes.crmModule(m.key)));
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('คัดลอกลิงก์โมดูลแล้ว')),
+                    SnackBar(content: Text(tr('คัดลอกลิงก์โมดูลแล้ว'))),
                   );
                 }
               },
@@ -145,13 +146,13 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
           _moduleGrid(bp, customers),
           if (catalog.isNotEmpty) ...[
             const SizedBox(height: 28),
-            Text('สินค้าและบริการ', style: theme.textTheme.titleLarge),
+            Text(tr('สินค้าและบริการ'), style: theme.textTheme.titleLarge),
             const SizedBox(height: 12),
             _moduleGrid(bp, catalog),
           ],
           if (MenuAccess.allow(session, MenuAccess.callLog)) ...[
             const SizedBox(height: 28),
-            Text('เครื่องมือ', style: theme.textTheme.titleLarge),
+            Text(tr('เครื่องมือ'), style: theme.textTheme.titleLarge),
             const SizedBox(height: 12),
             _ToolCard(
               icon: NxI.phoneCall,
@@ -164,7 +165,7 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
           TextButton.icon(
             onPressed: () => context.push(AppRoutes.workspaceHome),
             icon: const Icon(NxI.arrowRight),
-            label: const Text('ไป Workspace งาน'),
+            label: Text(tr('ไป Workspace งาน')),
           ),
         ],
       ),
@@ -238,10 +239,10 @@ class _ModuleCard extends StatelessWidget {
             child: Icon(icon, color: color),
           ),
           const SizedBox(height: 14),
-          Text(title, style: theme.textTheme.titleMedium),
+          Text(tr(title), style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            count == null ? 'เปิดรายการ' : '$count รายการ',
+            tr(count == null ? 'เปิดรายการ' : '$count รายการ'),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -285,9 +286,9 @@ class _ToolCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: theme.textTheme.titleMedium),
+                  Text(tr(title), style: theme.textTheme.titleMedium),
                   Text(
-                    subtitle,
+                    tr(subtitle),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

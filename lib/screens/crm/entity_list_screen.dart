@@ -20,6 +20,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/entity_display.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class EntityListScreen extends StatefulWidget {
   const EntityListScreen({
@@ -283,14 +284,14 @@ class _EntityListScreenState extends State<EntityListScreen> {
     final PreferredSizeWidget header = _picked.isNotEmpty
         ? AppBar(
             leading: IconButton(
-              tooltip: 'ยกเลิก',
+              tooltip: tr('ยกเลิก'),
               icon: const Icon(NxI.x),
               onPressed: () => setState(_picked.clear),
             ),
-            title: Text('เลือก ${_picked.length} รายการ'),
+            title: Text(tr('เลือก ${_picked.length} รายการ')),
             actions: [
               IconButton(
-                tooltip: 'เลือกทั้งหมด',
+                tooltip: tr('เลือกทั้งหมด'),
                 icon: const Icon(NxI.checkCircle),
                 onPressed: () => setState(
                   () => _picked.addAll([
@@ -300,7 +301,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
                 ),
               ),
               IconButton(
-                tooltip: 'ลบที่เลือก',
+                tooltip: tr('ลบที่เลือก'),
                 icon: const Icon(NxI.trash),
                 onPressed: () {
                   final ids = _picked.toList();
@@ -314,7 +315,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
             title: widget.title,
             actions: [
               IconButton(
-                tooltip: 'รีเฟรช',
+                tooltip: tr('รีเฟรช'),
                 icon: const Icon(NxI.arrowCounterClockwise),
                 onPressed: () => _load(reset: true),
               ),
@@ -402,14 +403,14 @@ class _EntityListScreenState extends State<EntityListScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'ยังไม่มี${widget.title}',
+                        tr('ยังไม่มี${widget.title}'),
                         style: theme.textTheme.titleLarge,
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        twoPane
+                        tr(twoPane
                             ? 'กดปุ่มสร้างด้านบนขวาเพื่อเพิ่มรายการแรก'
-                            : 'กดปุ่มสร้างมุมล่างเพื่อเพิ่มรายการแรก',
+                            : 'กดปุ่มสร้างมุมล่างเพื่อเพิ่มรายการแรก'),
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
@@ -535,7 +536,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
           Icon(icon, color: Colors.white),
           const SizedBox(width: 8),
           Text(
-            label,
+            tr(label),
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w700,

@@ -7,6 +7,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'i18n.dart';
+
 import '../services/api_client.dart';
 import '../services/app_lock.dart';
 import '../services/device_push_service.dart';
@@ -356,7 +358,8 @@ class AppConfig extends ChangeNotifier {
     final rawAccent = prefs.getInt(_keyAccentIndex) ?? 0;
     final maxA = accentOptions.length - 1;
     _accentIndex = rawAccent < 0 ? 0 : (rawAccent > maxA ? maxA : rawAccent);
-    _uiLocaleCode = prefs.getString(_keyUiLocale) ?? 'th';
+    _uiLocaleCode = prefs.getString(_keyUiLocale) == 'en' ? 'en' : 'th';
+    L10n.set(_uiLocaleCode);
     _dateFormatPattern = prefs.getString(_keyDateFormat) ?? 'dd/MM/yyyy HH:mm';
     _recentServers = prefs.getStringList(_keyRecentServers) ?? const [];
     _recentAccounts = decodeRecentAccounts(prefs.getString(_keyRecentAccounts));
@@ -548,11 +551,26 @@ class AppConfig extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Switches the whole app's language at once. When the app's switch layer
+  /// is mounted it covers the screen with a short animation and swaps the
+  /// strings underneath, so nothing flickers half-translated.
   Future<void> setUiLocaleCode(String code) async {
-    _uiLocaleCode = code;
+    final c = code == 'en' ? 'en' : 'th';
+    if (c == _uiLocaleCode) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyUiLocale, code);
-    notifyListeners();
+    await prefs.setString(_keyUiLocale, c);
+    void apply() {
+      _uiLocaleCode = c;
+      L10n.set(c);
+      notifyListeners();
+    }
+
+    final switcher = L10n.switcher;
+    if (switcher != null) {
+      await switcher(c, apply);
+    } else {
+      apply();
+    }
   }
 
   Future<void> setDateFormatPattern(String pattern) async {

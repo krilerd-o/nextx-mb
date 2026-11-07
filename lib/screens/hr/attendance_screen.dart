@@ -12,6 +12,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../core/error_reporting.dart';
 import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -107,7 +108,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         final now = TimeOfDay.now().format(context);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('ไม่มีอินเทอร์เน็ต — บันทึก${inn ? 'เวลาเข้า' : 'เวลาออก'} $now ไว้ในเครื่องแล้ว จะส่งอัตโนมัติเมื่อออนไลน์'),
+            content: Text(tr('ไม่มีอินเทอร์เน็ต — บันทึก${inn ? 'เวลาเข้า' : 'เวลาออก'} $now ไว้ในเครื่องแล้ว จะส่งอัตโนมัติเมื่อออนไลน์')),
           ));
         }
         await _loadPending();
@@ -116,7 +117,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       await _reload();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(inn ? 'ลงเวลาเข้าแล้ว' : 'ลงเวลาออกแล้ว')),
+          SnackBar(content: Text(tr(inn ? 'ลงเวลาเข้าแล้ว' : 'ลงเวลาออกแล้ว'))),
         );
       }
     } catch (e) {
@@ -143,7 +144,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 padding: NxBreakpoint.of(context).scrollPadding(context),
                 children: [
                   Text(
-                    'ใช้ตำแหน่งจากเครื่อง แล้วส่งไป /api/hr/attendance',
+                    tr('ใช้ตำแหน่งจากเครื่อง แล้วส่งไป /api/hr/attendance'),
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 16),
@@ -152,20 +153,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('วันนี้', style: theme.textTheme.titleMedium),
+                        Text(tr('วันนี้'), style: theme.textTheme.titleMedium),
                         const SizedBox(height: 8),
                         Text(
-                          [
+                          tr([
                             if (clockIn != null) 'เข้า $clockIn',
                             if (clockOut != null) 'ออก $clockOut',
                             if (clockIn == null) 'ยังไม่ได้ลงเวลาเข้า',
-                          ].join('\n'),
+                          ].join('\n')),
                           style: theme.textTheme.bodyMedium,
                         ),
                         if (_fixLabel != null) ...[
                           const SizedBox(height: 12),
                           Text(
-                            'พิกัด $_fixLabel',
+                            tr('พิกัด $_fixLabel'),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -173,7 +174,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         ],
                         if (_address != null && _address!.isNotEmpty)
                           Text(
-                            _address!,
+                            tr(_address!),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -188,11 +189,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('รอส่ง (ลงเวลาตอนออฟไลน์)', style: theme.textTheme.titleSmall),
+                          Text(tr('รอส่ง (ลงเวลาตอนออฟไลน์)'), style: theme.textTheme.titleSmall),
                           const SizedBox(height: 4),
-                          Text(_pending.map(_punchLabel).join(' · '), style: theme.textTheme.bodySmall),
-                          Text('จะส่งด้วยเวลาตามที่กดในเครื่อง เมื่อมีอินเทอร์เน็ต', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                          TextButton(onPressed: _loadPending, child: const Text('ส่งตอนนี้')),
+                          Text(tr(_pending.map(_punchLabel).join(' · ')), style: theme.textTheme.bodySmall),
+                          Text(tr('จะส่งด้วยเวลาตามที่กดในเครื่อง เมื่อมีอินเทอร์เน็ต'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                          TextButton(onPressed: _loadPending, child: Text(tr('ส่งตอนนี้'))),
                         ],
                       ),
                     ),
@@ -204,14 +205,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('ส่งการลงเวลาไม่สำเร็จ: ${_punchLabel(f)}', style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.error)),
-                          Text(f['error']?.toString() ?? '', style: theme.textTheme.bodySmall),
-                          Text('แจ้ง HR พร้อมเวลานี้เพื่อแก้ไขในระบบ', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                          Text(tr('ส่งการลงเวลาไม่สำเร็จ: ${_punchLabel(f)}'), style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.error)),
+                          Text(tr(f['error']?.toString() ?? ''), style: theme.textTheme.bodySmall),
+                          Text(tr('แจ้ง HR พร้อมเวลานี้เพื่อแก้ไขในระบบ'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
                               onPressed: () => context.read<AppConfig>().dismissFailedPunch(f),
-                              child: const Text('แจ้ง HR แล้ว'),
+                              child: Text(tr('แจ้ง HR แล้ว')),
                             ),
                           ),
                         ],
@@ -220,13 +221,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
-                    Text(formatApiError(_error!), style: TextStyle(color: theme.colorScheme.error)),
+                    Text(tr(formatApiError(_error!)), style: TextStyle(color: theme.colorScheme.error)),
                     const SizedBox(height: 8),
-                    TextButton(onPressed: _reload, child: const Text('ลองใหม่')),
+                    TextButton(onPressed: _reload, child: Text(tr('ลองใหม่'))),
                   ],
                   if (_history.isNotEmpty) ...[
                     const SizedBox(height: 24),
-                    Text('ประวัติเดือนนี้', style: theme.textTheme.titleSmall),
+                    Text(tr('ประวัติเดือนนี้'), style: theme.textTheme.titleSmall),
                     const SizedBox(height: 8),
                     for (final row in _history.take(31))
                       Padding(
@@ -236,12 +237,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(row['work_date']?.toString() ?? '', style: theme.textTheme.titleMedium),
+                              Text(tr(row['work_date']?.toString() ?? ''), style: theme.textTheme.titleMedium),
                               Text(
-                                [
+                                tr([
                                   if (row['clock_in_at'] != null) 'เข้า ${row['clock_in_at']}${offlinePunchFlags(row).$1 ? ' (ออฟไลน์)' : ''}',
                                   if (row['clock_out_at'] != null) 'ออก ${row['clock_out_at']}${offlinePunchFlags(row).$2 ? ' (ออฟไลน์)' : ''}',
-                                ].join(' · '),
+                                ].join(' · ')),
                                 style: theme.textTheme.bodySmall,
                               ),
                             ],
@@ -262,7 +263,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       minimumSize: const Size.fromHeight(52),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
                     ),
-                    child: const Text('Clock Out'),
+                    child: Text(tr('Clock Out')),
                   ),
                 ],
               ),

@@ -7,6 +7,7 @@ import '../../core/html_display.dart';
 import '../../services/api_client.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 enum MailComposeMode { compose, reply, forward, draft }
 
@@ -180,7 +181,7 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
       _users ??= await api.getMailUsers();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
       return;
     }
@@ -196,11 +197,11 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
 
   Future<void> _submit({required bool draft}) async {
     if (!draft && _to.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาเลือกผู้รับ')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('กรุณาเลือกผู้รับ'))));
       return;
     }
     if (!draft && _subject.text.trim().isEmpty && _body.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณาใส่หัวข้อหรือข้อความ')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('กรุณาใส่หัวข้อหรือข้อความ'))));
       return;
     }
     setState(() => _busy = true);
@@ -234,13 +235,13 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(draft ? 'บันทึกฉบับร่างแล้ว' : 'ส่งจดหมายแล้ว')),
+        SnackBar(content: Text(tr(draft ? 'บันทึกฉบับร่างแล้ว' : 'ส่งจดหมายแล้ว'))),
       );
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -255,7 +256,7 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
             width: 48,
             child: Padding(
               padding: const EdgeInsets.only(top: 14),
-              child: Text(label, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              child: Text(tr(label), style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ),
           ),
           Expanded(
@@ -266,12 +267,12 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
               children: [
                 for (final r in list)
                   InputChip(
-                    label: Text(r.display),
+                    label: Text(tr(r.display)),
                     onDeleted: _busy ? null : () => setState(() => list.remove(r)),
                   ),
                 ActionChip(
                   avatar: const Icon(NxI.userPlus, size: 18),
-                  label: const Text('เพิ่ม'),
+                  label: Text(tr('เพิ่ม')),
                   onPressed: _busy ? null : () => _pick(list),
                 ),
               ],
@@ -290,12 +291,12 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
         title: _title,
         actions: [
           IconButton(
-            tooltip: 'บันทึกฉบับร่าง',
+            tooltip: tr('บันทึกฉบับร่าง'),
             onPressed: _busy ? null : () => _submit(draft: true),
             icon: const Icon(NxI.note),
           ),
           IconButton(
-            tooltip: 'ส่ง',
+            tooltip: tr('ส่ง'),
             onPressed: _busy ? null : () => _submit(draft: false),
             icon: _busy
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
@@ -314,14 +315,14 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
               alignment: Alignment.centerLeft,
               child: TextButton(
                 onPressed: () => setState(() => _showCc = true),
-                child: const Text('+ สำเนา (CC)'),
+                child: Text(tr('+ สำเนา (CC)')),
               ),
             ),
           const Divider(),
           TextField(
             controller: _subject,
             enabled: !_busy,
-            decoration: const InputDecoration(labelText: 'หัวข้อ'),
+            decoration: InputDecoration(labelText: tr('หัวข้อ')),
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 12),
@@ -331,8 +332,8 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
             minLines: 8,
             maxLines: null,
             keyboardType: TextInputType.multiline,
-            decoration: const InputDecoration(
-              labelText: 'ข้อความ',
+            decoration: InputDecoration(
+              labelText: tr('ข้อความ'),
               alignLabelWithHint: true,
               border: OutlineInputBorder(),
             ),
@@ -340,12 +341,12 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
           if (_seed.quotedHtml != null) ...[
             const SizedBox(height: 16),
             Text(
-              widget.mode == MailComposeMode.forward ? 'ข้อความที่ส่งต่อจะแนบท้ายอัตโนมัติ' : 'ข้อความเดิมจะแนบท้ายอัตโนมัติ',
+              tr(widget.mode == MailComposeMode.forward ? 'ข้อความที่ส่งต่อจะแนบท้ายอัตโนมัติ' : 'ข้อความเดิมจะแนบท้ายอัตโนมัติ'),
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 4),
             Text(
-              stripHtmlPreview(_seed.quotedHtml, maxLen: 400),
+              tr(stripHtmlPreview(_seed.quotedHtml, maxLen: 400)),
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
           ],
@@ -384,8 +385,8 @@ class _RecipientPickerState extends State<_RecipientPicker> {
               padding: const EdgeInsets.all(16),
               child: TextField(
                 autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'ค้นหาผู้รับ',
+                decoration: InputDecoration(
+                  labelText: tr('ค้นหาผู้รับ'),
                   prefixIcon: Icon(NxI.magnifyingGlass),
                 ),
                 onChanged: (v) => setState(() => _needle = v.trim().toLowerCase()),
@@ -393,15 +394,15 @@ class _RecipientPickerState extends State<_RecipientPicker> {
             ),
             Expanded(
               child: filtered.isEmpty
-                  ? const Center(child: Text('ไม่พบผู้ใช้'))
+                  ? Center(child: Text(tr('ไม่พบผู้ใช้')))
                   : ListView.builder(
                       itemCount: filtered.length,
                       itemBuilder: (_, i) {
                         final u = filtered[i];
                         return ListTile(
                           leading: const Icon(NxI.user),
-                          title: Text(u.display),
-                          subtitle: u.email == null ? null : Text(u.email!),
+                          title: Text(tr(u.display)),
+                          subtitle: u.email == null ? null : Text(tr(u.email!)),
                           onTap: () => Navigator.pop(context, u),
                         );
                       },

@@ -12,6 +12,7 @@ import 'field_ui_type.dart';
 import 'field_validate.dart';
 import 'nx_form_field.dart';
 import 'nx_pick_option.dart';
+import '../../core/i18n.dart';
 
 class NxEntityForm extends StatefulWidget {
   const NxEntityForm({
@@ -197,7 +198,7 @@ class NxEntityFormState extends State<NxEntityForm> {
         required: fieldIsRequired(f),
         enabled: widget.enabled,
         readOnly: fieldIsReadonly(f),
-        errorText: widget.errors[name],
+        errorText: trn(widget.errors[name]),
         host: _host,
         onChanged: (v) => widget.onChanged(name, v),
       ),
@@ -220,7 +221,7 @@ class NxEntityFormState extends State<NxEntityForm> {
           Padding(
             padding: const EdgeInsets.only(top: 8, bottom: 12),
             child: Text(
-              block,
+              tr(block),
               style: theme.textTheme.labelLarge?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,

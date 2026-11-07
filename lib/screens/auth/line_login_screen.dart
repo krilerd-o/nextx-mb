@@ -4,6 +4,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/app_config.dart';
 import '../../core/auth_redirect.dart';
+import '../../core/i18n.dart';
 
 /// LINE login inside an in-app WebView. NEXTX redirects the browser to
 /// `{frontend}/login?token=…`; we stop that navigation and keep the JWT.
@@ -58,7 +59,7 @@ class _LineLoginScreenState extends State<LineLoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('เข้าสู่ระบบด้วย LINE'),
+        title: Text(tr('เข้าสู่ระบบด้วย LINE')),
         bottom: _progress < 100
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(2),

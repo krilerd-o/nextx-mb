@@ -17,6 +17,7 @@ import 'update_required_screen.dart';
 import '../widgets/nx_app_header.dart';
 import '../widgets/nx_icons.dart';
 import 'spaces/space_switcher.dart' show showSpaceSwitcher;
+import '../core/i18n.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -66,7 +67,7 @@ class SettingsScreen extends StatelessWidget {
                 if ((session.email ?? '').isNotEmpty) session.email!,
               ].join(' · '),
               trailing: Text(
-                'ปัจจุบัน',
+                tr('ปัจจุบัน'),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                 ),
@@ -138,7 +139,7 @@ class SettingsScreen extends StatelessWidget {
                     children: [
                       for (final p in EffectsPreference.values)
                         ListTile(
-                          title: Text(p.label),
+                          title: Text(tr(p.label)),
                           trailing: p == pref
                               ? Icon(NxI.check, color: cs.primary)
                               : null,
@@ -199,18 +200,18 @@ class SettingsScreen extends StatelessWidget {
                 final ok = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    title: const Text('ออกจากระบบ?'),
+                    title: Text(tr('ออกจากระบบ?')),
                     content: Text(
-                      'ออกจาก ${sp?.title ?? serverLabel(config.apiBaseUrl)} บนเครื่องนี้',
+                      tr('ออกจาก ${sp?.title ?? serverLabel(config.apiBaseUrl)} บนเครื่องนี้'),
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('ยกเลิก'),
+                        child: Text(tr('ยกเลิก')),
                       ),
                       FilledButton(
                         onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('ออก'),
+                        child: Text(tr('ออก')),
                       ),
                     ],
                   ),
@@ -265,7 +266,7 @@ class _AppLockCardState extends State<_AppLockCard> {
                   final ok = await lock.setEnabled(v);
                   if (!ok)
                     messenger.showSnackBar(
-                      const SnackBar(content: Text('ยืนยันตัวตนไม่สำเร็จ')),
+                      SnackBar(content: Text(tr('ยืนยันตัวตนไม่สำเร็จ'))),
                     );
                   if (mounted) setState(() => _busy = false);
                 },
@@ -316,7 +317,7 @@ class _ProfileCard extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  name.characters.take(2).toString().toUpperCase(),
+                  tr(name.characters.take(2).toString().toUpperCase()),
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -339,7 +340,7 @@ class _ProfileCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        role,
+                        tr(role),
                         style: theme.textTheme.labelMedium?.copyWith(
                           color: color,
                           letterSpacing: 0.6,
@@ -348,7 +349,7 @@ class _ProfileCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      name,
+                      tr(name),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleLarge?.copyWith(
@@ -356,10 +357,10 @@ class _ProfileCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      [
+                      tr([
                         s.businessName ?? '',
                         s.packageCode ?? '',
-                      ].where((e) => e.isNotEmpty).join(' · '),
+                      ].where((e) => e.isNotEmpty).join(' · ')),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodyMedium?.copyWith(
@@ -388,7 +389,7 @@ class _Section extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 24, 4, 6),
       child: Text(
-        label.toUpperCase(),
+        tr(label.toUpperCase()),
         style: theme.textTheme.labelMedium?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
           letterSpacing: 0.8,
@@ -436,7 +437,7 @@ class _Row extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    tr(title),
                     style: theme.textTheme.bodyLarge?.copyWith(
                       fontWeight: FontWeight.w500,
                       color: color,
@@ -444,7 +445,7 @@ class _Row extends StatelessWidget {
                   ),
                   if (subtitle != null && subtitle!.isNotEmpty)
                     Text(
-                      subtitle!,
+                      tr(subtitle!),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: cs.onSurfaceVariant,
                       ),

@@ -8,6 +8,7 @@ import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_tab_nav.dart';
 import '../../widgets/nx_step_header.dart';
+import '../../core/i18n.dart';
 
 /// "เมนูของคุณ" — preview and arrange the bottom bar (max [kMaxCustomTabs]
 /// + the fixed "เมนู" tab). Used at the end of onboarding and from Settings.
@@ -48,7 +49,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
         _tabs.add(id);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ใส่ได้สูงสุด $kMaxCustomTabs แท็บ (บวกแท็บ "เมนู") — เอาออกก่อน 1 แท็บ')),
+          SnackBar(content: Text(tr('ใส่ได้สูงสุด $kMaxCustomTabs แท็บ (บวกแท็บ "เมนู") — เอาออกก่อน 1 แท็บ'))),
         );
       }
     });
@@ -58,7 +59,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
     await context.read<AppConfig>().saveShellConfig(_base.copyWith(tabs: List.of(_tabs)));
     if (!mounted) return;
     if (widget.fromSettings) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกเมนูล่างแล้ว')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกเมนูล่างแล้ว'))));
       Navigator.of(context).maybePop();
     }
     // Onboarding: router moves on to the app once roleSetupDone is true.
@@ -81,8 +82,8 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
     return Scaffold(
       appBar: widget.fromSettings
           ? AppBar(
-              title: const Text('ปรับแต่งเมนูล่าง'),
-              actions: [TextButton(onPressed: _resetToSuggested, child: const Text('ค่าแนะนำ'))],
+              title: Text(tr('ปรับแต่งเมนูล่าง')),
+              actions: [TextButton(onPressed: _resetToSuggested, child: Text(tr('ค่าแนะนำ')))],
             )
           : null,
       body: SafeArea(
@@ -94,10 +95,10 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                 children: [
                   if (!widget.fromSettings) ...[
-                    Text('เมนูที่จัดไว้ให้คุณ', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(tr('เมนูที่จัดไว้ให้คุณ'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
                     Text(
-                      'จากบทบาทที่เลือก ปรับเพิ่ม ลด หรือลากเรียงลำดับได้\nเปลี่ยนได้ตลอดในหน้าตั้งค่า',
+                      tr('จากบทบาทที่เลือก ปรับเพิ่ม ลด หรือลากเรียงลำดับได้\nเปลี่ยนได้ตลอดในหน้าตั้งค่า'),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.5),
                     ),
@@ -105,7 +106,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                   ],
                   _BarPreview(tabs: _tabs),
                   const SizedBox(height: 20),
-                  Text('แท็บที่แสดง (ลากเพื่อเรียงลำดับ)', style: theme.textTheme.titleSmall),
+                  Text(tr('แท็บที่แสดง (ลากเพื่อเรียงลำดับ)'), style: theme.textTheme.titleSmall),
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
@@ -132,15 +133,15 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                                 leading: CircleAvatar(
                                   radius: 18,
                                   backgroundColor: cs.primary,
-                                  child: Text('${i + 1}', style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w700)),
+                                  child: Text(tr('${i + 1}'), style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w700)),
                                 ),
-                                title: Text(d.label),
-                                subtitle: Text(d.description),
+                                title: Text(tr(d.label)),
+                                subtitle: Text(tr(d.description)),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     IconButton(
-                                      tooltip: 'เอาออก',
+                                      tooltip: tr('เอาออก'),
                                       icon: const Icon(NxI.circleMinus),
                                       onPressed: _tabs.length > 1 ? () => _toggle(d.id) : null,
                                     ),
@@ -155,15 +156,15 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                   ),
                   ListTile(
                     leading: const Icon(NxI.dotsThreeCircle),
-                    title: const Text('เมนู (ทุกโมดูล + ตั้งค่า)'),
-                    subtitle: const Text('อยู่ขวาสุดเสมอ'),
+                    title: Text(tr('เมนู (ทุกโมดูล + ตั้งค่า)')),
+                    subtitle: Text(tr('อยู่ขวาสุดเสมอ')),
                     trailing: const Icon(NxI.lock, size: 18),
                     textColor: cs.onSurfaceVariant,
                     iconColor: cs.onSurfaceVariant,
                   ),
                   if (available.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Text('เพิ่มแท็บ', style: theme.textTheme.titleSmall),
+                    Text(tr('เพิ่มแท็บ'), style: theme.textTheme.titleSmall),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -172,7 +173,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                         for (final d in available)
                           ActionChip(
                             avatar: Icon(d.icon, size: 18),
-                            label: Text(d.label),
+                            label: Text(tr(d.label)),
                             onPressed: () => _toggle(d.id),
                           ),
                       ],

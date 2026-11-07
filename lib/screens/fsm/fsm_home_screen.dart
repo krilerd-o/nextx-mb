@@ -17,6 +17,7 @@ import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../crm/entity_list_screen.dart';
 import '../jobs/my_jobs_screen.dart';
+import '../../core/i18n.dart';
 
 class FsmHomeScreen extends StatefulWidget {
   const FsmHomeScreen({super.key});
@@ -80,7 +81,7 @@ class _FsmHomeScreenState extends State<FsmHomeScreen> {
           children: [
             ListTile(
               leading: const Icon(NxI.arrowSquareOut),
-              title: const Text('เปิดรายการ'),
+              title: Text(tr('เปิดรายการ')),
               onTap: () {
                 Navigator.pop(ctx);
                 _pushList(m.key, m.title);
@@ -88,13 +89,13 @@ class _FsmHomeScreenState extends State<FsmHomeScreen> {
             ),
             ListTile(
               leading: const Icon(NxI.shareNetwork),
-              title: const Text('แชร์ลิงก์'),
+              title: Text(tr('แชร์ลิงก์')),
               onTap: () async {
                 await Clipboard.setData(ClipboardData(text: AppRoutes.fsmModule(m.key)));
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('คัดลอกลิงก์โมดูลแล้ว')),
+                    SnackBar(content: Text(tr('คัดลอกลิงก์โมดูลแล้ว'))),
                   );
                 }
               },
@@ -160,7 +161,7 @@ class _FsmHomeScreenState extends State<FsmHomeScreen> {
           ),
           if (MenuAccess.allow(session, MenuAccess.job)) ...[
             const SizedBox(height: 28),
-            Text('เครื่องมือ', style: theme.textTheme.titleLarge),
+            Text(tr('เครื่องมือ'), style: theme.textTheme.titleLarge),
             const SizedBox(height: 12),
             _ToolCard(
               icon: NxI.wrench,
@@ -221,10 +222,10 @@ class _ModuleCard extends StatelessWidget {
             child: Icon(icon, color: color),
           ),
           const SizedBox(height: 14),
-          Text(title, style: theme.textTheme.titleMedium),
+          Text(tr(title), style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            count == null ? 'เปิดรายการ' : '$count รายการ',
+            tr(count == null ? 'เปิดรายการ' : '$count รายการ'),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -268,9 +269,9 @@ class _ToolCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: theme.textTheme.titleMedium),
+                  Text(tr(title), style: theme.textTheme.titleMedium),
                   Text(
-                    subtitle,
+                    tr(subtitle),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

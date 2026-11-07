@@ -19,6 +19,7 @@ import '../../services/realtime_service.dart';
 import 'chat_room_screen.dart';
 import 'chat_search_screen.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class ChatHomeScreen extends StatefulWidget {
   const ChatHomeScreen({super.key});
@@ -60,7 +61,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
     try {
       users = await api.getUsers(limit: 200);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       return;
     }
     if (!mounted) return;
@@ -77,7 +78,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
       setState(() => _revision++);
       if (room['id'] != null) await _openRoom(room);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -94,17 +95,17 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
         title: 'แชททีม',
         actions: [
           IconButton(
-            tooltip: 'ค้นหาข้อความ',
+            tooltip: tr('ค้นหาข้อความ'),
             icon: const Icon(NxI.magnifyingGlass),
             onPressed: () => nxPush<void>(context, ChatSearchScreen(rooms: _rooms)),
           ),
           IconButton(
-            tooltip: 'สร้างห้องกลุ่ม',
+            tooltip: tr('สร้างห้องกลุ่ม'),
             icon: const Icon(NxI.users),
             onPressed: _createGroup,
           ),
           IconButton(
-            tooltip: 'แชทส่วนตัว',
+            tooltip: tr('แชทส่วนตัว'),
             icon: const Icon(NxI.userPlus),
             onPressed: () async {
               final api = context.read<AppConfig>().apiClient;
@@ -113,7 +114,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                 users = await api.getUsers(limit: 80);
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                 }
                 return;
               }
@@ -135,8 +136,8 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                                 padding: const EdgeInsets.all(16),
                                 child: TextField(
                                   controller: q,
-                                  decoration: const InputDecoration(
-                                    labelText: 'ค้นหาผู้ใช้',
+                                  decoration: InputDecoration(
+                                    labelText: tr('ค้นหาผู้ใช้'),
                                     prefixIcon: Icon(NxI.magnifyingGlass),
                                   ),
                                   onChanged: (v) {
@@ -163,8 +164,8 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                                     final name = userDisplayName(u);
                                     return ListTile(
                                       leading: const Icon(NxI.user),
-                                      title: Text(name),
-                                      subtitle: Text(userEmail(u) ?? u['id']?.toString() ?? ''),
+                                      title: Text(tr(name)),
+                                      subtitle: Text(tr(userEmail(u) ?? u['id']?.toString() ?? '')),
                                       onTap: () => Navigator.pop(ctx, u),
                                     );
                                   },
@@ -190,7 +191,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                 await _openRoom(map);
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
                 }
               }
             },
@@ -202,7 +203,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
         load: () => context.read<AppConfig>().apiClient.getChatRooms(),
         skeleton: const NxSkeletonList(),
         isEmpty: (list) => list.isEmpty,
-        empty: const Center(child: Text('ยังไม่มีห้องแชท')),
+        empty: Center(child: Text(tr('ยังไม่มีห้องแชท'))),
         builder: (context, all) {
           _rooms = all;
           final theme = Theme.of(context);
@@ -218,7 +219,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
               children: [
                 TextField(
                   decoration: InputDecoration(
-                    hintText: 'ค้นหาห้อง',
+                    hintText: tr('ค้นหาห้อง'),
                     prefixIcon: const Icon(NxI.magnifyingGlass),
                     filled: true,
                     isDense: true,
@@ -228,9 +229,9 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                 ),
                 const SizedBox(height: 12),
                 if (rooms.isEmpty)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.all(24),
-                    child: Center(child: Text('ไม่พบห้อง')),
+                    child: Center(child: Text(tr('ไม่พบห้อง'))),
                   ),
                 for (final ch in rooms)
                   Builder(builder: (context) {
@@ -250,12 +251,12 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                       leading: CircleAvatar(
                         backgroundColor: theme.colorScheme.primaryContainer,
                         child: emoji != null && emoji.isNotEmpty
-                            ? Text(emoji)
+                            ? Text(tr(emoji))
                             : Icon(isDm ? NxI.user : NxI.chatCircle, color: theme.colorScheme.onPrimaryContainer),
                       ),
                       trailing: unread > 0
                           ? Badge(
-                              label: Text(unread > 99 ? '99+' : '$unread'),
+                              label: Text(tr(unread > 99 ? '99+' : '$unread')),
                               backgroundColor: theme.colorScheme.primary,
                             )
                           : null,
@@ -325,14 +326,14 @@ class _GroupCreateSheetState extends State<_GroupCreateSheet> {
                 child: TextField(
                   controller: _name,
                   autofocus: true,
-                  decoration: const InputDecoration(labelText: 'ชื่อห้อง', border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: tr('ชื่อห้อง'), border: OutlineInputBorder()),
                   onChanged: (_) => setState(() {}),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: TextField(
-                  decoration: const InputDecoration(hintText: 'ค้นหาสมาชิก', prefixIcon: Icon(NxI.magnifyingGlass), isDense: true),
+                  decoration: InputDecoration(hintText: tr('ค้นหาสมาชิก'), prefixIcon: Icon(NxI.magnifyingGlass), isDense: true),
                   onChanged: (v) => setState(() => _needle = v.trim().toLowerCase()),
                 ),
               ),
@@ -344,8 +345,8 @@ class _GroupCreateSheetState extends State<_GroupCreateSheet> {
                     final id = u['id']?.toString() ?? '';
                     return CheckboxListTile(
                       value: _picked.contains(id),
-                      title: Text(userDisplayName(u)),
-                      subtitle: userEmail(u) == null ? null : Text(userEmail(u)!),
+                      title: Text(tr(userDisplayName(u))),
+                      subtitle: userEmail(u) == null ? null : Text(tr(userEmail(u)!)),
                       onChanged: id.isEmpty
                           ? null
                           : (v) => setState(() => v == true ? _picked.add(id) : _picked.remove(id)),
@@ -359,7 +360,7 @@ class _GroupCreateSheetState extends State<_GroupCreateSheet> {
                   onPressed: canCreate
                       ? () => Navigator.pop(context, (name: _name.text.trim(), ids: _picked.toList()))
                       : null,
-                  child: Text('สร้างห้อง (${_picked.length} คน)'),
+                  child: Text(tr('สร้างห้อง (${_picked.length} คน)')),
                 ),
               ),
             ],

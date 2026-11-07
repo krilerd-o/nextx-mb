@@ -10,6 +10,7 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
+import '../../core/i18n.dart';
 
 /// Thai label + colour for an announcement `type`.
 (String, Color) whatsNewType(String? type) {
@@ -79,7 +80,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
       setState(() => it['acknowledged'] = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -94,7 +95,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
         child: TextButton(
           onPressed: _load,
           child: Text(
-            '${formatApiError(_error!)}\nลองใหม่',
+            tr('${formatApiError(_error!)}\nลองใหม่'),
             textAlign: TextAlign.center,
           ),
         ),
@@ -103,7 +104,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
       body = const NxSkeletonList();
     } else if (items.isEmpty) {
       body = Center(
-        child: Text('ยังไม่มีประกาศ', style: theme.textTheme.bodyLarge),
+        child: Text(tr('ยังไม่มีประกาศ'), style: theme.textTheme.bodyLarge),
       );
     } else {
       body = RefreshIndicator(
@@ -142,7 +143,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
-                              label,
+                              tr(label),
                               style: TextStyle(
                                 color: color,
                                 fontWeight: FontWeight.w700,
@@ -152,14 +153,14 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
                           ),
                           const Spacer(),
                           Text(
-                            it['date']?.toString().split('T').first ?? '',
+                            tr(it['date']?.toString().split('T').first ?? ''),
                             style: theme.textTheme.bodySmall,
                           ),
                         ],
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        (it['title_th'] ?? it['title_en'] ?? '').toString(),
+                        tr((it['title_th'] ?? it['title_en'] ?? '').toString()),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -190,7 +191,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
                               },
                               icon: const Icon(NxI.arrowSquareOut, size: 16),
                               label: Text(
-                                (it['link_label_th'] ?? 'เปิดดู').toString(),
+                                tr((it['link_label_th'] ?? 'เปิดดู').toString()),
                               ),
                             ),
                           const Spacer(),
@@ -198,14 +199,14 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
                               ? Padding(
                                   padding: const EdgeInsets.all(12),
                                   child: Text(
-                                    'รับทราบแล้ว',
+                                    tr('รับทราบแล้ว'),
                                     style: theme.textTheme.labelMedium
                                         ?.copyWith(color: cs.onSurfaceVariant),
                                   ),
                                 )
                               : TextButton(
                                   onPressed: () => _ack(it),
-                                  child: const Text('รับทราบ'),
+                                  child: Text(tr('รับทราบ')),
                                 ),
                         ],
                       ),

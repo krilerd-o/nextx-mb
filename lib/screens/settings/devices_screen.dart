@@ -9,6 +9,7 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../notifications/notification_center_screen.dart' show relativeTime;
+import '../../core/i18n.dart';
 
 /// Platform icon + Thai label for a session row.
 (IconData, String) deviceKind(Map<String, dynamic> s) {
@@ -66,11 +67,11 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final r = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Text(body),
+        title: Text(tr(title)),
+        content: Text(tr(body)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ok)),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr(ok))),
         ],
       ),
     );
@@ -83,10 +84,10 @@ class _DevicesScreenState extends State<DevicesScreen> {
     try {
       await call();
       HapticFeedback.mediumImpact();
-      messenger.showSnackBar(SnackBar(content: Text(done)));
+      messenger.showSnackBar(SnackBar(content: Text(tr(done))));
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -123,17 +124,17 @@ class _DevicesScreenState extends State<DevicesScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           children: [
             Text(
-              '${config.activeSpace?.title ?? ''} · ${config.session.email ?? ''}',
+              tr('${config.activeSpace?.title ?? ''} · ${config.session.email ?? ''}'),
               style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
             if (_error != null)
-              Text(formatApiError(_error!), style: TextStyle(color: cs.error))
+              Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error))
             else if (list == null)
               const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
             else if (!_supported)
               Text(
-                'ระบบ MOAI NEXT ของ Space นี้ยังไม่รองรับการดูอุปกรณ์อื่น (ต้องอัปเดตระบบ) — ออกจากระบบเครื่องนี้ได้ตามปกติ',
+                tr('ระบบ MOAI NEXT ของ Space นี้ยังไม่รองรับการดูอุปกรณ์อื่น (ต้องอัปเดตระบบ) — ออกจากระบบเครื่องนี้ได้ตามปกติ'),
                 style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
               )
             else
@@ -157,13 +158,13 @@ class _DevicesScreenState extends State<DevicesScreen> {
                         await _run(() => context.read<AppConfig>().apiClient.revokeOtherDeviceSessions(), 'ออกจากระบบอุปกรณ์อื่นแล้ว');
                       },
                 icon: const Icon(NxI.signOut),
-                label: Text('ออกจากระบบอุปกรณ์อื่น (${others.length})'),
+                label: Text(tr('ออกจากระบบอุปกรณ์อื่น (${others.length})')),
               ),
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
               onPressed: _busy ? null : _logoutHere,
               icon: const Icon(NxI.signOut),
-              label: const Text('ออกจากระบบเครื่องนี้'),
+              label: Text(tr('ออกจากระบบเครื่องนี้')),
             ),
             if (_supported) ...[
               const SizedBox(height: 8),
@@ -180,7 +181,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                         } catch (_) {}
                         await config.logout();
                       },
-                child: const Text('ออกจากระบบทุกอุปกรณ์'),
+                child: Text(tr('ออกจากระบบทุกอุปกรณ์')),
               ),
             ],
           ],
@@ -228,26 +229,26 @@ class _DeviceTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Flexible(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall)),
+                    Flexible(child: Text(tr(name), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall)),
                     if (current) ...[
                       const SizedBox(width: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(color: const Color(0xFF16A34A).withValues(alpha: 0.14), borderRadius: BorderRadius.circular(999)),
-                        child: const Text('เครื่องนี้', style: TextStyle(color: Color(0xFF16A34A), fontSize: 11, fontWeight: FontWeight.w700)),
+                        child: Text(tr('เครื่องนี้'), style: TextStyle(color: Color(0xFF16A34A), fontSize: 11, fontWeight: FontWeight.w700)),
                       ),
                     ],
                   ],
                 ),
-                if (details.isNotEmpty) Text(details, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                if (details.isNotEmpty) Text(tr(details), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
                 Text(
-                  current ? 'กำลังใช้งาน' : 'ใช้งานล่าสุด ${relativeTime(s['last_seen_at'])}',
+                  tr(current ? 'กำลังใช้งาน' : 'ใช้งานล่าสุด ${relativeTime(s['last_seen_at'])}'),
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ],
             ),
           ),
-          if (onKick != null) IconButton(tooltip: 'ออกจากระบบอุปกรณ์นี้', icon: Icon(NxI.signOut, color: cs.error), onPressed: onKick),
+          if (onKick != null) IconButton(tooltip: tr('ออกจากระบบอุปกรณ์นี้'), icon: Icon(NxI.signOut, color: cs.error), onPressed: onKick),
         ],
       ),
     );

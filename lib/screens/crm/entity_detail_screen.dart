@@ -24,6 +24,7 @@ import 'entity_create_screen.dart';
 import 'entity_detail_parts.dart';
 import 'entity_ops.dart';
 import '../../core/error_reporting.dart';
+import '../../core/i18n.dart';
 
 class EntityDetailScreen extends StatefulWidget {
   const EntityDetailScreen({
@@ -165,7 +166,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       setState(() => _row = {..._row, key: before});
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -173,18 +174,18 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ทำซ้ำรายการนี้?'),
+        title: Text(tr('ทำซ้ำรายการนี้?')),
         content: Text(
-          'สร้างสำเนาของ ${entityTitle(_row, module: widget.module)}',
+          tr('สร้างสำเนาของ ${entityTitle(_row, module: widget.module)}'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ยกเลิก'),
+            child: Text(tr('ยกเลิก')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ทำซ้ำ'),
+            child: Text(tr('ทำซ้ำ')),
           ),
         ],
       ),
@@ -197,14 +198,14 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       );
       if (!mounted || newId.isEmpty) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ทำซ้ำแล้ว — เปิดรายการใหม่')),
+        SnackBar(content: Text(tr('ทำซ้ำแล้ว — เปิดรายการใหม่'))),
       );
       nxPush<void>(context, EntityByIdLoader(module: widget.module, id: newId));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -214,14 +215,14 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     if (files.isEmpty || !mounted) return;
     final api = context.read<AppConfig>().apiClient;
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text('กำลังอัปโหลด…')));
+    messenger.showSnackBar(SnackBar(content: Text(tr('กำลังอัปโหลด…'))));
     try {
       final atts = await api.uploadCommentAttachments(files);
       await api.postEntityComment(widget.module, _id, '', attachments: atts);
       messenger.hideCurrentSnackBar();
       await _reload();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -241,7 +242,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -275,19 +276,19 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
               widget.module == 'inspection' ||
               widget.module == 'job') ...[
             IconButton(
-              tooltip: 'เปิด PDF',
+              tooltip: tr('เปิด PDF'),
               icon: const Icon(NxI.filePdf),
               onPressed: _openPdf,
             ),
             IconButton(
-              tooltip: 'แชร์ PDF',
+              tooltip: tr('แชร์ PDF'),
               icon: const Icon(NxI.shareNetwork),
               onPressed: _sharePdf,
             ),
           ],
           if (canEdit)
             IconButton(
-              tooltip: 'แก้ไข',
+              tooltip: tr('แก้ไข'),
               icon: const Icon(NxI.pencilSimple),
               onPressed: () => _openEdit(context),
             ),
@@ -337,7 +338,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      title,
+                      tr(title),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w700,
@@ -346,7 +347,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                     if (people != null && people.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        people,
+                        tr(people),
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
@@ -356,7 +357,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                     if (status != null && statusOptions.isEmpty) ...[
                       const SizedBox(height: 10),
                       Chip(
-                        label: Text(status),
+                        label: Text(tr(status)),
                         visualDensity: VisualDensity.compact,
                       ),
                     ],
@@ -406,12 +407,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   child: Column(
                     children: [
                       Text(
-                        formatApiError(_error!),
+                        tr(formatApiError(_error!)),
                         style: TextStyle(color: theme.colorScheme.error),
                       ),
                       TextButton(
                         onPressed: _reload,
-                        child: const Text('ลองใหม่'),
+                        child: Text(tr('ลองใหม่')),
                       ),
                     ],
                   ),
@@ -478,7 +479,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                             },
                           ),
                           const SizedBox(height: 20),
-                          Text('แท็ก', style: theme.textTheme.titleMedium),
+                          Text(tr('แท็ก'), style: theme.textTheme.titleMedium),
                           const SizedBox(height: 8),
                           NxSurfaceCard(
                             padding: const EdgeInsets.all(12),
@@ -488,11 +489,11 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                               children: [
                                 for (final t in _tags)
                                   InputChip(
-                                    label: Text(t['name']?.toString() ?? ''),
+                                    label: Text(tr(t['name']?.toString() ?? '')),
                                     onDeleted: () => _toggleTag(t),
                                   ),
                                 ActionChip(
-                                  label: const Text('เลือกแท็ก'),
+                                  label: Text(tr('เลือกแท็ก')),
                                   onPressed: _catalog.isEmpty
                                       ? null
                                       : _pickTags,
@@ -521,7 +522,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
           children: [
             for (final t in _catalog)
               CheckboxListTile(
-                title: Text(t['name']?.toString() ?? ''),
+                title: Text(tr(t['name']?.toString() ?? '')),
                 value: _tags.any(
                   (x) => x['id']?.toString() == t['id']?.toString(),
                 ),
@@ -564,7 +565,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       }
     }
     if (keys.isEmpty) {
-      return [const Padding(padding: EdgeInsets.all(8), child: Text('—'))];
+      return [Padding(padding: EdgeInsets.all(8), child: Text(tr('—')))];
     }
     return [
       for (final name in keys)
@@ -728,7 +729,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -740,7 +741,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -748,16 +749,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ลบรายการนี้?'),
-        content: Text('ลบ ${entityTitle(_row, module: widget.module)}'),
+        title: Text(tr('ลบรายการนี้?')),
+        content: Text(tr('ลบ ${entityTitle(_row, module: widget.module)}')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ยกเลิก'),
+            child: Text(tr('ยกเลิก')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ลบ'),
+            child: Text(tr('ลบ')),
           ),
         ],
       ),
@@ -791,7 +792,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     if (saved == true && context.mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('บันทึกแล้ว')));
+      ).showSnackBar(SnackBar(content: Text(tr('บันทึกแล้ว'))));
       _reload();
     }
   }

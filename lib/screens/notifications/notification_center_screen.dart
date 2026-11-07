@@ -15,6 +15,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 /// NEXTX notification categories (backend/src/services/notificationCategory.js).
 const notificationCategories = <String, String>{
@@ -51,7 +52,7 @@ String relativeTime(dynamic raw, {DateTime? now}) {
   if (diff.inMinutes < 60) return '${diff.inMinutes} นาทีที่แล้ว';
   if (diff.inHours < 24) return '${diff.inHours} ชั่วโมงที่แล้ว';
   if (diff.inDays < 7) return '${diff.inDays} วันที่แล้ว';
-  return '${d.day}/${d.month}/${d.year + 543}';
+  return '${d.day}/${d.month}/${uiYear(d.year)}';
 }
 
 class NotificationCenterScreen extends StatefulWidget {
@@ -170,7 +171,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _items = [..._items]..insert(index.clamp(0, _items.length), item));
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -183,7 +184,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       UnreadNotifications.instance.clear();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -223,18 +224,18 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        stripHtmlPreview(it['title']?.toString() ?? '', maxLen: 80),
+                        tr(stripHtmlPreview(it['title']?.toString() ?? '', maxLen: 80)),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
                         ),
                       ),
                       if (body.isNotEmpty) ...[
                         const SizedBox(height: 2),
-                        Text(body, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
+                        Text(tr(body), maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
                       ],
                       const SizedBox(height: 4),
                       Text(
-                        relativeTime(it['created_at']),
+                        tr(relativeTime(it['created_at'])),
                         style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                       ),
                     ],
@@ -262,15 +263,15 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     } else if (_error != null && _items.isEmpty) {
       body = ListView(children: [
         const SizedBox(height: 80),
-        Center(child: Text(formatApiError(_error!))),
-        Center(child: TextButton(onPressed: _reload, child: const Text('ลองใหม่'))),
+        Center(child: Text(tr(formatApiError(_error!)))),
+        Center(child: TextButton(onPressed: _reload, child: Text(tr('ลองใหม่')))),
       ]);
     } else if (_items.isEmpty) {
       body = ListView(children: [
         const SizedBox(height: 100),
         Icon(NxI.bellSimple, size: 56, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(height: 12),
-        Center(child: Text(_unreadOnly ? 'อ่านครบทุกรายการแล้ว' : 'ไม่มีการแจ้งเตือน', style: theme.textTheme.titleMedium)),
+        Center(child: Text(tr(_unreadOnly ? 'อ่านครบทุกรายการแล้ว' : 'ไม่มีการแจ้งเตือน'), style: theme.textTheme.titleMedium)),
       ]);
     } else {
       body = ListView.separated(
@@ -308,7 +309,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: FilterChip(
-                    label: const Text('ยังไม่อ่าน'),
+                    label: Text(tr('ยังไม่อ่าน')),
                     selected: _unreadOnly,
                     onSelected: (v) {
                       setState(() => _unreadOnly = v);
@@ -320,7 +321,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
-                      label: Text(e.value),
+                      label: Text(tr(e.value)),
                       selected: _category == e.key,
                       showCheckmark: false,
                       onSelected: (_) {

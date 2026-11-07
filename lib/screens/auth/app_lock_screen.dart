@@ -6,6 +6,7 @@ import '../../services/app_lock.dart';
 import '../../widgets/nx_app_logo.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 /// Covers the app until fingerprint / face unlock succeeds.
 class AppLockScreen extends StatefulWidget {
@@ -52,10 +53,10 @@ class _AppLockScreenState extends State<AppLockScreen> {
               const Spacer(),
               const NxAppLogo(size: 72),
               const SizedBox(height: 20),
-              Text('แอปถูกล็อก', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+              Text(tr('แอปถูกล็อก'), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
               Text(
-                [session.displayName, session.businessName].whereType<String>().where((e) => e.isNotEmpty).join(' · '),
+                tr([session.displayName, session.businessName].whereType<String>().where((e) => e.isNotEmpty).join(' · ')),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
               ),
@@ -63,7 +64,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
               Icon(NxI.fingerprint, size: 64, color: cs.primary),
               if (_failed) ...[
                 const SizedBox(height: 12),
-                Text('ยืนยันตัวตนไม่สำเร็จ ลองอีกครั้ง', style: TextStyle(color: cs.error)),
+                Text(tr('ยืนยันตัวตนไม่สำเร็จ ลองอีกครั้ง'), style: TextStyle(color: cs.error)),
               ],
               const Spacer(),
               NxHeroCta(label: 'ปลดล็อก', busy: _busy, onPressed: _busy ? null : _unlock),
@@ -75,7 +76,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
                         AppLock.instance.reset();
                         await context.read<AppConfig>().logout();
                       },
-                child: const Text('ใช้รหัสผ่านแทน (ออกจากระบบ)'),
+                child: Text(tr('ใช้รหัสผ่านแทน (ออกจากระบบ)')),
               ),
               const SizedBox(height: 16),
             ],

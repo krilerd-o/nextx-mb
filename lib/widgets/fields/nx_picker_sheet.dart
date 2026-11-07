@@ -5,6 +5,7 @@ import 'nx_field_chrome.dart';
 import 'nx_lift_sheet.dart';
 import 'nx_pick_option.dart';
 import '../nx_icons.dart';
+import '../../core/i18n.dart';
 
 Future<String?> showNxPickerSheet({
   required BuildContext context,
@@ -113,7 +114,7 @@ class _NxPickerBodyState extends State<_NxPickerBody> {
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Text(widget.title, style: theme.textTheme.titleMedium),
+            child: Text(tr(widget.title), style: theme.textTheme.titleMedium),
           ),
         ),
         Padding(
@@ -152,8 +153,8 @@ class _NxPickerBodyState extends State<_NxPickerBody> {
                             ),
                           )
                         : null),
-                title: Text('${opt.emoji ?? ''}${opt.emoji != null ? ' ' : ''}${opt.label}'),
-                subtitle: opt.subtitle == null ? null : Text(opt.subtitle!),
+                title: Text(tr('${opt.emoji ?? ''}${opt.emoji != null ? ' ' : ''}${opt.label}')),
+                subtitle: opt.subtitle == null ? null : Text(tr(opt.subtitle!)),
                 trailing: selected ? const Icon(NxI.check) : null,
                 selected: selected,
                 onTap: () => Navigator.pop(context, opt.value),
@@ -228,10 +229,10 @@ class _NxMultiPickerBodyState extends State<_NxMultiPickerBody> {
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
           child: Row(
             children: [
-              Expanded(child: Text(widget.title, style: theme.textTheme.titleMedium)),
+              Expanded(child: Text(tr(widget.title), style: theme.textTheme.titleMedium)),
               TextButton(
                 onPressed: () => Navigator.pop(context, _selected),
-                child: const Text('ตกลง'),
+                child: Text(tr('ตกลง')),
               ),
             ],
           ),
@@ -259,8 +260,8 @@ class _NxMultiPickerBodyState extends State<_NxMultiPickerBody> {
               return CheckboxListTile(
                 value: on,
                 secondary: widget.users ? NxAvatar(label: opt.label, size: 36) : null,
-                title: Text(opt.label),
-                subtitle: opt.subtitle == null ? null : Text(opt.subtitle!),
+                title: Text(tr(opt.label)),
+                subtitle: opt.subtitle == null ? null : Text(tr(opt.subtitle!)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 onChanged: (v) {
                   setState(() {

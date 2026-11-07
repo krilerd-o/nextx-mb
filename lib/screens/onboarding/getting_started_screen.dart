@@ -8,6 +8,7 @@ import '../../core/nx_motion.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_select_tile.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class GettingStartedScreen extends StatefulWidget {
   const GettingStartedScreen({super.key});
@@ -58,7 +59,7 @@ class _GettingStartedScreenState extends State<GettingStartedScreen> {
                 NxHeroCta(label: 'เข้าสู่แอป', onPressed: _finish),
                 TextButton(
                   onPressed: _finish,
-                  child: const Text('ข้าม'),
+                  child: Text(tr('ข้าม')),
                 ),
               ],
             ],
@@ -149,10 +150,10 @@ class _WelcomeStep extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('ยินดีต้อนรับ', style: theme.textTheme.displayMedium),
+          Text(tr('ยินดีต้อนรับ'), style: theme.textTheme.displayMedium),
           const SizedBox(height: 12),
           Text(
-            'ตั้งค่าโทนสีและโปรไฟล์สั้นๆ แล้วเข้าใช้งานได้เลย',
+            tr('ตั้งค่าโทนสีและโปรไฟล์สั้นๆ แล้วเข้าใช้งานได้เลย'),
             style: theme.textTheme.bodyLarge?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -172,7 +173,7 @@ class _ThemeStep extends StatelessWidget {
     final theme = Theme.of(context);
     return ListView(
       children: [
-        Text('โทนและการเน้นสี', style: theme.textTheme.headlineMedium),
+        Text(tr('โทนและการเน้นสี'), style: theme.textTheme.headlineMedium),
         const SizedBox(height: 16),
         NxSelectTile(
           title: 'สว่าง',
@@ -194,7 +195,7 @@ class _ThemeStep extends StatelessWidget {
           onTap: () => config.setThemeMode(ThemeMode.system),
         ),
         const SizedBox(height: 24),
-        Text('สีเน้น', style: theme.textTheme.titleMedium),
+        Text(tr('สีเน้น'), style: theme.textTheme.titleMedium),
         const SizedBox(height: 12),
         Wrap(
           spacing: 12,
@@ -233,10 +234,10 @@ class _ProfileStep extends StatelessWidget {
     final theme = Theme.of(context);
     return ListView(
       children: [
-        Text('โปรไฟล์', style: theme.textTheme.headlineMedium),
+        Text(tr('โปรไฟล์'), style: theme.textTheme.headlineMedium),
         const SizedBox(height: 8),
         Text(
-          'ใส่รูปได้ตอนนี้ หรือข้ามแล้วไปตั้งในภายหลัง',
+          tr('ใส่รูปได้ตอนนี้ หรือข้ามแล้วไปตั้งในภายหลัง'),
           style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 20),
@@ -250,7 +251,7 @@ class _ProfileStep extends StatelessWidget {
               await config.uploadProfileAvatarToServer();
             } catch (e) {
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
               }
             }
           },

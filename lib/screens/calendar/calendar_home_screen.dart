@@ -22,6 +22,7 @@ import '../crm/entity_create_screen.dart';
 import 'activity_detail_screen.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 class CalendarHomeScreen extends StatefulWidget {
   const CalendarHomeScreen({super.key});
@@ -141,8 +142,8 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(leading: const Icon(NxI.copySimple), title: const Text('ทำซ้ำ'), onTap: () => Navigator.pop(context, 'dup')),
-          ListTile(leading: const Icon(NxI.trash), title: const Text('ลบ'), onTap: () => Navigator.pop(context, 'del')),
+          ListTile(leading: const Icon(NxI.copySimple), title: Text(tr('ทำซ้ำ')), onTap: () => Navigator.pop(context, 'dup')),
+          ListTile(leading: const Icon(NxI.trash), title: Text(tr('ลบ')), onTap: () => Navigator.pop(context, 'del')),
         ],
       ),
     );
@@ -154,7 +155,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
         setState(() => _revision++);
         if (newId.isNotEmpty) nxPush<void>(context, ActivityDetailScreen(row: {'id': newId}));
       } catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } else if (pick == 'del') {
       PendingEntityDeletes.instance.schedule(
@@ -183,11 +184,11 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
         title: _title,
         actions: [
           IconButton(
-            tooltip: 'รีเฟรช',
+            tooltip: tr('รีเฟรช'),
             icon: const Icon(NxI.arrowCounterClockwise),
             onPressed: () => setState(() => _revision++),
           ),
-          if (twoPane) NxAddButton(tooltip: 'นัดหมาย', onPressed: _openCreate),
+          if (twoPane) NxAddButton(tooltip: tr('นัดหมาย'), onPressed: _openCreate),
         ],
       ),
       body: NxCachedFuture<List<Map<String, dynamic>>>(
@@ -203,11 +204,11 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
             children: [
               SegmentedButton<_CalMode>(
                 segments: [
-                  const ButtonSegment(value: _CalMode.agenda, label: Text('ปฏิทิน'), icon: Icon(NxI.calendarBlank)),
+                  ButtonSegment(value: _CalMode.agenda, label: Text(tr('ปฏิทิน')), icon: Icon(NxI.calendarBlank)),
                   if (showIncoming)
-                    const ButtonSegment(value: _CalMode.incoming, label: Text('ใกล้ถึง'), icon: Icon(NxI.clockCountdown)),
+                    ButtonSegment(value: _CalMode.incoming, label: Text(tr('ใกล้ถึง')), icon: Icon(NxI.clockCountdown)),
                   if (showPending)
-                    const ButtonSegment(value: _CalMode.pending, label: Text('ค้าง'), icon: Icon(NxI.warningCircle)),
+                    ButtonSegment(value: _CalMode.pending, label: Text(tr('ค้าง')), icon: Icon(NxI.warningCircle)),
                 ],
                 selected: {_mode},
                 showSelectedIcon: false,
@@ -226,7 +227,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                       _revision++;
                     }),
                     icon: Icon(_weekView ? NxI.calendarBlank : NxI.listBullets, size: 18),
-                    label: Text(_weekView ? 'ดูรายเดือน' : 'ดูรายสัปดาห์'),
+                    label: Text(tr(_weekView ? 'ดูรายเดือน' : 'ดูรายสัปดาห์')),
                   ),
                 ),
                 if (_weekView)
@@ -255,15 +256,15 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${_selectedDay.day}/${_selectedDay.month}/${_selectedDay.year + 543} · ${visible.length} กิจกรรม',
+                  tr('${_selectedDay.day}/${_selectedDay.month}/${uiYear(_selectedDay.year)} · ${visible.length} กิจกรรม'),
                   style: theme.textTheme.titleSmall,
                 ),
                 const SizedBox(height: 8),
               ],
               if (visible.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.all(24),
-                  child: Center(child: Text('ไม่มีกิจกรรม')),
+                  child: Center(child: Text(tr('ไม่มีกิจกรรม'))),
                 ),
               for (final row in visible)
                 if (!PendingEntityDeletes.instance.isPending('activity', row['id']?.toString() ?? ''))
@@ -293,15 +294,15 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                entityTitle(row, module: 'activity'),
+                                tr(entityTitle(row, module: 'activity')),
                                 style: theme.textTheme.titleMedium,
                               ),
                               Text(
-                                [
+                                tr([
                                   activityTimeLabel(row),
                                   row['status'],
                                   row['location'],
-                                ].where((e) => e != null && e.toString().isNotEmpty).join(' · '),
+                                ].where((e) => e != null && e.toString().isNotEmpty).join(' · ')),
                                 style: theme.textTheme.bodySmall,
                               ),
                             ],
@@ -387,7 +388,7 @@ class NxMonthGrid extends StatelessWidget {
     final now = thaiNow();
     final cells = <Widget>[
       for (final w in _thWeek)
-        Center(child: Text(w, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
+        Center(child: Text(tr(w), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
       for (var i = 0; i < lead; i++) const SizedBox.shrink(),
       for (var day = 1; day <= daysInMonth; day++)
         Builder(builder: (context) {
@@ -408,7 +409,7 @@ class NxMonthGrid extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    '$day',
+                    tr('$day'),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: isSel ? cs.onPrimary : null,
                       fontWeight: isToday || isSel ? FontWeight.w700 : null,
@@ -443,10 +444,10 @@ class NxMonthGrid extends StatelessWidget {
                 ),
                 Expanded(
                   child: Center(
-                    child: Text('${_thMonths[month.month - 1]} ${month.year + 543}', style: theme.textTheme.titleMedium),
+                    child: Text(tr('${tr(_thMonths[month.month - 1])} ${uiYear(month.year)}'), style: theme.textTheme.titleMedium),
                   ),
                 ),
-                TextButton(onPressed: () => onMonthChange(DateTime(now.year, now.month)), child: const Text('วันนี้')),
+                TextButton(onPressed: () => onMonthChange(DateTime(now.year, now.month)), child: Text(tr('วันนี้'))),
                 IconButton(
                   icon: const Icon(NxI.caretRight),
                   onPressed: () => onMonthChange(DateTime(month.year, month.month + 1)),
@@ -512,10 +513,10 @@ class NxWeekStrip extends StatelessWidget {
                       ),
                       child: Column(
                         children: [
-                          Text(_thWeek[i], style: theme.textTheme.labelSmall?.copyWith(color: isSel ? cs.onPrimary : cs.onSurfaceVariant)),
-                          Text('${d.day}', style: theme.textTheme.titleMedium?.copyWith(color: isSel ? cs.onPrimary : null)),
+                          Text(tr(_thWeek[i]), style: theme.textTheme.labelSmall?.copyWith(color: isSel ? cs.onPrimary : cs.onSurfaceVariant)),
+                          Text(tr('${d.day}'), style: theme.textTheme.titleMedium?.copyWith(color: isSel ? cs.onPrimary : null)),
                           Text(
-                            n == 0 ? ' ' : '$n',
+                            tr(n == 0 ? ' ' : '$n'),
                             style: theme.textTheme.labelSmall?.copyWith(color: isSel ? cs.onPrimary : cs.primary, fontWeight: FontWeight.w700),
                           ),
                         ],

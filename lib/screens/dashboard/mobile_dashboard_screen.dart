@@ -20,6 +20,7 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_streaming_text.dart';
 import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 /// Thai greeting for the hour of day.
 String greetingFor(DateTime now) {
@@ -53,8 +54,9 @@ const _thaiDays = [
   'อาทิตย์',
 ];
 
-String thaiLongDate(DateTime d) =>
-    'วัน${_thaiDays[d.weekday - 1]}ที่ ${d.day} ${_thaiMonths[d.month - 1]} ${d.year + 543}';
+String thaiLongDate(DateTime d) => L10n.isEn
+    ? '${tr(_thaiDays[d.weekday - 1])}, ${d.day} ${tr(_thaiMonths[d.month - 1])} ${d.year}'
+    : 'วัน${_thaiDays[d.weekday - 1]}ที่ ${d.day} ${_thaiMonths[d.month - 1]} ${uiYear(d.year)}';
 
 String _hhmm(dynamic raw) {
   final d = parseThai(raw?.toString() ?? '');
@@ -248,7 +250,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
         actions: [
           IconButton(
             icon: const Icon(NxI.arrowCounterClockwise),
-            tooltip: 'รีเฟรช',
+            tooltip: tr('รีเฟรช'),
             onPressed: _load,
           ),
         ],
@@ -288,13 +290,13 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                               padding: _refreshing ? pad : listPad,
                               children: [
                                 Text(
-                                  '${greetingFor(now)}${session.displayName != null ? ' ${session.displayName}' : ''}',
+                                  tr('${greetingFor(now)}${session.displayName != null ? ' ${session.displayName}' : ''}'),
                                   style: theme.textTheme.headlineSmall
                                       ?.copyWith(fontWeight: FontWeight.w700),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  thaiLongDate(now),
+                                  tr(thaiLongDate(now)),
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: cs.onSurfaceVariant,
                                   ),
@@ -305,7 +307,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                                   Padding(
                                     padding: const EdgeInsets.only(top: 12),
                                     child: Text(
-                                      formatApiError(_error!),
+                                      tr(formatApiError(_error!)),
                                       style: theme.textTheme.bodySmall
                                           ?.copyWith(color: cs.error),
                                     ),
@@ -331,7 +333,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                                         const SizedBox(width: 10),
                                         Expanded(
                                           child: Text(
-                                            'มีอะไรใหม่ $_whatsNew รายการ',
+                                            tr('มีอะไรใหม่ $_whatsNew รายการ'),
                                             style: theme.textTheme.titleSmall,
                                           ),
                                         ),
@@ -568,13 +570,13 @@ class _TodayCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'ลงเวลาวันนี้',
+                    tr('ลงเวลาวันนี้'),
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: cs.onSurfaceVariant,
                     ),
                   ),
                   Text(
-                    status,
+                    tr(status),
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -591,7 +593,7 @@ class _TodayCard extends StatelessWidget {
                 minimumSize: const Size(0, 40),
               ),
               onPressed: () => context.push(AppRoutes.attendance),
-              child: Text(cta),
+              child: Text(tr(cta)),
             ),
           ],
         ),
@@ -615,14 +617,14 @@ class _TodayCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'นัดถัดไป · ${_hhmm(n['date_start'])}',
+                      tr('นัดถัดไป · ${_hhmm(n['date_start'])}'),
                       style: theme.textTheme.labelMedium?.copyWith(
                         color: cs.onSurfaceVariant,
                       ),
                     ),
                     Text(
-                      n['subject']?.toString() ??
-                          entityTitle(n, module: 'activity'),
+                      tr(n['subject']?.toString() ??
+                          entityTitle(n, module: 'activity')),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall?.copyWith(
@@ -631,7 +633,7 @@ class _TodayCard extends StatelessWidget {
                     ),
                     if ((n['location']?.toString() ?? '').isNotEmpty)
                       Text(
-                        n['location'].toString(),
+                        tr(n['location'].toString()),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall,
@@ -713,14 +715,14 @@ class _AiBriefCard extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                'สรุปวันนี้',
+                tr('สรุปวันนี้'),
                 style: theme.textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const Spacer(),
               Text(
-                'ถาม AI',
+                tr('ถาม AI'),
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: cs.primary,
                   fontWeight: FontWeight.w600,
@@ -731,7 +733,7 @@ class _AiBriefCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           NxStreamingText(
-            text,
+            tr(text),
             style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
           ),
           const SizedBox(height: 4),
@@ -799,7 +801,7 @@ class _QuickGrid extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          a.label,
+                          tr(a.label),
                           style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w500),
                           textAlign: TextAlign.center,
                           maxLines: 1,
@@ -831,14 +833,14 @@ class _SectionTitle extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              title,
+              tr(title),
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
           if (action != null)
-            TextButton(onPressed: onAction, child: Text(action!)),
+            TextButton(onPressed: onAction, child: Text(tr(action!))),
         ],
       ),
     );
@@ -864,13 +866,13 @@ class _CountPill extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$value',
+            tr('$value'),
             style: theme.textTheme.headlineSmall?.copyWith(
               color: color,
               fontWeight: FontWeight.w700,
             ),
           ),
-          Text(label, style: theme.textTheme.labelMedium),
+          Text(tr(label), style: theme.textTheme.labelMedium),
         ],
       ),
     );
@@ -933,14 +935,14 @@ class _ListRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    tr(title),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleSmall,
                   ),
                   if (subtitle != null && subtitle!.isNotEmpty)
                     Text(
-                      subtitle!,
+                      tr(subtitle!),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -1017,13 +1019,13 @@ class _StatCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$value',
+                  tr('$value'),
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 Text(
-                  label,
+                  tr(label),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

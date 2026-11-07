@@ -15,6 +15,7 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../notifications/notification_center_screen.dart' show relativeTime;
+import '../../core/i18n.dart';
 
 /// Field that holds a record's status / stage for [module] (first one present).
 String? entityStatusKey(Map<String, dynamic> row, String module) {
@@ -84,7 +85,7 @@ class EntityStatusStepper extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (done) ...[Icon(NxI.check, size: 14, color: fg), const SizedBox(width: 4)],
-                    Text(o.label, style: TextStyle(color: fg, fontWeight: active ? FontWeight.w700 : FontWeight.w500, fontSize: 13)),
+                    Text(tr(o.label), style: TextStyle(color: fg, fontWeight: active ? FontWeight.w700 : FontWeight.w500, fontSize: 13)),
                   ],
                 ),
               ),
@@ -151,7 +152,7 @@ class EntityQuickActions extends StatelessWidget {
                         child: Icon(icon, size: 20, color: cs.primary),
                       ),
                       const SizedBox(height: 4),
-                      Text(label, style: Theme.of(context).textTheme.labelSmall),
+                      Text(tr(label), style: Theme.of(context).textTheme.labelSmall),
                     ],
                   ),
                 ),
@@ -206,9 +207,9 @@ Future<List<MultipartFile>> pickAttachments(BuildContext context) async {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ListTile(leading: const Icon(NxI.camera), title: const Text('ถ่ายรูป'), onTap: () => Navigator.pop(context, 'camera')),
-        ListTile(leading: const Icon(NxI.images), title: const Text('เลือกรูปจากเครื่อง'), onTap: () => Navigator.pop(context, 'gallery')),
-        ListTile(leading: const Icon(NxI.file), title: const Text('เลือกไฟล์'), onTap: () => Navigator.pop(context, 'file')),
+        ListTile(leading: const Icon(NxI.camera), title: Text(tr('ถ่ายรูป')), onTap: () => Navigator.pop(context, 'camera')),
+        ListTile(leading: const Icon(NxI.images), title: Text(tr('เลือกรูปจากเครื่อง')), onTap: () => Navigator.pop(context, 'gallery')),
+        ListTile(leading: const Icon(NxI.file), title: Text(tr('เลือกไฟล์')), onTap: () => Navigator.pop(context, 'file')),
       ],
     ),
   );
@@ -275,7 +276,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
       final atts = await context.read<AppConfig>().apiClient.uploadCommentAttachments(files);
       if (mounted) setState(() => _pending.addAll(atts));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -299,7 +300,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
       HapticFeedback.lightImpact();
       await widget.onChanged();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -325,7 +326,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'ตอบกลับ ${_replyTo!['user_name'] ?? ''}',
+                        tr('ตอบกลับ ${_replyTo!['user_name'] ?? ''}'),
                         style: theme.textTheme.labelMedium?.copyWith(color: cs.primary),
                       ),
                     ),
@@ -344,7 +345,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
                     for (final a in _pending)
                       InputChip(
                         avatar: Icon(isImageAttachment(a) ? NxI.image : NxI.paperclip, size: 16),
-                        label: Text(a['name']?.toString() ?? 'file', overflow: TextOverflow.ellipsis),
+                        label: Text(tr(a['name']?.toString() ?? 'file'), overflow: TextOverflow.ellipsis),
                         onDeleted: () => setState(() => _pending.remove(a)),
                       ),
                   ],
@@ -352,19 +353,19 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  IconButton(tooltip: 'แนบไฟล์ / ถ่ายรูป', icon: const Icon(NxI.paperclip), onPressed: _busy ? null : _attach),
+                  IconButton(tooltip: tr('แนบไฟล์ / ถ่ายรูป'), icon: const Icon(NxI.paperclip), onPressed: _busy ? null : _attach),
                   Expanded(
                     child: TextField(
                       controller: _text,
                       focusNode: _focus,
                       minLines: 1,
                       maxLines: 5,
-                      decoration: const InputDecoration(hintText: 'เขียนความคิดเห็น', border: InputBorder.none, filled: false),
+                      decoration: InputDecoration(hintText: tr('เขียนความคิดเห็น'), border: InputBorder.none, filled: false),
                     ),
                   ),
                   _busy
                       ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                      : IconButton.filled(tooltip: 'ส่ง', icon: const Icon(NxI.paperPlaneTilt, size: 18), onPressed: _send),
+                      : IconButton.filled(tooltip: tr('ส่ง'), icon: const Icon(NxI.paperPlaneTilt, size: 18), onPressed: _send),
                 ],
               ),
             ],
@@ -374,7 +375,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
         if (threads.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Text('ยังไม่มีความคิดเห็น', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+            child: Text(tr('ยังไม่มีความคิดเห็น'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
           ),
         for (final (root, replies) in threads)
           Padding(
@@ -399,7 +400,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
                         setState(() => _replyTo = root);
                         _focus.requestFocus();
                       },
-                      child: Text(replies.isEmpty ? 'ตอบกลับ' : 'ตอบกลับ (${replies.length})'),
+                      child: Text(tr(replies.isEmpty ? 'ตอบกลับ' : 'ตอบกลับ (${replies.length})')),
                     ),
                   ),
                 ],
@@ -428,8 +429,8 @@ class _CommentTile extends StatelessWidget {
           children: [
             NxAvatar(label: name?.isNotEmpty == true ? name! : '?', size: small ? 24 : 30),
             const SizedBox(width: 8),
-            Expanded(child: Text(name?.isNotEmpty == true ? name! : 'ผู้ใช้', style: theme.textTheme.titleSmall)),
-            Text(relativeTime(c['created_at']), style: theme.textTheme.bodySmall),
+            Expanded(child: Text(tr(name?.isNotEmpty == true ? name! : 'ผู้ใช้'), style: theme.textTheme.titleSmall)),
+            Text(tr(relativeTime(c['created_at'])), style: theme.textTheme.bodySmall),
           ],
         ),
         if ((c['body']?.toString() ?? '').trim().isNotEmpty)
@@ -479,7 +480,7 @@ class AttachmentStrip extends StatelessWidget {
             dense: true,
             contentPadding: EdgeInsets.zero,
             leading: const Icon(NxI.paperclip),
-            title: Text(f['name']?.toString() ?? 'file', maxLines: 1, overflow: TextOverflow.ellipsis),
+            title: Text(tr(f['name']?.toString() ?? 'file'), maxLines: 1, overflow: TextOverflow.ellipsis),
             onTap: () => launchUrl(Uri.parse(api.absoluteUrl(f['url'].toString())), mode: LaunchMode.externalApplication),
           ),
       ],
@@ -534,13 +535,13 @@ class EntityFilesPanel extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: onAdd,
           icon: const Icon(NxI.camera),
-          label: const Text('ถ่ายรูป / แนบไฟล์'),
+          label: Text(tr('ถ่ายรูป / แนบไฟล์')),
         ),
         const SizedBox(height: 12),
         if (all.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Text('ยังไม่มีไฟล์แนบ', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            child: Text(tr('ยังไม่มีไฟล์แนบ'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           )
         else
           NxSurfaceCard(padding: const EdgeInsets.all(12), child: AttachmentStrip(items: all)),
@@ -622,7 +623,7 @@ class EntityHistoryPanel extends StatelessWidget {
     if (events.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Text('ยังไม่มีประวัติ', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+        child: Text(tr('ยังไม่มีประวัติ'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
       );
     }
     return NxSurfaceCard(
@@ -655,10 +656,10 @@ class EntityHistoryPanel extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(d.title, style: theme.textTheme.titleSmall),
-                            if (d.detail != null) Text(d.detail!, style: theme.textTheme.bodyMedium),
+                            Text(tr(d.title), style: theme.textTheme.titleSmall),
+                            if (d.detail != null) Text(tr(d.detail!), style: theme.textTheme.bodyMedium),
                             Text(
-                              [if (who != null && who.isNotEmpty) who, relativeTime(events[i]['at'])].join(' · '),
+                              tr([if (who != null && who.isNotEmpty) who, relativeTime(events[i]['at'])].join(' · ')),
                               style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                             ),
                           ],
@@ -710,7 +711,7 @@ class NxSegmented extends StatelessWidget {
                   ),
                   alignment: Alignment.center,
                   child: Text(
-                    labels[i],
+                    tr(labels[i]),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -755,7 +756,7 @@ class PendingEntityDeletes extends ChangeNotifier {
     final ctrl = messenger.showSnackBar(SnackBar(
       duration: window,
       behavior: SnackBarBehavior.floating,
-      content: Text('ลบ $label แล้ว'),
+      content: Text(tr('ลบ $label แล้ว')),
       action: SnackBarAction(label: 'เลิกทำ', onPressed: () => undone = true),
     ));
     ctrl.closed.then((_) async {
@@ -763,7 +764,7 @@ class PendingEntityDeletes extends ChangeNotifier {
         try {
           await commit();
         } catch (e) {
-          messenger.showSnackBar(SnackBar(content: Text('ลบไม่สำเร็จ: ${formatApiError(e)}')));
+          messenger.showSnackBar(SnackBar(content: Text(tr('ลบไม่สำเร็จ: ${formatApiError(e)}'))));
         }
       }
       _keys.removeAll(keys);

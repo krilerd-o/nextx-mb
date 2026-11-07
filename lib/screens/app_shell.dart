@@ -26,6 +26,7 @@ import 'module/module_hub_screen.dart';
 import 'notifications/notification_center_screen.dart';
 import 'search/global_search_screen.dart';
 import 'workspace/workspace_home_screen.dart';
+import '../core/i18n.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -236,12 +237,12 @@ class _PendingSyncBanner extends StatelessWidget {
               dense: true,
               leading: Icon(NxI.cloud, color: cs.onTertiaryContainer),
               title: Text(
-                'มี $n รายการรอส่ง (บันทึกตอนออฟไลน์)',
+                tr('มี $n รายการรอส่ง (บันทึกตอนออฟไลน์)'),
                 style: TextStyle(color: cs.onTertiaryContainer),
               ),
               trailing: TextButton(
                 onPressed: () => context.read<AppConfig>().flushOfflineQueue(),
-                child: const Text('ส่งตอนนี้'),
+                child: Text(tr('ส่งตอนนี้')),
               ),
             ),
           ),

@@ -14,6 +14,7 @@ import '../core/nx_motion.dart';
 import '../screens/notifications/notification_center_screen.dart' show relativeTime;
 import '../services/unread_service.dart';
 import 'nx_icons.dart';
+import '../core/i18n.dart';
 
 /// Bell that morphs into an inline notification tray (expo-notif-morph):
 /// the circle grows from where the bell is into a card with the latest items.
@@ -148,8 +149,8 @@ class _MorphTrayState extends State<_MorphTray> {
             padding: const EdgeInsets.fromLTRB(18, 14, 8, 6),
             child: Row(
               children: [
-                Expanded(child: Text('การแจ้งเตือน', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
-                IconButton(tooltip: 'ปิด', icon: const Icon(NxI.x, size: 20), onPressed: () => Navigator.of(context).pop()),
+                Expanded(child: Text(tr('การแจ้งเตือน'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+                IconButton(tooltip: tr('ปิด'), icon: const Icon(NxI.x, size: 20), onPressed: () => Navigator.of(context).pop()),
               ],
             ),
           ),
@@ -161,7 +162,7 @@ class _MorphTrayState extends State<_MorphTray> {
               Navigator.of(context).pop();
               router.push(AppRoutes.notifications);
             },
-            child: const Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('ดูทั้งหมด')),
+            child: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text(tr('ดูทั้งหมด'))),
           ),
         ],
       ),
@@ -169,10 +170,10 @@ class _MorphTrayState extends State<_MorphTray> {
   }
 
   Widget _list(ThemeData theme, ColorScheme cs) {
-    if (_error != null) return Center(child: Text('โหลดไม่สำเร็จ', style: theme.textTheme.bodyMedium));
+    if (_error != null) return Center(child: Text(tr('โหลดไม่สำเร็จ'), style: theme.textTheme.bodyMedium));
     final items = _items;
     if (items == null) return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-    if (items.isEmpty) return Center(child: Text('ไม่มีการแจ้งเตือน', style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)));
+    if (items.isEmpty) return Center(child: Text(tr('ไม่มีการแจ้งเตือน'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)));
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: items.length,
@@ -197,15 +198,15 @@ class _MorphTrayState extends State<_MorphTray> {
               child: Icon(NxI.bell, size: 16, color: unread ? cs.primary : cs.onSurfaceVariant),
             ),
             title: Text(
-              stripHtmlPreview(it['title']?.toString() ?? '', maxLen: 80),
+              tr(stripHtmlPreview(it['title']?.toString() ?? '', maxLen: 80)),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontWeight: unread ? FontWeight.w700 : FontWeight.w500),
             ),
             subtitle: Text(
-              [stripHtmlPreview(it['body']?.toString() ?? '', maxLen: 60), relativeTime(it['created_at'])]
+              tr([stripHtmlPreview(it['body']?.toString() ?? '', maxLen: 60), relativeTime(it['created_at'])]
                   .where((e) => e.isNotEmpty)
-                  .join(' · '),
+                  .join(' · ')),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

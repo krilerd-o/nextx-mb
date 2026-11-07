@@ -26,6 +26,7 @@ import 'external_mail_compose_screen.dart';
 import '../../services/file_open.dart';
 import '../../services/realtime_service.dart';
 import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 class MailHomeScreen extends StatefulWidget {
   const MailHomeScreen({super.key});
@@ -208,8 +209,8 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
         children: [
           ListTile(
             leading: const CircleAvatar(child: Icon(NxI.envelope)),
-            title: const Text('เมลภายใน NEXTX'),
-            subtitle: const Text('ส่งหาคนในธุรกิจ'),
+            title: Text(tr('เมลภายใน NEXTX')),
+            subtitle: Text(tr('ส่งหาคนในธุรกิจ')),
             trailing: _account == null ? const Icon(NxI.check) : null,
             onTap: () => Navigator.pop(context, 'internal'),
           ),
@@ -229,22 +230,22 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
                       : NxBrandColor.gmail,
                 ),
               ),
-              title: Text(a.email.isEmpty ? a.providerLabel : a.email),
+              title: Text(tr(a.email.isEmpty ? a.providerLabel : a.email)),
               subtitle: Text(
-                [
+                tr([
                   a.providerLabel,
                   if (a.readOnly) 'อ่านอย่างเดียว',
                   if (a.status != null && a.status != 'active') a.status!,
-                ].join(' · '),
+                ].join(' · ')),
               ),
               trailing: _account == a ? const Icon(NxI.check) : null,
               onTap: () => Navigator.pop(context, a),
             ),
           if (_accounts.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Text(
-                'ยังไม่ได้เชื่อม Gmail / Outlook — เชื่อมได้ที่เว็บ เมนูเมล → ตั้งค่าบัญชี',
+                tr('ยังไม่ได้เชื่อม Gmail / Outlook — เชื่อมได้ที่เว็บ เมนูเมล → ตั้งค่าบัญชี'),
               ),
             ),
         ],
@@ -318,10 +319,10 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
       await call();
       if (done != null)
         messenger.showSnackBar(
-          SnackBar(content: Text(done), duration: const Duration(seconds: 2)),
+          SnackBar(content: Text(tr(done)), duration: const Duration(seconds: 2)),
         );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       _reload();
     }
   }
@@ -343,7 +344,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
       setState(() => m['starred'] = !next);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -361,7 +362,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
             : '${acc.providerLabel} · ${acc.email}',
         actions: [
           IconButton(
-            tooltip: _searching ? 'ปิดค้นหา' : 'ค้นหาเมล',
+            tooltip: trn(_searching ? 'ปิดค้นหา' : 'ค้นหาเมล'),
             icon: Icon(_searching ? NxI.x : NxI.magnifyingGlass),
             onPressed: () {
               setState(() {
@@ -375,12 +376,12 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
             },
           ),
           IconButton(
-            tooltip: 'เลือกกล่องเมล',
+            tooltip: tr('เลือกกล่องเมล'),
             onPressed: _pickAccount,
             icon: const Icon(NxI.tray),
           ),
           IconButton(
-            tooltip: 'เปิดเว็บเมล',
+            tooltip: tr('เปิดเว็บเมล'),
             onPressed: () async {
               final base = context.read<AppConfig>().apiBaseUrl.replaceAll(
                 RegExp(r'/+$'),
@@ -394,7 +395,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
             icon: const Icon(NxI.arrowSquareOut),
           ),
           // The FAB hides on wide layouts; keep compose reachable on tablets.
-          if (twoPane) NxAddButton(tooltip: 'เขียนเมล', onPressed: _compose),
+          if (twoPane) NxAddButton(tooltip: tr('เขียนเมล'), onPressed: _compose),
         ],
       ),
       floatingActionButton: NxCreateFab(label: 'เขียน', onPressed: _compose),
@@ -408,7 +409,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
                 autofocus: true,
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
-                  hintText: 'ค้นหาหัวข้อ เนื้อหา หรือผู้ส่ง',
+                  hintText: tr('ค้นหาหัวข้อ เนื้อหา หรือผู้ส่ง'),
                   prefixIcon: const Icon(NxI.magnifyingGlass),
                   filled: true,
                   isDense: true,
@@ -433,7 +434,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: ChoiceChip(
-                        label: Text(e.value),
+                        label: Text(tr(e.value)),
                         selected: _box == e.key,
                         showCheckmark: false,
                         onSelected: (_) => _setBox(e.key),
@@ -454,7 +455,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'กำลังซิงก์เมลจาก ${acc?.providerLabel ?? ''}…',
+                    tr('กำลังซิงก์เมลจาก ${acc?.providerLabel ?? ''}…'),
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
@@ -473,8 +474,8 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(formatApiError(_error!), textAlign: TextAlign.center),
-            TextButton(onPressed: _reload, child: const Text('ลองใหม่')),
+            Text(tr(formatApiError(_error!)), textAlign: TextAlign.center),
+            TextButton(onPressed: _reload, child: Text(tr('ลองใหม่'))),
           ],
         ),
       );
@@ -488,9 +489,9 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
               height: 260,
               child: Center(
                 child: Text(
-                  _query.isNotEmpty
+                  tr(_query.isNotEmpty
                       ? 'ไม่พบเมลที่ตรงกับ "$_query"'
-                      : 'ไม่มีจดหมายใน${_boxes[_box]}',
+                      : 'ไม่มีจดหมายใน${_boxes[_box]}'),
                 ),
               ),
             ),
@@ -613,7 +614,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
           Icon(icon, color: Colors.white),
           const SizedBox(width: 8),
           Text(
-            label,
+            tr(label),
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -680,10 +681,10 @@ class _MailRow extends StatelessWidget {
                       ],
                       Expanded(
                         child: Text(
-                          [
+                          tr([
                             who.isEmpty ? '—' : who,
                             if (count > 1) '($count)',
-                          ].join(' '),
+                          ].join(' ')),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleSmall?.copyWith(
@@ -694,14 +695,14 @@ class _MailRow extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        mailShortTime(m['sent_at'] ?? m['created_at']),
+                        tr(mailShortTime(m['sent_at'] ?? m['created_at'])),
                         style: theme.textTheme.bodySmall,
                       ),
                     ],
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    subject,
+                    tr(subject),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -710,7 +711,7 @@ class _MailRow extends StatelessWidget {
                   ),
                   if (snippet.isNotEmpty)
                     Text(
-                      snippet,
+                      tr(snippet),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -725,7 +726,7 @@ class _MailRow extends StatelessWidget {
                 if (showStar)
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    tooltip: starred ? 'เอาดาวออก' : 'ติดดาว',
+                    tooltip: trn(starred ? 'เอาดาวออก' : 'ติดดาว'),
                     onPressed: onStar,
                     icon: Icon(
                       starred ? NxI.starFill : NxI.star,
@@ -764,7 +765,7 @@ String mailLongTime(dynamic raw) {
     'พ.ย.',
     'ธ.ค.',
   ];
-  return '${d.day} ${m[d.month - 1]} ${d.year + 543} · ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  return '${d.day} ${tr(m[d.month - 1])} ${uiYear(d.year)} · ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
 
 /// `14:05` today, `7 พ.ย.` otherwise.
@@ -789,7 +790,7 @@ String mailShortTime(dynamic raw) {
     'พ.ย.',
     'ธ.ค.',
   ];
-  return '${d.day} ${m[d.month - 1]}';
+  return '${d.day} ${tr(m[d.month - 1])}';
 }
 
 /// Inbox rows have `read_at == null` until the recipient opens them.
@@ -922,11 +923,11 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
     try {
       await call();
       messenger.showSnackBar(
-        SnackBar(content: Text(done), duration: const Duration(seconds: 2)),
+        SnackBar(content: Text(tr(done)), duration: const Duration(seconds: 2)),
       );
       if (close && mounted) _done();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -953,7 +954,7 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
       if (mounted)
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -962,16 +963,16 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(permanent ? 'ลบถาวร?' : 'ย้ายไปถังขยะ?'),
-        content: Text(permanent ? 'ลบแล้วกู้คืนไม่ได้' : 'กู้คืนได้จากถังขยะ'),
+        title: Text(tr(permanent ? 'ลบถาวร?' : 'ย้ายไปถังขยะ?')),
+        content: Text(tr(permanent ? 'ลบแล้วกู้คืนไม่ได้' : 'กู้คืนได้จากถังขยะ')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ยกเลิก'),
+            child: Text(tr('ยกเลิก')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('ลบ'),
+            child: Text(tr('ลบ')),
           ),
         ],
       ),
@@ -985,14 +986,14 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(permanent ? 'ลบถาวรแล้ว' : 'ย้ายไปถังขยะแล้ว')),
+        SnackBar(content: Text(tr(permanent ? 'ลบถาวรแล้ว' : 'ย้ายไปถังขยะแล้ว'))),
       );
       _done();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -1006,13 +1007,13 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('กู้คืนแล้ว')));
+      ).showSnackBar(SnackBar(content: Text(tr('กู้คืนแล้ว'))));
       _done();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -1062,7 +1063,7 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
         actions: [
           if (acc != null)
             IconButton(
-              tooltip: starred ? 'เอาดาวออก' : 'ติดดาว',
+              tooltip: trn(starred ? 'เอาดาวออก' : 'ติดดาว'),
               icon: Icon(
                 starred ? NxI.starFill : NxI.star,
                 color: starred ? const Color(0xFFF59E0B) : null,
@@ -1077,12 +1078,12 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
             ),
           if (widget.box == 'trash')
             IconButton(
-              tooltip: 'กู้คืน',
+              tooltip: tr('กู้คืน'),
               onPressed: _restore,
               icon: const Icon(NxI.arrowCounterClockwise),
             ),
           IconButton(
-            tooltip: widget.box == 'trash' ? 'ลบถาวร' : 'ลบ',
+            tooltip: trn(widget.box == 'trash' ? 'ลบถาวร' : 'ลบ'),
             onPressed: _delete,
             icon: const Icon(NxI.trash),
           ),
@@ -1100,7 +1101,7 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
                         child: FilledButton.icon(
                           onPressed: () => _respond(MailComposeMode.reply),
                           icon: const Icon(NxI.reply),
-                          label: const Text('ตอบกลับ'),
+                          label: Text(tr('ตอบกลับ')),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -1109,7 +1110,7 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
                       child: OutlinedButton.icon(
                         onPressed: () => _respond(MailComposeMode.forward),
                         icon: const Icon(NxI.forward),
-                        label: const Text('ส่งต่อ'),
+                        label: Text(tr('ส่งต่อ')),
                       ),
                     ),
                   ],
@@ -1125,16 +1126,16 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
             16,
           ),
           children: [
-            if (_error != null) Text(formatApiError(_error!)),
+            if (_error != null) Text(tr(formatApiError(_error!))),
             Text(
-              mailCounterparty(data, 'inbox'),
+              tr(mailCounterparty(data, 'inbox')),
               style: Theme.of(context).textTheme.titleSmall,
             ),
             if (_recipientsLine(data).isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  _recipientsLine(data),
+                  tr(_recipientsLine(data)),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -1142,7 +1143,7 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Text(
-                  mailLongTime(data['sent_at'] ?? data['created_at']),
+                  tr(mailLongTime(data['sent_at'] ?? data['created_at'])),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -1158,7 +1159,7 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
             if (_attachments.isNotEmpty) ...[
               const SizedBox(height: 16),
               Text(
-                'ไฟล์แนบ (${_attachments.length})',
+                tr('ไฟล์แนบ (${_attachments.length})'),
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const SizedBox(height: 6),
@@ -1168,13 +1169,13 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
                   child: ListTile(
                     leading: const Icon(NxI.paperclip),
                     title: Text(
-                      (a['filename'] ?? a['name'] ?? 'file').toString(),
+                      tr((a['filename'] ?? a['name'] ?? 'file').toString()),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: a['size'] == null
                         ? null
-                        : Text(_fileSize(a['size'])),
+                        : Text(tr(_fileSize(a['size']))),
                     trailing: const Icon(NxI.arrowSquareOut, size: 18),
                     onTap: () => _openAttachment(a),
                   ),

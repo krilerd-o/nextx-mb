@@ -18,6 +18,7 @@ import 'profile/phone_verify_screen.dart';
 import 'profile_edit_screen.dart';
 import 'settings_screen.dart';
 import '../core/nx_page_route.dart';
+import '../core/i18n.dart';
 
 /// Phase 7 — โปรไฟล์, ภาษา/รูปแบบวันที่, รหัสผ่าน/2FA placeholder, accent, avatar (C1)
 class ProfileScreen extends StatelessWidget {
@@ -65,13 +66,13 @@ class ProfileScreen extends StatelessWidget {
               children: [
                 avatar,
                 const SizedBox(height: 12),
-                Text(email, style: theme.textTheme.titleMedium),
+                Text(tr(email), style: theme.textTheme.titleMedium),
                 Text(
-                  'v${SettingsScreen.appVersion}',
+                  tr('v${SettingsScreen.appVersion}'),
                   style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 Text(
-                  'รูปโปรไฟล์อัปโหลดไปเซิร์ฟเวอร์',
+                  tr('รูปโปรไฟล์อัปโหลดไปเซิร์ฟเวอร์'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
@@ -84,7 +85,7 @@ class ProfileScreen extends StatelessWidget {
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(formatApiError(e))),
+                          SnackBar(content: Text(tr(formatApiError(e)))),
                         );
                       }
                     }
@@ -93,20 +94,20 @@ class ProfileScreen extends StatelessWidget {
                 if (b64 != null && b64.isNotEmpty)
                   TextButton(
                     onPressed: () => config.clearProfileAvatar(),
-                    child: const Text('ลบรูป'),
+                    child: Text(tr('ลบรูป')),
                   ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: () => nxPush<bool>(context, const ProfileEditScreen()),
                   icon: const Icon(NxI.pencilSimple),
-                  label: const Text('แก้ไขข้อมูลส่วนตัว'),
+                  label: Text(tr('แก้ไขข้อมูลส่วนตัว')),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 24),
           Text(
-            'การแสดงผล',
+            tr('การแสดงผล'),
             style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
@@ -114,13 +115,13 @@ class ProfileScreen extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  title: const Text('ภาษาของปฏิทิน/ปุ่มระบบ'),
-                  subtitle: Text(config.uiLocaleCode == 'th' ? 'ไทย' : 'English'),
+                  title: Text(tr('ภาษาของแอป')),
+                  subtitle: Text(tr(config.uiLocaleCode == 'th' ? 'ไทย' : 'English')),
                   trailing: DropdownButton<String>(
                     value: config.uiLocaleCode,
-                    items: const [
-                      DropdownMenuItem(value: 'th', child: Text('ไทย')),
-                      DropdownMenuItem(value: 'en', child: Text('English')),
+                    items: [
+                      DropdownMenuItem(value: 'th', child: Text(tr('ไทย'))),
+                      DropdownMenuItem(value: 'en', child: Text(tr('English'))),
                     ],
                     onChanged: (v) {
                       if (v != null) config.setUiLocaleCode(v);
@@ -128,14 +129,14 @@ class ProfileScreen extends StatelessWidget {
                   ),
                 ),
                 ListTile(
-                  title: const Text('รูปแบบวันที่/เวลา'),
-                  subtitle: Text(config.dateFormatPattern),
+                  title: Text(tr('รูปแบบวันที่/เวลา')),
+                  subtitle: Text(tr(config.dateFormatPattern)),
                   trailing: DropdownButton<String>(
                     value: config.dateFormatPattern,
-                    items: const [
-                      DropdownMenuItem(value: 'dd/MM/yyyy HH:mm', child: Text('dd/MM/yyyy HH:mm')),
-                      DropdownMenuItem(value: 'yyyy-MM-dd HH:mm', child: Text('yyyy-MM-dd HH:mm')),
-                      DropdownMenuItem(value: 'MM/dd/yyyy h:mm a', child: Text('MM/dd/yyyy h:mm a')),
+                    items: [
+                      DropdownMenuItem(value: 'dd/MM/yyyy HH:mm', child: Text(tr('dd/MM/yyyy HH:mm'))),
+                      DropdownMenuItem(value: 'yyyy-MM-dd HH:mm', child: Text(tr('yyyy-MM-dd HH:mm'))),
+                      DropdownMenuItem(value: 'MM/dd/yyyy h:mm a', child: Text(tr('MM/dd/yyyy h:mm a'))),
                     ],
                     onChanged: (v) {
                       if (v != null) config.setDateFormatPattern(v);
@@ -143,8 +144,8 @@ class ProfileScreen extends StatelessWidget {
                   ),
                 ),
                 ListTile(
-                  title: const Text('สีเน้น (accent)'),
-                  subtitle: const Text('เก็บใน SharedPreferences'),
+                  title: Text(tr('สีเน้น (accent)')),
+                  subtitle: Text(tr('เก็บใน SharedPreferences')),
                   trailing: DropdownButton<int>(
                     value: config.accentIndex.clamp(0, AppConfig.accentOptions.length - 1),
                     items: List.generate(
@@ -163,7 +164,7 @@ class ProfileScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Text('ตัวเลือก ${i + 1}'),
+                            Text(tr('ตัวเลือก ${i + 1}')),
                           ],
                         ),
                       ),
@@ -178,7 +179,7 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'ความปลอดภัย',
+            tr('ความปลอดภัย'),
             style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
@@ -187,22 +188,22 @@ class ProfileScreen extends StatelessWidget {
               children: [
                 ListTile(
                   leading: const Icon(NxI.pencilSimple),
-                  title: const Text('ลายเซ็นของฉัน'),
-                  subtitle: const Text('ใช้บนใบเสนอราคาและเอกสาร (TH / EN)'),
+                  title: Text(tr('ลายเซ็นของฉัน')),
+                  subtitle: Text(tr('ใช้บนใบเสนอราคาและเอกสาร (TH / EN)')),
                   trailing: const Icon(NxI.caretRight),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MySignaturesScreen())),
                 ),
                 ListTile(
                   leading: const Icon(NxI.phone),
-                  title: const Text('ยืนยันเบอร์มือถือ'),
-                  subtitle: const Text('ใช้เข้าสู่ระบบด้วย OTP SMS'),
+                  title: Text(tr('ยืนยันเบอร์มือถือ')),
+                  subtitle: Text(tr('ใช้เข้าสู่ระบบด้วย OTP SMS')),
                   trailing: const Icon(NxI.caretRight),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneVerifyScreen())),
                 ),
                 ListTile(
                   leading: const Icon(NxI.password),
-                  title: const Text('เปลี่ยนรหัสผ่าน'),
-                  subtitle: const Text('รหัสปัจจุบัน + รหัสใหม่ (ยืนยัน)'),
+                  title: Text(tr('เปลี่ยนรหัสผ่าน')),
+                  subtitle: Text(tr('รหัสปัจจุบัน + รหัสใหม่ (ยืนยัน)')),
                   onTap: () async {
                     final current = TextEditingController();
                     final next = TextEditingController();
@@ -211,7 +212,7 @@ class ProfileScreen extends StatelessWidget {
                     final ok = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('เปลี่ยนรหัสผ่าน'),
+                        title: Text(tr('เปลี่ยนรหัสผ่าน')),
                         content: Form(
                           key: formKey,
                           child: Column(
@@ -220,21 +221,21 @@ class ProfileScreen extends StatelessWidget {
                               TextFormField(
                                 controller: current,
                                 obscureText: true,
-                                decoration: const InputDecoration(labelText: 'รหัสผ่านปัจจุบัน'),
+                                decoration: InputDecoration(labelText: tr('รหัสผ่านปัจจุบัน')),
                                 validator: (v) =>
                                     (v == null || v.isEmpty) ? 'กรุณากรอก' : null,
                               ),
                               TextFormField(
                                 controller: next,
                                 obscureText: true,
-                                decoration: const InputDecoration(labelText: 'รหัสผ่านใหม่'),
+                                decoration: InputDecoration(labelText: tr('รหัสผ่านใหม่')),
                                 validator: (v) =>
                                     (v == null || v.length < 6) ? 'อย่างน้อย 6 ตัวอักษร' : null,
                               ),
                               TextFormField(
                                 controller: confirm,
                                 obscureText: true,
-                                decoration: const InputDecoration(labelText: 'ยืนยันรหัสใหม่'),
+                                decoration: InputDecoration(labelText: tr('ยืนยันรหัสใหม่')),
                                 validator: (v) =>
                                     v != next.text ? 'รหัสไม่ตรงกัน' : null,
                               ),
@@ -242,14 +243,14 @@ class ProfileScreen extends StatelessWidget {
                           ),
                         ),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
                           FilledButton(
                             onPressed: () {
                               if (formKey.currentState?.validate() == true) {
                                 Navigator.pop(ctx, true);
                               }
                             },
-                            child: const Text('บันทึก'),
+                            child: Text(tr('บันทึก')),
                           ),
                         ],
                       ),
@@ -264,13 +265,13 @@ class ProfileScreen extends StatelessWidget {
                         await config.apiClient.changePassword(value, currentPassword: currentValue);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('เปลี่ยนรหัสแล้ว')),
+                            SnackBar(content: Text(tr('เปลี่ยนรหัสแล้ว'))),
                           );
                         }
                       } catch (e) {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(formatApiError(e))),
+                            SnackBar(content: Text(tr(formatApiError(e)))),
                           );
                         }
                       }
@@ -279,12 +280,12 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 ListTile(
                   leading: const Icon(NxI.bell),
-                  title: const Text('โทเคนพุช (FCM)'),
+                  title: Text(tr('โทเคนพุช (FCM)')),
                   subtitle: Text(
-                    DevicePushService.instance.lastToken == null ||
+                    tr(DevicePushService.instance.lastToken == null ||
                             DevicePushService.instance.lastToken!.isEmpty
                         ? 'ยังไม่มี — เปิดแอปบนมือถือจริงแล้วล็อกอิน'
-                        : DevicePushService.instance.lastToken!,
+                        : DevicePushService.instance.lastToken!),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -297,7 +298,7 @@ class ProfileScreen extends StatelessWidget {
                     if (token == null || token.isEmpty) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('ยังไม่มีโทเคน — ใช้แอปบน Android หลังวาง google-services.json')),
+                          SnackBar(content: Text(tr('ยังไม่มีโทเคน — ใช้แอปบน Android หลังวาง google-services.json'))),
                         );
                       }
                       return;
@@ -305,26 +306,26 @@ class ProfileScreen extends StatelessWidget {
                     await Clipboard.setData(ClipboardData(text: token));
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('คัดลอกโทเคนแล้ว — วางใน Firebase Cloud Messaging เพื่อทดสอบ')),
+                        SnackBar(content: Text(tr('คัดลอกโทเคนแล้ว — วางใน Firebase Cloud Messaging เพื่อทดสอบ'))),
                       );
                     }
                   },
                 ),
                 ListTile(
                   leading: const Icon(NxI.shieldCheck),
-                  title: const Text('Two-factor (2FA)'),
-                  subtitle: const Text('ยังไม่เปิดใช้บนเซิร์ฟเวอร์มือถือ'),
+                  title: Text(tr('Two-factor (2FA)')),
+                  subtitle: Text(tr('ยังไม่เปิดใช้บนเซิร์ฟเวอร์มือถือ')),
                   onTap: () {
                     showDialog<void>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text('Two-factor authentication'),
-                        content: const Text(
-                          'แอปยังไม่มี endpoint 2FA จาก NEXTX web API '
-                          'เมื่อเซิร์ฟเวอร์เปิดใช้ จะเชื่อมจากหน้านี้',
+                        title: Text(tr('Two-factor authentication')),
+                        content: Text(
+                          tr('แอปยังไม่มี endpoint 2FA จาก NEXTX web API '
+                          'เมื่อเซิร์ฟเวอร์เปิดใช้ จะเชื่อมจากหน้านี้'),
                         ),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ปิด')),
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ปิด'))),
                         ],
                       ),
                     );

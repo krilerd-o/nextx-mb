@@ -5,6 +5,7 @@ import '../../core/navigation/app_routes.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_hero_illustration.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class _Slide {
   const _Slide(this.title, this.body, this.icon, this.chips);
@@ -85,13 +86,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       child: Column(
                         children: [
                           Text(
-                            s.title,
+                            tr(s.title),
                             textAlign: TextAlign.center,
                             style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700, height: 1.25),
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            s.body,
+                            tr(s.body),
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.5),
                           ),
@@ -136,7 +137,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
                       ),
                       onPressed: () => context.go(AppRoutes.server),
-                      child: Text('ฉันมีบัญชีอยู่แล้ว', style: theme.textTheme.titleSmall),
+                      child: Text(tr('ฉันมีบัญชีอยู่แล้ว'), style: theme.textTheme.titleSmall),
                     ),
                   ),
                 ],

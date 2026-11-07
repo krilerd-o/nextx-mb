@@ -12,6 +12,7 @@ import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/section_header.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class HrHomeScreen extends StatelessWidget {
   const HrHomeScreen({super.key, this.standalone = false});
@@ -69,9 +70,9 @@ class _HrShortcuts extends StatelessWidget {
       children: [
         const SectionHeader('HR'),
         if (tiles.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(24),
-            child: Center(child: Text('ไม่มีเมนู HR ที่เข้าถึงได้')),
+            child: Center(child: Text(tr('ไม่มีเมนู HR ที่เข้าถึงได้'))),
           ),
         LayoutBuilder(
           builder: (context, c) {
@@ -96,8 +97,8 @@ class _HrShortcuts extends StatelessWidget {
                             child: Icon(t.icon, color: nxAvatarColor(t.title)),
                           ),
                           const SizedBox(height: 12),
-                          Text(t.title, style: theme.textTheme.titleMedium),
-                          Text(t.subtitle, style: theme.textTheme.bodySmall),
+                          Text(tr(t.title), style: theme.textTheme.titleMedium),
+                          Text(tr(t.subtitle), style: theme.textTheme.bodySmall),
                         ],
                       ),
                     ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'nx_icons.dart';
 import 'nx_press_scale.dart';
+import '../core/i18n.dart';
 
 /// Onboarding step header: round back button, segmented progress, `2/5`.
 class NxStepHeader extends StatelessWidget {
@@ -57,8 +58,8 @@ class NxStepHeader extends StatelessWidget {
           const SizedBox(width: 14),
           Text.rich(
             TextSpan(children: [
-              TextSpan(text: '$step', style: const TextStyle(fontWeight: FontWeight.w700)),
-              TextSpan(text: '/$total', style: TextStyle(color: cs.onSurfaceVariant)),
+              TextSpan(text: tr('$step'), style: const TextStyle(fontWeight: FontWeight.w700)),
+              TextSpan(text: tr('/$total'), style: TextStyle(color: cs.onSurfaceVariant)),
             ]),
             style: theme.textTheme.labelLarge,
           ),
@@ -120,9 +121,9 @@ class NxChoiceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                  Text(tr(title), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
                   if (subtitle != null && subtitle!.isNotEmpty)
-                    Text(subtitle!,
+                    Text(tr(subtitle!),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),

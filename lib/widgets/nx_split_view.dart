@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/nx_breakpoint.dart';
+import '../core/i18n.dart';
 
 class NxSplitView extends StatelessWidget {
   const NxSplitView({
@@ -47,7 +48,7 @@ class NxSplitView extends StatelessWidget {
               empty ??
               Center(
                 child: Text(
-                  'เลือกจากรายการ',
+                  tr('เลือกจากรายการ'),
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),

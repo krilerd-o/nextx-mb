@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import 'nx_field_chrome.dart';
+import '../../core/i18n.dart';
 
 class NxCanvasField extends StatefulWidget {
   const NxCanvasField({
@@ -175,7 +176,7 @@ class _NxCanvasFieldState extends State<NxCanvasField> {
                     _commit();
                   }
                 : null,
-            child: const Text('ล้าง'),
+            child: Text(tr('ล้าง')),
           ),
         ),
       ],

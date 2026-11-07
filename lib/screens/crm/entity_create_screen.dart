@@ -11,6 +11,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class EntityCreateScreen extends StatefulWidget {
   const EntityCreateScreen({
@@ -108,7 +109,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
           });
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรอกช่องที่จำเป็นและตรวจรูปแบบก่อนบันทึก')),
+          SnackBar(content: Text(tr('กรอกช่องที่จำเป็นและตรวจรูปแบบก่อนบันทึก'))),
         );
         return;
       }
@@ -131,7 +132,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
       if (mounted) _finish(true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -157,7 +158,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
         automaticallyImplyLeading: !widget.embedded,
         leading: widget.embedded
             ? IconButton(
-                tooltip: 'ปิด',
+                tooltip: tr('ปิด'),
                 onPressed: () => _finish(false),
                 icon: const Icon(NxI.x),
               )
@@ -170,13 +171,13 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
                 padding: EdgeInsets.fromLTRB(pad, 8, pad, 32),
                 children: [
                   if (_error != null)
-                    Text(formatApiError(_error!), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    Text(tr(formatApiError(_error!)), style: TextStyle(color: Theme.of(context).colorScheme.error)),
                   if (_fields.isEmpty)
                     NxFormField(
                       uiType: FieldUiType.text,
                       label: 'ชื่อเรื่อง',
                       required: true,
-                      errorText: _errors['subject'],
+                      errorText: trn(_errors['subject']),
                       value: _values['subject'],
                       onChanged: (v) => setState(() => _values['subject'] = v),
                     )

@@ -15,6 +15,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 class LeaveScreen extends StatefulWidget {
   const LeaveScreen({super.key, this.initialTab = 0});
@@ -77,7 +78,7 @@ class _LeaveBalanceTab extends StatelessWidget {
       load: () => context.read<AppConfig>().apiClient.getLeaveBalance(),
       skeleton: const NxSkeletonList(rows: 4),
       isEmpty: (list) => list.isEmpty,
-      empty: const Center(child: Text('ไม่มีข้อมูลสิทธิ์ลา')),
+      empty: Center(child: Text(tr('ไม่มีข้อมูลสิทธิ์ลา'))),
       builder: (context, list) {
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -158,7 +159,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
 
   Future<void> _submit() async {
     if (_typeId == null || _range == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เลือกประเภทลาและวันที่')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('เลือกประเภทลาและวันที่'))));
       return;
     }
     setState(() => _saving = true);
@@ -180,14 +181,14 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
         }
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(note)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(note))));
         _reason.clear();
         setState(() => _files = []);
         widget.onSubmitted();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -209,12 +210,12 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
             children: [
               DropdownButtonFormField<int>(
                 value: _typeId,
-                decoration: const InputDecoration(labelText: 'ประเภท'),
+                decoration: InputDecoration(labelText: tr('ประเภท')),
                 items: _types
                     .map(
                       (e) => DropdownMenuItem(
                         value: int.tryParse(e['id']?.toString() ?? ''),
-                        child: Text(e['name']?.toString() ?? ''),
+                        child: Text(tr(e['name']?.toString() ?? '')),
                       ),
                     )
                     .where((e) => e.value != null)
@@ -224,11 +225,11 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
               const SizedBox(height: 12),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('ช่วงวันที่'),
+                title: Text(tr('ช่วงวันที่')),
                 subtitle: Text(
-                  _range == null
+                  tr(_range == null
                       ? 'แตะเพื่อเลือก'
-                      : '${_range!.start.day}/${_range!.start.month} – ${_range!.end.day}/${_range!.end.month}',
+                      : '${_range!.start.day}/${_range!.start.month} – ${_range!.end.day}/${_range!.end.month}'),
                 ),
                 trailing: const Icon(NxI.calendarBlank),
                 onTap: _pickRange,
@@ -236,7 +237,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
               const SizedBox(height: 8),
               TextField(
                 controller: _reason,
-                decoration: const InputDecoration(labelText: 'เหตุผล'),
+                decoration: InputDecoration(labelText: tr('เหตุผล')),
                 maxLines: 3,
               ),
               if (context.select((AppConfig c) => c.serverInfo)?.has('leave_attachments') ?? false) ...[
@@ -251,7 +252,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
                             if (picked.isNotEmpty && mounted) setState(() => _files = [..._files, ...picked]);
                           },
                     icon: const Icon(NxI.paperclip, size: 18),
-                    label: const Text('แนบไฟล์ (เช่น ใบรับรองแพทย์)'),
+                    label: Text(tr('แนบไฟล์ (เช่น ใบรับรองแพทย์)')),
                   ),
                 ),
                 if (_files.isNotEmpty)
@@ -261,7 +262,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
                     children: [
                       for (final f in _files)
                         InputChip(
-                          label: Text(f.name, overflow: TextOverflow.ellipsis),
+                          label: Text(tr(f.name), overflow: TextOverflow.ellipsis),
                           onDeleted: () => setState(() => _files = _files.where((x) => !identical(x, f)).toList()),
                         ),
                     ],
@@ -296,11 +297,11 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยกเลิกคำขอลา?'),
-        content: Text('${p['leave_type_name'] ?? 'ลา'} ${p['start_date'] ?? ''} – ${p['end_date'] ?? ''}'),
+        title: Text(tr('ยกเลิกคำขอลา?')),
+        content: Text(tr('${p['leave_type_name'] ?? 'ลา'} ${p['start_date'] ?? ''} – ${p['end_date'] ?? ''}')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ไม่')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ยกเลิกคำขอ')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ไม่'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ยกเลิกคำขอ'))),
         ],
       ),
     );
@@ -308,11 +309,11 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
     try {
       await context.read<AppConfig>().apiClient.cancelLeave(p['id'].toString());
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ยกเลิกคำขอลาแล้ว')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ยกเลิกคำขอลาแล้ว'))));
       setState(() => _local++);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -324,7 +325,7 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
       load: () => context.read<AppConfig>().apiClient.getLeaveRequests(),
       skeleton: const NxSkeletonList(rows: 4),
       isEmpty: (list) => list.isEmpty,
-      empty: const Center(child: Text('ยังไม่มีคำขอลา')),
+      empty: Center(child: Text(tr('ยังไม่มีคำขอลา'))),
       builder: (context, list) {
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -391,7 +392,7 @@ class _LeaveRequestCard extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          who != null && who.isNotEmpty ? who : (row['leave_type_name']?.toString() ?? 'ลา'),
+                          tr(who != null && who.isNotEmpty ? who : (row['leave_type_name']?.toString() ?? 'ลา')),
                           style: theme.textTheme.titleSmall,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -400,27 +401,27 @@ class _LeaveRequestCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
-                        child: Text(label, style: theme.textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
+                        child: Text(tr(label), style: theme.textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    [
+                    tr([
                       if (who != null && who.isNotEmpty) row['leave_type_name']?.toString() ?? '',
                       '${d(row['start_date'])} – ${d(row['end_date'])}',
                       if (row['days'] != null) '${row['days']} วัน',
-                    ].where((e) => e.isNotEmpty).join(' · '),
+                    ].where((e) => e.isNotEmpty).join(' · ')),
                     style: theme.textTheme.bodySmall,
                   ),
-                  if (reason.isNotEmpty) Text('เหตุผล: $reason', style: theme.textTheme.bodySmall),
+                  if (reason.isNotEmpty) Text(tr('เหตุผล: $reason'), style: theme.textTheme.bodySmall),
                   if (reject.isNotEmpty)
-                    Text('เหตุผลที่ไม่อนุมัติ: $reject', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                    Text(tr('เหตุผลที่ไม่อนุมัติ: $reject'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
                   LeaveAttachments(row: row, editable: editableFiles),
                 ],
               ),
             ),
-            if (onCancel != null) TextButton(onPressed: onCancel, child: const Text('ยกเลิก')),
+            if (onCancel != null) TextButton(onPressed: onCancel, child: Text(tr('ยกเลิก'))),
             ?trailing,
           ],
         ),
@@ -450,8 +451,8 @@ class _BalanceCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text(row['leave_type_name']?.toString() ?? '', style: theme.textTheme.titleSmall)),
-                Text('คงเหลือ ${n(left < 0 ? 0 : left)} วัน', style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary)),
+                Expanded(child: Text(tr(row['leave_type_name']?.toString() ?? ''), style: theme.textTheme.titleSmall)),
+                Text(tr('คงเหลือ ${n(left < 0 ? 0 : left)} วัน'), style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary)),
               ],
             ),
             const SizedBox(height: 8),
@@ -460,7 +461,7 @@ class _BalanceCard extends StatelessWidget {
               child: LinearProgressIndicator(value: ratio, minHeight: 8),
             ),
             const SizedBox(height: 4),
-            Text('ใช้ไป ${n(used)} จาก ${n(total)} วัน', style: theme.textTheme.bodySmall),
+            Text(tr('ใช้ไป ${n(used)} จาก ${n(total)} วัน'), style: theme.textTheme.bodySmall),
           ],
         ),
       ),
@@ -485,11 +486,11 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
       reason = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('เหตุผลที่ไม่อนุมัติ'),
-          content: TextField(controller: ctrl, autofocus: true, maxLines: 3, decoration: const InputDecoration(hintText: 'ไม่บังคับ')),
+          title: Text(tr('เหตุผลที่ไม่อนุมัติ')),
+          content: TextField(controller: ctrl, autofocus: true, maxLines: 3, decoration: InputDecoration(hintText: tr('ไม่บังคับ'))),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('ไม่อนุมัติ')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('ไม่อนุมัติ'))),
           ],
         ),
       );
@@ -501,7 +502,7 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
       if (mounted) setState(() => _revision++);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -513,7 +514,7 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
       load: () => context.read<AppConfig>().apiClient.getLeaveRequests(all: true, status: 'Pending'),
       skeleton: const NxSkeletonList(rows: 4),
       isEmpty: (list) => list.isEmpty,
-      empty: const Center(child: Text('ไม่มีคำขอรออนุมัติ')),
+      empty: Center(child: Text(tr('ไม่มีคำขอรออนุมัติ'))),
       builder: (context, pending) {
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -580,7 +581,7 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
       final next = await f();
       if (mounted) setState(() => _files = next);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -593,7 +594,7 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
       final bytes = await api.downloadLeaveAttachment(f['url'].toString());
       await openFileBytes(bytes, f['name']?.toString() ?? 'file');
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -612,7 +613,7 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
           for (final f in _files)
             InputChip(
               avatar: Icon((f['mime']?.toString() ?? '').startsWith('image/') ? NxI.image : NxI.file, size: 16),
-              label: Text(f['name']?.toString() ?? 'ไฟล์', overflow: TextOverflow.ellipsis),
+              label: Text(tr(f['name']?.toString() ?? 'ไฟล์'), overflow: TextOverflow.ellipsis),
               onPressed: _busy ? null : () => _open(f),
               onDeleted: widget.editable && !_busy ? () => _run(() => api.removeLeaveAttachment(_id, f['id'].toString())) : null,
               deleteButtonTooltipMessage: 'เอาไฟล์ออก',
@@ -620,7 +621,7 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
           if (canAdd)
             ActionChip(
               avatar: _busy ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.paperclip, size: 16),
-              label: const Text('แนบไฟล์'),
+              label: Text(tr('แนบไฟล์')),
               onPressed: _busy
                   ? null
                   : () async {

@@ -5,6 +5,7 @@ import '../../core/app_config.dart';
 import '../../core/auth_errors.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 /// Sign up (NEXTX `POST /api/auth/register`): with a serial/invite key the
 /// account is created right away; without one it waits for admin approval.
@@ -77,7 +78,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   InputDecoration _dec(String label, IconData icon) => InputDecoration(
-        labelText: label,
+        labelText: trn(label),
         prefixIcon: Icon(icon),
         filled: true,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
@@ -97,9 +98,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             children: [
               CircleAvatar(radius: 40, backgroundColor: cs.primary.withValues(alpha: 0.12), child: Icon(NxI.clockCountdown, size: 38, color: cs.primary)),
               const SizedBox(height: 20),
-              Text('ส่งคำขอสมัครแล้ว', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+              Text(tr('ส่งคำขอสมัครแล้ว'), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
-              Text('ผู้ดูแลระบบจะตรวจสอบและอนุมัติบัญชีของคุณ\nเมื่ออนุมัติแล้วจะได้รับอีเมลแจ้ง',
+              Text(tr('ผู้ดูแลระบบจะตรวจสอบและอนุมัติบัญชีของคุณ\nเมื่ออนุมัติแล้วจะได้รับอีเมลแจ้ง'),
                   textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
               const SizedBox(height: 28),
               NxHeroCta(label: 'กลับไปหน้าเข้าสู่ระบบ', onPressed: () => Navigator.of(context).pop(false)),
@@ -109,16 +110,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('สมัครสมาชิก')),
+      appBar: AppBar(title: Text(tr('สมัครสมาชิก'))),
       body: SafeArea(
         child: Form(
           key: _form,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              Text('สร้างบัญชี MOAI NEXT', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+              Text(tr('สร้างบัญชี MOAI NEXT'), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
-              Text('มีรหัสเชิญ/ซีเรียลจากบริษัท ใช้งานได้ทันที ไม่มีรหัสจะรอผู้ดูแลอนุมัติ',
+              Text(tr('มีรหัสเชิญ/ซีเรียลจากบริษัท ใช้งานได้ทันที ไม่มีรหัสจะรอผู้ดูแลอนุมัติ'),
                   style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
               const SizedBox(height: 20),
               TextFormField(
@@ -161,13 +162,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Row(children: [
                     Icon(NxI.checkCircleFill, color: cs.primary),
                     const SizedBox(width: 10),
-                    const Expanded(child: Text('สมัครจากลิงก์เชิญ — เข้าธุรกิจได้ทันทีโดยไม่ต้องรออนุมัติ (ใช้อีเมลที่ได้รับคำเชิญ)')),
+                    Expanded(child: Text(tr('สมัครจากลิงก์เชิญ — เข้าธุรกิจได้ทันทีโดยไม่ต้องรออนุมัติ (ใช้อีเมลที่ได้รับคำเชิญ)'))),
                   ]),
                 ),
               if (!_invite) ...[
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('ฉันมีรหัสเชิญ / ซีเรียลคีย์'),
+                title: Text(tr('ฉันมีรหัสเชิญ / ซีเรียลคีย์')),
                 value: _hasKey,
                 onChanged: (v) => setState(() => _hasKey = v),
               ),
@@ -185,7 +186,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               ],
               if (_error != null)
-                Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: TextStyle(color: cs.error))),
+                Padding(padding: const EdgeInsets.only(top: 12), child: Text(tr(_error!), style: TextStyle(color: cs.error))),
               const SizedBox(height: 24),
               NxHeroCta(label: 'สมัครสมาชิก', busy: _busy, onPressed: _busy ? null : _submit),
             ],
