@@ -61,6 +61,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   Map<String, dynamic>? _work;
   Map<String, dynamic>? _sales;
   Map<String, dynamic>? _cases;
+  int _whatsNew = 0;
   bool _loading = true;
   bool _refreshing = false;
   Object? _error;
@@ -98,6 +99,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       guard(UnreadNotifications.instance.refresh(api).then((_) => null)),
       MenuAccess.any(session, const ['deal', 'quotation']) ? guard(api.getSalesDashboard()) : Future<Object?>.value(),
       MenuAccess.allow(session, 'case') ? guard(api.getCaseDashboard()) : Future<Object?>.value(),
+      api.getWhatsNewUnread().then<Object?>((n) => n).catchError((_) => 0),
     ]);
     if (!mounted) return;
     setState(() {
@@ -106,6 +108,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       _work = results[2] as Map<String, dynamic>?;
       _sales = results[4] as Map<String, dynamic>?;
       _cases = results[5] as Map<String, dynamic>?;
+      _whatsNew = (results[6] as int?) ?? 0;
       _error = (_summary == null && _attendance == null && _work == null) ? firstError : null;
       _loading = false;
       _refreshing = false;
@@ -223,6 +226,25 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                           padding: const EdgeInsets.only(top: 12),
                           child: Text(formatApiError(_error!), style: theme.textTheme.bodySmall?.copyWith(color: cs.error)),
                         ),
+                      if (_whatsNew > 0) ...[
+                        const SizedBox(height: 12),
+                        NxSurfaceCard(
+                          radius: 20,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          onTap: () async {
+                            await context.push(AppRoutes.whatsNew);
+                            if (mounted) _load();
+                          },
+                          child: Row(
+                            children: [
+                              Icon(NxI.sparkleFill, color: cs.primary),
+                              const SizedBox(width: 10),
+                              Expanded(child: Text('มีอะไรใหม่ $_whatsNew รายการ', style: theme.textTheme.titleSmall)),
+                              Icon(NxI.caretRight, size: 16, color: cs.onSurfaceVariant),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       _TodayCard(
                         showAttendance: MenuAccess.allow(session, MenuAccess.attendance),

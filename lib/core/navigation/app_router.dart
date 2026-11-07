@@ -19,6 +19,7 @@ import '../../screens/hr/leave_screen.dart';
 import '../../screens/jobs/my_jobs_screen.dart';
 import '../../screens/module/module_hub_screen.dart';
 import '../../screens/notifications/notification_center_screen.dart';
+import '../../screens/whats_new/whats_new_screen.dart';
 import '../../screens/onboarding/getting_started_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/splash_screen.dart';
@@ -167,6 +168,10 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.notifications,
         builder: (_, _) => const NotificationCenterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.whatsNew,
+        builder: (_, _) => const WhatsNewScreen(),
       ),
       GoRoute(
         path: AppRoutes.attendance,

@@ -27,6 +27,43 @@ String resolveApiBaseUrl([String? configured]) {
 @Deprecated('Use kDefaultApiBaseUrl')
 const String apiBaseUrl = kDefaultApiBaseUrl;
 
+/// A connected Gmail / Outlook mailbox (`/api/mail/connections` row).
+class MailAccount {
+  const MailAccount({required this.id, required this.provider, required this.email, this.status, this.readOnly = false});
+
+  final String id;
+
+  /// `gmail` or `outlook`.
+  final String provider;
+  final String email;
+  final String? status;
+  final bool readOnly;
+
+  /// Query the mail API needs to address this mailbox.
+  Map<String, String> get query => {'source': provider, 'connectionId': id};
+
+  String get providerLabel => provider == 'outlook' ? 'Outlook' : 'Gmail';
+
+  static MailAccount? fromMap(Map<String, dynamic> m) {
+    final id = m['id']?.toString();
+    final provider = (m['provider'] ?? m['source'])?.toString().toLowerCase();
+    if (id == null || id.isEmpty || (provider != 'gmail' && provider != 'outlook')) return null;
+    return MailAccount(
+      id: id,
+      provider: provider!,
+      email: (m['email'] ?? m['email_address'] ?? m['account_email'] ?? m['display_name'] ?? '').toString(),
+      status: m['status']?.toString(),
+      readOnly: m['read_only'] == true,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) => other is MailAccount && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
 List<Map<String, dynamic>> extractMapList(dynamic raw) {
   if (raw is List) {
     return raw
@@ -1456,8 +1493,93 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
-  Future<Map<String, dynamic>> getMailItem(String id) async {
-    return _dataMap(await _send('GET', '/api/mail/$id'));
+  Future<Map<String, dynamic>> getMailItem(String id, {MailAccount? account}) async {
+    return _dataMap(await _send('GET', '/api/mail/$id', query: account?.query));
+  }
+
+  /// Gmail / Outlook accounts the user connected on the web (`GET /api/mail/connections`).
+  Future<List<MailAccount>> getMailAccounts() async {
+    final env = await _send('GET', '/api/mail/connections');
+    return [
+      for (final c in extractMapList(env['data']))
+        if (MailAccount.fromMap(c) case final a?) a,
+    ];
+  }
+
+  /// One page of a box. Internal mail when [account] is null.
+  Future<({List<Map<String, dynamic>> items, String? nextCursor, bool syncing})> getMailPage({
+    String box = 'inbox',
+    MailAccount? account,
+    String? cursor,
+    int limit = 50,
+  }) async {
+    final env = await _send('GET', '/api/mail', query: {
+      'box': box,
+      'limit': '$limit',
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+      ...?account?.query,
+    });
+    final data = env['data'];
+    return (
+      items: extractMapList(data),
+      nextCursor: data is Map ? data['nextCursor']?.toString() : null,
+      syncing: data is Map && data['syncing'] == true,
+    );
+  }
+
+  Future<void> markMailUnread(String id, {MailAccount? account}) async {
+    await _send('PUT', '/api/mail/$id/unread', query: account?.query);
+  }
+
+  /// Gmail / Outlook only (the server rejects star on internal mail).
+  Future<void> setMailStarred(String id, bool starred, {required MailAccount account}) async {
+    await _send('PUT', '/api/mail/$id/star', query: account.query, data: {'starred': starred});
+  }
+
+  Future<void> archiveMail(String id, {required MailAccount account, bool undo = false}) async {
+    await _send('PUT', '/api/mail/$id/archive', query: account.query, data: {if (undo) 'undo': true});
+  }
+
+  Future<List<Map<String, dynamic>>> getMailAttachments(String id, {required MailAccount account}) async {
+    final env = await _send('GET', '/api/mail/$id/attachments', query: account.query);
+    return extractMapList(env['data']);
+  }
+
+  Future<List<int>> downloadMailAttachment(String id, String fileId, {required MailAccount account}) {
+    final q = Uri(queryParameters: account.query).query;
+    return _downloadBytes('/api/mail/$id/attachments/$fileId/download?$q');
+  }
+
+  /// Sends through a connected Gmail / Outlook account. [attachments] are
+  /// File Manager ids (`{file_id}`), resolved by the server like the web.
+  Future<Map<String, dynamic>> sendExternalMail({
+    required MailAccount account,
+    required List<String> to,
+    List<String> cc = const [],
+    List<String> bcc = const [],
+    required String subject,
+    required String bodyHtml,
+    String? action,
+    String? replyToId,
+    String? threadId,
+    List<Map<String, dynamic>> attachments = const [],
+    bool isDraft = false,
+  }) async {
+    return _dataMap(await _send('POST', '/api/mail', data: {
+      'source': account.provider,
+      'connectionId': int.tryParse(account.id) ?? account.id,
+      'to': to,
+      'cc': cc,
+      'bcc': bcc,
+      'subject': subject,
+      'body': bodyHtml.replaceAll(RegExp(r'<[^>]*>'), ''),
+      'body_html': bodyHtml,
+      if (action != null) 'action': action,
+      if (replyToId != null) 'reply_to_id': replyToId,
+      if (threadId != null) 'thread_id': threadId,
+      if (attachments.isNotEmpty) 'attachments': attachments,
+      'is_draft': isDraft,
+    }));
   }
   /// Search internal mail (subject / body / sender) — `GET /api/mail/search?q=`.
   Future<List<Map<String, dynamic>>> searchMail(String q) async {
@@ -1511,19 +1633,40 @@ class ApiClient {
     }));
   }
 
-  Future<void> markMailRead(String id) async {
-    await _send('PUT', '/api/mail/$id/read');
+  Future<void> markMailRead(String id, {MailAccount? account}) async {
+    await _send('PUT', '/api/mail/$id/read', query: account?.query);
   }
 
   /// Moves to trash; with [permanent] removes a message that is already in trash.
-  Future<void> deleteMail(String id, {bool permanent = false}) async {
-    await _send('DELETE', '/api/mail/$id', query: {if (permanent) 'permanent': '1'});
+  Future<void> deleteMail(String id, {bool permanent = false, MailAccount? account}) async {
+    await _send('DELETE', '/api/mail/$id', query: {if (permanent) 'permanent': '1', ...?account?.query});
   }
 
-  Future<void> restoreMail(String id) async {
-    await _send('PUT', '/api/mail/$id/restore');
+  Future<void> restoreMail(String id, {MailAccount? account}) async {
+    await _send('PUT', '/api/mail/$id/restore', query: account?.query);
   }
 
+
+  /// Published release / feature announcements (`GET /api/whats-new`).
+  Future<List<Map<String, dynamic>>> getWhatsNew() async {
+    final env = await _send('GET', '/api/whats-new');
+    return extractMapList(env['data']);
+  }
+
+  Future<int> getWhatsNewUnread() async {
+    final m = _dataMap(await _send('GET', '/api/whats-new/unread-count'));
+    return (m['count'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> markWhatsNewViewed(List<int> ids) async {
+    if (ids.isEmpty) return;
+    await _send('POST', '/api/whats-new/views/batch', data: {'ids': ids});
+  }
+
+  /// "รับทราบ" — hides the item for this user.
+  Future<void> ackWhatsNew(int id) async {
+    await _send('POST', '/api/whats-new/$id/ack');
+  }
 
   Future<Map<String, dynamic>> getEntityRelated(String module, String id) async {
     return _dataMap(await _send('GET', '/api/entity/$module/$id/related'));

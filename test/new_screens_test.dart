@@ -140,7 +140,7 @@ void main() {
     expect(find.byIcon(Icons.circle), findsOneWidget);
     // Wide test surface → header compose button instead of the FAB.
     expect(find.byTooltip('เขียนเมล'), findsOneWidget);
-    expect(adapter.calls.first.queryParameters['box'], 'inbox');
+    expect(adapter.calls.firstWhere((c) => c.path == '/api/mail').queryParameters['box'], 'inbox');
   });
 
   test('401 on a normal call triggers logout callback; login 401 does not', () async {
