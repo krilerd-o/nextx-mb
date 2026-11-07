@@ -19,6 +19,7 @@ import 'package:nextx_mobile/widgets/nx_avatar.dart';
 import 'package:nextx_mobile/widgets/nx_entity_row.dart';
 import 'package:nextx_mobile/widgets/nx_filter_chips.dart';
 import 'package:nextx_mobile/widgets/nx_search_field.dart';
+import 'package:nextx_mobile/widgets/nx_list_toolbar.dart';
 import 'package:nextx_mobile/widgets/nx_icons.dart';
 
 void main() {
@@ -138,9 +139,9 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.text('ผู้มุ่งหวัง'), findsWidgets);
-      expect(find.byType(NxSearchField), findsOneWidget);
-      expect(find.text('ทั้งหมด'), findsOneWidget);
-      expect(find.text('ล่าสุด'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byType(NxListToolbar), findsOneWidget);
+      expect(find.text('เรียง'), findsOneWidget);
       expect(find.byIcon(NxI.plus), findsOneWidget);
       expect(find.textContaining('ยังไม่มี'), findsOneWidget);
     }

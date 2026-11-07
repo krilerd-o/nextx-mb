@@ -100,6 +100,8 @@ class NxI {
   static const x = LucideIcons300.x;
   static const mapPin = LucideIcons300.mapPin;
   static const star = LucideIcons300.star;
+  static const funnel = LucideIcons300.listFilter;
+  static const sortAscending = LucideIcons300.arrowUpDown;
   static const starFill = LucideIcons500.star;
   static const videoCamera = LucideIcons300.video;
   static const navigationArrow = LucideIcons300.navigation;

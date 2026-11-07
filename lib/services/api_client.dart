@@ -590,6 +590,37 @@ class ApiClient {
     return ModuleFieldSchema(fields: fields, picklists: picklists);
   }
 
+  // ── Custom Views (มุมมอง CV) — same API as the NEXTX web list.
+
+  /// `{list, groups, default_id}`; each view carries can_edit / can_delete / can_duplicate.
+  Future<Map<String, dynamic>> getCustomViews(String module) async {
+    return _dataMap(await _send('GET', '/api/customviews', query: {'module': module}));
+  }
+
+  /// Fields (+operators), period presets, date fields, users and roles for the editor.
+  Future<Map<String, dynamic>> getCustomViewMeta(String module) async {
+    return _dataMap(await _send('GET', '/api/customviews/meta', query: {'module': module}));
+  }
+
+  Map<String, dynamic> _cvOf(Map<String, dynamic> m) =>
+      m['customview'] is Map ? Map<String, dynamic>.from(m['customview'] as Map) : m;
+
+  Future<Map<String, dynamic>> createCustomView(Map<String, dynamic> body) async {
+    return _cvOf(_dataMap(await _send('POST', '/api/customviews', data: body)));
+  }
+
+  Future<Map<String, dynamic>> updateCustomView(String id, Map<String, dynamic> body) async {
+    return _cvOf(_dataMap(await _send('PUT', '/api/customviews/$id', data: body)));
+  }
+
+  Future<Map<String, dynamic>> duplicateCustomView(String id) async {
+    return _cvOf(_dataMap(await _send('POST', '/api/customviews/$id/duplicate')));
+  }
+
+  Future<void> deleteCustomView(String id) async {
+    await _send('DELETE', '/api/customviews/$id');
+  }
+
   Future<List<Map<String, dynamic>>> getPicklists() async {
     final env = await _send('GET', '/api/picklists');
     return extractMapList(env['data']);

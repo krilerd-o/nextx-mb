@@ -293,6 +293,8 @@ class AppConfig extends ChangeNotifier {
 
   /// `host_userId` — keeps per-user settings apart across servers and accounts.
   String get _userScope => '${serverLabel(_apiBaseUrl)}_${_session.userId ?? ''}';
+  /// Per server + user key prefix for local UI prefs (list filters, recents…).
+  String get prefsScope => _userScope;
   String get _shellKey => 'shell_v1_$_userScope';
   String get _lastTabKey => 'last_tab_$_userScope';
   String? _lastTab;

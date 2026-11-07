@@ -8,12 +8,14 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_cached_future.dart';
 import '../../widgets/nx_create_fab.dart';
 import '../../widgets/nx_entity_row.dart';
-import '../../widgets/nx_filter_chips.dart';
+import '../../widgets/nx_list_toolbar.dart';
+import '../../core/error_reporting.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
-import '../../widgets/nx_search_field.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
+import 'custom_views.dart';
 import 'entity_create_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'entity_detail_parts.dart';
 import 'entity_detail_screen.dart';
 import 'package:flutter/services.dart';
@@ -88,9 +90,210 @@ class _EntityListScreenState extends State<EntityListScreen> {
   Object? _error;
   int _page = 1;
   bool _hasMore = true;
-  String _q = '';
-  NxEntityFilter _filter = NxEntityFilter.all;
+  NxListQuery _query = const NxListQuery();
+  late final NxListPrefs _prefs = NxListPrefs('crm_${widget.module}_${context.read<AppConfig>().prefsScope}');
   bool _showMine = true;
+  int? _total;
+
+  /// Quick filters built like the web panel: every picklist field, owner
+  /// fields (users), a period (date field × preset) and case tags.
+  String? _statusKey;
+  List<NxFilterGroup> _pickGroups = const [];
+  List<NxFilterGroup> _ownerGroups = const [];
+  List<NxFilterOption> _dateFields = const [];
+  List<NxFilterOption> _periodPresets = const [];
+  List<NxFilterOption> _tagOptions = const [];
+  String? _nameCol;
+  String? _amountCol;
+
+  /// Custom Views (มุมมอง CV) from the server, and the one applied.
+  CustomViewList? _cvs;
+  String? _cvId;
+  String get _cvPrefKey => 'nx_cv_${widget.module}_${context.read<AppConfig>().prefsScope}';
+
+  static const _statusCandidates = [
+    'status', 'leadstatus', 'lead_status', 'deal_stage', 'sales_stage', 'case_status', 'quotation_status',
+    'job_status', 'inspection_status', 'account_status', 'contact_status', 'activity_status',
+  ];
+  static const _nameCandidates = [
+    'lead_name', 'deal_name', 'account_name', 'contact_firstname', 'customer_name', 'case_name', 'subject',
+    'product_name', 'service_name', 'activity_name', 'title', 'name',
+  ];
+  static const _amountCandidates = ['amount', 'grand_total', 'total_amount', 'expected_revenue', 'price'];
+
+  List<NxFilterGroup> get _groups => [
+        if (_showMine && context.read<AppConfig>().session.userId != null)
+          const NxFilterGroup(key: 'scope', label: 'ขอบเขต', multi: false, options: [NxFilterOption('mine', 'ของฉัน')]),
+        ..._pickGroups,
+        ..._ownerGroups,
+        if (_dateFields.isNotEmpty && _periodPresets.isNotEmpty) ...[
+          NxFilterGroup(key: 'pp', label: 'ช่วงเวลา', multi: false, options: _periodPresets),
+          NxFilterGroup(key: 'pf', label: 'ใช้ช่วงเวลากับฟิลด์', multi: false, options: _dateFields),
+        ],
+        if (_tagOptions.isNotEmpty) NxFilterGroup(key: 'tag', label: 'แท็ก', options: _tagOptions),
+      ];
+
+  List<NxSortOption> get _sorts => [
+        const NxSortOption('modifiedtime:desc', 'แก้ไขล่าสุด'),
+        const NxSortOption('createdtime:desc', 'สร้างล่าสุด'),
+        const NxSortOption('createdtime:asc', 'เก่าสุด'),
+        if (_nameCol != null) NxSortOption('$_nameCol:asc', 'ชื่อ ก–ฮ'),
+        if (_amountCol != null) NxSortOption('$_amountCol:desc', 'มูลค่าสูงสุด'),
+      ];
+
+  static bool _isPicklist(Map f, Map<String, List<Map<String, dynamic>>> picklists) {
+    final t = '${f['type'] ?? f['uitype'] ?? ''}';
+    final name = f['name']?.toString() ?? '';
+    return (picklists[name] ?? const []).isNotEmpty && (t == 'Enum' || t == 'Picklist' || t == '15' || t == '16' || t == 'MultiPicklist' || t == '33');
+  }
+
+  static bool _isOwner(Map f) {
+    final t = '${f['type'] ?? f['uitype'] ?? ''}';
+    return f['name'] == 'smownerid' || f['name'] == 'assign_to' || t == 'PicklistUser' || t == '53';
+  }
+
+  Future<void> _loadSchema() async {
+    final api = context.read<AppConfig>().apiClient;
+    try {
+      final schema = await api.getFieldSchema(widget.module);
+      final names = {for (final f in schema.fields) f['name']?.toString() ?? ''};
+      String? status;
+      for (final k in ['${widget.module}_status', '${widget.module}_stage', ..._statusCandidates]) {
+        if ((schema.picklists[k] ?? const []).isNotEmpty) {
+          status = k;
+          break;
+        }
+      }
+      final picks = <NxFilterGroup>[];
+      for (final f in schema.fields) {
+        if (f['access'] == 'hidden' || !_isPicklist(f, schema.picklists)) continue;
+        final name = f['name'].toString();
+        picks.add(NxFilterGroup(
+          key: 'pl:$name',
+          label: nxLabel(f, fallback: name),
+          options: [
+            for (final o in schema.picklists[name]!)
+              NxFilterOption((o['value'] ?? o['value_th'] ?? '').toString(), nxLabel(o)),
+          ],
+        ));
+      }
+      // Status first: it is also the inline quick-chip row.
+      picks.sort((a, b) => (a.key == 'pl:$status' ? 0 : 1).compareTo(b.key == 'pl:$status' ? 0 : 1));
+      if (!mounted) return;
+      setState(() {
+        _statusKey = status;
+        _pickGroups = picks;
+        _nameCol = _nameCandidates.where(names.contains).firstOrNull;
+        _amountCol = _amountCandidates.where(names.contains).firstOrNull;
+      });
+      // Owners / periods need the CV meta (users, date fields, presets).
+      final meta = await api.getCustomViewMeta(widget.module);
+      final users = [
+        for (final u in (meta['users'] as List? ?? const []))
+          if (u is Map) NxFilterOption(u['id'].toString(), u['name']?.toString() ?? '${u['id']}'),
+      ];
+      final ownerFields = <Map>[
+        {'name': 'smownerid', 'label_th': 'เจ้าของ', 'label_en': 'Owner'},
+        for (final f in schema.fields)
+          if (_isOwner(f) && f['name'] != 'smownerid') f,
+      ];
+      if (!mounted) return;
+      setState(() {
+        _ownerGroups = users.isEmpty
+            ? const []
+            : [
+                for (final f in ownerFields)
+                  NxFilterGroup(key: 'ow:${f['name']}', label: nxLabel(f, fallback: '${f['name']}'), options: users),
+              ];
+        _dateFields = [
+          for (final f in (meta['date_fields'] as List? ?? const []))
+            if (f is Map) NxFilterOption(f['name'].toString(), nxLabel(f)),
+        ];
+        _periodPresets = [
+          for (final p in (meta['period_presets'] as List? ?? const []))
+            if (p is Map && p['value'] != 'custom') NxFilterOption(p['value'].toString(), nxLabel(p)),
+        ];
+      });
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
+    if (widget.module == 'case') {
+      try {
+        final tags = await api.getTags(module: 'case');
+        if (mounted) {
+          setState(() => _tagOptions = [
+                for (final t in tags)
+                  if (t['id'] != null) NxFilterOption(t['id'].toString(), t['name']?.toString() ?? '#${t['id']}'),
+              ]);
+        }
+      } catch (e, s) {
+        ErrorReporting.report(e, s);
+      }
+    }
+  }
+
+  Future<void> _loadViews() async {
+    try {
+      final data = await context.read<AppConfig>().apiClient.getCustomViews(widget.module);
+      if (!mounted) return;
+      final before = _cvId;
+      setState(() {
+        _cvs = CustomViewList.from(data);
+        if (_cvId == null || !_cvs!.views.any((v) => v.id == _cvId)) _cvId = _cvs!.defaultId;
+      });
+      // A default view with its own conditions changes what the list shows.
+      if (before != _cvId) _load(reset: true);
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
+  }
+
+  Future<void> _pickView() async {
+    final cvs = _cvs;
+    if (cvs == null) return;
+    final id = await showCustomViewPicker(
+      context,
+      module: widget.module,
+      views: cvs,
+      currentId: _cvId,
+      onChanged: _loadViews,
+    );
+    if (id == null || !mounted) return;
+    setState(() => _cvId = id.isEmpty ? _cvs?.defaultId : id);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_cvId == null) {
+        await prefs.remove(_cvPrefKey);
+      } else {
+        await prefs.setString(_cvPrefKey, _cvId!);
+      }
+    } catch (_) {}
+    _load(reset: true);
+  }
+
+  Widget _cvChip() {
+    final cs = Theme.of(context).colorScheme;
+    final cv = _cvs?.views.where((v) => v.id == _cvId).firstOrNull;
+    final custom = cv != null && !cv.isSystem;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ActionChip(
+        avatar: Icon(NxI.squaresFour, size: 16, color: custom ? cs.onPrimary : cs.onSurfaceVariant),
+        label: Text(cv?.displayName ?? tr('มุมมอง')),
+        onPressed: _cvs == null ? null : _pickView,
+        backgroundColor: custom ? cs.primary : null,
+        labelStyle: TextStyle(color: custom ? cs.onPrimary : cs.onSurface, fontWeight: FontWeight.w500),
+        side: BorderSide(color: custom ? cs.primary : cs.outlineVariant.withValues(alpha: 0.7)),
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+
+  void _onQuery(NxListQuery q) {
+    setState(() => _query = q);
+    _prefs.saveQuery(q.copyWith(q: ''));
+    _load(reset: true);
+  }
   Map<String, dynamic>? _selected;
   bool _creating = false;
 
@@ -99,7 +302,22 @@ class _EntityListScreenState extends State<EntityListScreen> {
     super.initState();
     PendingEntityDeletes.instance.addListener(_onPendingChanged);
     _scroll.addListener(_onScroll);
+    _init();
+  }
+
+  Future<void> _init() async {
+    final saved = await _prefs.loadQuery();
+    String? cv;
+    try {
+      cv = (await SharedPreferences.getInstance()).getString(_cvPrefKey);
+    } catch (_) {}
+    if (!mounted) return;
+    if (saved != null) _query = saved;
+    _cvId = cv;
     _load(reset: true);
+    if (!context.read<AppConfig>().isLoggedIn) return;
+    _loadSchema();
+    _loadViews();
   }
 
   @override
@@ -118,19 +336,35 @@ class _EntityListScreenState extends State<EntityListScreen> {
   }
 
   Map<String, String>? _extra() {
-    switch (_filter) {
-      case NxEntityFilter.all:
-        return null;
-      case NxEntityFilter.mine:
-        if (widget.module == 'activity') {
-          return const {'involved': '1'};
-        }
-        final uid = context.read<AppConfig>().session.userId;
-        if (uid == null || uid.isEmpty) return null;
-        return {'filter[smownerid]': uid};
-      case NxEntityFilter.recent:
-        return const {'sort': 'modifiedtime', 'order': 'desc'};
+    final q = _query;
+    final out = <String, String>{};
+    final sort = q.sort?.split(':');
+    if (sort != null && sort.length == 2) {
+      out['sort'] = sort[0];
+      out['order'] = sort[1];
     }
+    if (q.has('scope', 'mine')) {
+      if (widget.module == 'activity') {
+        out['involved'] = '1';
+      } else {
+        final uid = context.read<AppConfig>().session.userId;
+        if (uid != null && uid.isNotEmpty) out['filter[smownerid]'] = uid;
+      }
+    }
+    for (final e in q.filters.entries) {
+      if (e.value.isEmpty) continue;
+      if (e.key.startsWith('pl:') || e.key.startsWith('ow:')) out['filter[${e.key.substring(3)}]'] = e.value.join(',');
+    }
+    final preset = q.single('pp');
+    if (preset != null) {
+      out['period_field'] = q.single('pf') ??
+          (_dateFields.any((f) => f.value == 'createdtime') || _dateFields.isEmpty ? 'createdtime' : _dateFields.first.value);
+      out['period_preset'] = preset;
+    }
+    final tags = q.values('tag');
+    if (tags.isNotEmpty) out['filter[tag_ids]'] = tags.join(',');
+    if (_cvId != null && _cvId!.isNotEmpty) out['cv_id'] = _cvId!;
+    return out;
   }
 
   Future<void> _load({bool reset = false}) async {
@@ -160,7 +394,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
         widget.module,
         limit: 30,
         page: _page,
-        q: _q.isEmpty ? null : _q,
+        q: _query.q.isEmpty ? null : _query.q,
         extra: _extra(),
       );
       if (!mounted) return;
@@ -173,6 +407,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
           _items.addAll(page.items);
         }
         _hasMore = page.hasMore && page.items.isNotEmpty;
+        _total = page.total;
         _page += 1;
         _loading = false;
         _refreshing = false;
@@ -180,10 +415,10 @@ class _EntityListScreenState extends State<EntityListScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      if (_filter == NxEntityFilter.mine) {
+      if (_query.has('scope', 'mine')) {
         setState(() {
           _showMine = false;
-          _filter = NxEntityFilter.all;
+          _query = _query.toggle(_groups.first, 'mine');
           _loading = false;
           _refreshing = false;
           _loadingMore = false;
@@ -242,34 +477,17 @@ class _EntityListScreenState extends State<EntityListScreen> {
   Widget build(BuildContext context) {
     final twoPane = NxBreakpoint.of(context).twoPane;
     final bp = NxBreakpoint.of(context);
-    final toolbar = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: NxSearchField(
-            controller: _searchController,
-            hint: 'ค้นหา${widget.title}',
-            onSubmitted: (v) {
-              _q = v.trim();
-              _load(reset: true);
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: NxFilterChips(
-            value: _filter,
-            showMine:
-                _showMine &&
-                context.select((AppConfig c) => c.session).userId != null,
-            onChanged: (f) {
-              setState(() => _filter = f);
-              _load(reset: true);
-            },
-          ),
-        ),
-      ],
+    final toolbar = NxListToolbar(
+      query: _query,
+      prefs: _prefs,
+      groups: _groups,
+      sorts: _sorts,
+      quickGroup: _statusKey == null ? 'scope' : 'pl:$_statusKey',
+      leading: [if (_cvs != null) _cvChip()],
+      allowSavedViews: false,
+      searchHint: 'ค้นหา${widget.title}',
+      resultCount: _loading ? null : (_total ?? _visible.length),
+      onChanged: _onQuery,
     );
     final list = Column(
       children: [
@@ -354,7 +572,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
   }
 
   /// Search field + filter chips row (floating under the header on phones).
-  static const double _toolbarHeight = 108;
+  static const double _toolbarHeight = 140;
 
   /// Space the list leaves for the floating header + toolbar (phones only).
   double _top(bool twoPane) => twoPane ? 0 : _inset;
