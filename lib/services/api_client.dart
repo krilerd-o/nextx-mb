@@ -564,13 +564,56 @@ class ApiClient {
   Future<Map<String, dynamic>> postEntityComment(
     String module,
     String id,
-    String body,
-  ) async {
+    String body, {
+    List<Map<String, dynamic>> attachments = const [],
+    Object? parentId,
+  }) async {
     return _dataMap(await _send(
       'POST',
       '/api/entity/$module/$id/comments',
-      data: {'body': body},
+      data: {
+        'body': body,
+        if (attachments.isNotEmpty) 'attachments': attachments,
+        if (parentId != null) 'parent_id': parentId,
+      },
     ));
+  }
+
+  /// Unified history (`audit` / `field_change` / status / engagement events,
+  /// newest first) — `GET /api/entity/:module/:id/timeline`.
+  Future<List<Map<String, dynamic>>> getEntityTimeline(String module, String id, {int limit = 100}) async {
+    final env = await _send('GET', '/api/entity/$module/$id/timeline', query: {'limit': '$limit'});
+    return extractMapList(env['data']);
+  }
+
+  /// Copies a record; returns the new id.
+  Future<String> duplicateEntity(String module, String id) async {
+    final m = _dataMap(await _send('POST', '/api/entity/$module/$id/duplicate'));
+    return m['id']?.toString() ?? '';
+  }
+
+  Future<void> bulkDeleteEntities(String module, List<String> ids) async {
+    await _send('POST', '/api/entity/$module/bulk-delete', data: {
+      'ids': [for (final i in ids) int.tryParse(i) ?? i],
+    });
+  }
+
+  /// Uploads to File Manager and returns comment-attachment maps
+  /// (`{url, name, mime, size, file_id}`), the same shape the web sends.
+  Future<List<Map<String, dynamic>>> uploadCommentAttachments(List<MultipartFile> files) async {
+    final res = await uploadFiles(files);
+    final rows = extractMapList(res['list'] ?? res['files'] ?? res);
+    return [
+      for (final r in rows)
+        if ((r['storage_path'] ?? r['url'])?.toString().isNotEmpty == true)
+          {
+            'url': r['storage_path'] != null ? '/uploads/${r['storage_path'].toString().replaceFirst(RegExp(r'^/+'), '')}' : r['url'].toString(),
+            'name': r['file_name'] ?? r['name'] ?? 'file',
+            'mime': r['mime_type'] ?? r['mime'] ?? 'application/octet-stream',
+            if ((r['file_size'] ?? r['size']) != null) 'size': r['file_size'] ?? r['size'],
+            if (r['id'] != null) 'file_id': r['id'],
+          },
+    ];
   }
 
   Future<List<Map<String, dynamic>>> getEntityTags(String module, String id) async {

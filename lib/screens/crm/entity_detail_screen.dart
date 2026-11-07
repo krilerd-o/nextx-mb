@@ -16,11 +16,11 @@ import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
-import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../deep_link_loaders.dart';
 import '../jobs/job_inspection_screen.dart';
 import 'entity_create_screen.dart';
+import 'entity_detail_parts.dart';
 import 'entity_ops.dart';
 import '../../core/error_reporting.dart';
 
@@ -41,7 +41,6 @@ class EntityDetailScreen extends StatefulWidget {
 }
 
 class _EntityDetailScreenState extends State<EntityDetailScreen> {
-  final _noteController = TextEditingController();
   List<Map<String, dynamic>> _comments = [];
   List<Map<String, dynamic>> _tags = [];
   List<Map<String, dynamic>> _catalog = [];
@@ -50,6 +49,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   bool _loading = true;
   Object? _error;
   late Map<String, dynamic> _row;
+  int _tab = 0;
+  List<Map<String, dynamic>> _timeline = [];
+  bool _timelineLoading = false;
+  bool _timelineLoaded = false;
 
   String get _id => strId(widget.row['id']);
 
@@ -58,12 +61,6 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     super.initState();
     _row = Map<String, dynamic>.from(widget.row);
     _reload();
-  }
-
-  @override
-  void dispose() {
-    _noteController.dispose();
-    super.dispose();
   }
 
   Future<void> _reload() async {
@@ -114,16 +111,94 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     }
   }
 
-  Future<void> _postComment() async {
-    final body = _noteController.text.trim();
-    if (body.isEmpty) return;
+  Future<void> _loadTimeline({bool force = false}) async {
+    if ((_timelineLoaded && !force) || _timelineLoading) return;
+    setState(() => _timelineLoading = true);
     try {
-      await context.read<AppConfig>().apiClient.postEntityComment(widget.module, _id, body);
-      _noteController.clear();
-      await _reload();
+      final rows = await context.read<AppConfig>().apiClient.getEntityTimeline(widget.module, _id);
+      if (!mounted) return;
+      setState(() {
+        _timeline = rows;
+        _timelineLoaded = true;
+      });
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    } finally {
+      if (mounted) setState(() => _timelineLoading = false);
+    }
+  }
+
+  String _valueLabel(String field, String value) {
+    for (final o in _picklists[field] ?? const <Map<String, dynamic>>[]) {
+      final p = NxPickOption.fromMap(o);
+      if (p.value == value) return p.label;
+    }
+    return value;
+  }
+
+  List<({String value, String label})> _statusOptions(String? key) {
+    if (key == null) return const [];
+    return [
+      for (final o in _picklists[key] ?? const <Map<String, dynamic>>[])
+        () {
+          final p = NxPickOption.fromMap(o);
+          return (value: p.value, label: p.label);
+        }(),
+    ];
+  }
+
+  Future<void> _changeStatus(String key, String value) async {
+    final before = _row[key];
+    setState(() => _row = {..._row, key: value});
+    try {
+      await context.read<AppConfig>().apiClient.putEntity(widget.module, _id, {key: value});
+      _timelineLoaded = false;
+      if (_tab == 3) _loadTimeline(force: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _row = {..._row, key: before});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    }
+  }
+
+  Future<void> _duplicate() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ทำซ้ำรายการนี้?'),
+        content: Text('สร้างสำเนาของ ${entityTitle(_row, module: widget.module)}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ทำซ้ำ')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final newId = await context.read<AppConfig>().apiClient.duplicateEntity(widget.module, _id);
+      if (!mounted || newId.isEmpty) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ทำซ้ำแล้ว — เปิดรายการใหม่')));
+      nxPush<void>(context, EntityByIdLoader(module: widget.module, id: newId));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    }
+  }
+
+  /// Camera / gallery / file → posted as a comment with attachments.
+  Future<void> _quickAttach() async {
+    final files = await pickAttachments(context);
+    if (files.isEmpty || !mounted) return;
+    final api = context.read<AppConfig>().apiClient;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('กำลังอัปโหลด…')));
+    try {
+      final atts = await api.uploadCommentAttachments(files);
+      await api.postEntityComment(widget.module, _id, '', attachments: atts);
+      messenger.hideCurrentSnackBar();
+      await _reload();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
     }
   }
 
@@ -163,6 +238,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final status = entityStatus(_row);
 
     final canEdit = _editableFields().isNotEmpty || _fields.isEmpty;
+    final statusKey = entityStatusKey(_row, widget.module);
+    final statusOptions = _statusOptions(statusKey);
     return Scaffold(
       appBar: NxAppHeader(
         title: title,
@@ -189,6 +266,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         ],
         menu: canEdit && context.watch<AppConfig>().isLoggedIn
             ? [
+                NxHeaderMenuItem(label: 'ทำซ้ำ', icon: NxI.copySimple, onTap: _duplicate),
+                NxHeaderMenuItem(label: 'ถ่ายรูป / แนบไฟล์', icon: NxI.camera, onTap: _quickAttach),
                 NxHeaderMenuItem(
                   label: 'ลบ',
                   icon: NxI.trash,
@@ -205,18 +284,19 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
           children: [
             NxSurfaceCard(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
+              radius: 28,
+              padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
               child: Column(
                 children: [
-                  NxAvatar(label: title, size: 76),
-                  const SizedBox(height: 14),
+                  Hero(tag: 'entity-${widget.module}-$_id', child: NxAvatar(label: title, size: 76)),
+                  const SizedBox(height: 12),
                   Text(
                     title,
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium,
+                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   if (people != null && people.isNotEmpty) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(
                       people,
                       textAlign: TextAlign.center,
@@ -225,15 +305,39 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                       ),
                     ),
                   ],
-                  if (status != null) ...[
-                    const SizedBox(height: 12),
+                  if (status != null && statusOptions.isEmpty) ...[
+                    const SizedBox(height: 10),
                     Chip(
                       label: Text(status),
                       visualDensity: VisualDensity.compact,
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  EntityQuickActions(row: _row, onDuplicate: canEdit ? _duplicate : null),
                 ],
               ),
+            ),
+            if (statusOptions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              EntityStatusStepper(
+                options: statusOptions,
+                current: statusKey == null ? null : _row[statusKey]?.toString(),
+                onSelect: canEdit ? (v) => _changeStatus(statusKey!, v) : null,
+              ),
+            ],
+            const SizedBox(height: 14),
+            NxSegmented(
+              labels: [
+                'ข้อมูล',
+                _comments.isEmpty ? 'ความคิดเห็น' : 'ความคิดเห็น ${_comments.length}',
+                'ไฟล์',
+                'ประวัติ',
+              ],
+              index: _tab,
+              onChanged: (i) {
+                setState(() => _tab = i);
+                if (i == 3) _loadTimeline();
+              },
             ),
             if (_loading) ...[
               const SizedBox(height: 16),
@@ -249,7 +353,19 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   ],
                 ),
               ),
-            if (!_loading) ...[
+            const SizedBox(height: 14),
+            if (!_loading)
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: KeyedSubtree(
+                  key: ValueKey(_tab),
+                  child: switch (_tab) {
+                    1 => EntityCommentsPanel(module: widget.module, id: _id, comments: _comments, onChanged: _reload),
+                    2 => EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
+                    3 => EntityHistoryPanel(events: _timeline, loading: _timelineLoading, valueLabel: _valueLabel),
+                    _ => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
               if (widget.module == 'job' && MenuAccess.allow(session, MenuAccess.inspection)) ...[
                 const SizedBox(height: 16),
                 NxHeroCta(
@@ -260,7 +376,6 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   ),
                 ),
               ],
-              const SizedBox(height: 16),
               NxSurfaceCard(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                 child: Column(
@@ -303,67 +418,11 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              Text('บันทึกบนเซิร์ฟเวอร์', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (_comments.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'ยังไม่มีบันทึก',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ..._comments.map(
-                (c) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: NxSurfaceCard(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          c['user_name']?.toString().trim().isNotEmpty == true
-                              ? c['user_name'].toString()
-                              : 'บันทึก',
-                          style: theme.textTheme.titleSmall,
-                        ),
-                        const SizedBox(height: 6),
-                        NxHtmlView(html: c['body']?.toString() ?? ''),
-                        if (entityWhen({'created_at': c['created_at']}) != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              entityWhen({'created_at': c['created_at']})!,
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              NxSurfaceCard(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _noteController,
-                      decoration: const InputDecoration(
-                        hintText: 'เพิ่มบันทึก',
+                        ],
                       ),
-                      minLines: 2,
-                      maxLines: 4,
-                    ),
-                    const SizedBox(height: 12),
-                    NxHeroCta(label: 'บันทึก', onPressed: _postComment),
-                  ],
+                  },
                 ),
               ),
-            ],
           ],
         ),
       ),
@@ -602,15 +661,15 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    try {
-      await context.read<AppConfig>().apiClient.deleteEntity(widget.module, _id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ลบแล้ว')));
-      Navigator.of(context).maybePop();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
-    }
+    final api = context.read<AppConfig>().apiClient;
+    PendingEntityDeletes.instance.schedule(
+      messenger: ScaffoldMessenger.of(context),
+      module: widget.module,
+      ids: [_id],
+      label: entityTitle(_row, module: widget.module),
+      commit: () => api.deleteEntity(widget.module, _id),
+    );
+    if (!widget.embedded) Navigator.of(context).maybePop();
   }
 
   Future<void> _openEdit(BuildContext context) async {

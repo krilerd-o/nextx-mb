@@ -13,7 +13,11 @@ import '../../widgets/nx_search_field.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
 import 'entity_create_screen.dart';
+import 'entity_detail_parts.dart';
 import 'entity_detail_screen.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/entity_display.dart';
 import '../../widgets/nx_icons.dart';
 
 class EntityListScreen extends StatefulWidget {
@@ -34,6 +38,43 @@ class _EntityListScreenState extends State<EntityListScreen> {
   final _searchController = TextEditingController();
   final _scroll = ScrollController();
   final _items = <Map<String, dynamic>>[];
+
+  /// Ids picked in multi-select mode (long-press a row).
+  final Set<String> _picked = {};
+
+  List<Map<String, dynamic>> get _visible => [
+        for (final r in _items)
+          if (!PendingEntityDeletes.instance.isPending(widget.module, r['id']?.toString() ?? '')) r,
+      ];
+
+  void _onPendingChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _deleteIds(List<String> ids, String label) {
+    final api = context.read<AppConfig>().apiClient;
+    PendingEntityDeletes.instance.schedule(
+      messenger: ScaffoldMessenger.of(context),
+      module: widget.module,
+      ids: ids,
+      label: label,
+      commit: () async {
+        if (ids.length == 1) {
+          await api.deleteEntity(widget.module, ids.first);
+        } else {
+          await api.bulkDeleteEntities(widget.module, ids);
+        }
+        if (mounted) _load(reset: true);
+      },
+    );
+  }
+
+  void _togglePick(Map<String, dynamic> row) {
+    final id = row['id']?.toString();
+    if (id == null) return;
+    HapticFeedback.selectionClick();
+    setState(() => _picked.contains(id) ? _picked.remove(id) : _picked.add(id));
+  }
   bool _loading = true;
   bool _refreshing = false;
   bool _loadingMore = false;
@@ -49,12 +90,14 @@ class _EntityListScreenState extends State<EntityListScreen> {
   @override
   void initState() {
     super.initState();
+    PendingEntityDeletes.instance.addListener(_onPendingChanged);
     _scroll.addListener(_onScroll);
     _load(reset: true);
   }
 
   @override
   void dispose() {
+    PendingEntityDeletes.instance.removeListener(_onPendingChanged);
     _searchController.dispose();
     _scroll.dispose();
     super.dispose();
@@ -222,7 +265,28 @@ class _EntityListScreenState extends State<EntityListScreen> {
     );
 
     return Scaffold(
-      appBar: NxAppHeader(
+      appBar: _picked.isNotEmpty
+          ? AppBar(
+              leading: IconButton(tooltip: 'ยกเลิก', icon: const Icon(NxI.x), onPressed: () => setState(_picked.clear)),
+              title: Text('เลือก ${_picked.length} รายการ'),
+              actions: [
+                IconButton(
+                  tooltip: 'เลือกทั้งหมด',
+                  icon: const Icon(NxI.checkCircle),
+                  onPressed: () => setState(() => _picked.addAll([for (final r in _visible) if (r['id'] != null) r['id'].toString()])),
+                ),
+                IconButton(
+                  tooltip: 'ลบที่เลือก',
+                  icon: const Icon(NxI.trash),
+                  onPressed: () {
+                    final ids = _picked.toList();
+                    setState(_picked.clear);
+                    _deleteIds(ids, '${ids.length} รายการ');
+                  },
+                ),
+              ],
+            )
+          : NxAppHeader(
         title: widget.title,
         actions: [
           IconButton(
@@ -246,7 +310,8 @@ class _EntityListScreenState extends State<EntityListScreen> {
     if (_error != null && _items.isEmpty) {
       return NxErrorRetry(error: _error!, onRetry: () => _load(reset: true));
     }
-    if (_items.isEmpty) {
+    final items = _visible;
+    if (items.isEmpty) {
       return RefreshIndicator(
         color: theme.colorScheme.primary,
         onRefresh: () => _load(reset: true),
@@ -292,19 +357,29 @@ class _EntityListScreenState extends State<EntityListScreen> {
       controller: _scroll,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: bp.scrollPadding(context, hasFab: !twoPane),
-      itemCount: _items.length + (_loadingMore ? 1 : 0),
+      itemCount: items.length + (_loadingMore ? 1 : 0),
       itemBuilder: (context, i) {
-        if (i >= _items.length) {
+        if (i >= items.length) {
           return const Padding(
             padding: EdgeInsets.all(16),
             child: NxBone(height: 52, radius: 14),
           );
         }
-        final row = _items[i];
-        return NxEntityRow.fromRow(
+        final row = items[i];
+        final id = row['id']?.toString() ?? '';
+        final picked = _picked.contains(id);
+        final phone = ['mobile_1st', 'mobile', 'phone', 'contact_mobile']
+            .map((k) => row[k]?.toString().trim() ?? '')
+            .firstWhere((v) => v.isNotEmpty && v != 'null', orElse: () => '');
+        final tile = NxEntityRow.fromRow(
           row,
           module: widget.module,
+          onLongPress: () => _togglePick(row),
           onTap: () {
+            if (_picked.isNotEmpty) {
+              _togglePick(row);
+              return;
+            }
             if (twoPane) {
               setState(() {
                 _creating = false;
@@ -319,8 +394,52 @@ class _EntityListScreenState extends State<EntityListScreen> {
             ).then((_) => _load(reset: true));
           },
         );
+        final decorated = picked
+            ? DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: theme.colorScheme.primary, width: 2),
+                ),
+                child: tile,
+              )
+            : tile;
+        if (_picked.isNotEmpty || id.isEmpty) return decorated;
+        // Swipe left = delete (undo 5 s), swipe right = call.
+        return Dismissible(
+          key: ValueKey('row-${widget.module}-$id'),
+          direction: phone.isEmpty ? DismissDirection.endToStart : DismissDirection.horizontal,
+          background: _swipeBg(theme.colorScheme.primary, NxI.phoneCall, 'โทร', Alignment.centerLeft),
+          secondaryBackground: _swipeBg(theme.colorScheme.error, NxI.trash, 'ลบ', Alignment.centerRight),
+          confirmDismiss: (dir) async {
+            if (dir == DismissDirection.startToEnd) {
+              launchUrl(Uri(scheme: 'tel', path: phone));
+              return false;
+            }
+            HapticFeedback.mediumImpact();
+            return true;
+          },
+          onDismissed: (_) => _deleteIds([id], entityTitle(row, module: widget.module)),
+          child: decorated,
+        );
       },
     ),
+    );
+  }
+
+  Widget _swipeBg(Color color, IconData icon, String label, Alignment align) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
+      alignment: align,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        ],
+      ),
     );
   }
 }
