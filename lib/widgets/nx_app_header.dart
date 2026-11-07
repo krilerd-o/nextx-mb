@@ -9,6 +9,7 @@ import '../core/app_config.dart';
 import '../core/entity_display.dart';
 import '../core/navigation/app_routes.dart';
 import 'nx_icons.dart';
+import '../screens/spaces/space_switcher.dart' show showSpaceSwitcher;
 import 'nx_notif_morph.dart';
 import 'nx_scroll_scaffold.dart' show NxFloatingHeaderScope;
 import 'nx_overlay_panel.dart';
@@ -236,7 +237,9 @@ class _HubAvatar extends StatelessWidget {
       } catch (_) {}
     }
     return GestureDetector(
-      onTap: () => GoRouter.maybeOf(context)?.push(AppRoutes.profile),
+      // Tap = Space switcher (Slack-style); long-press = profile.
+      onTap: () => showSpaceSwitcher(context),
+      onLongPress: () => GoRouter.maybeOf(context)?.push(AppRoutes.profile),
       child: SizedBox(
         width: NxAppHeader.controlSize,
         height: NxAppHeader.controlSize,

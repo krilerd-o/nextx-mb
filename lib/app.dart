@@ -87,6 +87,7 @@ class _NextXMobileAppState extends State<NextXMobileApp>
                       ?child,
                       if (AppLock.instance.locked && sel.$4)
                         const Positioned.fill(child: AppLockScreen()),
+                      if (!sel.$4) const _AddSpaceCancelPill(),
                     ],
                   ),
                 ),
@@ -96,6 +97,42 @@ class _NextXMobileAppState extends State<NextXMobileApp>
           routerConfig: _router,
         );
       },
+    );
+  }
+}
+
+/// While signing in to an extra Space: a way back to the Space you came from.
+class _AddSpaceCancelPill extends StatelessWidget {
+  const _AddSpaceCancelPill();
+
+  @override
+  Widget build(BuildContext context) {
+    final config = context.watch<AppConfig>();
+    if (!config.addingSpace) return const SizedBox.shrink();
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: MediaQuery.paddingOf(context).bottom + 12,
+      child: Center(
+        child: Material(
+          color: Theme.of(context).colorScheme.inverseSurface,
+          shape: const StadiumBorder(),
+          child: InkWell(
+            customBorder: const StadiumBorder(),
+            onTap: () => config.cancelAddSpace(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              child: Text(
+                'ยกเลิกการเพิ่ม Space',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onInverseSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

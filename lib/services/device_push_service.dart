@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_config.dart';
+import 'api_client.dart';
 import '../core/navigation/notification_deep_link.dart';
 import '../core/push_navigation.dart';
 
@@ -150,6 +151,15 @@ class DevicePushService {
     } catch (e) {
       debugPrint('[push] re-register: $e');
     }
+  }
+
+  /// Removes this device's push registration from one server only (signing
+  /// out of a Space) — the FCM token stays valid for the other Spaces.
+  Future<void> unregisterFrom(ApiClient api) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = lastToken ?? prefs.getString(_tokenKey);
+    if (token == null || token.isEmpty) return;
+    await api.unregisterDeviceToken(token);
   }
 
   Future<void> unregister(AppConfig config) async {

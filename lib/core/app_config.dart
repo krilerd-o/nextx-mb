@@ -22,6 +22,7 @@ import 'recent_accounts.dart';
 import 'server_profile.dart';
 import 'session_state.dart';
 import 'shell_tabs.dart';
+import 'spaces.dart';
 
 const String _keyApiBaseUrl = 'api_base_url';
 const String _keyThemeMode = 'theme_mode';
@@ -47,6 +48,28 @@ const String _keyServerInfo = 'server_mobile_info_v1';
 const String _keyPunchFailed = 'offline_punch_failed_v1';
 
 const _secureTokenKey = 'access_token';
+
+const String _keySpaces = 'spaces_v1';
+const String _keySpaceActive = 'spaces_active_v1';
+const String _keySpaceAddReturn = 'spaces_add_return_v1';
+String _spaceTokenKey(String id) => 'space_token_$id';
+
+/// Preferences that make up "the current session" — saved per Space and put
+/// back when switching, so the rest of the app keeps reading the same keys.
+const List<String> _spaceBundleKeys = [
+  _keyApiBaseUrl,
+  _keyUserId,
+  _keyBusinessId,
+  _keyBusinessName,
+  _keyEmail,
+  _keyDisplayName,
+  _keyPackageCode,
+  _keyMenuKeys,
+  _keyPackageId,
+  _keyServerConfirmed,
+  'offline_checkin_queue_v1',
+  _keyPunchFailed,
+];
 const int _maxAvatarBytes = 400000;
 
 class AppConfig extends ChangeNotifier {
@@ -178,6 +201,8 @@ class AppConfig extends ChangeNotifier {
     _session = _session.copyWith(accessToken: fresh);
     try {
       await _secure.write(key: _secureTokenKey, value: fresh);
+      final id = _activeSpaceId;
+      if (id != null) await _secure.write(key: _spaceTokenKey(id), value: fresh);
     } catch (e) {
       debugPrint('save renewed token: $e');
     }
@@ -375,6 +400,9 @@ class AppConfig extends ChangeNotifier {
     );
     // Existing installs were already on a server: don't make them pick again.
     _serverConfirmed = (prefs.getBool(_keyServerConfirmed) ?? false) || (token != null && token.isNotEmpty);
+    _spaces = decodeSpaces(prefs.getString(_keySpaces));
+    _activeSpaceId = prefs.getString(_keySpaceActive);
+    _addReturnId = prefs.getString(_keySpaceAddReturn);
     await _loadUserScoped(prefs);
     await AppLock.instance.load(loggedIn: _session.isLoggedIn);
     _loadServerInfo(prefs);
@@ -813,6 +841,7 @@ class AppConfig extends ChangeNotifier {
       await prefs.setString(_shellKey, remote.encode());
     }
     notifyListeners();
+    await _syncActiveSpace();
   }
 
   Future<void> selectBusiness({
@@ -960,8 +989,18 @@ class AppConfig extends ChangeNotifier {
     _session = const SessionState();
     _api.attachSession(baseUrl: _apiBaseUrl);
     AppLock.instance.reset();
+    // Signing out of a Space removes it; move on to the most recent other one.
+    final gone = _activeSpaceId;
+    if (gone != null) {
+      await _secure.delete(key: _spaceTokenKey(gone));
+      _spaces = [for (final sp in _spaces) if (sp.id != gone) sp];
+      _activeSpaceId = null;
+      await _saveSpaces(prefs);
+    }
     _loggingOut = false;
     notifyListeners();
+    final next = _recentSpace();
+    if (next != null) await switchSpace(next.id);
   }
 
   Future<void> addSearchHistory(String query) async {
@@ -1124,6 +1163,215 @@ class AppConfig extends ChangeNotifier {
     final lng = (item['lng'] as num?)?.toDouble() ?? 0;
     if (lat == 0 && lng == 0) return Future.value();
     return _offlineQueue.enqueue(item);
+  }
+
+  // ---------------------------------------------------------------- Spaces
+
+  List<Space> _spaces = const [];
+  String? _activeSpaceId;
+
+  /// Space to return to when "add Space" is cancelled.
+  String? _addReturnId;
+
+  List<Space> get spaces => _spaces;
+  Space? get activeSpace {
+    for (final s in _spaces) {
+      if (s.id == _activeSpaceId) return s;
+    }
+    return null;
+  }
+
+  /// True while the user is signing in to an additional Space.
+  bool get addingSpace => _addReturnId != null;
+
+  Space? _recentSpace() {
+    if (_spaces.isEmpty) return null;
+    final list = [..._spaces]
+      ..sort((a, b) => (b.lastUsedAt ?? DateTime(2000)).compareTo(a.lastUsedAt ?? DateTime(2000)));
+    return list.first;
+  }
+
+  Future<void> _saveSpaces(SharedPreferences prefs) async {
+    await prefs.setString(_keySpaces, encodeSpaces(_spaces));
+    if (_activeSpaceId != null) {
+      await prefs.setString(_keySpaceActive, _activeSpaceId!);
+    } else {
+      await prefs.remove(_keySpaceActive);
+    }
+    if (_addReturnId != null) {
+      await prefs.setString(_keySpaceAddReturn, _addReturnId!);
+    } else {
+      await prefs.remove(_keySpaceAddReturn);
+    }
+  }
+
+  Map<String, Object?> _readBundle(SharedPreferences prefs) => {
+        for (final k in _spaceBundleKeys)
+          if (prefs.get(k) != null) k: prefs.get(k),
+      };
+
+  Future<void> _writeBundle(SharedPreferences prefs, Map<String, Object?> bundle) async {
+    for (final k in _spaceBundleKeys) {
+      final v = bundle[k];
+      if (v == null) {
+        await prefs.remove(k);
+      } else if (v is bool) {
+        await prefs.setBool(k, v);
+      } else if (v is int) {
+        await prefs.setInt(k, v);
+      } else if (v is List) {
+        await prefs.setStringList(k, [for (final e in v) e.toString()]);
+      } else {
+        await prefs.setString(k, v.toString());
+      }
+    }
+  }
+
+  /// Saves the current session into its Space (creating one after a new login).
+  Future<void> _syncActiveSpace() async {
+    if (!_session.isLoggedIn) return;
+    final prefs = await SharedPreferences.getInstance();
+    var sp = activeSpace;
+    if (sp == null) {
+      sp = findSpaceFor(_spaces, _apiBaseUrl, _session.userId) ?? Space(id: newSpaceId(), baseUrl: _apiBaseUrl);
+      _activeSpaceId = sp.id;
+      _addReturnId = null;
+    }
+    sp = sp.copyWith(
+      baseUrl: _apiBaseUrl,
+      userId: _session.userId,
+      email: _session.email,
+      displayName: _session.displayName,
+      businessName: _session.businessName,
+      packageCode: _session.packageCode,
+      bundle: _readBundle(prefs),
+      lastUsedAt: DateTime.now(),
+    );
+    _spaces = upsertSpace(_spaces, sp);
+    final token = _session.accessToken;
+    if (token != null && token.isNotEmpty) await _secure.write(key: _spaceTokenKey(sp.id), value: token);
+    await _saveSpaces(prefs);
+  }
+
+  /// Puts [sp]'s saved session back and reloads the app state for it.
+  Future<void> _enterSpace(Space sp) async {
+    final prefs = await SharedPreferences.getInstance();
+    RealtimeService.instance.disconnect();
+    UnreadNotifications.instance.clear();
+    await _writeBundle(prefs, sp.bundle.isEmpty ? {_keyApiBaseUrl: sp.baseUrl, _keyServerConfirmed: true} : sp.bundle);
+    final token = await _secure.read(key: _spaceTokenKey(sp.id));
+    if (token != null && token.isNotEmpty) {
+      await _secure.write(key: _secureTokenKey, value: token);
+    } else {
+      await _secure.delete(key: _secureTokenKey);
+    }
+    _activeSpaceId = sp.id;
+    _addReturnId = null;
+    _shell = null;
+    _lastTab = null;
+    _spaces = upsertSpace(_spaces, sp.copyWith(lastUsedAt: DateTime.now()));
+    await _saveSpaces(prefs);
+    await _load();
+  }
+
+  /// Switches to another signed-in Space. Each Space keeps its own server,
+  /// account, business, package, settings and offline queue.
+  Future<void> switchSpace(String id) async {
+    if (id == _activeSpaceId && _session.isLoggedIn) return;
+    final target = _spaces.where((s) => s.id == id).firstOrNull;
+    if (target == null) return;
+    await _syncActiveSpace();
+    await _enterSpace(target);
+  }
+
+  /// Starts signing in to one more Space; the current one stays signed in.
+  /// [baseUrl] pre-fills the server (used by "duplicate" = another account).
+  Future<void> beginAddSpace({String? baseUrl}) async {
+    await _syncActiveSpace();
+    final prefs = await SharedPreferences.getInstance();
+    RealtimeService.instance.disconnect();
+    UnreadNotifications.instance.clear();
+    _addReturnId = _activeSpaceId ?? _addReturnId;
+    _activeSpaceId = null;
+    await _writeBundle(prefs, {if (baseUrl != null) _keyApiBaseUrl: baseUrl, if (baseUrl != null) _keyServerConfirmed: true});
+    await _secure.delete(key: _secureTokenKey);
+    _shell = null;
+    await _saveSpaces(prefs);
+    await _load();
+  }
+
+  /// Back to the Space the user was in before "add Space".
+  Future<void> cancelAddSpace() async {
+    final back = _spaces.where((s) => s.id == _addReturnId).firstOrNull ?? _recentSpace();
+    _addReturnId = null;
+    if (back != null) {
+      await _enterSpace(back);
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      await _saveSpaces(prefs);
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateSpace(String id, {String? label, int? colorValue}) async {
+    final sp = _spaces.where((s) => s.id == id).firstOrNull;
+    if (sp == null) return;
+    final trimmed = label?.trim();
+    _spaces = upsertSpace(
+      _spaces,
+      sp.copyWith(label: trimmed, clearLabel: trimmed != null && trimmed.isEmpty, colorValue: colorValue),
+    );
+    await _saveSpaces(await SharedPreferences.getInstance());
+    notifyListeners();
+  }
+
+  Future<void> reorderSpaces(int from, int to) async {
+    final list = [..._spaces];
+    final s = list.removeAt(from);
+    list.insert(to > from ? to - 1 : to, s);
+    _spaces = list;
+    await _saveSpaces(await SharedPreferences.getInstance());
+    notifyListeners();
+  }
+
+  /// A client signed in as [sp] (for its unread count / sign-out) without
+  /// touching the active session.
+  Future<ApiClient?> spaceClient(Space sp) async {
+    final token = await _secure.read(key: _spaceTokenKey(sp.id));
+    if (token == null || token.isEmpty) return null;
+    final api = ApiClient(dio: Dio(BaseOptions(baseUrl: sp.baseUrl, connectTimeout: const Duration(seconds: 10))));
+    api.attachSession(
+      baseUrl: sp.baseUrl,
+      accessToken: token,
+      userId: sp.userId,
+      businessId: sp.bundle[_keyBusinessId]?.toString(),
+      packageCode: sp.packageCode,
+    );
+    return api;
+  }
+
+  /// "Delete" a Space = sign out of it (server logout + local token removed).
+  /// Other Spaces stay signed in; push keeps working for them.
+  Future<void> removeSpace(String id) async {
+    if (id == _activeSpaceId) {
+      await logout();
+      return;
+    }
+    final sp = _spaces.where((s) => s.id == id).firstOrNull;
+    if (sp == null) return;
+    final api = await spaceClient(sp);
+    if (api != null) {
+      try {
+        await DevicePushService.instance.unregisterFrom(api);
+      } catch (_) {}
+      try {
+        await api.logoutRemote();
+      } catch (_) {}
+    }
+    await _secure.delete(key: _spaceTokenKey(id));
+    _spaces = [for (final s in _spaces) if (s.id != id) s];
+    await _saveSpaces(await SharedPreferences.getInstance());
+    notifyListeners();
   }
 
   /// Repaints listeners after an app-wide visual setting changed (effects level).
