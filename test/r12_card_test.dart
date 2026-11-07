@@ -39,6 +39,26 @@ void main() {
     expect(ctx.text({'secret': 'x', 'off': 'y', 'ok': 'z'}, 'ok'), 'z');
   });
 
+  test('cards only take light fields', () {
+    final ctx = CardFieldContext(fields: [
+      {'name': 'subject', 'type': 'Text'},
+      {'name': 'case_description_open', 'type': 'LongText'},
+      {'name': 'note', 'type': 'Text'},
+      {'name': 'photo', 'type': 'Image'},
+      {'name': 'attendees', 'type': 'jsonb'},
+      {'name': 'amount', 'type': 'Number'},
+    ]);
+    expect(ctx.isCardSafe('subject'), isTrue);
+    expect(ctx.isCardSafe('amount'), isTrue);
+    expect(ctx.isCardSafe('modifiedtime'), isTrue);
+    for (final n in ['case_description_open', 'note', 'photo', 'attendees']) {
+      expect(ctx.isCardSafe(n), isFalse, reason: n);
+    }
+    final l = const CardLayout(title: 'subject', subtitle: 'case_description_open').sanitized(ctx);
+    expect(l.title, 'subject');
+    expect(l.subtitle, isNull);
+  });
+
   testWidgets('card renders formatted slots', (tester) async {
     final ctx = CardFieldContext(
       fields: fields,

@@ -53,11 +53,32 @@ class _CardLayoutEditorScreenState extends State<CardLayoutEditorScreen> {
   late CardLayout _l = widget.initial;
 
   List<String> get _fieldNames {
-    final names = widget.fields.fields.keys.where((k) => k.isNotEmpty).toList();
+    // Only light fields can go on a card (no long text, files, JSON…).
+    final names = widget.fields.fields.keys.where((k) => k.isNotEmpty && widget.fields.isCardSafe(k)).toList();
     for (final m in CardFieldContext.metaLabels.keys) {
       if (!names.contains(m)) names.add(m);
     }
     return names;
+  }
+
+  /// Per-menu picks for a slot: the shared default first, then fields whose
+  /// name/type fit the spot (numbers for the amount, dates for the date…).
+  List<String> _suggestedFor(String slot) {
+    final f = widget.fields;
+    final names = _fieldNames;
+    final def = widget.defaults.slot(slot);
+    bool has(String n) => names.contains(n);
+    final byName = switch (slot) {
+      'top' => names.where((n) => RegExp(r'_no$|_code$|_number$|_ref$').hasMatch(n) || f.type(n) == 'Counter'),
+      'title' => names.where((n) => RegExp(r'_name$|^name$|subject|title|customer').hasMatch(n)),
+      'subtitle' => names.where((n) => RegExp(r'_name$|company|email|type|source|title|project|position').hasMatch(n)),
+      'badge' => names.where((n) => f.option(n, '') != null || (f.picklists[n] ?? const []).isNotEmpty),
+      'date' => names.where(f.isDate),
+      'person' => names.where(f.isUser),
+      'amount' => names.where(f.isNumber),
+      _ => const Iterable<String>.empty(),
+    };
+    return [if (def != null && has(def)) def, ...byName.where((n) => n != def)].take(8).toList();
   }
 
   Future<void> _pick(_SlotInfo slot) async {
@@ -73,6 +94,7 @@ class _CardLayoutEditorScreenState extends State<CardLayoutEditorScreen> {
         preferNumbers: slot.key == 'amount',
         preferDates: slot.key == 'date',
         preferUsers: slot.key == 'person',
+        suggested: _suggestedFor(slot.key),
       ),
     );
     if (picked == null) return;
@@ -245,7 +267,9 @@ class _FieldPicker extends StatefulWidget {
     this.preferNumbers = false,
     this.preferDates = false,
     this.preferUsers = false,
+    this.suggested = const [],
   });
+  final List<String> suggested;
   final List<String> names;
   final CardFieldContext fields;
   final String? current;
@@ -289,13 +313,45 @@ class _FieldPickerState extends State<_FieldPicker> {
           ),
         ),
         const SizedBox(height: 8),
+        Row(
+          children: [
+            Icon(NxI.info, size: 14, color: cs.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                tr('แสดงเฉพาะฟิลด์สั้นๆ — ไม่รวมรายละเอียด ข้อความยาว ไฟล์ และรูป เพื่อให้รายการโหลดเร็ว'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
         ListTile(
           leading: Icon(NxI.eyeSlash, color: cs.onSurfaceVariant),
           title: Text(tr('ไม่แสดง')),
           trailing: widget.current == null ? Icon(NxI.check, color: cs.primary) : null,
           onTap: () => Navigator.pop(context, ''),
         ),
+        if (q.isEmpty && widget.suggested.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(tr('แนะนำสำหรับตำแหน่งนี้'), style: Theme.of(context).textTheme.labelLarge?.copyWith(color: cs.primary)),
+          ),
+          for (final n in widget.suggested)
+            ListTile(
+              title: Text(widget.fields.label(n)),
+              subtitle: Text(n, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+              leading: Icon(NxI.sparkle, size: 18, color: cs.primary),
+              trailing: widget.current == n ? Icon(NxI.check, color: cs.primary) : null,
+              onTap: () => Navigator.pop(context, n),
+            ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: Text(tr('ฟิลด์อื่น'), style: Theme.of(context).textTheme.labelLarge),
+          ),
+        ],
         for (final n in names)
+          if (q.isNotEmpty || !widget.suggested.contains(n))
           ListTile(
             title: Text(widget.fields.label(n)),
             subtitle: Text(n, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),

@@ -1171,6 +1171,9 @@ const Map<String, String> enStrings = {
   'เธรด': 'Thread',
   'ทั้งเธรด': 'Whole thread',
   'ไม่มีข้อความในเธรดนี้': 'No messages in this thread',
+  'แนะนำสำหรับตำแหน่งนี้': 'Suggested for this spot',
+  'ฟิลด์อื่น': 'Other fields',
+  'แสดงเฉพาะฟิลด์สั้นๆ — ไม่รวมรายละเอียด ข้อความยาว ไฟล์ และรูป เพื่อให้รายการโหลดเร็ว': 'Short fields only — no details, long text, files or images, so the list stays fast',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

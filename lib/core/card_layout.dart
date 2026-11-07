@@ -74,6 +74,16 @@ class CardLayout {
         subtitleMode: m,
       );
 
+  /// Drops slots pointing at fields a card must not show (heavy or hidden).
+  CardLayout sanitized(CardFieldContext ctx) {
+    var l = this;
+    for (final s in slots) {
+      final f = l.slot(s);
+      if (f != null && !ctx.isCardSafe(f)) l = l.withSlot(s, null);
+    }
+    return l;
+  }
+
   Map<String, dynamic> toJson() => {
         for (final s in slots) s: slot(s) ?? '',
         'subtitle_mode': subtitleMode,
@@ -205,6 +215,27 @@ class CardFieldContext {
     return '${fields[name]?['type'] ?? ''}';
   }
 
+  // NEXTX field types (case-sensitive: `Text` is short, Postgres `text` is long).
+  static const _heavyTypes = {
+    'LongText', 'RichText', 'Html', 'Json', 'Image', 'Video', 'File', 'Files', 'Media', 'Post', 'Drawing',
+    'Signature', 'Canvas', 'AddressMap', 'Address', 'LatLong', 'XY', 'App', 'Tag',
+    'text', 'json', 'jsonb', 'bytea', '19', '21', '69',
+  };
+  static final _heavyNames = RegExp(
+      r'description|remark|note|detail|comment|body|content|html|json|signature|attendees|photos|images|files|'
+      r'score_factors|health_flags|_log$|address_line|locationmap|image_url|avatar|attachment|recurrence|history');
+
+  /// Fields a list card may show: short values only. Long text, rich text,
+  /// JSON, files/images, maps and addresses would make every row heavy.
+  bool isCardSafe(String name) {
+    if (metaLabels.containsKey(name)) return true;
+    final f = fields[name];
+    if (f == null) return false;
+    if (_heavyTypes.contains(type(name))) return false;
+    if (_heavyNames.hasMatch(name.toLowerCase())) return false;
+    return true;
+  }
+
   bool isUser(String name) => type(name) == 'PicklistUser' || type(name) == '53';
   bool isDate(String name) => const ['Date', 'DateTime', '5', '6', '23', '70'].contains(type(name));
   bool isNumber(String name) => const ['Number', 'Currency', 'Decimal', 'Integer', '7', '71', '72'].contains(type(name));
@@ -216,8 +247,9 @@ class CardFieldContext {
   /// Text for [name] on [row], formatted by the field's type.
   String text(Map<String, dynamic> row, String? name, {bool money = false}) {
     if (name == null || name.isEmpty) return '';
-    // A slot saved earlier for a field the user may no longer see stays empty.
-    if (!fields.containsKey(name) && !metaLabels.containsKey(name)) return '';
+    // A slot saved earlier for a field the user may no longer see (or a heavy
+    // field) stays empty.
+    if (!isCardSafe(name)) return '';
     final raw = row[name];
     if (raw == null) return '';
     var s = raw is List ? raw.join(', ') : '$raw'.trim();
