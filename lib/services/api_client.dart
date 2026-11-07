@@ -1061,6 +1061,202 @@ class ApiClient {
     return '$base${url.startsWith('/') ? '' : '/'}$url';
   }
 
+  // ── Workspace (boards / epics / tasks) — same endpoints as the NEXTX web.
+
+  /// `kind`: `task` (task/bug/story/subtask/checklist) or `epic`.
+  String _wsPath(String boardId, String kind, String id) =>
+      '/api/boards/$boardId/${kind == 'epic' ? 'epics' : 'tasks'}/$id';
+
+  Future<Map<String, dynamic>> getBoard(String boardId) async => _dataMap(await _send('GET', '/api/boards/$boardId'));
+
+  Future<List<Map<String, dynamic>>> getBoardTasks(String boardId, {bool lite = true, String? epicId, String? ids}) async {
+    final env = await _send('GET', '/api/boards/$boardId/tasks', query: {
+      if (lite) 'fields': 'lite',
+      if (epicId != null) 'epic_id': epicId,
+      if (epicId != null) 'include_children': '1',
+      if (ids != null) 'ids': ids,
+    });
+    return extractMapList(env['data']);
+  }
+
+  Future<List<Map<String, dynamic>>> getBoardEpics(String boardId, {bool lite = true, String? ids}) async {
+    final env = await _send('GET', '/api/boards/$boardId/epics', query: {
+      if (lite) 'fields': 'lite',
+      if (ids != null) 'ids': ids,
+    });
+    return extractMapList(env['data']);
+  }
+
+  /// One task or epic with every field (description, attachments…).
+  Future<Map<String, dynamic>?> getWorkspaceItem(String boardId, String kind, String id) async {
+    final list = kind == 'epic'
+        ? await getBoardEpics(boardId, lite: false, ids: id)
+        : await getBoardTasks(boardId, lite: false, ids: id);
+    return list.where((e) => '${e['id']}' == id).firstOrNull ?? (list.isEmpty ? null : list.first);
+  }
+
+  Future<Map<String, dynamic>> createWorkspaceItem(String boardId, String kind, Map<String, dynamic> body) async =>
+      _dataMap(await _send('POST', '/api/boards/$boardId/${kind == 'epic' ? 'epics' : 'tasks'}', data: body));
+
+  Future<Map<String, dynamic>> updateWorkspaceItem(String boardId, String kind, String id, Map<String, dynamic> body) async =>
+      _dataMap(await _send('PUT', _wsPath(boardId, kind, id), data: body));
+
+  Future<void> deleteWorkspaceItem(String boardId, String kind, String id) async {
+    await _send('DELETE', _wsPath(boardId, kind, id));
+  }
+
+  Future<Map<String, dynamic>> moveWorkspaceItem(String boardId, String kind, String id, String targetBoardId) async =>
+      _dataMap(await _send('POST', '${_wsPath(boardId, kind, id)}/move', data: {'target_board_id': targetBoardId}));
+
+  /// New order of sibling tasks (e.g. one Kanban column).
+  Future<void> reorderBoardTasks(String boardId, List<String> orderedIds) async {
+    await _send('PUT', '/api/boards/$boardId/tasks/reorder', data: {
+      'ordered_ids': [for (final id in orderedIds) int.tryParse(id) ?? id],
+    });
+  }
+
+  /// `items`: `[(kind, id)]`; `updates`: status_id / assignee_id / priority / dates…
+  Future<void> bulkUpdateWorkspaceItems(String boardId, List<(String, String)> items, Map<String, dynamic> updates) async {
+    await _send('PUT', '/api/boards/$boardId/bulk-update', data: {
+      'item_ids': [for (final (k, id) in items) {'type': k, 'id': int.tryParse(id) ?? id}],
+      'updates': updates,
+    });
+  }
+
+  Future<void> bulkDeleteWorkspaceItems(String boardId, List<(String, String)> items) async {
+    await _send('POST', '/api/boards/$boardId/bulk-delete', data: {
+      'item_ids': [for (final (k, id) in items) {'type': k, 'id': int.tryParse(id) ?? id}],
+    });
+  }
+
+  // Worklogs (ลงเวลา)
+  Future<Map<String, dynamic>> addWorklog(
+    String boardId,
+    String taskId, {
+    required int minutes,
+    String? description,
+    int? remainingMinutes,
+    String? startedAt,
+  }) async =>
+      _dataMap(await _send('POST', '/api/boards/$boardId/tasks/$taskId/worklogs', data: {
+        'time_spent_minutes': minutes,
+        if (description != null && description.isNotEmpty) 'work_description': description,
+        if (remainingMinutes != null) 'time_remaining_minutes': remainingMinutes,
+        if (startedAt != null) 'started_at': startedAt,
+      }));
+
+  Future<Map<String, dynamic>> updateWorklog(
+    String boardId,
+    String taskId,
+    String worklogId, {
+    required int minutes,
+    String? description,
+    int? remainingMinutes,
+    String? startedAt,
+  }) async =>
+      _dataMap(await _send('PUT', '/api/boards/$boardId/tasks/$taskId/worklogs/$worklogId', data: {
+        'time_spent_minutes': minutes,
+        'work_description': description ?? '',
+        if (remainingMinutes != null) 'time_remaining_minutes': remainingMinutes,
+        if (startedAt != null) 'started_at': startedAt,
+      }));
+
+  Future<void> deleteWorklog(String boardId, String taskId, String worklogId) async {
+    await _send('DELETE', '/api/boards/$boardId/tasks/$taskId/worklogs/$worklogId');
+  }
+
+  // Comments (tasks and epics)
+  Future<List<Map<String, dynamic>>> getItemComments(String boardId, String kind, String id) async {
+    final env = await _send('GET', '${_wsPath(boardId, kind, id)}/comments');
+    return extractMapList(env['data']);
+  }
+
+  Future<Map<String, dynamic>> addItemComment(
+    String boardId,
+    String kind,
+    String id,
+    String body, {
+    String? parentId,
+    List<Map<String, dynamic>> attachments = const [],
+  }) async =>
+      _dataMap(await _send('POST', '${_wsPath(boardId, kind, id)}/comments', data: {
+        'body': body,
+        if (parentId != null) 'parent_id': int.tryParse(parentId) ?? parentId,
+        if (attachments.isNotEmpty) 'attachments': attachments,
+      }));
+
+  Future<void> updateItemComment(String boardId, String kind, String id, String commentId, String body) async {
+    await _send('PUT', '${_wsPath(boardId, kind, id)}/comments/$commentId', data: {'body': body});
+  }
+
+  Future<void> deleteItemComment(String boardId, String kind, String id, String commentId) async {
+    await _send('DELETE', '${_wsPath(boardId, kind, id)}/comments/$commentId');
+  }
+
+  /// Toggles my like; returns `{liked, like_count}`.
+  Future<Map<String, dynamic>> toggleItemCommentLike(String boardId, String kind, String id, String commentId) async =>
+      _dataMap(await _send('POST', '${_wsPath(boardId, kind, id)}/comments/$commentId/like'));
+
+  /// Change history of one item (status, assignee, fields, comments, worklogs…).
+  Future<List<Map<String, dynamic>>> getItemActivity(String boardId, String kind, String id, {int limit = 100}) async {
+    final env = await _send('GET', '/api/boards/$boardId/activity', query: {
+      kind == 'epic' ? 'epic_id' : 'task_id': id,
+      'limit': '$limit',
+      'fields': 'lite',
+    });
+    return extractMapList(env['data']);
+  }
+
+  // Watchers / links
+  Future<List<Map<String, dynamic>>> getItemWatchers(String boardId, String kind, String id) async =>
+      extractMapList((await _send('GET', '/api/boards/$boardId/items/$kind/$id/watchers'))['data']);
+
+  Future<void> addItemWatcher(String boardId, String kind, String id, String userId) async {
+    await _send('POST', '/api/boards/$boardId/items/$kind/$id/watchers', data: {'user_id': int.tryParse(userId) ?? userId});
+  }
+
+  Future<void> removeItemWatcher(String boardId, String kind, String id, String userId) async {
+    await _send('DELETE', '/api/boards/$boardId/items/$kind/$id/watchers/$userId');
+  }
+
+  Future<List<Map<String, dynamic>>> getItemLinks(String boardId, String kind, String id) async =>
+      extractMapList((await _send('GET', '/api/boards/$boardId/items/$kind/$id/links'))['data']);
+
+  Future<void> addItemLink(String boardId, String kind, String id,
+      {required String toKind, required String toId, String linkType = 'relates_to'}) async {
+    await _send('POST', '/api/boards/$boardId/items/$kind/$id/links', data: {
+      'to_type': toKind,
+      'to_id': int.tryParse(toId) ?? toId,
+      'link_type': linkType,
+    });
+  }
+
+  Future<void> deleteItemLink(String boardId, String linkId) async {
+    await _send('DELETE', '/api/boards/$boardId/item-links/$linkId');
+  }
+
+  // Board-level
+  Future<Map<String, dynamic>> duplicateBoard(String boardId) async =>
+      _dataMap(await _send('POST', '/api/boards/$boardId/duplicate'));
+
+  Future<List<Map<String, dynamic>>> getBoardItemTags(String boardId) async =>
+      extractMapList((await _send('GET', '/api/boards/$boardId/item-tags'))['data']);
+
+  Future<List<Map<String, dynamic>>> getBoardReleases(String boardId) async =>
+      extractMapList((await _send('GET', '/api/boards/$boardId/releases'))['data']);
+
+  // Trash
+  Future<Map<String, dynamic>> getWorkspaceTrash({int limit = 50, int offset = 0}) async =>
+      _dataMap(await _send('GET', '/api/workspace/trash', query: {'limit': '$limit', 'offset': '$offset'}));
+
+  Future<void> restoreWorkspaceTrash(String id) async {
+    await _send('POST', '/api/workspace/trash/$id/restore');
+  }
+
+  Future<void> purgeWorkspaceTrash(String id) async {
+    await _send('DELETE', '/api/workspace/trash/$id');
+  }
+
   /// Soft-deletes a task (moved to the workspace trash on the server).
   Future<void> deleteBoardTask(String boardId, String taskId) async {
     await _send('DELETE', '/api/boards/$boardId/tasks/$taskId');

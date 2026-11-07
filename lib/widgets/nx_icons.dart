@@ -102,6 +102,17 @@ class NxI {
   static const mapPin = LucideIcons300.mapPin;
   static const star = LucideIcons300.star;
   static const funnel = LucideIcons300.listFilter;
+  static const bookmark = LucideIcons300.bookmark;
+  static const subtask = LucideIcons300.listTree;
+  static const listChecks = LucideIcons300.listChecks;
+  static const checkSquare = LucideIcons300.squareCheck;
+  static const chevronsUp = LucideIcons300.chevronsUp;
+  static const chevronsDown = LucideIcons300.chevronsDown;
+  static const equals = LucideIcons300.equal;
+  static const play = LucideIcons300.play;
+  static const pause = LucideIcons300.pause;
+  static const stop = LucideIcons300.square;
+  static const moveRight = LucideIcons300.moveRight;
   static const lightning = LucideIcons300.zap;
   static const chartBar = LucideIcons300.chartColumn;
   static const trendUp = LucideIcons300.trendingUp;
