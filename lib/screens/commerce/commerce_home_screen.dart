@@ -13,6 +13,7 @@ import '../../widgets/nx_split_view.dart';
 import '../../widgets/nx_icons.dart';
 import '../crm/order_summary_screen.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 /// NEXTX order queues (backend/src/services/commercialOrderQueueService.js).
 const orderQueues = <String, String>{
@@ -95,6 +96,22 @@ class _OrdersTab extends StatefulWidget {
 
 class _OrdersTabState extends State<_OrdersTab> {
   String _queue = 'new_today';
+  NxListQuery _lq = const NxListQuery();
+
+  String _at(Map o) => '${o['created_at'] ?? o['order_date'] ?? o['id'] ?? ''}';
+  num _amount(Map o) => num.tryParse('${o['grand_total'] ?? 0}') ?? 0;
+
+  /// Queue comes from the server; search and sort apply to the loaded page.
+  List<Map<String, dynamic>> get _shown => nxApplyLocalQuery<Map<String, dynamic>>(
+        _items,
+        _lq,
+        text: (o) => '${o['order_number'] ?? ''} ${o['customer_name'] ?? ''} ${o['customer_phone'] ?? ''} ${o['id'] ?? ''}',
+        sorts: {
+          'new': (a, b) => _at(b).compareTo(_at(a)),
+          'old': (a, b) => _at(a).compareTo(_at(b)),
+          'amount': (a, b) => _amount(b).compareTo(_amount(a)),
+        },
+      );
   List<Map<String, dynamic>> _items = [];
   Map<String, dynamic> _counts = {};
   Map<String, dynamic>? _selected;
@@ -185,6 +202,18 @@ class _OrdersTabState extends State<_OrdersTab> {
             ],
           ),
         ),
+        NxListToolbar(
+          query: _lq,
+          liveSearch: true,
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          searchHint: 'ค้นหาเลขออเดอร์ / ลูกค้า',
+          sorts: const [
+            NxSortOption('new', 'ใหม่ล่าสุด'),
+            NxSortOption('old', 'เก่าสุด'),
+            NxSortOption('amount', 'ยอดสูงสุด'),
+          ],
+          onChanged: (q) => setState(() => _lq = q),
+        ),
         Expanded(
           child: NxSplitView(
             detail: _selected == null
@@ -203,9 +232,9 @@ class _OrdersTabState extends State<_OrdersTab> {
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     children: [
                       if (_error != null) Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error)),
-                      if (_error == null && _items.isEmpty)
+                      if (_error == null && _shown.isEmpty)
                         Padding(padding: EdgeInsets.all(48), child: Center(child: Text(tr('ไม่มีออเดอร์ในคิวนี้')))),
-                      for (final o in _items)
+                      for (final o in _shown)
                         Card(
                           margin: const EdgeInsets.only(bottom: 10),
                           child: ListTile(

@@ -725,3 +725,26 @@ class _FilterSheetState extends State<_FilterSheet> {
     );
   }
 }
+
+/// Applies a [NxListQuery] to an in-memory list (menus whose API has no
+/// server-side filters): free-text search, per-group predicates, sort.
+List<T> nxApplyLocalQuery<T>(
+  List<T> items,
+  NxListQuery q, {
+  required String Function(T item) text,
+  Map<String, bool Function(T item, Set<String> values)> filters = const {},
+  Map<String, int Function(T a, T b)> sorts = const {},
+}) {
+  final needle = q.q.trim().toLowerCase();
+  final out = items.where((it) {
+    if (needle.isNotEmpty && !text(it).toLowerCase().contains(needle)) return false;
+    for (final e in q.filters.entries) {
+      final f = filters[e.key];
+      if (f != null && e.value.isNotEmpty && !f(it, e.value)) return false;
+    }
+    return true;
+  }).toList();
+  final s = q.sort == null ? null : sorts[q.sort];
+  if (s != null) out.sort(s);
+  return out;
+}

@@ -16,6 +16,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 /// NEXTX notification categories (backend/src/services/notificationCategory.js).
 const notificationCategories = <String, String>{
@@ -254,9 +255,22 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     );
   }
 
+  /// Category + unread go to the server; search and sort apply locally.
+  NxListQuery _query = const NxListQuery();
+
+  List<Map<String, dynamic>> get _shown => nxApplyLocalQuery<Map<String, dynamic>>(
+        _items,
+        _query.copyWith(filters: const {}),
+        text: (n) => '${n['title'] ?? ''} ${n['body'] ?? ''}',
+        sorts: {
+          'old': (a, b) => '${a['created_at'] ?? ''}'.compareTo('${b['created_at'] ?? ''}'),
+        },
+      );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final shown = _shown;
     Widget body;
     if (_loading) {
       body = const NxSkeletonList();
@@ -266,7 +280,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         Center(child: Text(tr(formatApiError(_error!)))),
         Center(child: TextButton(onPressed: _reload, child: Text(tr('ลองใหม่')))),
       ]);
-    } else if (_items.isEmpty) {
+    } else if (shown.isEmpty) {
       body = ListView(children: [
         const SizedBox(height: 100),
         Icon(NxI.bellSimple, size: 56, color: theme.colorScheme.onSurfaceVariant),
@@ -277,16 +291,16 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       body = ListView.separated(
         controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: _items.length + (_cursor != null ? 1 : 0),
+        itemCount: shown.length + (_cursor != null ? 1 : 0),
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, i) {
-          if (i >= _items.length) {
+          if (i >= shown.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
               child: Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
             );
           }
-          return _tile(_items[i]);
+          return _tile(shown[i]);
         },
       );
     }
@@ -300,38 +314,38 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       ),
       body: Column(
         children: [
-          SizedBox(
-            height: 52,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(tr('ยังไม่อ่าน')),
-                    selected: _unreadOnly,
-                    onSelected: (v) {
-                      setState(() => _unreadOnly = v);
-                      _reload();
-                    },
-                  ),
-                ),
-                for (final e in notificationCategories.entries)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(tr(e.value)),
-                      selected: _category == e.key,
-                      showCheckmark: false,
-                      onSelected: (_) {
-                        setState(() => _category = e.key);
-                        _reload();
-                      },
-                    ),
-                  ),
-              ],
-            ),
+          NxListToolbar(
+            query: _query,
+            liveSearch: true,
+            searchHint: 'ค้นหาการแจ้งเตือน',
+            quickGroup: 'cat',
+            groups: [
+              NxFilterGroup(
+                key: 'cat',
+                label: 'หมวด',
+                multi: false,
+                options: [
+                  for (final e in notificationCategories.entries)
+                    if (e.key != 'all') NxFilterOption(e.key, e.value),
+                ],
+              ),
+              const NxFilterGroup(
+                key: 'state',
+                label: 'สถานะ',
+                multi: false,
+                options: [NxFilterOption('unread', 'ยังไม่อ่าน')],
+              ),
+            ],
+            sorts: const [NxSortOption('new', 'ใหม่ → เก่า'), NxSortOption('old', 'เก่า → ใหม่')],
+            onChanged: (q) {
+              final reload = q.single('cat') != _query.single('cat') || q.has('state', 'unread') != _query.has('state', 'unread');
+              setState(() {
+                _query = q;
+                _category = q.single('cat') ?? 'all';
+                _unreadOnly = q.has('state', 'unread');
+              });
+              if (reload) _reload();
+            },
           ),
           Expanded(child: RefreshIndicator(onRefresh: _reload, child: body)),
         ],

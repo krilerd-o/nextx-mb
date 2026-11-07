@@ -23,6 +23,7 @@ import 'activity_detail_screen.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 class CalendarHomeScreen extends StatefulWidget {
   const CalendarHomeScreen({super.key});
@@ -172,6 +173,8 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     }
   }
 
+  NxListQuery _lq = const NxListQuery();
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -195,10 +198,39 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
         revision: _revision,
         load: _fetch,
         skeleton: const NxSkeletonList(),
-        builder: (context, list) {
+        builder: (context, all) {
+          Set<String> valuesOf(String k) => {
+                for (final r in all)
+                  if ('${r[k] ?? ''}'.isNotEmpty) '${r[k]}',
+              };
+          final types = valuesOf('activitytype').toList()..sort();
+          final statuses = valuesOf('status').toList()..sort();
+          final me = session.userId ?? '';
+          final list = nxApplyLocalQuery<Map<String, dynamic>>(
+            all,
+            _lq.copyWith(sort: null),
+            text: (r) => '${r['subject'] ?? ''} ${r['location'] ?? ''} ${r['account_name'] ?? ''} ${r['contact_name'] ?? ''}',
+            filters: {
+              'type': (r, v) => v.contains('${r['activitytype'] ?? ''}'),
+              'status': (r, v) => v.contains('${r['status'] ?? ''}'),
+              'checkin': (r, v) {
+                final done = '${r['checkindate'] ?? ''}'.isNotEmpty;
+                return (v.contains('done') && done) || (v.contains('not') && !done);
+              },
+              'scope': (r, v) => !v.contains('mine') || '${r['smownerid'] ?? ''}' == me,
+            },
+          );
           final dayKey = _ymd(_selectedDay);
           final byDay = groupActivitiesByDay(list);
-          final visible = _mode == _CalMode.agenda ? (byDay[dayKey] ?? const <Map<String, dynamic>>[]) : list;
+          final visible = nxApplyLocalQuery<Map<String, dynamic>>(
+            _mode == _CalMode.agenda ? (byDay[dayKey] ?? const <Map<String, dynamic>>[]) : list,
+            NxListQuery(sort: _lq.sort),
+            text: (_) => '',
+            sorts: {
+              'late': (a, b) => '${b['date_start'] ?? ''}'.compareTo('${a['date_start'] ?? ''}'),
+              'early': (a, b) => '${a['date_start'] ?? ''}'.compareTo('${b['date_start'] ?? ''}'),
+            },
+          );
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -217,7 +249,27 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                   _revision++;
                 }),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+              NxListToolbar(
+                query: _lq,
+                liveSearch: true,
+                padding: const EdgeInsets.only(bottom: 4),
+                searchHint: 'ค้นหาชื่อนัด / สถานที่ / ลูกค้า',
+                quickGroup: 'scope',
+                groups: [
+                  const NxFilterGroup(key: 'scope', label: 'ขอบเขต', multi: false, options: [NxFilterOption('mine', 'ของฉัน')]),
+                  if (types.isNotEmpty)
+                    NxFilterGroup(key: 'type', label: 'ประเภท', options: [for (final t in types) NxFilterOption(t, t)]),
+                  if (statuses.isNotEmpty)
+                    NxFilterGroup(key: 'status', label: 'สถานะ', options: [for (final t in statuses) NxFilterOption(t, t)]),
+                  const NxFilterGroup(key: 'checkin', label: 'เช็คอิน', multi: false, options: [
+                    NxFilterOption('done', 'เช็คอินแล้ว'),
+                    NxFilterOption('not', 'ยังไม่เช็คอิน'),
+                  ]),
+                ],
+                sorts: const [NxSortOption('early', 'เวลาเช้า → ค่ำ'), NxSortOption('late', 'เวลาค่ำ → เช้า')],
+                onChanged: (q) => setState(() => _lq = q),
+              ),
               if (_mode == _CalMode.agenda) ...[
                 Align(
                   alignment: Alignment.centerRight,

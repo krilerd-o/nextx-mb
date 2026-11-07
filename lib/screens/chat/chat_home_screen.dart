@@ -20,6 +20,7 @@ import 'chat_room_screen.dart';
 import 'chat_search_screen.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 class ChatHomeScreen extends StatefulWidget {
   const ChatHomeScreen({super.key});
@@ -31,6 +32,7 @@ class ChatHomeScreen extends StatefulWidget {
 class _ChatHomeScreenState extends State<ChatHomeScreen> {
   var _revision = 0;
   var _query = '';
+  NxListQuery _lq = const NxListQuery();
   Map<String, dynamic>? _selected;
   List<Map<String, dynamic>> _rooms = const [];
   StreamSubscription<RealtimeEvent>? _sub;
@@ -207,27 +209,53 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
         builder: (context, all) {
           _rooms = all;
           final theme = Theme.of(context);
-          final needle = _query.trim().toLowerCase();
-          final rooms = needle.isEmpty
-              ? all
-              : all.where((r) => (r['name']?.toString() ?? '').toLowerCase().contains(needle)).toList();
+          int unreadOf(Map r) => int.tryParse('${r['unread_count'] ?? ''}') ?? 0;
+          String lastAt(Map r) => '${r['last_message_at'] ?? r['updated_at'] ?? r['created_at'] ?? ''}';
+          final rooms = nxApplyLocalQuery<Map<String, dynamic>>(
+            all,
+            _lq.copyWith(q: _query),
+            text: (r) => '${r['name'] ?? ''} ${r['last_message'] ?? ''}',
+            filters: {
+              'kind': (r, v) => v.contains(r['room_type']?.toString() == 'dm' ? 'dm' : 'group'),
+              'state': (r, v) => !v.contains('unread') || unreadOf(r) > 0,
+            },
+            sorts: {
+              'recent': (a, b) => lastAt(b).compareTo(lastAt(a)),
+              'unread': (a, b) => unreadOf(b).compareTo(unreadOf(a)),
+              'name': (a, b) => '${a['name'] ?? ''}'.toLowerCase().compareTo('${b['name'] ?? ''}'.toLowerCase()),
+            },
+          );
           final items = RefreshIndicator(
             onRefresh: () async => setState(() => _revision++),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
-                TextField(
-                  decoration: InputDecoration(
-                    hintText: tr('ค้นหาห้อง'),
-                    prefixIcon: const Icon(NxI.magnifyingGlass),
-                    filled: true,
-                    isDense: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                  ),
-                  onChanged: (v) => setState(() => _query = v),
+                NxListToolbar(
+                  query: _lq.copyWith(q: _query),
+                  liveSearch: true,
+                  padding: const EdgeInsets.only(bottom: 8),
+                  searchHint: 'ค้นหาห้อง',
+                  quickGroup: 'kind',
+                  groups: const [
+                    NxFilterGroup(key: 'kind', label: 'ประเภทห้อง', multi: false, options: [
+                      NxFilterOption('group', 'กลุ่ม'),
+                      NxFilterOption('dm', 'ส่วนตัว'),
+                    ]),
+                    NxFilterGroup(key: 'state', label: 'สถานะ', multi: false, options: [
+                      NxFilterOption('unread', 'ยังไม่อ่าน'),
+                    ]),
+                  ],
+                  sorts: const [
+                    NxSortOption('recent', 'ข้อความล่าสุด'),
+                    NxSortOption('unread', 'ยังไม่อ่านมากสุด'),
+                    NxSortOption('name', 'ชื่อ ก–ฮ'),
+                  ],
+                  onChanged: (q) => setState(() {
+                    _query = q.q;
+                    _lq = q.copyWith(q: '');
+                  }),
                 ),
-                const SizedBox(height: 12),
                 if (rooms.isEmpty)
                   Padding(
                     padding: EdgeInsets.all(24),

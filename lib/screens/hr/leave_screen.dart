@@ -16,6 +16,7 @@ import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 import '../../widgets/nx_shake.dart';
 
 class LeaveScreen extends StatefulWidget {
@@ -303,6 +304,8 @@ class _LeaveMineTab extends StatefulWidget {
 }
 
 class _LeaveMineTabState extends State<_LeaveMineTab> {
+  NxListQuery _lq = const NxListQuery();
+
   var _local = 0;
 
   Future<void> _cancel(Map<String, dynamic> p) async {
@@ -338,11 +341,57 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
       skeleton: const NxSkeletonList(rows: 4),
       isEmpty: (list) => list.isEmpty,
       empty: Center(child: Text(tr('ยังไม่มีคำขอลา'))),
-      builder: (context, list) {
+      builder: (context, all) {
+        final now = thaiNow();
+        String ym(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}';
+        final thisMonth = ym(now);
+        final lastMonth = ym(DateTime(now.year, now.month - 1));
+        final list = nxApplyLocalQuery<Map<String, dynamic>>(
+          all,
+          _lq,
+          text: (p) => '${p['leave_type_name'] ?? ''} ${p['reason'] ?? ''}',
+          filters: {
+            'status': (p, v) => v.contains('${p['status'] ?? ''}'),
+            'month': (p, v) {
+              final m = '${p['start_date'] ?? ''}'.length >= 7 ? '${p['start_date']}'.substring(0, 7) : '';
+              return (v.contains('this') && m == thisMonth) ||
+                  (v.contains('last') && m == lastMonth) ||
+                  (v.contains('year') && m.startsWith('${now.year}'));
+            },
+          },
+          sorts: {
+            'new': (a, b) => '${b['start_date'] ?? ''}'.compareTo('${a['start_date'] ?? ''}'),
+            'old': (a, b) => '${a['start_date'] ?? ''}'.compareTo('${b['start_date'] ?? ''}'),
+          },
+        );
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: NxBreakpoint.of(context).scrollPadding(context),
           children: [
+            NxListToolbar(
+              query: _lq,
+              liveSearch: true,
+              showSearch: all.length > 5,
+              padding: const EdgeInsets.only(bottom: 8),
+              searchHint: 'ค้นหาประเภท / เหตุผล',
+              quickGroup: 'status',
+              resultCount: list.length,
+              groups: const [
+                NxFilterGroup(key: 'status', label: 'สถานะ', options: [
+                  NxFilterOption('Pending', 'รออนุมัติ'),
+                  NxFilterOption('Approved', 'อนุมัติแล้ว'),
+                  NxFilterOption('Rejected', 'ไม่อนุมัติ'),
+                  NxFilterOption('Cancelled', 'ยกเลิกแล้ว'),
+                ]),
+                NxFilterGroup(key: 'month', label: 'ช่วงเดือน', multi: false, options: [
+                  NxFilterOption('this', 'เดือนนี้'),
+                  NxFilterOption('last', 'เดือนที่แล้ว'),
+                  NxFilterOption('year', 'ปีนี้'),
+                ]),
+              ],
+              sorts: const [NxSortOption('new', 'วันที่ลาล่าสุด'), NxSortOption('old', 'วันที่ลาเก่าสุด')],
+              onChanged: (q) => setState(() => _lq = q),
+            ),
             for (final p in list)
               _LeaveRequestCard(
                 row: p,

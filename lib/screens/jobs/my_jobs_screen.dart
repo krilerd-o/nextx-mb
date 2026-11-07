@@ -16,6 +16,8 @@ import '../crm/entity_detail_screen.dart';
 import 'job_inspection_screen.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
+import '../../core/thai_time.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 class MyJobsScreen extends StatefulWidget {
   const MyJobsScreen({super.key});
@@ -27,6 +29,7 @@ class MyJobsScreen extends StatefulWidget {
 class _MyJobsScreenState extends State<MyJobsScreen> {
   var _revision = 0;
   var _query = '';
+  NxListQuery _lq = const NxListQuery();
   Map<String, dynamic>? _selected;
 
   @override
@@ -50,12 +53,49 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
         isEmpty: (list) => list.isEmpty,
         empty: Center(child: Text(tr('ไม่มีงานที่ได้รับมอบหมาย'))),
         builder: (context, all) {
-          final needle = _query.trim().toLowerCase();
-          final list = needle.isEmpty
-              ? all
-              : all
-                  .where((r) => '${entityTitle(r, module: 'job')} ${entitySubtitle(r) ?? ''}'.toLowerCase().contains(needle))
-                  .toList();
+          final statuses = <String>{
+            for (final r in all)
+              if ('${r['job_status'] ?? ''}'.isNotEmpty) '${r['job_status']}',
+          }.toList()
+            ..sort();
+          String planOf(Map r) => '${r['plan_start'] ?? r['due_datetime'] ?? ''}';
+          final today = thaiNow();
+          bool onDay(Map r, Set<String> v) {
+            final d = parseThai(planOf(r));
+            if (d == null) return v.contains('none');
+            final day = DateTime(d.year, d.month, d.day);
+            final t0 = DateTime(today.year, today.month, today.day);
+            return (v.contains('today') && day == t0) ||
+                (v.contains('tomorrow') && day == t0.add(const Duration(days: 1))) ||
+                (v.contains('week') && !day.isBefore(t0) && day.isBefore(t0.add(const Duration(days: 7)))) ||
+                (v.contains('overdue') && day.isBefore(t0) && !RegExp(r'complete|cancel|closed|done', caseSensitive: false).hasMatch('${r['job_status']}'));
+          }
+
+          final groups = [
+            if (statuses.isNotEmpty)
+              NxFilterGroup(key: 'status', label: 'สถานะ', options: [for (final st in statuses) NxFilterOption(st, st)]),
+            const NxFilterGroup(key: 'day', label: 'วันนัด', options: [
+              NxFilterOption('today', 'วันนี้'),
+              NxFilterOption('tomorrow', 'พรุ่งนี้'),
+              NxFilterOption('week', '7 วันข้างหน้า'),
+              NxFilterOption('overdue', 'เลยกำหนด'),
+              NxFilterOption('none', 'ยังไม่นัด'),
+            ]),
+          ];
+          final list = nxApplyLocalQuery<Map<String, dynamic>>(
+            all,
+            _lq.copyWith(q: _query),
+            text: (r) => '${entityTitle(r, module: 'job')} ${entitySubtitle(r) ?? ''} ${r['job_no'] ?? ''} ${r['customer_name'] ?? ''}',
+            filters: {
+              'status': (r, v) => v.contains('${r['job_status'] ?? ''}'),
+              'day': onDay,
+            },
+            sorts: {
+              'plan_asc': (a, b) => (planOf(a).isEmpty ? 'z' : planOf(a)).compareTo(planOf(b).isEmpty ? 'z' : planOf(b)),
+              'plan_desc': (a, b) => planOf(b).compareTo(planOf(a)),
+              'new': (a, b) => '${b['createdtime'] ?? b['id'] ?? ''}'.compareTo('${a['createdtime'] ?? a['id'] ?? ''}'),
+            },
+          );
           final items = RefreshIndicator(
             onRefresh: () async => setState(() => _revision++),
             child: ListView.builder(
@@ -64,18 +104,23 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
             itemCount: list.length + 1,
             itemBuilder: (context, index) {
               if (index == 0) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: tr('ค้นหางาน (${all.length})'),
-                      prefixIcon: const Icon(NxI.magnifyingGlass),
-                      filled: true,
-                      isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                    ),
-                    onChanged: (v) => setState(() => _query = v),
-                  ),
+                return NxListToolbar(
+                  query: _lq.copyWith(q: _query),
+                  liveSearch: true,
+                  padding: const EdgeInsets.only(bottom: 8),
+                  searchHint: 'ค้นหาเลขงาน / ลูกค้า',
+                  quickGroup: 'day',
+                  groups: groups,
+                  resultCount: list.length,
+                  sorts: const [
+                    NxSortOption('plan_asc', 'วันนัดใกล้สุด'),
+                    NxSortOption('plan_desc', 'วันนัดล่าสุด'),
+                    NxSortOption('new', 'สร้างล่าสุด'),
+                  ],
+                  onChanged: (q) => setState(() {
+                    _query = q.q;
+                    _lq = q.copyWith(q: '');
+                  }),
                 );
               }
               final row = list[index - 1];

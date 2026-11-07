@@ -27,6 +27,7 @@ import '../../services/file_open.dart';
 import '../../services/realtime_service.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 class MailHomeScreen extends StatefulWidget {
   const MailHomeScreen({super.key});
@@ -443,6 +444,22 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
                 ],
               ),
             ),
+          // Quick filters on the loaded page + sort (server search stays above).
+          NxListToolbar(
+            query: _lq,
+            showSearch: false,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+            quickGroup: 'flag',
+            groups: const [
+              NxFilterGroup(key: 'flag', label: 'ตัวกรอง', options: [
+                NxFilterOption('unread', 'ยังไม่อ่าน'),
+                NxFilterOption('attach', 'มีไฟล์แนบ'),
+                NxFilterOption('star', 'ติดดาว'),
+              ]),
+            ],
+            sorts: const [NxSortOption('new', 'ใหม่ → เก่า'), NxSortOption('old', 'เก่า → ใหม่')],
+            onChanged: (q) => setState(() => _lq = q),
+          ),
           if (_syncing)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -467,7 +484,26 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
     );
   }
 
+  NxListQuery _lq = const NxListQuery();
+
+  /// Loaded mail after the quick flags (all must match) and sort.
+  List<Map<String, dynamic>> get _shown => nxApplyLocalQuery<Map<String, dynamic>>(
+        _items,
+        _lq,
+        text: (_) => '',
+        filters: {
+          'flag': (m, v) =>
+              (!v.contains('unread') || isMailUnread(m, _box)) &&
+              (!v.contains('attach') || m['has_attachments'] == true) &&
+              (!v.contains('star') || m['starred'] == true),
+        },
+        sorts: {
+          'old': (a, b) => '${a['date'] ?? a['created_at'] ?? ''}'.compareTo('${b['date'] ?? b['created_at'] ?? ''}'),
+        },
+      );
+
   Widget _listBody(ThemeData theme, ColorScheme cs, bool twoPane) {
+    final shown = _shown;
     if (_loading && _items.isEmpty) return const NxSkeletonList();
     if (_error != null && _items.isEmpty) {
       return Center(
@@ -480,7 +516,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
         ),
       );
     }
-    if (_items.isEmpty) {
+    if (shown.isEmpty) {
       return RefreshIndicator(
         onRefresh: _reload,
         child: ListView(
@@ -505,14 +541,14 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
       child: ListView.builder(
         controller: _scroll,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-        itemCount: _items.length + (_loadingMore ? 1 : 0),
+        itemCount: shown.length + (_loadingMore ? 1 : 0),
         itemBuilder: (context, i) {
-          if (i >= _items.length)
+          if (i >= shown.length)
             return const Padding(
               padding: EdgeInsets.all(16),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             );
-          final m = _items[i];
+          final m = shown[i];
           final id = m['id']?.toString() ?? '';
           final unread = isMailUnread(m, _box);
           final tile = _MailRow(

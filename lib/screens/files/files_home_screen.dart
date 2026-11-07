@@ -14,6 +14,7 @@ import '../../widgets/nx_create_fab.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 String formatBytes(dynamic raw) {
   final n = num.tryParse(raw?.toString() ?? '');
@@ -26,6 +27,20 @@ String formatBytes(dynamic raw) {
     i++;
   }
   return '${v.toStringAsFixed(v >= 10 || i == 0 ? 0 : 1)} ${units[i]}';
+}
+
+/// Rough file kind for the type filter: image / pdf / doc / sheet / video / other.
+String fileKindOf(String? mime, String? name) {
+  final m = (mime ?? '').toLowerCase();
+  final n = (name ?? '').toLowerCase();
+  if (m.startsWith('image/') || RegExp(r'\.(png|jpe?g|gif|webp|heic)$').hasMatch(n)) return 'image';
+  if (m.contains('pdf') || n.endsWith('.pdf')) return 'pdf';
+  if (m.startsWith('video/') || RegExp(r'\.(mp4|mov|avi|mkv)$').hasMatch(n)) return 'video';
+  if (m.contains('sheet') || m.contains('excel') || RegExp(r'\.(xlsx?|csv)$').hasMatch(n)) return 'sheet';
+  if (m.contains('word') || m.contains('document') || m.startsWith('text/') || RegExp(r'\.(docx?|txt|pptx?)$').hasMatch(n)) {
+    return 'doc';
+  }
+  return 'other';
 }
 
 IconData fileIconFor(String? mime, String? name) {
@@ -53,6 +68,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
   bool _busy = false;
   Object? _error;
   String _query = '';
+  NxListQuery _lq = const NxListQuery();
   final Set<String> _opening = {};
 
   ApiClient get _api => context.read<AppConfig>().apiClient;
@@ -260,12 +276,31 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final needle = _query.trim().toLowerCase();
-    final folders = needle.isEmpty
-        ? _folders
-        : _folders.where((f) => (f['name']?.toString() ?? '').toLowerCase().contains(needle)).toList();
-    final files = needle.isEmpty
-        ? _files
-        : _files.where((f) => (f['file_name']?.toString() ?? '').toLowerCase().contains(needle)).toList();
+    final lq = _lq.copyWith(q: _query);
+    int byName(Map a, Map b, String k) => '${a[k] ?? ''}'.toLowerCase().compareTo('${b[k] ?? ''}'.toLowerCase());
+    final folders = nxApplyLocalQuery<Map<String, dynamic>>(
+      _lq.values('kind').isEmpty || _lq.has('kind', 'folder') ? _folders : const [],
+      lq.copyWith(filters: const {}),
+      text: (f) => '${f['name'] ?? ''}',
+      sorts: {
+        'name': (a, b) => byName(a, b, 'name'),
+        'new': (a, b) => '${b['created_at'] ?? ''}'.compareTo('${a['created_at'] ?? ''}'),
+        'size': (a, b) => byName(a, b, 'name'),
+      },
+    );
+    final files = nxApplyLocalQuery<Map<String, dynamic>>(
+      _files,
+      lq,
+      text: (f) => '${f['file_name'] ?? ''}',
+      filters: {
+        'kind': (f, v) => v.contains(fileKindOf(f['mime_type']?.toString(), f['file_name']?.toString())),
+      },
+      sorts: {
+        'name': (a, b) => byName(a, b, 'file_name'),
+        'new': (a, b) => '${b['created_at'] ?? ''}'.compareTo('${a['created_at'] ?? ''}'),
+        'size': (a, b) => (num.tryParse('${b['file_size'] ?? 0}') ?? 0).compareTo(num.tryParse('${a['file_size'] ?? 0}') ?? 0),
+      },
+    );
 
     Widget body;
     if (_loading) {
@@ -281,15 +316,33 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: [
-          TextField(
-            decoration: InputDecoration(
-              hintText: tr('ค้นหาในโฟลเดอร์นี้'),
-              prefixIcon: const Icon(NxI.magnifyingGlass),
-              filled: true,
-              isDense: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-            ),
-            onChanged: (v) => setState(() => _query = v),
+          NxListToolbar(
+            key: ValueKey('files-${_folderId ?? 'root'}'),
+            query: lq,
+            liveSearch: true,
+            padding: EdgeInsets.zero,
+            searchHint: 'ค้นหาในโฟลเดอร์นี้',
+            quickGroup: 'kind',
+            groups: const [
+              NxFilterGroup(key: 'kind', label: 'ชนิดไฟล์', options: [
+                NxFilterOption('folder', 'โฟลเดอร์'),
+                NxFilterOption('image', 'รูปภาพ'),
+                NxFilterOption('pdf', 'PDF'),
+                NxFilterOption('doc', 'เอกสาร'),
+                NxFilterOption('sheet', 'ตาราง'),
+                NxFilterOption('video', 'วิดีโอ'),
+                NxFilterOption('other', 'อื่นๆ'),
+              ]),
+            ],
+            sorts: const [
+              NxSortOption('name', 'ชื่อ ก–ฮ'),
+              NxSortOption('new', 'ใหม่ล่าสุด'),
+              NxSortOption('size', 'ขนาดใหญ่สุด'),
+            ],
+            onChanged: (q) => setState(() {
+              _query = q.q;
+              _lq = q.copyWith(q: '');
+            }),
           ),
           const SizedBox(height: 8),
           SingleChildScrollView(
