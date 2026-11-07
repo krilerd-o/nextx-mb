@@ -74,21 +74,23 @@ String wsTitle(Map<String, dynamic> item) {
 
 int? wsInt(dynamic v) => v == null ? null : int.tryParse('$v'.split('.').first);
 
-/// Parses "1h 30m", "90m", "1.5h", "2d", "1ชม 30น", "45" (minutes).
-/// A working day is 8 hours, like the NEXTX web. Returns null if invalid.
+/// Parses "1h 30m", "90m", "1.5h", "2d", "1w", "1ชม 30น", "45" (minutes).
+/// Same units as NEXTX `parseTimeToMinutes`: 1d = 24h, 1w = 7d. Null if invalid.
 int? parseDuration(String raw) {
   final s = raw.trim().toLowerCase().replaceAll(',', '.');
   if (s.isEmpty) return null;
   if (RegExp(r'^\d+$').hasMatch(s)) return int.parse(s);
-  final re = RegExp(r'(\d+(?:\.\d+)?)\s*(days|day|d|วัน|hours|hour|hrs|hr|h|ชั่วโมง|ชม\.?|minutes|minute|mins|min|m|นาที|น\.?)');
+  final re = RegExp(r'(\d+(?:\.\d+)?)\s*(weeks|week|w|สัปดาห์|days|day|d|วัน|hours|hour|hrs|hr|h|ชั่วโมง|ชม\.?|minutes|minute|mins|min|m|นาที|น\.?)');
   var total = 0.0;
   var matched = false;
   for (final m in re.allMatches(s)) {
     matched = true;
     final n = double.parse(m.group(1)!);
     final u = m.group(2)!;
-    if (u.startsWith('d') || u == 'วัน') {
-      total += n * 8 * 60;
+    if (u.startsWith('w') || u == 'สัปดาห์') {
+      total += n * 7 * 24 * 60;
+    } else if (u.startsWith('d') || u == 'วัน') {
+      total += n * 24 * 60;
     } else if (u.startsWith('h') || u.startsWith('ชม') || u == 'ชั่วโมง') {
       total += n * 60;
     } else {
@@ -102,15 +104,20 @@ int? parseDuration(String raw) {
   return v > 0 ? v : null;
 }
 
-/// 90 → "1h 30m" (English units like the web), 0/null → "0m".
+/// 90 → "1h 30m", 1500 → "1d 1h" (w/d/h/m like the NEXTX web), 0/null → "0m".
 String formatMinutes(int? minutes) {
-  final m = minutes ?? 0;
-  if (m <= 0) return '0m';
-  final h = m ~/ 60;
-  final r = m % 60;
-  if (h == 0) return '${r}m';
-  if (r == 0) return '${h}h';
-  return '${h}h ${r}m';
+  var rest = minutes ?? 0;
+  if (rest <= 0) return '0m';
+  const units = [('w', 7 * 24 * 60), ('d', 24 * 60), ('h', 60), ('m', 1)];
+  final parts = <String>[];
+  for (final (u, mul) in units) {
+    final v = rest ~/ mul;
+    if (v > 0) {
+      parts.add('$v$u');
+      rest -= v * mul;
+    }
+  }
+  return parts.join(' ');
 }
 
 /// Short date in Thai time (BE in Thai), e.g. `9 พ.ย.` / `9 Nov`.

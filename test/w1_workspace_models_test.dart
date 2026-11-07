@@ -7,7 +7,8 @@ void main() {
     expect(parseDuration('90m'), 90);
     expect(parseDuration('45'), 45);
     expect(parseDuration('1.5h'), 90);
-    expect(parseDuration('1d'), 480);
+    expect(parseDuration('1d'), 1440);
+    expect(parseDuration('1w 2h'), 10200);
     expect(parseDuration('1ชม 30นาที'), 90);
     expect(parseDuration('abc'), isNull);
     expect(parseDuration('1h foo'), isNull);
@@ -18,6 +19,7 @@ void main() {
     expect(formatMinutes(90), '1h 30m');
     expect(formatMinutes(120), '2h');
     expect(formatMinutes(15), '15m');
+    expect(formatMinutes(1500), '1d 1h');
     expect(formatMinutes(null), '0m');
   });
 
