@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/error_reporting.dart';
 import '../core/i18n.dart';
 import 'app_bottom_sheet.dart';
+import 'nx_chrome.dart';
 import 'nx_icons.dart';
 
 /// One choice inside a filter group.
@@ -228,7 +229,17 @@ class NxListToolbar extends StatefulWidget {
     this.leading = const [],
     this.allowSavedViews = true,
     this.padding = const EdgeInsets.fromLTRB(16, 4, 16, 8),
+    this.collapsible = true,
+    this.extraActions = const [],
   });
+
+  /// Fold away while the page reads down (inside [NxScrollScaffold]); search /
+  /// filter then live as header icons.
+  final bool collapsible;
+
+  /// More header icons while folded (e.g. the board's view switcher), shown
+  /// before search / filter.
+  final List<NxChromeAction> extraActions;
 
   /// Chips placed first in the chip row (e.g. the Custom View picker).
   final List<Widget> leading;
@@ -284,11 +295,61 @@ class _NxListToolbarState extends State<NxListToolbar> {
     if (widget.query.q != _c.text && !_focus.hasFocus) _c.text = widget.query.q;
   }
 
+  NxChrome? _chrome;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final c = NxChrome.maybeRead(context);
+    if (c != _chrome) {
+      _chrome?.removeActions(this);
+      _chrome = c;
+    }
+  }
+
   @override
   void dispose() {
+    _chrome?.removeActions(this);
     _c.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  /// Header icons left behind while folded: search, filter (with badge).
+  void _registerChrome({required int filterBadge, required bool hasFilters}) {
+    final chrome = _chrome;
+    if (chrome == null) return;
+    if (!widget.collapsible) {
+      chrome.removeActions(this);
+      return;
+    }
+    chrome.setActions(this, [
+      ...widget.extraActions,
+      if (widget.showSearch)
+        NxChromeAction(
+          id: 'search',
+          icon: NxI.magnifyingGlass,
+          tooltip: 'ค้นหา',
+          badge: widget.query.q.isEmpty ? 0 : 1,
+          onTap: () {
+            chrome.expand();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _focus.requestFocus();
+            });
+          },
+        ),
+      if (hasFilters)
+        NxChromeAction(
+          id: 'filter',
+          icon: NxI.funnel,
+          tooltip: 'ตัวกรอง',
+          badge: filterBadge,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            _openFilters();
+          },
+        ),
+    ]);
   }
 
   void _submit(String v) {
@@ -317,6 +378,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
       builder: (ctx, controller) => _FilterSheet(
         query: widget.query,
         groups: widget.groups,
+        sorts: widget.sorts,
         prefs: widget.allowSavedViews ? widget.prefs : null,
         controller: controller,
       ),
@@ -398,6 +460,29 @@ class _NxListToolbarState extends State<NxListToolbar> {
 
     final hasChips =
         quick != null || sheetGroups.isNotEmpty || widget.sorts.isNotEmpty || widget.leading.isNotEmpty;
+    final sortOn = q.sort != null && widget.sorts.isNotEmpty && q.sort != widget.sorts.first.key;
+    _registerChrome(
+      hasFilters: widget.groups.isNotEmpty || widget.sorts.isNotEmpty,
+      filterBadge: q.activeFilterCount + (sortOn ? 1 : 0),
+    );
+    return NxChromeCollapse(
+      // Keep it open while the user is typing in it.
+      enabled: widget.collapsible && !_focus.hasFocus,
+      child: _body(context, q, quick, sheetGroups, sheetCount, chip, hasChips),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    NxListQuery q,
+    NxFilterGroup? quick,
+    List<NxFilterGroup> sheetGroups,
+    int sheetCount,
+    Widget Function({required String label, required bool on, required VoidCallback onTap, IconData? icon, int badge}) chip,
+    bool hasChips,
+  ) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return Padding(
       padding: widget.padding,
       child: Column(
@@ -535,9 +620,12 @@ class _NxListToolbarState extends State<NxListToolbar> {
 }
 
 class _FilterSheet extends StatefulWidget {
-  const _FilterSheet({required this.query, required this.groups, this.prefs, this.controller});
+  const _FilterSheet({required this.query, required this.groups, this.prefs, this.controller, this.sorts = const []});
   final NxListQuery query;
   final List<NxFilterGroup> groups;
+
+  /// Sort choices on top (the folded header has one funnel for both).
+  final List<NxSortOption> sorts;
   final NxListPrefs? prefs;
   final ScrollController? controller;
 
@@ -643,6 +731,27 @@ class _FilterSheetState extends State<_FilterSheet> {
                   ],
                 ),
                 const SizedBox(height: 16),
+              ],
+              if (widget.sorts.isNotEmpty && _find.isEmpty) ...[
+                Text(tr('เรียงตาม'), style: theme.textTheme.titleSmall),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final o in widget.sorts)
+                      ChoiceChip(
+                        label: Text(tr(o.label)),
+                        selected: (_q.sort ?? widget.sorts.first.key) == o.key,
+                        onSelected: (_) {
+                          HapticFeedback.selectionClick();
+                          setState(() => _q = _q.copyWith(sort: o.key));
+                        },
+                        selectedColor: cs.primaryContainer,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 18),
               ],
               for (final g in groups) ...[
                 Row(

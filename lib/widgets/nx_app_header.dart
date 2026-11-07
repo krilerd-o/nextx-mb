@@ -12,6 +12,7 @@ import '../core/navigation/app_routes.dart';
 import 'nx_icons.dart';
 import '../screens/spaces/space_switcher.dart' show showSpaceSwitcher;
 import 'nx_notif_morph.dart';
+import 'nx_chrome.dart';
 import 'nx_scroll_scaffold.dart' show NxFloatingHeaderScope;
 import 'nx_overlay_panel.dart';
 import '../services/unread_service.dart';
@@ -40,6 +41,8 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.automaticallyImplyLeading = true,
     this.leading,
     this.menu,
+    this.subtitleWidget,
+    this.largeTitle = false,
   })  : mode = NxHeaderMode.page,
         unreadCount = null;
 
@@ -52,7 +55,9 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
         subtitle = null,
         automaticallyImplyLeading = false,
         leading = null,
-        menu = null;
+        menu = null,
+        subtitleWidget = null,
+        largeTitle = false;
 
   const NxAppHeader.page({
     super.key,
@@ -62,6 +67,8 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.automaticallyImplyLeading = true,
     this.leading,
     this.menu,
+    this.subtitleWidget,
+    this.largeTitle = false,
   })  : mode = NxHeaderMode.page,
         unreadCount = null;
 
@@ -74,10 +81,17 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
   final List<NxHeaderMenuItem>? menu;
   final int? unreadCount;
 
+  /// Tappable row under the title (e.g. the CRM Custom View picker `ทั้งหมด ▾`).
+  final Widget? subtitleWidget;
+
+  /// Big menu title (list roots) that shrinks while the page chrome is collapsed.
+  final bool largeTitle;
+
   static const double controlSize = 40;
 
   @override
-  Size get preferredSize => Size.fromHeight(mode == NxHeaderMode.hub ? 64 : (subtitle == null ? 56 : 72));
+  Size get preferredSize =>
+      Size.fromHeight(mode == NxHeaderMode.hub ? 64 : (subtitle == null && subtitleWidget == null ? 56 : 72));
 
   @override
   Widget build(BuildContext context) {
@@ -331,42 +345,54 @@ class _PageBar extends StatelessWidget {
     final theme = Theme.of(context);
     final canPop = header.automaticallyImplyLeading && Navigator.of(context).canPop();
     final items = _items();
+    final chrome = NxChrome.of(context);
+    final folded = chrome != null && chrome.collapsed;
+    // Collapsed toolbars leave their search / filter / view icons here.
+    final chromeActions = folded ? chrome.actions : const <NxChromeAction>[];
+    final leading = header.leading ??
+        (canPop
+            ? _CircleBtn(
+                icon: NxI.arrowLeft,
+                tooltip: tr('กลับ'),
+                onTap: () => Navigator.of(context).maybePop(),
+              )
+            : null);
+    final big = header.largeTitle && !folded;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: SizedBox(
-        height: header.subtitle == null ? NxAppHeader.controlSize : 56,
+        height: header.subtitle == null && header.subtitleWidget == null ? NxAppHeader.controlSize : 56,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            SizedBox(
-              width: NxAppHeader.controlSize,
-              height: NxAppHeader.controlSize,
-              child: header.leading ??
-                  (canPop
-                      ? _CircleBtn(
-                          icon: NxI.arrowLeft,
-                          tooltip: tr('กลับ'),
-                          onTap: () => Navigator.of(context).maybePop(),
-                        )
-                      : null),
-            ),
-            const SizedBox(width: 12),
+            if (leading != null) ...[
+              SizedBox(width: NxAppHeader.controlSize, height: NxAppHeader.controlSize, child: leading),
+              const SizedBox(width: 12),
+            ] else
+              const SizedBox(width: 4),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    tr(header.title),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.start,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    style: (big ? theme.textTheme.titleLarge : theme.textTheme.titleMedium)!.copyWith(
+                      fontWeight: big ? FontWeight.w800 : FontWeight.w700,
                       letterSpacing: -0.2,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    child: Text(
+                      tr(header.title),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.start,
                     ),
                   ),
-                  if (header.subtitle != null)
+                  if (header.subtitleWidget != null)
+                    header.subtitleWidget!
+                  else if (header.subtitle != null)
                     Text(
                       tr(header.subtitle!),
                       maxLines: 1,
@@ -379,6 +405,18 @@ class _PageBar extends StatelessWidget {
                 ],
               ),
             ),
+            for (final a in chromeActions)
+              Padding(
+                key: ValueKey('chrome-${a.id}'),
+                padding: const EdgeInsets.only(left: 10),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.4, end: 1),
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOutBack,
+                  builder: (context, v, child) => Transform.scale(scale: v, child: Opacity(opacity: v.clamp(0.0, 1.0), child: child)),
+                  child: _CircleBtn(icon: a.icon, tooltip: tr(a.tooltip), badgeCount: a.badge, onTap: a.onTap),
+                ),
+              ),
             ..._circleActions(header.actions),
             if (items.isNotEmpty)
               Padding(

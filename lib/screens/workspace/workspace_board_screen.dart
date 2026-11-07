@@ -15,6 +15,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_create_fab.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_skeleton.dart';
 import 'task_detail_screen.dart';
@@ -328,6 +329,37 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
     }
   }
 
+  /// View menu behind the folded header icon.
+  void _pickView() {
+    HapticFeedback.selectionClick();
+    final cs = Theme.of(context).colorScheme;
+    showNxBlurPanel<void>(
+      context: context,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final (v, label, icon) in const [
+              ('kanban', 'บอร์ด', NxI.kanban),
+              ('list', 'รายการ', NxI.listBullets),
+              ('epic', 'Epic', NxI.lightning),
+            ])
+              ListTile(
+                leading: Icon(icon, color: _view == v ? cs.primary : null),
+                title: Text(tr(label)),
+                trailing: _view == v ? Icon(NxI.check, color: cs.primary) : null,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() => _view = v);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = '${_board['name'] ?? 'บอร์ด'}';
@@ -362,6 +394,15 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
       quickGroup: 'scope',
       groups: _groups,
       resultCount: _loading ? null : tasks.length,
+      // Folded: the view switch becomes one header icon showing the current view.
+      extraActions: [
+        NxChromeAction(
+          id: 'view',
+          icon: switch (_view) { 'list' => NxI.listBullets, 'epic' => NxI.lightning, _ => NxI.kanban },
+          tooltip: 'มุมมอง',
+          onTap: _pickView,
+        ),
+      ],
       leading: [
         Padding(
           padding: const EdgeInsets.only(right: 8),
