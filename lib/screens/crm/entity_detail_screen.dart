@@ -25,7 +25,11 @@ import 'entity_detail_parts.dart';
 import 'entity_ops.dart';
 import '../../core/error_reporting.dart';
 import '../../core/i18n.dart';
+import '../../core/effects.dart';
 import '../../core/entity_form_rules.dart';
+import '../../core/recent_records.dart';
+import '../calendar/activity_detail_screen.dart';
+import 'package:share_plus/share_plus.dart';
 
 class EntityDetailScreen extends StatefulWidget {
   const EntityDetailScreen({
@@ -64,6 +68,79 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     super.initState();
     _row = Map<String, dynamic>.from(widget.row);
     _reload();
+    if (widget.module == 'case') _loadFollow();
+  }
+
+  final _heroScroll = ScrollController();
+
+  @override
+  void dispose() {
+    _heroScroll.dispose();
+    super.dispose();
+  }
+
+  /// Case watchers: whether I follow this case (server supports cases only).
+  bool? _following;
+
+  Future<void> _loadFollow() async {
+    try {
+      final w = await context.read<AppConfig>().apiClient.getCaseWatchers(_id);
+      if (mounted) setState(() => _following = w['following'] == true);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleFollow() async {
+    final next = !(_following ?? false);
+    setState(() => _following = next);
+    try {
+      await context.read<AppConfig>().apiClient.setCaseFollow(_id, next);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr(next ? 'ติดตามเคสนี้แล้ว — จะได้รับแจ้งเตือนเมื่อมีความเคลื่อนไหว' : 'เลิกติดตามแล้ว'))),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _following = !next);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    }
+  }
+
+  /// Web link to this record (opens NEXTX on the web, or this app via deep link).
+  Future<void> _shareLink() async {
+    final base = Uri.tryParse(context.read<AppConfig>().apiBaseUrl);
+    if (base == null) return;
+    final url = base.replace(path: '/modules/${widget.module}/view/$_id', query: null).toString();
+    final title = entityTitle(_row, module: widget.module);
+    await Share.share('$title\n$url', subject: title);
+  }
+
+  /// Opened records feed Home's "เปิดล่าสุด".
+  void _rememberRecent() {
+    final config = context.read<AppConfig>();
+    RecentRecords.instance.add(
+      config.prefsScope,
+      module: widget.module,
+      id: _id,
+      title: entityTitle(_row, module: widget.module),
+    );
+  }
+
+  Future<bool?> _createLinkedActivity() {
+    return nxPush<bool>(
+      context,
+      EntityCreateScreen(
+        module: 'activity',
+        title: 'สร้างนัดหมาย',
+        initialValues: {
+          'related_module': widget.module,
+          'related_id': int.tryParse(_id) ?? _id,
+          'subject': entityTitle(_row, module: widget.module),
+          if (_row['account_name'] != null) 'account_name': _row['account_name'],
+        },
+      ),
+      root: true,
+    );
   }
 
   Future<void> _reload() async {
@@ -105,6 +182,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         _picklists = picklists;
         _loading = false;
       });
+      _rememberRecent();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -334,6 +412,17 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   onTap: _duplicate,
                 ),
                 NxHeaderMenuItem(
+                  label: 'แชร์ลิงก์',
+                  icon: NxI.shareNetwork,
+                  onTap: _shareLink,
+                ),
+                if (widget.module == 'case' && _following != null)
+                  NxHeaderMenuItem(
+                    label: _following! ? 'เลิกติดตามเคส' : 'ติดตามเคส',
+                    icon: _following! ? NxI.bellSlash : NxI.bellRinging,
+                    onTap: _toggleFollow,
+                  ),
+                NxHeaderMenuItem(
                   label: 'ถ่ายรูป / แนบไฟล์',
                   icon: NxI.camera,
                   onTap: _quickAttach,
@@ -352,6 +441,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
           color: theme.colorScheme.primary,
           onRefresh: _reload,
           child: ListView(
+            controller: _heroScroll,
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(
               16,
@@ -365,9 +455,25 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
                 child: Column(
                   children: [
-                    Hero(
-                      tag: 'entity-${widget.module}-$_id',
-                      child: NxAvatar(label: title, size: 76),
+                    // Lite "metaball": the avatar shrinks, rises and melts into
+                    // the header as you scroll.
+                    AnimatedBuilder(
+                      animation: _heroScroll,
+                      builder: (context, child) {
+                        if (!Effects.animate(context) || !_heroScroll.hasClients) return child!;
+                        final t = (_heroScroll.offset / 140).clamp(0.0, 1.0);
+                        return Opacity(
+                          opacity: 1 - t * 0.85,
+                          child: Transform.translate(
+                            offset: Offset(0, -26 * t),
+                            child: Transform.scale(scale: 1 - 0.5 * t, child: child),
+                          ),
+                        );
+                      },
+                      child: Hero(
+                        tag: 'entity-${widget.module}-$_id',
+                        child: NxAvatar(label: title, size: 76),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -423,6 +529,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                       : 'ความคิดเห็น ${_comments.length}',
                   'ไฟล์',
                   'ประวัติ',
+                  if (widget.module != 'activity') 'กิจกรรม',
                 ],
                 index: _tab,
                 onChanged: (i) {
@@ -471,6 +578,13 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                         events: _timeline,
                         loading: _timelineLoading,
                         valueLabel: _valueLabel,
+                      ),
+                      4 => EntityActivitiesPanel(
+                        module: widget.module,
+                        id: _id,
+                        title: entityTitle(_row, module: widget.module),
+                        onOpen: (r) => nxPush<void>(context, ActivityDetailScreen(row: r), root: true),
+                        onCreate: _createLinkedActivity,
                       ),
                       _ => Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,

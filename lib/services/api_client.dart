@@ -590,6 +590,58 @@ class ApiClient {
     return ModuleFieldSchema(fields: fields, picklists: picklists);
   }
 
+  /// `POST /api/entity/:m/bulk-update` — same fields on many records.
+  /// Sends in chunks of 100 (the server's per-request cap).
+  Future<void> bulkUpdateEntities(String module, List<String> ids, Map<String, dynamic> fields) async {
+    for (var i = 0; i < ids.length; i += 100) {
+      final chunk = ids.sublist(i, i + 100 > ids.length ? ids.length : i + 100);
+      await _send('POST', '/api/entity/$module/bulk-update', data: {
+        'ids': [for (final id in chunk) int.tryParse(id) ?? id],
+        ...fields,
+      });
+    }
+  }
+
+  /// Case watchers: `{list, following}` (only cases support following).
+  Future<Map<String, dynamic>> getCaseWatchers(String id) async =>
+      _dataMap(await _send('GET', '/api/entity/case/$id/watchers'));
+
+  Future<void> setCaseFollow(String id, bool follow) async {
+    await _send(follow ? 'POST' : 'DELETE', '/api/entity/case/$id/follow');
+  }
+
+  /// Link an external (Gmail/Outlook) message to a CRM record.
+  Future<void> linkMailToEntity({
+    required String connectionId,
+    required String messageId,
+    required String module,
+    required String entityId,
+    String? email,
+    String? name,
+  }) async {
+    await _send('POST', '/api/mail/entity-link', data: {
+      'connectionId': int.tryParse(connectionId) ?? connectionId,
+      'messageId': messageId,
+      'module': module,
+      'entity_id': int.tryParse(entityId) ?? entityId,
+      if (email != null) 'email': email,
+      if (name != null) 'name': name,
+    });
+  }
+
+  /// CRM records already known for an e-mail address.
+  Future<List<Map<String, dynamic>>> lookupEntityByEmail(String email) async {
+    final data = _dataMap(await _send('GET', '/api/mail/entity-lookup', query: {'email': email}));
+    return extractMapList(data['links']);
+  }
+
+  /// All messages of an external mail thread.
+  Future<List<Map<String, dynamic>>> getMailThreadMessages(String threadId, {required String connectionId}) async {
+    final env = await _send('GET', '/api/mail/threads/$threadId', query: {'connectionId': connectionId});
+    final data = env['data'];
+    return extractMapList(data is Map ? data['list'] : data);
+  }
+
   // ── Custom Views (มุมมอง CV) — same API as the NEXTX web list.
 
   /// `{list, groups, default_id}`; each view carries can_edit / can_delete / can_duplicate.

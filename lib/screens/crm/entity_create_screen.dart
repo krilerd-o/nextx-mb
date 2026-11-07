@@ -190,6 +190,14 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
       _saving = true;
     });
     final payload = collectEntityPayload(_fields, _values, currentRow: widget.initialValues);
+    // Links set by the caller (e.g. an appointment booked from a record) are
+    // sent even when the form doesn't show those fields.
+    if (!widget.isEdit) {
+      for (final k in const ['related_module', 'related_id']) {
+        final v = widget.initialValues?[k];
+        if (v != null && payload[k] == null) payload[k] = v;
+      }
+    }
     if (payload.isEmpty && _values['subject'] != null) {
       payload['subject'] = _values['subject'];
     }

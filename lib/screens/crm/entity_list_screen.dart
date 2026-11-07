@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../services/api_client.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../core/nx_page_route.dart';
 import '../../widgets/nx_app_header.dart';
@@ -9,6 +10,7 @@ import '../../widgets/nx_cached_future.dart';
 import '../../widgets/nx_create_fab.dart';
 import '../../widgets/nx_entity_row.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/app_bottom_sheet.dart';
 import '../../core/error_reporting.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_skeleton.dart';
@@ -40,6 +42,10 @@ class EntityListScreen extends StatefulWidget {
   @override
   State<EntityListScreen> createState() => _EntityListScreenState();
 }
+
+/// Last first page per module + query (this app session): reopening a list
+/// shows it instantly, then refreshes in the background.
+final Map<String, ({List<Map<String, dynamic>> items, int? total})> _firstPageCache = {};
 
 class _EntityListScreenState extends State<EntityListScreen> {
   final _searchController = TextEditingController();
@@ -328,6 +334,40 @@ class _EntityListScreenState extends State<EntityListScreen> {
     );
   }
 
+  /// Multi-select → one status for all picked records (`bulk-update`).
+  Future<void> _bulkStatus() async {
+    final group = _pickGroups.firstWhere((g) => g.key == 'pl:$_statusKey');
+    final ids = _picked.toList();
+    final cs = Theme.of(context).colorScheme;
+    final value = await showAppBottomSheet<String>(
+      context: context,
+      title: tr('เปลี่ยนสถานะ ${ids.length} รายการ'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final o in group.options)
+            ListTile(
+              leading: Icon(NxI.flag, color: cs.primary),
+              title: Text(tr(o.label)),
+              onTap: () => Navigator.pop(context, o.value),
+            ),
+        ],
+      ),
+    );
+    if (value == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppConfig>().apiClient.bulkUpdateEntities(widget.module, ids, {_statusKey!: value});
+      HapticFeedback.mediumImpact();
+      if (!mounted) return;
+      setState(_picked.clear);
+      messenger.showSnackBar(SnackBar(content: Text(tr('เปลี่ยนสถานะ ${ids.length} รายการแล้ว'))));
+      _load(reset: true);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    }
+  }
+
   void _onQuery(NxListQuery q) {
     setState(() => _query = q);
     _prefs.saveQuery(q.copyWith(q: ''));
@@ -406,7 +446,17 @@ class _EntityListScreenState extends State<EntityListScreen> {
     return out;
   }
 
+  String get _cacheKey =>
+      '${context.read<AppConfig>().prefsScope}|${widget.module}|$_cvId|${_query.q}|${_query.toJson()}';
+
   Future<void> _load({bool reset = false}) async {
+    if (reset && _items.isEmpty) {
+      final hit = _firstPageCache[_cacheKey];
+      if (hit != null) {
+        _items.addAll(hit.items);
+        _total = hit.total;
+      }
+    }
     if (reset) {
       setState(() {
         _loading = _items.isEmpty;
@@ -447,6 +497,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
         }
         _hasMore = page.hasMore && page.items.isNotEmpty;
         _total = page.total;
+        if (reset) _firstPageCache[_cacheKey] = (items: List.of(page.items), total: page.total);
         _page += 1;
         _loading = false;
         _refreshing = false;
@@ -557,6 +608,12 @@ class _EntityListScreenState extends State<EntityListScreen> {
                   ]),
                 ),
               ),
+              if (_statusKey != null && _pickGroups.any((g) => g.key == 'pl:$_statusKey'))
+                IconButton(
+                  tooltip: tr('เปลี่ยนสถานะที่เลือก'),
+                  icon: const Icon(NxI.flag),
+                  onPressed: _bulkStatus,
+                ),
               IconButton(
                 tooltip: tr('ลบที่เลือก'),
                 icon: const Icon(NxI.trash),

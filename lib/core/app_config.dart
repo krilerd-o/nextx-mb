@@ -13,6 +13,7 @@ import '../services/api_client.dart';
 import '../services/app_lock.dart';
 import '../services/device_push_service.dart';
 import '../services/offline_queue.dart';
+import '../services/offline_photos.dart';
 import '../services/realtime_service.dart';
 import '../services/unread_service.dart';
 import 'app_version.dart';
@@ -1180,11 +1181,25 @@ class AppConfig extends ChangeNotifier {
         final lng = (item['lng'] as num?)?.toDouble();
         if ((type != 'checkin' && type != 'checkout') || id.isEmpty) continue;
         if (lat == null || lng == null || (lat == 0 && lng == 0)) continue;
+        // Photos taken offline were saved as files; upload them first.
+        String? imagename;
+        final photos = [for (final p in (item['photos'] as List? ?? const [])) '$p'];
+        if (photos.isNotEmpty) {
+          final parts = <MultipartFile>[
+            for (final path in photos)
+              if (await OfflinePhotos.exists(path)) await MultipartFile.fromFile(path, filename: path.split('/').last),
+          ];
+          if (parts.isNotEmpty) {
+            final saved = await apiClient.uploadActivityPhotos(id, parts);
+            if (saved.isNotEmpty) imagename = (saved.first['path'] ?? saved.first['name'])?.toString();
+          }
+        }
         if (type == 'checkout') {
           await apiClient.activityCheckout(id, lat: lat, lng: lng);
         } else {
-          await apiClient.activityCheckin(id, lat: lat, lng: lng);
+          await apiClient.activityCheckin(id, lat: lat, lng: lng, imagename: imagename);
         }
+        await OfflinePhotos.delete(photos);
       } on ApiException catch (e) {
         // Network still down → retry later; a real server rejection is dropped.
         if (e.statusCode == 0) {

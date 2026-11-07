@@ -16,6 +16,9 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../notifications/notification_center_screen.dart' show relativeTime;
 import '../../core/i18n.dart';
+import '../../widgets/nx_skeleton.dart';
+import '../../core/thai_time.dart';
+import '../../core/entity_display.dart';
 
 /// Field that holds a record's status / stage for [module] (first one present).
 String? entityStatusKey(Map<String, dynamic> row, String module) {
@@ -771,4 +774,135 @@ class PendingEntityDeletes extends ChangeNotifier {
       notifyListeners();
     });
   }
+}
+
+/// "กิจกรรม" tab: appointments linked to this record (related_module /
+/// related_id), newest first, plus a button to book one linked to it.
+class EntityActivitiesPanel extends StatefulWidget {
+  const EntityActivitiesPanel({
+    super.key,
+    required this.module,
+    required this.id,
+    required this.title,
+    required this.onOpen,
+    required this.onCreate,
+  });
+
+  final String module;
+  final String id;
+  final String title;
+  final void Function(Map<String, dynamic> row) onOpen;
+  final Future<bool?> Function() onCreate;
+
+  @override
+  State<EntityActivitiesPanel> createState() => _EntityActivitiesPanelState();
+}
+
+class _EntityActivitiesPanelState extends State<EntityActivitiesPanel> {
+  List<Map<String, dynamic>>? _rows;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final page = await context.read<AppConfig>().apiClient.getEntityList(
+        'activity',
+        limit: 50,
+        extra: {
+          'filter[related_module]': widget.module,
+          'filter[related_id]': widget.id,
+          'sort': 'date_start',
+          'order': 'desc',
+        },
+      );
+      if (mounted) setState(() => _rows = page.items);
+    } catch (e) {
+      if (mounted) setState(() => _error = e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final rows = _rows;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.tonalIcon(
+          onPressed: () async {
+            final ok = await widget.onCreate();
+            if (ok == true) _load();
+          },
+          icon: const Icon(NxI.calendarCheck),
+          label: Text(tr('สร้างนัดผูกกับรายการนี้')),
+        ),
+        const SizedBox(height: 12),
+        if (_error != null)
+          Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error))
+        else if (rows == null)
+          const NxSkeletonList(rows: 2)
+        else if (rows.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(child: Text(tr('ยังไม่มีกิจกรรมที่ผูกกับรายการนี้'), style: theme.textTheme.bodyMedium)),
+          )
+        else
+          for (final r in rows)
+            NxSurfaceCard(
+              margin: const EdgeInsets.only(bottom: 10),
+              onTap: () => widget.onOpen(r),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+                    child: Icon(
+                      '${r['checkindate'] ?? ''}'.isNotEmpty ? NxI.checkCircle : NxI.calendarBlank,
+                      color: cs.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${r['subject'] ?? entityTitle(r, module: 'activity')}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall,
+                        ),
+                        Text(
+                          [
+                            _activityWhen(r['date_start']),
+                            if ('${r['status'] ?? ''}'.isNotEmpty) '${r['status']}',
+                            if ('${r['activitytype'] ?? ''}'.isNotEmpty) '${r['activitytype']}',
+                          ].where((e) => e.isNotEmpty).join(' · '),
+                          style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(NxI.caretRight, size: 18, color: cs.onSurfaceVariant),
+                ],
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+String _activityWhen(dynamic raw) {
+  final d = parseThai(raw);
+  if (d == null) return '';
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${d.day}/${d.month}/${uiYear(d.year)} ${two(d.hour)}:${two(d.minute)}';
 }

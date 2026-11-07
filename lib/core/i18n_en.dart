@@ -1155,6 +1155,22 @@ const Map<String, String> enStrings = {
   'มีไฟล์แนบ': 'Has attachments',
   'ค้นหาการแจ้งเตือน': 'Search notifications',
   'หมวด': 'Category',
+  'สร้างนัดผูกกับรายการนี้': 'Book an appointment for this record',
+  'ยังไม่มีกิจกรรมที่ผูกกับรายการนี้': 'No activities linked to this record yet',
+  'ติดตามเคสนี้แล้ว — จะได้รับแจ้งเตือนเมื่อมีความเคลื่อนไหว': 'Following this case — you\'ll be notified of updates',
+  'เลิกติดตามแล้ว': 'Unfollowed',
+  'สร้างนัดหมาย': 'New appointment',
+  'เลิกติดตามเคส': 'Unfollow case',
+  'ติดตามเคส': 'Follow case',
+  'เปลี่ยนสถานะที่เลือก': 'Change status of selected',
+  'เปิดล่าสุด': 'Recently opened',
+  'ผูกเมลนี้กับ': 'Link this mail to',
+  'เลือกรายการ': 'Choose a record',
+  'ดูทั้งเธรด': 'View whole thread',
+  'ผูกกับลูกค้า / เคส': 'Link to customer / case',
+  'เธรด': 'Thread',
+  'ทั้งเธรด': 'Whole thread',
+  'ไม่มีข้อความในเธรดนี้': 'No messages in this thread',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1297,4 +1313,8 @@ const Map<String, String> enPatterns = {
   'ช่องจำเป็น {}/{}': 'Required {}/{}',
   'จำเป็น {}/{}': 'Required {}/{}',
   'ทำซ้ำ {}': 'Duplicate {}',
+  'เปลี่ยนสถานะ {} รายการ': 'Change status of {} records',
+  'เปลี่ยนสถานะ {} รายการแล้ว': 'Changed status of {} records',
+  '+{} ใน 7 วัน': '+{} in 7 days',
+  'ผูกกับ {} แล้ว': 'Linked to {}',
 };

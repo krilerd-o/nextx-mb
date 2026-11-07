@@ -21,6 +21,7 @@ import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_streaming_text.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../core/recent_records.dart';
 
 /// Thai greeting for the hour of day.
 String greetingFor(DateTime now) {
@@ -97,6 +98,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   void initState() {
     super.initState();
     _load();
+    RecentRecords.instance.load(context.read<AppConfig>().prefsScope);
   }
 
   Future<void> _load() async {
@@ -150,6 +152,40 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       _loading = false;
       _refreshing = false;
     });
+    _loadSparks();
+  }
+
+  /// New records per day for the last 7 days (Thai days), per stat module.
+  final Map<String, List<int>> _sparks = {};
+
+  Future<void> _loadSparks() async {
+    final config = context.read<AppConfig>();
+    final session = config.session;
+    final api = config.apiClient;
+    final today = thaiNow();
+    final t0 = DateTime(today.year, today.month, today.day);
+    for (final module in _statModules.keys) {
+      if (!MenuAccess.allow(session, EntityModules.menuKeyOf(module))) continue;
+      try {
+        final page = await api.getEntityList(module, limit: 200, extra: const {
+          'period_field': 'createdtime',
+          'period_preset': 'last7days',
+          'sort': 'createdtime',
+          'order': 'desc',
+        });
+        final days = List<int>.filled(7, 0);
+        for (final r in page.items) {
+          final d = parseThai(r['createdtime']);
+          if (d == null) continue;
+          final diff = t0.difference(DateTime(d.year, d.month, d.day)).inDays;
+          if (diff >= 0 && diff < 7) days[6 - diff]++;
+        }
+        if (!mounted) return;
+        setState(() => _sparks[module] = days);
+      } catch (_) {
+        // Sparklines are a nicety; the tile still shows its total.
+      }
+    }
   }
 
   int _count(Map<String, dynamic>? m, String key) =>
@@ -412,6 +448,35 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                                             ),
                                     ),
                                 ],
+                                // Records opened lately on this device (per user).
+                                ValueListenableBuilder<List<Map<String, String>>>(
+                                  valueListenable: RecentRecords.instance.items,
+                                  builder: (context, recent, _) {
+                                    final allowed = [
+                                      for (final r in recent)
+                                        if (MenuAccess.allow(session, EntityModules.menuKeyOf(r['module'] ?? ''))) r,
+                                    ].take(5).toList();
+                                    if (allowed.isEmpty) return const SizedBox.shrink();
+                                    return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        const SizedBox(height: 24),
+                                        const _SectionTitle('เปิดล่าสุด'),
+                                        for (final r in allowed)
+                                          _ListRow(
+                                            icon: NxI.clockCounterClockwise,
+                                            title: r['title'] ?? '',
+                                            subtitle: EntityModules.titleOf(r['module'] ?? ''),
+                                            onTap: () => context.push(
+                                              r['module'] == 'activity'
+                                                  ? AppRoutes.activity(r['id'] ?? '')
+                                                  : AppRoutes.crmRecord(r['module'] ?? '', r['id'] ?? ''),
+                                            ),
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                ),
                                 if (statTiles.isNotEmpty) ...[
                                   const SizedBox(height: 24),
                                   const _SectionTitle('ภาพรวม'),
@@ -422,6 +487,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                                           label: EntityModules.titleOf(module),
                                           value: n,
                                           icon: icon,
+                                          spark: _sparks[module],
                                           onTap: () => context.push(
                                             EntityModules.isFsm(module)
                                                 ? AppRoutes.fsmModule(module)
@@ -994,11 +1060,15 @@ class _StatCard extends StatelessWidget {
     required this.value,
     required this.icon,
     this.onTap,
+    this.spark,
   });
   final String label;
   final int value;
   final IconData icon;
   final VoidCallback? onTap;
+
+  /// New per day, oldest → today (7 values).
+  final List<int>? spark;
 
   @override
   Widget build(BuildContext context) {
@@ -1030,6 +1100,28 @@ class _StatCard extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (spark != null && spark!.any((v) => v > 0))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 54,
+                          height: 18,
+                          child: CustomPaint(painter: _SparkPainter(spark!, theme.colorScheme.primary)),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            tr('+${spark!.fold(0, (a, b) => a + b)} ใน 7 วัน'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1037,4 +1129,41 @@ class _StatCard extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Tiny line chart for a stat tile.
+class _SparkPainter extends CustomPainter {
+  _SparkPainter(this.values, this.color);
+  final List<int> values;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final maxV = values.reduce((a, b) => a > b ? a : b).clamp(1, 1 << 30);
+    final dx = size.width / (values.length - 1);
+    final path = Path();
+    for (var i = 0; i < values.length; i++) {
+      final p = Offset(i * dx, size.height - 2 - (values[i] / maxV) * (size.height - 4));
+      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+    }
+    final fill = Path.from(path)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(fill, Paint()..color = color.withValues(alpha: 0.12));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..strokeWidth = 1.6
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SparkPainter old) => old.values != values || old.color != color;
 }

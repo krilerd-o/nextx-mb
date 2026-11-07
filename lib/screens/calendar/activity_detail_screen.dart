@@ -21,6 +21,7 @@ import '../crm/entity_detail_parts.dart';
 import 'visit_check_sheet.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../core/recent_records.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
   const ActivityDetailScreen({super.key, required this.row});
@@ -62,6 +63,12 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         if (rec.isNotEmpty) _row = {..._row, ...rec};
         _comments = comments;
       });
+      RecentRecords.instance.add(
+        context.read<AppConfig>().prefsScope,
+        module: 'activity',
+        id: _id,
+        title: '${_row['subject'] ?? entityTitle(_row, module: 'activity')}',
+      );
     } catch (e, s) {
       ErrorReporting.report(e, s);
     }

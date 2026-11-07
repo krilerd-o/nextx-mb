@@ -15,6 +15,7 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_map_view.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../services/offline_photos.dart';
 
 /// Result of the sheet: what was recorded (for the caller to refresh).
 class VisitCheckResult {
@@ -194,8 +195,14 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
       });
     } on ApiException catch (e) {
       if (e.statusCode == 0) {
-        // No signal: keep it with the real time and send when back online.
+        // No signal: keep it (and its photos) with the real time, send when back online.
+        final saved = <String>[];
+        for (final p in _photos) {
+          final path = await OfflinePhotos.save(await p.readAsBytes(), p.name);
+          if (path != null) saved.add(path);
+        }
         await config.queueFieldAction({
+          if (saved.isNotEmpty) 'photos': saved,
           'type': widget.checkIn ? 'checkin' : 'checkout',
           'id': widget.activityId,
           'lat': fix.latitude,

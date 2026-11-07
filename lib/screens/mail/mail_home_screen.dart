@@ -27,6 +27,11 @@ import '../../services/file_open.dart';
 import '../../services/realtime_service.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../core/entity_display.dart';
+import '../../widgets/fields/nx_pick_option.dart';
+import '../../widgets/fields/nx_entity_picker_sheet.dart';
+import '../../core/entity_modules.dart';
+import '../../core/menu_access.dart';
 import '../../widgets/nx_list_toolbar.dart';
 
 class MailHomeScreen extends StatefulWidget {
@@ -833,6 +838,13 @@ String mailShortTime(dynamic raw) {
 bool isMailUnread(Map<String, dynamic> m, String box) =>
     box == 'inbox' && m.containsKey('read_at') && m['read_at'] == null;
 
+/// Sender e-mail address only (for CRM lookups), `''` when unknown.
+String mailSender(Map<String, dynamic> m) {
+  final raw = '${m['from_email'] ?? m['from'] ?? ''}';
+  final hit = RegExp(r'[^\s<>"]+@[^\s<>"]+').firstMatch(raw);
+  return hit?.group(0) ?? '';
+}
+
 /// "From" for received mail, "To" for sent mail.
 String mailCounterparty(Map<String, dynamic> m, String box) {
   if (box == 'sent' || box == 'drafts') {
@@ -1034,6 +1046,61 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
     }
   }
 
+  /// Attach this Gmail/Outlook message to a CRM record (shows on its timeline).
+  Future<void> _linkToRecord(Map<String, dynamic> data) async {
+    final acc = widget.account;
+    if (acc == null) return;
+    final api = context.read<AppConfig>().apiClient;
+    const modules = [
+      ('account', 'บัญชีลูกค้า'),
+      ('contact', 'ผู้ติดต่อ'),
+      ('lead', 'ผู้มุ่งหวัง'),
+      ('deal', 'ดีล'),
+      ('case', 'เคส'),
+    ];
+    final module = await showAppBottomSheet<String>(
+      context: context,
+      title: 'ผูกเมลนี้กับ',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final m in modules)
+            if (MenuAccess.allow(context.read<AppConfig>().session, EntityModules.menuKeyOf(m.$1)))
+              ListTile(title: Text(tr(m.$2)), trailing: const Icon(NxI.caretRight), onTap: () => Navigator.pop(context, m.$1)),
+        ],
+      ),
+    );
+    if (module == null || !mounted) return;
+    final picked = await showNxEntityPickerSheet(
+      context: context,
+      title: tr('เลือกรายการ'),
+      search: (q) async {
+        final page = await api.getEntityList(module, limit: 30, q: q.isEmpty ? (mailSender(data)) : q);
+        return [
+          for (final r in page.items)
+            NxPickOption(value: strId(r['id']), label: entityTitle(r, module: module), subtitle: entitySubtitle(r)),
+        ];
+      },
+    );
+    if (picked == null || !mounted) return;
+    final messageId = '${data['external_id'] ?? data['message_id'] ?? widget.id}';
+    try {
+      await api.linkMailToEntity(
+        connectionId: acc.id,
+        messageId: messageId,
+        module: module,
+        entityId: picked.value,
+        email: mailSender(data),
+        name: data['subject']?.toString(),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ผูกกับ ${picked.label} แล้ว'))));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    }
+  }
+
   Future<void> _restore() async {
     try {
       await context.read<AppConfig>().apiClient.restoreMail(
@@ -1084,6 +1151,25 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
                 'เก็บถาวรแล้ว',
                 close: true,
               ),
+            ),
+          if (acc != null && '${data['thread_id'] ?? ''}'.isNotEmpty)
+            NxHeaderMenuItem(
+              label: 'ดูทั้งเธรด',
+              icon: NxI.listBullets,
+              onTap: () => nxPush<void>(
+                context,
+                MailThreadScreen(
+                  threadId: '${data['thread_id']}',
+                  account: acc,
+                  subject: data['subject']?.toString() ?? '',
+                ),
+              ),
+            ),
+          if (acc != null)
+            NxHeaderMenuItem(
+              label: 'ผูกกับลูกค้า / เคส',
+              icon: NxI.link,
+              onTap: () => _linkToRecord(data),
             ),
           if (acc != null && widget.box == 'archive')
             NxHeaderMenuItem(
@@ -1256,4 +1342,81 @@ bool isMailRealtimeEvent(RealtimeEvent e) {
   final hint = '${e.data['type'] ?? ''} ${e.data['link_path'] ?? ''}'
       .toLowerCase();
   return hint.contains('mail');
+}
+
+
+/// Every message of a Gmail / Outlook conversation, oldest first.
+class MailThreadScreen extends StatefulWidget {
+  const MailThreadScreen({super.key, required this.threadId, required this.account, required this.subject});
+  final String threadId;
+  final MailAccount account;
+  final String subject;
+
+  @override
+  State<MailThreadScreen> createState() => _MailThreadScreenState();
+}
+
+class _MailThreadScreenState extends State<MailThreadScreen> {
+  late final Future<List<Map<String, dynamic>>> _future =
+      context.read<AppConfig>().apiClient.getMailThreadMessages(widget.threadId, connectionId: widget.account.id);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return NxScrollScaffold(
+      header: NxAppHeader(title: widget.subject.isEmpty ? 'เธรด' : widget.subject, subtitle: 'ทั้งเธรด'),
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) return const NxSkeletonList();
+          if (snap.hasError) return Center(child: Text(tr(formatApiError(snap.error!))));
+          final list = snap.data ?? const [];
+          if (list.isEmpty) return Center(child: Text(tr('ไม่มีข้อความในเธรดนี้')));
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              for (final m in list)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${m['from_display'] ?? m['from_email'] ?? m['from'] ?? ''}',
+                              style: theme.textTheme.titleSmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(mailLongTime(m['date'] ?? m['created_at']), style: theme.textTheme.bodySmall),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      NxHtmlView(html: '${m['body_html'] ?? m['body_text'] ?? m['snippet'] ?? ''}'),
+                      if ((m['attachments'] as List?)?.isNotEmpty ?? false)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            tr('ไฟล์แนบ (${(m['attachments'] as List).length})'),
+                            style: theme.textTheme.labelMedium?.copyWith(color: cs.primary),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }

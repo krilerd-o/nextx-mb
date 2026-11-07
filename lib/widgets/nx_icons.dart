@@ -27,6 +27,7 @@ class NxI {
   static const bellSimple = LucideIcons300.bell;
   static const bellSimpleFill = LucideIcons500.bell;
   static const bellRinging = LucideIcons300.bellRing;
+  static const bellSlash = LucideIcons300.bellOff;
   static const clock = LucideIcons300.clock;
   static const checkCircle = LucideIcons300.circleCheck;
   static const checkCircleFill = LucideIcons500.circleCheck;
