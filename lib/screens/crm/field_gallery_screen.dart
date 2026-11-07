@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../../core/app_theme.dart';
@@ -51,8 +52,8 @@ class _FieldGalleryScreenState extends State<FieldGalleryScreen> {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: _dark ? ThemeMode.dark : ThemeMode.light,
-      home: Scaffold(
-        appBar: NxAppHeader(
+      home: NxScrollScaffold(
+        header: NxAppHeader(
           title: 'UI Type',
           actions: [
             IconButton(

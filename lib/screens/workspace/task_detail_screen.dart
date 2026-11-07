@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 
@@ -367,8 +368,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
     return DefaultTabController(
         length: 3,
-        child: Scaffold(
-          appBar: NxAppHeader(
+        child: NxScrollScaffold(
+          header: NxAppHeader(
             title: title,
             actions: [
               if (_saving)

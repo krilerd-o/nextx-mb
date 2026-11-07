@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import 'package:go_router/go_router.dart';
@@ -83,8 +84,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     final theme = Theme.of(context);
     final config = context.watch<AppConfig>();
 
-    return Scaffold(
-      appBar: const NxAppHeader.hub(),
+    return NxScrollScaffold(
+      header: const NxAppHeader.hub(),
       body: ListView(
         padding: NxBreakpoint.of(context).scrollPadding(context, inShell: true),
         children: [

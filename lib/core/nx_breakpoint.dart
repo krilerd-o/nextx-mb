@@ -105,6 +105,9 @@ class NxBreakpoint {
     } else if (hasFab) {
       bottom = 88;
     }
+    // Inside the tab shell the floating bar adds to the bottom padding.
+    final safe = MediaQuery.paddingOf(context).bottom;
+    if (safe > 0) bottom = (hasFab ? 88 : 24) + safe;
     return EdgeInsets.fromLTRB(h, 8, h, bottom);
   }
 }

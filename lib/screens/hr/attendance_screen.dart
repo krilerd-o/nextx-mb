@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -129,8 +130,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final theme = Theme.of(context);
     final clockIn = _summary?['clock_in_at']?.toString();
     final clockOut = _summary?['clock_out_at']?.toString();
-    return Scaffold(
-      appBar: const NxAppHeader(title: 'ลงเวลา'),
+    return NxScrollScaffold(
+      header: const NxAppHeader(title: 'ลงเวลา'),
       body: _loading
           ? const NxSkeletonForm(fields: 4)
           : RefreshIndicator(

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -295,8 +296,8 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final acc = _account;
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'เมล',
         subtitle: acc == null ? 'เมลภายใน NEXTX' : '${acc.providerLabel} · ${acc.email}',
         actions: [
@@ -784,8 +785,9 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
     final acc = widget.account;
     final api = context.read<AppConfig>().apiClient;
     final starred = _starred ?? (data['starred'] == true);
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      insetBody: false,
+      header: NxAppHeader(
         title: data['subject']?.toString() ?? 'เมล',
         automaticallyImplyLeading: !widget.embedded,
         menu: [
@@ -859,7 +861,7 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
               ),
             ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16 + NxScrollScaffold.topInset(context), 16, 16),
         children: [
           if (_error != null) Text(formatApiError(_error!)),
           Text(

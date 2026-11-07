@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -48,8 +49,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     final config = context.watch<AppConfig>();
     final errors = List.of(ErrorReporting.recent);
     final report = buildDiagnosticsReport(config, errors);
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'บันทึกปัญหา',
         actions: [
           IconButton(

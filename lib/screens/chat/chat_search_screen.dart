@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -62,8 +63,8 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: const NxAppHeader(title: 'ค้นหาข้อความ'),
+    return NxScrollScaffold(
+      header: const NxAppHeader(title: 'ค้นหาข้อความ'),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

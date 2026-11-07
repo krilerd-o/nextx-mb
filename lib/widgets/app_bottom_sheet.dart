@@ -17,13 +17,35 @@ class NxSheetRoute<T> extends ModalBottomSheetRoute<T> {
   }) : super(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          modalBarrierColor: Colors.black.withValues(alpha: blur ? 0.18 : 0.38),
+          // Dim + blur are drawn in buildTransitions so they follow the drag.
+          modalBarrierColor: Colors.transparent,
         );
 
   final bool blur;
 
   @override
-  ui.ImageFilter? get filter => blur ? ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8) : null;
+  Widget buildTransitions(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    // The route animation tracks the sheet while it is dragged, so the
+    // backdrop blurs/dims in step with the finger (expo-backdrop).
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedBuilder(
+              animation: animation,
+              builder: (context, _) {
+                final t = Curves.easeOut.transform(animation.value.clamp(0.0, 1.0));
+                final dim = ColoredBox(color: Colors.black.withValues(alpha: (blur ? 0.22 : 0.4) * t));
+                if (!blur || t < 0.02) return dim;
+                return BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: 10 * t, sigmaY: 10 * t), child: dim);
+              },
+            ),
+          ),
+        ),
+        super.buildTransitions(context, animation, secondaryAnimation, child),
+      ],
+    );
+  }
 }
 
 /// Rounded sheet body with grab handle.

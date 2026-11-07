@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -64,15 +65,15 @@ class CommerceHomeScreen extends StatelessWidget {
       if (MenuAccess.allow(session, stockMenu) && session.isBusinessAdmin) ('สต็อก', const _StockTab()),
     ];
     if (tabs.isEmpty) {
-      return const Scaffold(
-        appBar: NxAppHeader(title: 'ร้านค้า'),
+      return const NxScrollScaffold(
+        header: NxAppHeader(title: 'ร้านค้า'),
         body: Center(child: Text('ไม่มีสิทธิ์เข้าถึงร้านค้า (สต็อกดูได้เฉพาะเจ้าของหรือแอดมิน)')),
       );
     }
     return DefaultTabController(
       length: tabs.length,
-      child: Scaffold(
-        appBar: const NxAppHeader(title: 'ร้านค้า'),
+      child: NxScrollScaffold(
+        header: const NxAppHeader(title: 'ร้านค้า'),
         body: Column(
           children: [
             TabBar(tabs: [for (final t in tabs) Tab(text: t.$1)]),

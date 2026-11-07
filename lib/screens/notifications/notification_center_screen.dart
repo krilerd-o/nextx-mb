@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -288,8 +289,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'การแจ้งเตือน',
         menu: [
           NxHeaderMenuItem(label: 'อ่านทั้งหมด', icon: NxI.checkCircle, onTap: _readAll),

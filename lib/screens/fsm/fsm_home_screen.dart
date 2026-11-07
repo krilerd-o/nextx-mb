@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -125,8 +126,8 @@ class _FsmHomeScreenState extends State<FsmHomeScreen> {
         const _FsmModule(key: 'skill', title: 'ทักษะ', icon: NxI.medal),
     ];
 
-    return Scaffold(
-      appBar: const NxAppHeader(
+    return NxScrollScaffold(
+      header: const NxAppHeader(
         title: 'FSM',
         subtitle: 'งานบริการภาคสนาม',
       ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -133,8 +134,8 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
         const _CrmModule(key: 'service', title: 'บริการ', icon: NxI.wrench),
     ];
 
-    return Scaffold(
-      appBar: const NxAppHeader(
+    return NxScrollScaffold(
+      header: const NxAppHeader(
         title: 'CRM',
         subtitle: 'ลูกค้าและงานขาย',
       ),

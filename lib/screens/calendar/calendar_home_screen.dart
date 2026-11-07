@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
@@ -176,8 +177,8 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     final session = context.select((AppConfig c) => c.session);
     final showIncoming = MenuAccess.allow(session, MenuAccess.incoming);
     final showPending = MenuAccess.allow(session, MenuAccess.pending);
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: _title,
         actions: [
           IconButton(

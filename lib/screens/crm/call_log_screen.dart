@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -32,8 +33,8 @@ class _CallLogScreenState extends State<CallLogScreen> {
   @override
   Widget build(BuildContext context) {
     final twoPane = NxBreakpoint.of(context).twoPane;
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'บันทึกการโทร',
         actions: [
           IconButton(
@@ -132,8 +133,8 @@ class _CallLogResultScreenState extends State<CallLogResultScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: entityTitle(widget.row, module: 'call_log'),
         automaticallyImplyLeading: !widget.embedded,
       ),

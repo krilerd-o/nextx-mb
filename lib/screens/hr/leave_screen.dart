@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -37,8 +38,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
     return DefaultTabController(
       length: tabCount,
       initialIndex: widget.initialTab.clamp(0, tabCount - 1),
-      child: Scaffold(
-        appBar: const NxAppHeader(title: 'การลา'),
+      child: NxScrollScaffold(
+        header: const NxAppHeader(title: 'การลา'),
         body: Column(
           children: [
             TabBar(

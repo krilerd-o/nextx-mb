@@ -10,6 +10,7 @@ import '../core/entity_display.dart';
 import '../core/navigation/app_routes.dart';
 import 'nx_icons.dart';
 import 'nx_notif_morph.dart';
+import 'nx_scroll_scaffold.dart' show NxFloatingHeaderScope;
 import 'nx_overlay_panel.dart';
 import '../services/unread_service.dart';
 
@@ -77,8 +78,10 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Inside NxScrollScaffold the header floats over a progressive blur.
+    final floating = NxFloatingHeaderScope.of(context);
     return Material(
-      color: Theme.of(context).scaffoldBackgroundColor,
+      color: floating ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor,
       child: SafeArea(
         bottom: false,
         child: mode == NxHeaderMode.hub ? _HubBar(actions: actions, unreadCount: unreadCount) : _PageBar(header: this),

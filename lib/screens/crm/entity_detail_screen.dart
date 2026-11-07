@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -240,8 +241,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final canEdit = _editableFields().isNotEmpty || _fields.isEmpty;
     final statusKey = entityStatusKey(_row, widget.module);
     final statusOptions = _statusOptions(statusKey);
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      insetBody: false,
+      header: NxAppHeader(
         title: title,
         automaticallyImplyLeading: !widget.embedded,
         actions: [
@@ -277,11 +279,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             : null,
       ),
       body: RefreshIndicator(
+        edgeOffset: NxScrollScaffold.topInset(context),
         color: theme.colorScheme.primary,
         onRefresh: _reload,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+          padding: EdgeInsets.fromLTRB(16, 8 + NxScrollScaffold.topInset(context), 16, 28),
           children: [
             NxSurfaceCard(
               radius: 28,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -109,8 +110,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         'join': _Section('คำขอเข้าร่วมธุรกิจ', NxI.userPlus, api.getJoinRequests),
     };
 
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'รออนุมัติ',
         actions: [
           IconButton(

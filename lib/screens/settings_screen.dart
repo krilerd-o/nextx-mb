@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nx_scroll_scaffold.dart';
 import '../core/effects.dart';
 import '../widgets/app_bottom_sheet.dart';
 import 'package:go_router/go_router.dart';
@@ -35,8 +36,8 @@ class SettingsScreen extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final config = context.watch<AppConfig>();
 
-    return Scaffold(
-      appBar: const NxAppHeader(title: 'ตั้งค่า'),
+    return NxScrollScaffold(
+      header: const NxAppHeader(title: 'ตั้งค่า'),
       body: ListView(
         padding: NxBreakpoint.of(context).scrollPadding(context),
         children: [

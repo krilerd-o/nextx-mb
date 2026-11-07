@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -21,8 +22,8 @@ class HrHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (standalone) {
-      return const Scaffold(
-        appBar: NxAppHeader(title: 'HR'),
+      return const NxScrollScaffold(
+        header: NxAppHeader(title: 'HR'),
         body: _HrShortcuts(),
       );
     }

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_config.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
@@ -91,7 +92,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
       body = RefreshIndicator(
         onRefresh: _load,
         child: ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          padding: EdgeInsets.fromLTRB(16, 8 + NxScrollScaffold.topInset(context), 16, 32),
           itemCount: items.length,
           itemBuilder: (context, i) {
             final it = items[i];
@@ -152,6 +153,6 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
         ),
       );
     }
-    return Scaffold(appBar: const NxAppHeader(title: 'มีอะไรใหม่'), body: body);
+    return NxScrollScaffold(insetBody: false, header: const NxAppHeader(title: 'มีอะไรใหม่'), body: body);
   }
 }

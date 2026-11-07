@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -359,8 +360,8 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         final parent = _breadcrumb.length >= 2 ? _breadcrumb[_breadcrumb.length - 2]['id']?.toString() : null;
         _goTo(parent);
       },
-      child: Scaffold(
-        appBar: NxAppHeader(
+      child: NxScrollScaffold(
+        header: NxAppHeader(
           title: _breadcrumb.isEmpty ? 'ไฟล์' : (_breadcrumb.last['name']?.toString() ?? 'ไฟล์'),
           actions: [
             IconButton(onPressed: _load, icon: const Icon(NxI.arrowCounterClockwise)),

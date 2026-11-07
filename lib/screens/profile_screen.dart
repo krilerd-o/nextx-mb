@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../widgets/nx_scroll_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -53,8 +54,8 @@ class ProfileScreen extends StatelessWidget {
       );
     }
 
-    return Scaffold(
-      appBar: const NxAppHeader(title: 'โปรไฟล์'),
+    return NxScrollScaffold(
+      header: const NxAppHeader(title: 'โปรไฟล์'),
       body: ListView(
         padding: NxBreakpoint.of(context).scrollPadding(context),
         children: [

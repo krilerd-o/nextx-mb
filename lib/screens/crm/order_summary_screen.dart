@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -106,8 +107,8 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     final paid = (_row['payment_status']?.toString() ?? '') == 'paid';
     final isAdmin = context.select((AppConfig c) => c.session).isBusinessAdmin;
     final addr = _address;
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'ออเดอร์ $no',
         menu: [
           NxHeaderMenuItem(label: 'แชร์ใบเสร็จ', icon: NxI.shareNetwork, onTap: () => _pdf(label: false, share: true)),

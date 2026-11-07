@@ -9,6 +9,7 @@ import '../../widgets/nx_cached_future.dart';
 import '../../widgets/nx_create_fab.dart';
 import '../../widgets/nx_entity_row.dart';
 import '../../widgets/nx_filter_chips.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_search_field.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
@@ -235,9 +236,9 @@ class _EntityListScreenState extends State<EntityListScreen> {
   Widget build(BuildContext context) {
     final twoPane = NxBreakpoint.of(context).twoPane;
     final bp = NxBreakpoint.of(context);
-    final list = Column(
+    final toolbar = Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        if (_refreshing) const LinearProgressIndicator(minHeight: 2),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: NxSearchField(
@@ -260,12 +261,17 @@ class _EntityListScreenState extends State<EntityListScreen> {
             },
           ),
         ),
+      ],
+    );
+    final list = Column(
+      children: [
+        if (_refreshing) const LinearProgressIndicator(minHeight: 2),
+        if (twoPane) toolbar,
         Expanded(child: _body(Theme.of(context), twoPane: twoPane, bp: bp)),
       ],
     );
 
-    return Scaffold(
-      appBar: _picked.isNotEmpty
+    final PreferredSizeWidget header = _picked.isNotEmpty
           ? AppBar(
               leading: IconButton(tooltip: 'ยกเลิก', icon: const Icon(NxI.x), onPressed: () => setState(_picked.clear)),
               title: Text('เลือก ${_picked.length} รายการ'),
@@ -296,19 +302,39 @@ class _EntityListScreenState extends State<EntityListScreen> {
           ),
           if (twoPane) NxAddButton(onPressed: _openCreate),
         ],
-      ),
+      );
+    if (twoPane) {
+      return Scaffold(
+        appBar: header,
+        body: NxSplitView(list: list, detail: _creating || _selected != null ? _detail() : null),
+      );
+    }
+    // Phone: search + filters float on the glass header; the list scrolls under both.
+    return NxScrollScaffold(
+      insetBody: false,
+      header: header,
+      headerBottom: toolbar,
+      headerBottomHeight: _toolbarHeight,
       floatingActionButton: NxCreateFab(onPressed: _openCreate),
-      body: NxSplitView(
-        list: list,
-        detail: _creating || _selected != null ? _detail() : null,
+      body: Column(
+        children: [
+          Expanded(child: _body(Theme.of(context), twoPane: twoPane, bp: bp)),
+        ],
       ),
     );
   }
 
+  /// Search field + filter chips row (floating under the header on phones).
+  static const double _toolbarHeight = 108;
+
+  /// Space the list leaves for the floating header + toolbar (phones only).
+  double _top(bool twoPane) => twoPane ? 0 : NxScrollScaffold.topInset(context);
+
   Widget _body(ThemeData theme, {required bool twoPane, required NxBreakpoint bp}) {
-    if (_loading && _items.isEmpty) return const NxSkeletonList();
+    final top = _top(twoPane);
+    if (_loading && _items.isEmpty) return Padding(padding: EdgeInsets.only(top: top), child: const NxSkeletonList());
     if (_error != null && _items.isEmpty) {
-      return NxErrorRetry(error: _error!, onRetry: () => _load(reset: true));
+      return Padding(padding: EdgeInsets.only(top: top), child: NxErrorRetry(error: _error!, onRetry: () => _load(reset: true)));
     }
     final items = _visible;
     if (items.isEmpty) {
@@ -317,6 +343,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
         onRefresh: () => _load(reset: true),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.only(top: top),
           children: [
             SizedBox(
               height: 320,
@@ -351,12 +378,16 @@ class _EntityListScreenState extends State<EntityListScreen> {
       );
     }
     return RefreshIndicator(
+      edgeOffset: top,
       color: theme.colorScheme.primary,
       onRefresh: () => _load(reset: true),
       child: ListView.builder(
       controller: _scroll,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: bp.scrollPadding(context, hasFab: !twoPane),
+      padding: () {
+        final p = bp.scrollPadding(context, hasFab: !twoPane);
+        return p.copyWith(top: p.top + top);
+      }(),
       itemCount: items.length + (_loadingMore ? 1 : 0),
       itemBuilder: (context, i) {
         if (i >= items.length) {

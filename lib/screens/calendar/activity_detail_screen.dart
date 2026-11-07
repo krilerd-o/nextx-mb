@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -303,8 +304,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         _visit?['checked_out'] == true ||
         (_visit?['checkoutdate']?.toString().isNotEmpty ?? false);
     final photos = extractMapList(_visit?['photos']);
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      insetBody: false,
+      header: NxAppHeader(
         title: entityTitle(row, module: 'activity'),
         actions: [
           IconButton(
@@ -328,7 +330,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: EdgeInsets.fromLTRB(16, 8 + NxScrollScaffold.topInset(context), 16, 32),
         children: [
           NxSurfaceCard(
             radius: 26,

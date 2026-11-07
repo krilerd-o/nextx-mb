@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -101,8 +102,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         : _rows.where((r) => (r['user_name']?.toString() ?? '').toLowerCase().contains(needle)).toList();
     final stillIn = _rows.where((r) => r['clock_in_at'] != null && r['clock_out_at'] == null).length;
 
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'รายงานลงเวลา',
         actions: [IconButton(tooltip: 'เลือกวัน', icon: const Icon(NxI.calendarBlank), onPressed: _pickDay)],
       ),
