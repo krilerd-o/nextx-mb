@@ -251,3 +251,72 @@ String caseSubjectSuggestion(String caseType) {
   if (t.isEmpty) return '';
   return '[$t] : ${hints[t] ?? 'สรุปประเด็นหลักของเคส'}';
 }
+
+/// Modules the web duplicates on the server (lines and links come along).
+const Set<String> kServerDuplicateModules = {'quotation', 'job'};
+
+/// Running numbers the server assigns again for a copy.
+const Set<String> kRunningNumberFields = {
+  'account_no', 'lead_no', 'contact_no', 'case_no', 'product_no', 'service_no', 'quotation_no', 'contract_no',
+  'account_number', 'lead_number', 'contact_number', 'deal_no', 'job_no', 'asset_no',
+};
+
+/// Form values for "ทำซ้ำ": the source's data, minus ids/numbers/system
+/// columns, owner = me, and status/timestamps reset like the web.
+Map<String, dynamic> duplicateFormValues(
+  String module,
+  Map<String, dynamic> source, {
+  String? userId,
+  Map<String, List<Map<String, dynamic>>> picklists = const {},
+  DateTime? now,
+}) {
+  final t = now ?? thaiNow();
+  final copy = <String, dynamic>{
+    for (final e in source.entries)
+      if (!kSkipCreateColumns.contains(e.key) && !kRunningNumberFields.contains(e.key) && e.value != null) e.key: e.value,
+  };
+  if (userId != null && userId.isNotEmpty) copy['smownerid'] = int.tryParse(userId) ?? userId;
+  final p = picklists;
+  void reset(String k, String? v) {
+    if (v != null) copy[k] = v;
+  }
+
+  switch (module) {
+    case 'lead':
+      reset('lead_status', pickFirstOption(p['lead_status'], 'New'));
+      copy['lead_datetime'] = _ymdhm(t);
+    case 'contact':
+      reset('contact_status', pickFirstOption(p['contact_status'], 'Customer'));
+      copy['contact_datetime'] = _ymdhm(t);
+    case 'account':
+      reset('account_status', pickFirstOption(p['account_status'], 'Customer'));
+      copy['account_datetime'] = _ymdhm(t);
+    case 'case':
+      reset('case_status', pickFirstOption(p['case_status'], 'เปิดเคส'));
+      for (final k in ['open_datetime', 'plan_datetime', 'due_datetime']) {
+        copy[k] = _ymdhm(t);
+      }
+      for (final k in [
+        'execution_datetime', 'hold_datetime', 'closed_datetime', 'cancle_datetime', 'acknowledge_datetime',
+        'evaluation_score', 'evaluation_datetime', 'case_description_closed', 'case_solution_answer', 'case_description_cancel',
+      ]) {
+        copy.remove(k);
+      }
+    case 'activity':
+      reset('status', pickFirstOption(p['status'], 'Planned'));
+      for (final k in ['date_start', 'date_end']) {
+        final d = DateTime.tryParse('${copy[k] ?? ''}'.replaceFirst(' ', 'T'));
+        if (d != null) copy[k] = _ymdhm(DateTime(d.year, d.month, d.day + 1, d.hour, d.minute));
+      }
+      for (final k in ['checkindate', 'checkoutdate', 'checkin_lat', 'checkin_lng', 'location_chkout', 'imagename', 'photos']) {
+        copy.remove(k);
+      }
+    case 'deal':
+      reset('deal_stage', pickFirstOption(p['deal_stage'], null));
+      copy.remove('closed_at');
+      copy.remove('closed_reason');
+    default:
+      break;
+  }
+  return copy;
+}

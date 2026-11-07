@@ -25,6 +25,7 @@ import 'entity_detail_parts.dart';
 import 'entity_ops.dart';
 import '../../core/error_reporting.dart';
 import '../../core/i18n.dart';
+import '../../core/entity_form_rules.dart';
 
 class EntityDetailScreen extends StatefulWidget {
   const EntityDetailScreen({
@@ -171,6 +172,38 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   }
 
   Future<void> _duplicate() async {
+    // Like the web: most modules open a pre-filled form to review the copy;
+    // documents (quotation / job) are copied on the server with their lines.
+    if (!kServerDuplicateModules.contains(widget.module) && _fields.isNotEmpty) {
+      final config = context.read<AppConfig>();
+      final values = duplicateFormValues(
+        widget.module,
+        _row,
+        userId: config.session.userId,
+        picklists: _picklists,
+      );
+      if (values['smownerid'] != null) {
+        values['smownerid'] = {
+          'id': '${values['smownerid']}',
+          'label': config.session.displayName ?? config.session.email ?? '${values['smownerid']}',
+        };
+      }
+      final saved = await nxPush<bool>(
+        context,
+        EntityCreateScreen(
+          module: widget.module,
+          title: 'ทำซ้ำ ${entityTitle(_row, module: widget.module)}',
+          initialValues: values,
+          fields: _editableFields(),
+          picklists: _picklists,
+        ),
+        root: true,
+      );
+      if (saved == true && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ทำซ้ำแล้ว'))));
+      }
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
