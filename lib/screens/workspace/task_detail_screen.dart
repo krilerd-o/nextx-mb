@@ -87,6 +87,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   final _titleCtrl = TextEditingController();
   final _subtaskCtrl = TextEditingController();
   final _activity = GlobalKey<WsActivityPanelState>();
+  static const _bleed = ValueKey('ws-full-bleed');
   StreamSubscription<RealtimeEvent>? _live;
   Timer? _debounce;
   String? _businessId;
@@ -768,135 +769,134 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           await _activity.currentState?.reload();
         },
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 40),
+          // Everything gets the page gutter except the full-width status stepper.
           children: [
-            // Type · key · priority
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: type.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+            for (final c in <Widget>[
+              // Type · key · priority
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: type.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(type.icon, size: 14, color: type.color),
+                        const SizedBox(width: 4),
+                        Text(
+                          tr(type.label),
+                          style: theme.textTheme.labelMedium?.copyWith(color: type.color, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onLongPress: _copyKey,
+                    child: Text(
+                      key,
+                      style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (_item['priority'] != null)
+                    Builder(
+                      builder: (_) {
+                        final p = wsPriorityStyle('${_item['priority']}');
+                        return Row(
+                          children: [
+                            Icon(p.icon, size: 16, color: p.color),
+                            const SizedBox(width: 2),
+                            Text(
+                              tr(p.label),
+                              style: theme.textTheme.labelMedium?.copyWith(color: p.color, fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                ],
+              ),
+              // Breadcrumb board › epic › parent
+              if (epic != null || parent != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 4,
                     children: [
-                      Icon(type.icon, size: 14, color: type.color),
-                      const SizedBox(width: 4),
-                      Text(
-                        tr(type.label),
-                        style: theme.textTheme.labelMedium?.copyWith(color: type.color, fontWeight: FontWeight.w700),
-                      ),
+                      for (final (i, row) in [?epic, ?parent].indexed) ...[
+                        if (i > 0) Icon(NxI.caretRight, size: 12, color: cs.outline),
+                        ActionChip(
+                          visualDensity: VisualDensity.compact,
+                          avatar: Icon(wsTypeStyle(wsType(row)).icon, size: 14, color: wsTypeStyle(wsType(row)).color),
+                          label: Text('${wsKey(row, boardCode: _code)} ${wsTitle(row)}', overflow: TextOverflow.ellipsis),
+                          onPressed: () => _open(row),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+              const SizedBox(height: 8),
+              // Title (tap to edit in place)
+              if (_editingTitle)
+                TextField(
+                  controller: _titleCtrl,
+                  autofocus: true,
+                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(isDense: true),
+                  onSubmitted: (_) => _saveTitle(),
+                  onTapOutside: (_) => _saveTitle(),
+                )
+              else
                 GestureDetector(
-                  onLongPress: _copyKey,
-                  child: Text(
-                    key,
-                    style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
-                  ),
+                  onTap: _online
+                      ? () => setState(() {
+                          _titleCtrl.text = title;
+                          _editingTitle = true;
+                        })
+                      : null,
+                  child: Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
                 ),
-                const Spacer(),
-                if (_item['priority'] != null)
-                  Builder(
-                    builder: (_) {
-                      final p = wsPriorityStyle('${_item['priority']}');
-                      return Row(
-                        children: [
-                          Icon(p.icon, size: 16, color: p.color),
-                          const SizedBox(width: 2),
-                          Text(
-                            tr(p.label),
-                            style: theme.textTheme.labelMedium?.copyWith(color: p.color, fontWeight: FontWeight.w700),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+              const SizedBox(height: 14),
+              if (_statuses.isNotEmpty)
+                Padding(
+                  key: _bleed,
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: WsStatusStepper(statuses: _statuses, current: '${_item['status_id'] ?? ''}', busy: _saving, onPick: _online ? _setStatus : null),
+                ),
+              if (_online) Padding(padding: const EdgeInsets.only(bottom: 12), child: _isEpic ? _epicTime(children) : _timeCard()),
+              _descriptionSection(context, desc),
+              _fieldsSection(context, epic, parent),
+              if (_online && (_isEpic || !_isChild)) _childrenSection(context, children),
+              if (_online && !_isEpic) SmartChecklistSection(boardId: _boardId, taskId: _id),
+              if (_online) ...[
+                const SizedBox(height: 12),
+                _attachmentsSection(context),
+                _peopleSection(context),
+                _linksSection(context),
+                const SizedBox(height: 4),
               ],
-            ),
-            // Breadcrumb board › epic › parent
-            if (epic != null || parent != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 4,
-                  children: [
-                    for (final (i, row) in [?epic, ?parent].indexed) ...[
-                      if (i > 0) Icon(NxI.caretRight, size: 12, color: cs.outline),
-                      ActionChip(
-                        visualDensity: VisualDensity.compact,
-                        avatar: Icon(wsTypeStyle(wsType(row)).icon, size: 14, color: wsTypeStyle(wsType(row)).color),
-                        label: Text('${wsKey(row, boardCode: _code)} ${wsTitle(row)}', overflow: TextOverflow.ellipsis),
-                        onPressed: () => _open(row),
-                      ),
-                    ],
-                  ],
+              WsActivityPanel(
+                key: _activity,
+                boardId: _boardId,
+                kind: _kind,
+                itemId: _id,
+                meId: _me,
+                lookups: WsLookups(
+                  users: _users,
+                  statuses: _statuses,
+                  items: {
+                    for (final t in _tasks) 'task:${t['id']}': {...t, 'board_code': _code},
+                    for (final e in _epics) 'epic:${e['id']}': {...e, 'board_code': _code},
+                  },
                 ),
+                onWorklogChanged: _reloadItem,
               ),
-            const SizedBox(height: 8),
-            // Title (tap to edit in place)
-            if (_editingTitle)
-              TextField(
-                controller: _titleCtrl,
-                autofocus: true,
-                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(isDense: true),
-                onSubmitted: (_) => _saveTitle(),
-                onTapOutside: (_) => _saveTitle(),
-              )
-            else
-              GestureDetector(
-                onTap: _online
-                    ? () => setState(() {
-                        _titleCtrl.text = title;
-                        _editingTitle = true;
-                      })
-                    : null,
-                child: Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-              ),
-            const SizedBox(height: 14),
-            if (_statuses.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: Transform.translate(
-                  offset: const Offset(-16, 0),
-                  child: SizedBox(
-                    width: MediaQuery.sizeOf(context).width,
-                    child: WsStatusStepper(statuses: _statuses, current: '${_item['status_id'] ?? ''}', busy: _saving, onPick: _online ? _setStatus : null),
-                  ),
-                ),
-              ),
-            if (_online) Padding(padding: const EdgeInsets.only(bottom: 12), child: _isEpic ? _epicTime(children) : _timeCard()),
-            _descriptionSection(context, desc),
-            _fieldsSection(context, epic, parent),
-            if (_online && (_isEpic || !_isChild)) _childrenSection(context, children),
-            if (_online && !_isEpic) SmartChecklistSection(boardId: _boardId, taskId: _id),
-            if (_online) ...[
-              const SizedBox(height: 12),
-              _attachmentsSection(context),
-              _peopleSection(context),
-              _linksSection(context),
-              const SizedBox(height: 4),
-            ],
-            WsActivityPanel(
-              key: _activity,
-              boardId: _boardId,
-              kind: _kind,
-              itemId: _id,
-              meId: _me,
-              lookups: WsLookups(
-                users: _users,
-                statuses: _statuses,
-                items: {
-                  for (final t in _tasks) 'task:${t['id']}': {...t, 'board_code': _code},
-                  for (final e in _epics) 'epic:${e['id']}': {...e, 'board_code': _code},
-                },
-              ),
-              onWorklogChanged: _reloadItem,
-            ),
+            ])
+              c.key == _bleed ? c : Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: c),
           ],
         ),
       ),

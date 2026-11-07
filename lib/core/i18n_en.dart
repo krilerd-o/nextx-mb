@@ -1273,6 +1273,15 @@ const Map<String, String> enStrings = {
   'จับเวลา': 'Timer',
   'วันเวลาที่ทำ': 'Worked at',
   'เวลาคงเหลือ (ไม่บังคับ)': 'Remaining (optional)',
+  'ทำซ้ำบอร์ด?': 'Duplicate board?',
+  'ทำซ้ำบอร์ดแล้ว': 'Board duplicated',
+  'ทำซ้ำบอร์ด': 'Duplicate board',
+  'ค้นหาบอร์ด': 'Search boards',
+  'สัปดาห์นี้': 'This week',
+  'ไม่มีงานในช่วงนี้ 🎉': 'Nothing due in this range 🎉',
+  'การลงเวลา': 'Time log',
+  'ถังขยะ Workspace': 'Workspace trash',
+  'ถังขยะว่าง': 'Trash is empty',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1437,4 +1446,12 @@ const Map<String, String> enPatterns = {
   'รวม {}': 'Total {}',
   'เกินเวลาประมาณ {}': 'Over estimate by {}',
   'คงเหลือ {}': '{} left',
+  'สร้างบอร์ดใหม่จาก "{}" พร้อมสถานะและงานทั้งหมด': 'Create a new board from "{}" with all statuses and items',
+  '{} งานค้าง': '{} open',
+  'ดูทั้งหมด {} งาน': 'See all {} items',
+  'เลย {} วัน': '{} days overdue',
+  'เสร็จ {}/{}': 'Done {}/{}',
+  'กู้คืน {} แล้ว': 'Restored {}',
+  '"{}" จะถูกลบถาวรและกู้คืนไม่ได้': '"{}" will be deleted for good and can\'t be restored',
+  'ลบโดย {}': 'Deleted by {}',
 };

@@ -351,8 +351,8 @@ class WsActivityPanelState extends State<WsActivityPanel> {
         SegmentedButton<int>(
           showSelectedIcon: false,
           segments: [
-            for (final (v, label, icon, n) in tabs)
-              ButtonSegment(value: v, icon: Icon(icon, size: 16), label: Text(n == null || n == 0 ? tr(label) : '${tr(label)} $n')),
+            for (final (v, label, _, n) in tabs)
+              ButtonSegment(value: v, label: Text(n == null || n == 0 ? tr(label) : '${tr(label)} $n', maxLines: 1, softWrap: false, overflow: TextOverflow.fade)),
           ],
           selected: {_tab == 1 && !_isTask ? 0 : _tab},
           onSelectionChanged: (s) {

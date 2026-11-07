@@ -67,15 +67,15 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
   }
 
   Future<void> _toggle(Map<String, dynamic> item, bool done) => _run(() async {
-        final id = item['id']?.toString() ?? '';
-        setState(() => item['status'] = done ? 'done' : 'todo');
-        try {
-          await _api.updateSmartChecklistItem(widget.boardId, id, {'status': done ? 'done' : 'todo'});
-        } catch (_) {
-          if (mounted) setState(() => item['status'] = done ? 'todo' : 'done');
-          rethrow;
-        }
-      });
+    final id = item['id']?.toString() ?? '';
+    setState(() => item['status'] = done ? 'done' : 'todo');
+    try {
+      await _api.updateSmartChecklistItem(widget.boardId, id, {'status': done ? 'done' : 'todo'});
+    } catch (_) {
+      if (mounted) setState(() => item['status'] = done ? 'todo' : 'done');
+      rethrow;
+    }
+  });
 
   Future<void> _addItem() async {
     final title = _add.text.trim();
@@ -88,69 +88,87 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
   }
 
   Future<void> _delete(Map<String, dynamic> item) => _run(() async {
-        await _api.deleteSmartChecklistItem(widget.boardId, item['id']?.toString() ?? '');
-        if (mounted) setState(() => _items = _items.where((e) => e != item).toList());
-      });
+    await _api.deleteSmartChecklistItem(widget.boardId, item['id']?.toString() ?? '');
+    if (mounted) setState(() => _items = _items.where((e) => e != item).toList());
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final (done, total) = checklistProgress(_items);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(children: [
-          Expanded(child: Text(tr('เช็คลิสต์${total > 0 ? ' ($done/$total)' : ''}'), style: theme.textTheme.titleSmall)),
-          if (_busy) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-        ]),
-        if (total > 0)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(value: done / total, minHeight: 6),
-            ),
+    const accent = Color(0xFF14B8A6);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+                child: const Icon(NxI.listChecks, size: 16, color: accent),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(tr('เช็คลิสต์'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              ),
+              if (_busy) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+              if (total > 0) Text('$done/$total', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+            ],
           ),
-        if (_loading) const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
-        for (final item in _items)
-          if (item['item_kind']?.toString() == 'header')
+          if (total > 0)
             Padding(
-              padding: const EdgeInsets.only(top: 10, bottom: 2),
-              child: Text(tr(item['title']?.toString() ?? ''), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
-            )
-          else
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              controlAffinity: ListTileControlAffinity.leading,
-              value: item['status']?.toString() == 'done',
-              onChanged: _busy ? null : (v) => _toggle(item, v ?? false),
-              title: Text(
-                tr(item['title']?.toString() ?? ''),
-                style: item['status']?.toString() == 'done' || item['status']?.toString() == 'skipped'
-                    ? TextStyle(decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant)
-                    : null,
-              ),
-              secondary: IconButton(
-                tooltip: tr('ลบ'),
-                icon: const Icon(NxI.x, size: 16),
-                onPressed: _busy ? null : () => _delete(item),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(value: done / total, minHeight: 6, color: accent),
               ),
             ),
-        TextField(
-          controller: _add,
-          enabled: !_busy,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _addItem(),
-          decoration: InputDecoration(
-            hintText: tr('เพิ่มรายการเช็คลิสต์'),
-            isDense: true,
-            prefixIcon: const Icon(NxI.plus, size: 18),
-            suffixIcon: IconButton(icon: const Icon(NxI.paperPlaneTilt, size: 18), onPressed: _busy ? null : _addItem),
+          if (_loading) const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
+          for (final item in _items)
+            if (item['item_kind']?.toString() == 'header')
+              Padding(
+                padding: const EdgeInsets.only(top: 10, bottom: 2),
+                child: Text(tr(item['title']?.toString() ?? ''), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+              )
+            else
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: item['status']?.toString() == 'done',
+                onChanged: _busy ? null : (v) => _toggle(item, v ?? false),
+                title: Text(
+                  tr(item['title']?.toString() ?? ''),
+                  style: item['status']?.toString() == 'done' || item['status']?.toString() == 'skipped'
+                      ? TextStyle(decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant)
+                      : null,
+                ),
+                secondary: IconButton(tooltip: tr('ลบ'), icon: const Icon(NxI.x, size: 16), onPressed: _busy ? null : () => _delete(item)),
+              ),
+          TextField(
+            controller: _add,
+            enabled: !_busy,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _addItem(),
+            decoration: InputDecoration(
+              hintText: tr('เพิ่มรายการเช็คลิสต์'),
+              isDense: true,
+              border: InputBorder.none,
+              prefixIcon: const Icon(NxI.plus, size: 18),
+              suffixIcon: IconButton(icon: const Icon(NxI.paperPlaneTilt, size: 18), onPressed: _busy ? null : _addItem),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -1026,11 +1026,17 @@ class ApiClient {
   Future<List<Map<String, dynamic>>> getWorkspaceItems({
     String? boardIds,
     String? q,
+    String? assigneeId,
+    bool excludeDone = false,
+    bool excludeEpic = false,
     int limit = 200,
   }) async {
     final env = await _send('GET', '/api/workspace/items', query: {
       if (boardIds != null && boardIds.isNotEmpty) 'board_ids': boardIds,
       if (q != null && q.isNotEmpty) 'q': q,
+      if (assigneeId != null && assigneeId.isNotEmpty) 'assignee_id': assigneeId,
+      if (excludeDone) 'exclude_done': '1',
+      if (excludeEpic) 'exclude_epic': '1',
       'limit': '$limit',
     });
     return extractMapList(env['data']);
