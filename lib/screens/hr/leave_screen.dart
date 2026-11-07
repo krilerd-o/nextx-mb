@@ -16,6 +16,7 @@ import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_shake.dart';
 
 class LeaveScreen extends StatefulWidget {
   const LeaveScreen({super.key, this.initialTab = 0});
@@ -103,6 +104,8 @@ class _LeaveRequestTab extends StatefulWidget {
 class _LeaveRequestTabState extends State<_LeaveRequestTab> {
   List<Map<String, dynamic>> _types = [];
   int? _typeId;
+  final _typeShake = GlobalKey<NxShakeState>();
+  final _rangeShake = GlobalKey<NxShakeState>();
   final _reason = TextEditingController();
   DateTimeRange? _range;
   List<({List<int> bytes, String name})> _files = [];
@@ -159,6 +162,9 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
 
   Future<void> _submit() async {
     if (_typeId == null || _range == null) {
+      // Point at what's missing: scroll there, shake it, short vibration.
+      nxShakeField(_typeId == null ? _typeShake : _rangeShake);
+      if (_typeId == null && _range == null) _rangeShake.currentState?.shake(haptic: false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('เลือกประเภทลาและวันที่'))));
       return;
     }
@@ -208,9 +214,11 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
           child: Column(
             children: [
-              DropdownButtonFormField<int>(
+              NxShake(
+                key: _typeShake,
+                child: DropdownButtonFormField<int>(
                 value: _typeId,
-                decoration: InputDecoration(labelText: tr('ประเภท')),
+                decoration: InputDecoration(label: nxRequiredLabel(context, tr('ประเภท'))),
                 items: _types
                     .map(
                       (e) => DropdownMenuItem(
@@ -222,10 +230,13 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
                     .toList(),
                 onChanged: (v) => setState(() => _typeId = v),
               ),
+              ),
               const SizedBox(height: 12),
-              ListTile(
+              NxShake(
+                key: _rangeShake,
+                child: ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(tr('ช่วงวันที่')),
+                title: nxRequiredLabel(context, tr('ช่วงวันที่')),
                 subtitle: Text(
                   tr(_range == null
                       ? 'แตะเพื่อเลือก'
@@ -233,6 +244,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
                 ),
                 trailing: const Icon(NxI.calendarBlank),
                 onTap: _pickRange,
+              ),
               ),
               const SizedBox(height: 8),
               TextField(

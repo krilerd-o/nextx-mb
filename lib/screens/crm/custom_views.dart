@@ -10,6 +10,7 @@ import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
+import '../../widgets/nx_shake.dart';
 
 /// Label of a NEXTX field/option map in the current UI language.
 String nxLabel(Map m, {String fallback = ''}) {
@@ -217,6 +218,7 @@ class _Cond {
 
 class _CustomViewEditorScreenState extends State<CustomViewEditorScreen> {
   final _name = TextEditingController();
+  final _nameShake = GlobalKey<NxShakeState>();
   Map<String, dynamic>? _meta;
   Map<String, List<Map<String, dynamic>>> _picklists = {};
   Object? _error;
@@ -311,7 +313,7 @@ class _CustomViewEditorScreenState extends State<CustomViewEditorScreen> {
   Future<void> _save() async {
     final name = _name.text.trim();
     if (name.isEmpty) {
-      HapticFeedback.heavyImpact();
+      nxShakeField(_nameShake);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('กรุณาตั้งชื่อมุมมอง'))));
       return;
     }
@@ -487,10 +489,13 @@ class _CustomViewEditorScreenState extends State<CustomViewEditorScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
               children: [
-                TextField(
-                  controller: _name,
-                  readOnly: widget.initial?['is_system'] == true,
-                  decoration: InputDecoration(labelText: tr('ชื่อมุมมอง')),
+                NxShake(
+                  key: _nameShake,
+                  child: TextField(
+                    controller: _name,
+                    readOnly: widget.initial?['is_system'] == true,
+                    decoration: InputDecoration(label: nxRequiredLabel(context, tr('ชื่อมุมมอง'))),
+                  ),
                 ),
                 _section('ใครเห็นมุมมองนี้', [
                   SegmentedButton<String>(

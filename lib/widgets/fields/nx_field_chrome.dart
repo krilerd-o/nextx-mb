@@ -51,18 +51,11 @@ class NxFieldStyle {
     final scheme = Theme.of(context).colorScheme;
     final hasLabel = label != null && label.isNotEmpty;
     final restInside = hasLabel && !floatLabel && !skipRestingHint;
-    final markColor = errorText != null ? scheme.error : scheme.onSurfaceVariant;
     final floatingLabel = hasLabel && floatLabel
         ? Text.rich(
             TextSpan(
               text: trn(label),
-              children: [
-                if (required)
-                  TextSpan(
-                    text: tr(' *'),
-                    style: TextStyle(color: markColor, fontWeight: FontWeight.w600, fontSize: 12),
-                  ),
-              ],
+              children: [if (required) requiredMark(scheme, fontSize: 12)],
             ),
           )
         : null;
@@ -78,7 +71,9 @@ class NxFieldStyle {
       ),
       alignLabelWithHint: tall,
       filled: false,
-      hintText: trn(restInside ? '$label${required ? ' *' : ''}' : (hasLabel ? null : hint)),
+      // Resting label: bold with a red * while a required field is still empty.
+      hint: restInside ? restingLabel(scheme, label, required: required) : null,
+      hintText: restInside ? null : trn(hasLabel ? null : hint),
       hintStyle: restingStyle(scheme),
       errorText: trn(errorText),
       suffixIcon: _iconSlot(suffixIcon),
@@ -95,6 +90,26 @@ class NxFieldStyle {
       disabledBorder: border(scheme.outline.withValues(alpha: 0.4)),
     );
   }
+
+  /// The red " *" after a required field's label.
+  static TextSpan requiredMark(ColorScheme scheme, {double? fontSize}) => TextSpan(
+        text: ' *',
+        style: TextStyle(color: scheme.error, fontWeight: FontWeight.w700, fontSize: fontSize),
+      );
+
+  /// Label shown inside an empty field. Required ones are bold + red *.
+  static Widget restingLabel(ColorScheme scheme, String label, {required bool required}) => Text.rich(
+        TextSpan(
+          text: tr(label),
+          style: restingStyle(scheme).copyWith(
+            fontWeight: required ? FontWeight.w700 : FontWeight.w400,
+            color: required ? scheme.onSurface : scheme.onSurfaceVariant,
+          ),
+          children: [if (required) requiredMark(scheme)],
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
 
   static Widget? _iconSlot(Widget? icon) {
     if (icon == null) return null;
@@ -154,7 +169,6 @@ class NxOutlinedTapField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final rest = '$label${required ? ' *' : ''}';
     return InkWell(
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(NxFieldStyle.radius),
@@ -174,12 +188,7 @@ class NxOutlinedTapField extends StatelessWidget {
                 height: NxFieldStyle.lineHeight,
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text(
-                    tr(rest),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: NxFieldStyle.restingStyle(scheme),
-                  ),
+                  child: NxFieldStyle.restingLabel(scheme, label, required: required),
                 ),
               )
             : ConstrainedBox(

@@ -1088,6 +1088,21 @@ const Map<String, String> enStrings = {
   'แสดงบรรทัดรอง': 'Show second line',
   'แสดงเมื่อต่างจากหัวข้อหลัก': 'When different from the title',
   'แสดงเสมอ (ถ้ามีข้อมูล)': 'Always (if it has a value)',
+  'ข้อมูลทั่วไป': 'General info',
+  'รอบบริการและประกัน': 'Service cycle & warranty',
+  'ช่องทางติดต่อ': 'Contact details',
+  'มอบหมาย': 'Assign ownership',
+  'ลีดจากช่องทางออนไลน์มักมีอัตราแปลงที่ดีขึ้นเมื่อติดตามภายใน 24 ชม.': 'Leads from digital channels often convert better when followed up within 24 hours.',
+  'ผู้ติดต่อที่ผูกกับบัญชีลูกค้ามักช่วยให้ทีมขายเห็นบริบทครบขึ้น': 'Contacts linked to an account give sales clearer context for every touchpoint.',
+  'ข้อมูลบัญชีที่อัปเดตสม่ำเสมอช่วยรายงานและการมอบหมายงานแม่นยำขึ้น': 'Keeping account data current improves reporting and territory assignment.',
+  'อัปเดตสถานะเคสให้ชัดช่วยทีมบริการและลูกค้าเห็นความคืบหน้าเดียวกัน': 'Clear case status updates keep service and customers aligned on progress.',
+  'ผูกลูกค้า ใส่วันเวลาและจุดนัดให้ชัด เพื่อให้ทีมเช็คอินและเห็นนัดในปฏิทิน': 'Link the customer and set time and place so the team can check in and see it on the calendar.',
+  'รายละเอียดสินค้าและราคาที่ตรงกันทุกช่องทางลดความสับสนในการเสนอราคา': 'Consistent product details and pricing reduce confusion across quotes and orders.',
+  'นิยามบริการและราคามาตรฐานช่วยให้ทีมขายและปฏิบัติการสอดคล้องกัน': 'Standard service definitions and rates keep sales and delivery aligned.',
+  'ตรวจสอบบรรทัดและส่วนลดก่อนส่งใบเสนอราคาเพื่อลดการแก้ไขรอบสอง': 'Review lines and discounts before sending to cut down on revision rounds.',
+  'ตั้งวันสิ้นสุดและผู้รับผิดชอบให้ชัด เพื่อให้ระบบแจ้งเตือนก่อนสัญญาหมดอายุ': 'Set end dates and owners clearly so the team gets expiry alerts in time.',
+  'กรอกช่องจำเป็นครบแล้ว': 'All required fields filled',
+  'ครบแล้ว': 'Done',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1226,4 +1241,7 @@ const Map<String, String> enPatterns = {
   '{} เงื่อนไข': '{} conditions',
   'ดูทั้งหมด ({})': 'Show all ({})',
   'ใช้ตัวกรอง ({})': 'Apply filters ({})',
+  'ยังไม่ได้กรอก {} ช่องที่จำเป็น/ไม่ถูกรูปแบบ': '{} required fields are empty or invalid',
+  'ช่องจำเป็น {}/{}': 'Required {}/{}',
+  'จำเป็น {}/{}': 'Required {}/{}',
 };

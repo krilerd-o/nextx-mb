@@ -19,6 +19,7 @@ import 'profile_edit_screen.dart';
 import 'settings_screen.dart';
 import '../core/nx_page_route.dart';
 import '../core/i18n.dart';
+import '../widgets/nx_shake.dart';
 
 /// Phase 7 — โปรไฟล์, ภาษา/รูปแบบวันที่, รหัสผ่าน/2FA placeholder, accent, avatar (C1)
 class ProfileScreen extends StatelessWidget {
@@ -246,27 +247,27 @@ Future<void> showChangePasswordDialog(BuildContext context) async {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextFormField(
+            NxShake(child: TextFormField(
               controller: current,
               obscureText: true,
-              decoration: InputDecoration(labelText: tr('รหัสผ่านปัจจุบัน')),
+              decoration: InputDecoration(label: nxRequiredLabel(ctx, tr('รหัสผ่านปัจจุบัน'))),
               validator: (v) =>
                   (v == null || v.isEmpty) ? tr('กรุณากรอก') : null,
-            ),
-            TextFormField(
+            )),
+            NxShake(child: TextFormField(
               controller: next,
               obscureText: true,
-              decoration: InputDecoration(labelText: tr('รหัสผ่านใหม่')),
+              decoration: InputDecoration(label: nxRequiredLabel(ctx, tr('รหัสผ่านใหม่'))),
               validator: (v) => (v == null || v.length < 6)
                   ? tr('อย่างน้อย 6 ตัวอักษร')
                   : null,
-            ),
-            TextFormField(
+            )),
+            NxShake(child: TextFormField(
               controller: confirm,
               obscureText: true,
-              decoration: InputDecoration(labelText: tr('ยืนยันรหัสใหม่')),
+              decoration: InputDecoration(label: nxRequiredLabel(ctx, tr('ยืนยันรหัสใหม่'))),
               validator: (v) => v != next.text ? tr('รหัสไม่ตรงกัน') : null,
-            ),
+            )),
           ],
         ),
       ),
@@ -277,7 +278,9 @@ Future<void> showChangePasswordDialog(BuildContext context) async {
         ),
         FilledButton(
           onPressed: () {
-            if (formKey.currentState?.validate() == true) {
+            if (formKey.currentState?.validate() != true) {
+              nxRevealFormError(ctx);
+            } else {
               Navigator.pop(ctx, true);
             }
           },

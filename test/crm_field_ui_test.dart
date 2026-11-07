@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nextx_mobile/widgets/nx_shake.dart';
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/app_theme.dart';
 import 'package:nextx_mobile/screens/crm/entity_create_screen.dart';
@@ -116,7 +117,7 @@ void main() {
       expect(NxFieldStyle.radius, 14);
       expect(textField.decoration?.floatingLabelBehavior, FloatingLabelBehavior.auto);
       expect(
-        textField.decoration?.labelText ?? textField.decoration?.hintText,
+        textField.decoration?.labelText ?? textField.decoration?.hintText ?? textField.decoration?.hint,
         isNotNull,
       );
     }
@@ -138,10 +139,16 @@ void main() {
       ),
     );
     final empty = tester.widget<TextField>(find.byType(TextField));
-    expect(empty.decoration?.hintText, 'ชื่อ *');
+    // Required + empty: bold label with a red " *" inside the field.
+    final hint = empty.decoration?.hint as Text;
+    final span = hint.textSpan! as TextSpan;
+    expect(span.text, 'ชื่อ');
+    expect(span.style?.fontWeight, FontWeight.w700);
+    final star = span.children!.single as TextSpan;
+    expect(star.text, ' *');
+    expect(star.style?.color, AppTheme.light.colorScheme.error);
     expect(empty.decoration?.labelText, isNull);
     expect(empty.decoration?.hintStyle?.fontSize, 15);
-    expect(empty.decoration?.hintStyle?.fontWeight, FontWeight.w400);
     expect(empty.decoration?.hintStyle?.height, 1.2);
     expect(empty.textAlignVertical, TextAlignVertical.center);
     expect(empty.decoration?.suffixIconConstraints?.maxHeight, 22);
@@ -306,6 +313,15 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('entity-save')));
       await tester.pump();
       expect(find.text('จำเป็นต้องกรอก'), findsWidgets);
+      expect(find.text('ช่องจำเป็น 0/1'), findsOneWidget);
+      // Scroll to the field, then it shakes (offset ≠ 0 mid-animation).
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 60));
+      final shaking = tester.widgetList<Transform>(
+        find.descendant(of: find.byType(NxShake), matching: find.byType(Transform)),
+      );
+      expect(shaking.any((t) => t.transform.getTranslation().x.abs() > 0.5), isTrue);
+      await tester.pump(const Duration(seconds: 1));
       await tester.pumpWidget(const SizedBox.shrink());
     }
   });

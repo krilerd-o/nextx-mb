@@ -6,6 +6,7 @@ import '../services/api_client.dart';
 import '../widgets/nx_app_header.dart';
 import '../widgets/nx_skeleton.dart';
 import '../core/i18n.dart';
+import '../widgets/nx_shake.dart';
 
 /// Editable fields of `PUT /api/me/profile` (NEXTX PROFILE_UPDATE_SETS).
 const profileEditableFields = <String, String>{
@@ -84,7 +85,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Future<void> _save() async {
-    if (_form.currentState?.validate() != true) return;
+    if (_form.currentState?.validate() != true) {
+      nxRevealFormError(context);
+      return;
+    }
     final changes = profileChanges(_original, {for (final e in _c.entries) e.key: e.value.text});
     if (changes.isEmpty) {
       Navigator.of(context).pop(false);
@@ -131,17 +135,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       for (final e in profileEditableFields.entries)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12),
-                          child: TextFormField(
+                          child: NxShake(
+                            child: TextFormField(
                             controller: _c[e.key],
-                            decoration: InputDecoration(labelText: trn(e.value), border: const OutlineInputBorder()),
+                            decoration: InputDecoration(
+                              label: e.key == 'first_name' ? nxRequiredLabel(context, tr(e.value)) : Text(tr(e.value)),
+                              border: const OutlineInputBorder(),
+                            ),
                             keyboardType: e.key.startsWith('phone') ? TextInputType.phone : TextInputType.text,
                             minLines: e.key == 'description' || e.key == 'signature' ? 3 : 1,
                             maxLines: e.key == 'description' || e.key == 'signature' ? 6 : 1,
                             validator: e.key == 'first_name'
                                 ? (v) => (v == null || v.trim().isEmpty) && (_c['first_name_th']!.text.trim().isEmpty)
-                                    ? 'กรุณาใส่ชื่ออย่างน้อยหนึ่งภาษา'
+                                    ? tr('กรุณาใส่ชื่ออย่างน้อยหนึ่งภาษา')
                                     : null
                                 : null,
+                          ),
                           ),
                         ),
                     ],

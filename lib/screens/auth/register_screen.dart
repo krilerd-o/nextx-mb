@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_shake.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -44,7 +45,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _submit() async {
-    if (_form.currentState?.validate() != true) return;
+    if (_form.currentState?.validate() != true) {
+      nxRevealFormError(context);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -77,8 +81,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  InputDecoration _dec(String label, IconData icon) => InputDecoration(
-        labelText: trn(label),
+  InputDecoration _dec(String label, IconData icon, {bool required = true}) => InputDecoration(
+        label: required ? nxRequiredLabel(context, tr(label)) : Text(tr(label)),
         prefixIcon: Icon(icon),
         filled: true,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
@@ -122,37 +126,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
               Text(tr('มีรหัสเชิญ/ซีเรียลจากบริษัท ใช้งานได้ทันที ไม่มีรหัสจะรอผู้ดูแลอนุมัติ'),
                   style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
               const SizedBox(height: 20),
-              TextFormField(
-                controller: _name,
-                decoration: _dec('ชื่อ-นามสกุล', NxI.user),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'กรุณากรอกชื่อ' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: _dec('อีเมล', NxI.envelope),
-                validator: (v) => (v == null || !v.contains('@')) ? 'อีเมลไม่ถูกต้อง' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _password,
-                obscureText: _obscure,
-                decoration: _dec('รหัสผ่าน', NxI.password).copyWith(
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscure ? NxI.eye : NxI.eyeOff),
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                  ),
+              NxShake(
+                child: TextFormField(
+                  controller: _name,
+                  decoration: _dec('ชื่อ-นามสกุล', NxI.user),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? tr('กรุณากรอกชื่อ') : null,
                 ),
-                // Strength rules live on the server (authValidation.js) — its message is shown.
-                validator: (v) => (v == null || v.isEmpty) ? 'กรุณากรอกรหัสผ่าน' : null,
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _confirm,
-                obscureText: _obscure,
-                decoration: _dec('ยืนยันรหัสผ่าน', NxI.password),
-                validator: (v) => v != _password.text ? 'รหัสผ่านไม่ตรงกัน' : null,
+              NxShake(
+                child: TextFormField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: _dec('อีเมล', NxI.envelope),
+                  validator: (v) => (v == null || !v.contains('@')) ? tr('อีเมลไม่ถูกต้อง') : null,
+                ),
+              ),
+              const SizedBox(height: 12),
+              NxShake(
+                child: TextFormField(
+                  controller: _password,
+                  obscureText: _obscure,
+                  decoration: _dec('รหัสผ่าน', NxI.password).copyWith(
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscure ? NxI.eye : NxI.eyeOff),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                  ),
+                  // Strength rules live on the server (authValidation.js) — its message is shown.
+                  validator: (v) => (v == null || v.isEmpty) ? tr('กรุณากรอกรหัสผ่าน') : null,
+                ),
+              ),
+              const SizedBox(height: 12),
+              NxShake(
+                child: TextFormField(
+                  controller: _confirm,
+                  obscureText: _obscure,
+                  decoration: _dec('ยืนยันรหัสผ่าน', NxI.password),
+                  validator: (v) => v != _password.text ? tr('รหัสผ่านไม่ตรงกัน') : null,
+                ),
               ),
               const SizedBox(height: 16),
               if (_invite)
@@ -173,16 +185,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 onChanged: (v) => setState(() => _hasKey = v),
               ),
               if (_hasKey) ...[
-                TextFormField(
-                  controller: _key,
-                  decoration: _dec('รหัสเชิญ / ซีเรียลคีย์', NxI.shieldCheck),
-                  validator: (v) => _hasKey && (v == null || v.trim().isEmpty) ? 'กรุณากรอกรหัส' : null,
+                NxShake(
+                  child: TextFormField(
+                    controller: _key,
+                    decoration: _dec('รหัสเชิญ / ซีเรียลคีย์', NxI.shieldCheck),
+                    validator: (v) => _hasKey && (v == null || v.trim().isEmpty) ? tr('กรุณากรอกรหัส') : null,
+                  ),
                 ),
                 const SizedBox(height: 12),
               ],
               TextFormField(
                 controller: _business,
-                decoration: _dec('ชื่อธุรกิจ (ถ้ามี)', NxI.buildings),
+                decoration: _dec('ชื่อธุรกิจ (ถ้ามี)', NxI.buildings, required: false),
               ),
               ],
               if (_error != null)
