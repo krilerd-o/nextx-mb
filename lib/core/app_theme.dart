@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/nx_icons.dart';
+
 /// Atmosphere tokens — Inbox lavender fill, floating cards, comfortable ink.
 class AppTheme {
   AppTheme._();
@@ -218,6 +220,13 @@ class AppTheme {
       // Thin, soft lines + light-stroke icons in a muted colour (not pure black).
       dividerTheme: DividerThemeData(thickness: 0.6, space: 1, color: scheme.outlineVariant),
       iconTheme: IconThemeData(color: scheme.onSurfaceVariant, size: 22),
+      // Built-in back / close / menu buttons use Lucide too (same as every other icon).
+      actionIconTheme: ActionIconThemeData(
+        backButtonIconBuilder: (_) => const Icon(NxI.arrowLeft),
+        closeButtonIconBuilder: (_) => const Icon(NxI.x),
+        drawerButtonIconBuilder: (_) => const Icon(NxI.listBullets),
+        endDrawerButtonIconBuilder: (_) => const Icon(NxI.listBullets),
+      ),
       extensions: [atmosphere],
     );
   }

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../nx_icons.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/entity_display.dart';
@@ -284,7 +285,7 @@ class NxEntityFormState extends State<NxEntityForm> {
                             color: (meta?.color ?? cs.primary).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(meta?.icon ?? Icons.notes, size: 18, color: meta?.color ?? cs.primary),
+                          child: Icon(meta?.icon ?? NxI.note, size: 18, color: meta?.color ?? cs.primary),
                         ),
                         const SizedBox(width: 10),
                         Expanded(

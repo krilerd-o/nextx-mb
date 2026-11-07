@@ -611,6 +611,8 @@ class NxFormField extends StatelessWidget {
     final now = thaiNow();
     final initial = parseDate(value) ?? now;
     final picked = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       locale: kFieldLocale,
       initialDate: initial,
@@ -639,6 +641,8 @@ class NxFormField extends StatelessWidget {
     final now = thaiNow();
     final initial = parseDate(value) ?? now;
     final day = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       locale: kFieldLocale,
       initialDate: initial,
@@ -662,6 +666,8 @@ class NxFormField extends StatelessWidget {
     final r = parseRange(value);
     final start = parseDate(r['start']) ?? thaiNow();
     final a = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       locale: kFieldLocale,
       initialDate: start,
@@ -671,6 +677,8 @@ class NxFormField extends StatelessWidget {
     );
     if (a == null || !context.mounted) return;
     final b = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       locale: kFieldLocale,
       initialDate: parseDate(r['end']) ?? a,
@@ -686,6 +694,8 @@ class NxFormField extends StatelessWidget {
     final now = thaiNow();
     final cur = parseDate('${value ?? now.year}-${two(now.month)}-01') ?? now;
     final picked = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       locale: kFieldLocale,
       initialDate: cur,
@@ -710,6 +720,8 @@ class NxFormField extends StatelessWidget {
   Future<void> _pickMonthRange(BuildContext context) async {
     final r = parseRange(value, slice: 7);
     final a = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       locale: kFieldLocale,
       initialDate: parseDate('${r['start']}-01') ?? thaiNow(),
@@ -719,6 +731,8 @@ class NxFormField extends StatelessWidget {
     );
     if (a == null || !context.mounted) return;
     final b = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       locale: kFieldLocale,
       initialDate: parseDate('${r['end']}-01') ?? a,

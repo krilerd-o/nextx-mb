@@ -717,7 +717,7 @@ class _MailRow extends StatelessWidget {
                   Row(
                     children: [
                       if (unread) ...[
-                        Icon(Icons.circle, size: 9, color: cs.primary),
+                        Container(key: const ValueKey('mail-unread-dot'), width: 9, height: 9, decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle)),
                         const SizedBox(width: 6),
                       ],
                       Expanded(

@@ -245,7 +245,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                 if (unread)
                   Padding(
                     padding: const EdgeInsets.only(top: 6, left: 8),
-                    child: Icon(Icons.circle, size: 10, color: cs.primary),
+                    child: Container(width: 10, height: 10, decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle)),
                   ),
               ],
             ),

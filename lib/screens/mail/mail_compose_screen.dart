@@ -267,6 +267,7 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
               children: [
                 for (final r in list)
                   InputChip(
+        deleteIcon: const Icon(NxI.x, size: 16),
                     label: Text(tr(r.display)),
                     onDeleted: _busy ? null : () => setState(() => list.remove(r)),
                   ),

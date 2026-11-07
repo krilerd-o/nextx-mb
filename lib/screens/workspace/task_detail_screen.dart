@@ -265,6 +265,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final current = DateTime.tryParse(taskDateOnly(_task['due_date']) ?? '');
     final now = thaiNow();
     final picked = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       initialDate: current ?? now,
       firstDate: DateTime(now.year - 5),

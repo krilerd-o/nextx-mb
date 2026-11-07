@@ -181,6 +181,7 @@ class _ExternalMailComposeScreenState extends State<ExternalMailComposeScreen> {
                 children: [
                   for (final f in _files)
                     InputChip(
+        deleteIcon: const Icon(NxI.x, size: 16),
                       avatar: const Icon(NxI.paperclip, size: 16),
                       label: Text(tr(f['name']?.toString() ?? 'file')),
                       onDeleted: () => setState(() => _files.remove(f)),

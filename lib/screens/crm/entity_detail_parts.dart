@@ -347,6 +347,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
                   children: [
                     for (final a in _pending)
                       InputChip(
+        deleteIcon: const Icon(NxI.x, size: 16),
                         avatar: Icon(isImageAttachment(a) ? NxI.image : NxI.paperclip, size: 16),
                         label: Text(tr(a['name']?.toString() ?? 'file'), overflow: TextOverflow.ellipsis),
                         onDeleted: () => setState(() => _pending.remove(a)),

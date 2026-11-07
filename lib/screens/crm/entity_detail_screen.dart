@@ -28,6 +28,7 @@ import '../../core/i18n.dart';
 import '../../core/effects.dart';
 import '../../core/entity_form_rules.dart';
 import '../../core/recent_records.dart';
+import '../../core/detail_fields_pref.dart';
 import '../calendar/activity_detail_screen.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -603,10 +604,26 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                               ),
                             ),
                           ],
-                          NxSurfaceCard(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                            child: Column(children: _valueRows()),
-                          ),
+                          Builder(builder: (context) {
+                            final rows = _valueRows();
+                            return NxSurfaceCard(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6, bottom: 6),
+                                    child: _fieldsToggle(),
+                                  ),
+                                  AnimatedSize(
+                                    duration: const Duration(milliseconds: 220),
+                                    alignment: Alignment.topCenter,
+                                    child: Column(children: rows),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                           const SizedBox(height: 16),
                           EntityOpsSection(
                             module: widget.module,
@@ -636,6 +653,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                               children: [
                                 for (final t in _tags)
                                   InputChip(
+        deleteIcon: const Icon(NxI.x, size: 16),
                                     label: Text(tr(t['name']?.toString() ?? '')),
                                     onDeleted: () => _toggleTag(t),
                                   ),
@@ -691,6 +709,51 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     '_dashboard_unowned',
   };
 
+  /// "มีข้อมูล" (default, remembered) vs "ทั้งหมด".
+  bool _showAllFields = DetailFieldsPref.showAll;
+  int _allFieldCount = 0;
+
+  static bool _hasValue(dynamic v) {
+    if (v == null) return false;
+    if (v is String) {
+      final t = v.trim();
+      return t.isNotEmpty && t != 'null' && t != '[]' && t != '{}' && t != '0000-00-00';
+    }
+    if (v is Iterable) return v.isNotEmpty;
+    if (v is Map) return v.isNotEmpty;
+    return true;
+  }
+
+  /// Header of the details card. Call after [_valueRows] (it sets the count).
+  Widget _fieldsToggle() {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Expanded(child: Text(tr('รายละเอียด'), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall)),
+        Flexible(
+          flex: 3,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: SegmentedButton<bool>(
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(value: false, label: Text(tr('มีข้อมูล'))),
+            ButtonSegment(value: true, label: Text(tr('ทั้งหมด ($_allFieldCount)'))),
+          ],
+          selected: {_showAllFields},
+          onSelectionChanged: (v) {
+            setState(() => _showAllFields = v.first);
+            DetailFieldsPref.set(v.first);
+          },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   List<Widget> _valueRows() {
     final byName = <String, Map<String, dynamic>>{};
     for (final f in _fields) {
@@ -711,8 +774,11 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         keys.add(k);
       }
     }
+    _allFieldCount = keys.length;
+    // Default: only fields that have a value; "ทั้งหมด" shows every field.
+    if (!_showAllFields) keys.removeWhere((k) => !_hasValue(_row[k]));
     if (keys.isEmpty) {
-      return [Padding(padding: EdgeInsets.all(8), child: Text(tr('—')))];
+      return [Padding(padding: const EdgeInsets.all(8), child: Text(tr('ยังไม่มีข้อมูล — แตะ "ทั้งหมด" เพื่อดูทุกฟิลด์')))];
     }
     return [
       for (final name in keys)

@@ -28,6 +28,7 @@ import 'profile_edit_screen.dart';
 import 'profile_screen.dart' show showChangePasswordDialog;
 import 'spaces/space_switcher.dart' show showSpaceSwitcher, SpaceAvatar;
 import 'update_required_screen.dart';
+import 'dashboard/home_layout_editor.dart';
 
 /// Profile hub — opened from the avatar (and Menu → ตั้งค่า). Everything the
 /// user can set, in groups: profile, Space & business, appearance (theme,
@@ -198,6 +199,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
+      )),
+      _Entry('เมนูและการใช้งาน', ['หน้าหลัก', 'วิดเจ็ท', 'home', 'widget'], _Tile(
+        icon: NxI.squaresFour,
+        tint: const Color(0xFF10B981),
+        title: 'ปรับแต่งหน้าหลัก',
+        subtitle: 'เรียงและซ่อน/แสดงกล่องบนหน้าหลัก',
+        onTap: () => nxPush<bool>(context, const HomeLayoutEditorScreen(), root: true),
       )),
       _Entry('เมนูและการใช้งาน', ['บทบาท', 'role'], _Tile(
         icon: NxI.users,

@@ -634,6 +634,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                   children: [
                     for (final v in _views)
                       InputChip(
+        deleteIcon: const Icon(NxI.x, size: 16),
                         avatar: const Icon(NxI.star, size: 16),
                         label: Text(v.name),
                         onPressed: () => Navigator.pop(context, v.query.copyWith(q: widget.query.q)),

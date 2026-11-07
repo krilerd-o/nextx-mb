@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -113,6 +114,7 @@ class _JobInspectionScreenState extends State<JobInspectionScreen> {
                   children: [
                     Text(tr(_lines[i]['item_label']?.toString() ?? 'รายการ ${i + 1}')),
                     DropdownButtonFormField<String>(
+        icon: const Icon(NxI.caretDown, size: 18),
                       key: ValueKey('result-$i-${_lines[i]['id']}'),
                       value: () {
                         final v = (_lines[i]['item_result'] ?? '').toString();

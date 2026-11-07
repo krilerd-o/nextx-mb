@@ -75,6 +75,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   Future<void> _pickDay() async {
     final now = thaiNow();
     final d = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       initialDate: _day,
       firstDate: DateTime(now.year - 2),

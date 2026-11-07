@@ -102,6 +102,11 @@ class NxI {
   static const mapPin = LucideIcons300.mapPin;
   static const star = LucideIcons300.star;
   static const funnel = LucideIcons300.listFilter;
+  static const lightning = LucideIcons300.zap;
+  static const chartBar = LucideIcons300.chartColumn;
+  static const trendUp = LucideIcons300.trendingUp;
+  static const dotsSixVertical = LucideIcons300.gripVertical;
+  static const caretUp = LucideIcons300.chevronUp;
   static const hash = LucideIcons300.hash;
   static const textT = LucideIcons300.type;
   static const textAlignLeft = LucideIcons300.textAlignStart;

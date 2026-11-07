@@ -297,6 +297,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       for (final a in config.recentAccounts)
                         InputChip(
+        deleteIcon: const Icon(NxI.x, size: 16),
                           avatar: CircleAvatar(
                             child: Text(tr((a.name.isNotEmpty ? a.name : a.loginId).characters.first.toUpperCase())),
                           ),

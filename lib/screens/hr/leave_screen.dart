@@ -153,6 +153,8 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
   Future<void> _pickRange() async {
     final now = thaiNow();
     final r = await showDateRangePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year + 2),
@@ -218,6 +220,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
               NxShake(
                 key: _typeShake,
                 child: DropdownButtonFormField<int>(
+        icon: const Icon(NxI.caretDown, size: 18),
                 value: _typeId,
                 decoration: InputDecoration(label: nxRequiredLabel(context, tr('ประเภท'))),
                 items: _types
@@ -275,6 +278,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
                     children: [
                       for (final f in _files)
                         InputChip(
+        deleteIcon: const Icon(NxI.x, size: 16),
                           label: Text(tr(f.name), overflow: TextOverflow.ellipsis),
                           onDeleted: () => setState(() => _files = _files.where((x) => !identical(x, f)).toList()),
                         ),
@@ -673,6 +677,7 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
         children: [
           for (final f in _files)
             InputChip(
+        deleteIcon: const Icon(NxI.x, size: 16),
               avatar: Icon((f['mime']?.toString() ?? '').startsWith('image/') ? NxI.image : NxI.file, size: 16),
               label: Text(tr(f['name']?.toString() ?? 'ไฟล์'), overflow: TextOverflow.ellipsis),
               onPressed: _busy ? null : () => _open(f),
