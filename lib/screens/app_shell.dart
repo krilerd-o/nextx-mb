@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../core/app_config.dart';
 import '../core/nx_breakpoint.dart';
 import '../services/offline_queue.dart';
+import '../services/unread_service.dart';
+import '../widgets/nx_glass.dart';
 import '../widgets/nx_icons.dart';
 import '../widgets/nx_invite_prompt.dart';
 import '../widgets/nx_tab_nav.dart';
@@ -80,6 +82,10 @@ const _shellNativeTabs = {'dashboard', 'search', 'hr', kMenuTabId};
 class _AppShellState extends State<AppShell> {
   String _current = '';
 
+  /// Tabs opened at least once — others stay unbuilt so launch only loads
+  /// the visible tab instead of every tab's API at once.
+  final Set<String> _built = {};
+
   @override
   Widget build(BuildContext context) {
     final bp = NxBreakpoint.of(context);
@@ -98,6 +104,10 @@ class _AppShellState extends State<AppShell> {
       _current = last != null && ids.contains(last) ? last : ids.first;
     }
     final selected = ids.indexOf(_current);
+    _built
+      ..removeWhere((id) => !ids.contains(id))
+      ..add(_current);
+    final notifIndex = ids.indexOf('notifications');
     final destinations = [
       for (final id in ids)
         if (id == kMenuTabId)
@@ -109,7 +119,11 @@ class _AppShellState extends State<AppShell> {
             label: shellTabById(id)!.label,
           ),
     ];
-    final nav = NxTabNav(
+    final nav = ListenableBuilder(
+      listenable: UnreadNotifications.instance,
+      builder: (context, _) {
+        final unread = UnreadNotifications.instance.count;
+        return NxTabNav(
       destinations: destinations,
       selectedIndex: selected,
       onSelect: (i) {
@@ -117,6 +131,9 @@ class _AppShellState extends State<AppShell> {
         config.setLastTab(ids[i]);
       },
       rail: bp.useRail,
+      badges: {if (notifIndex >= 0 && unread > 0) notifIndex: unread},
+        );
+      },
     );
 
     final stack = Column(
@@ -125,7 +142,13 @@ class _AppShellState extends State<AppShell> {
         Expanded(
           child: IndexedStack(
             index: selected,
-            children: [for (final id in ids) KeyedSubtree(key: ValueKey('tab-$id'), child: shellTabScreen(id))],
+            children: [
+              for (final id in ids)
+                KeyedSubtree(
+                  key: ValueKey('tab-$id'),
+                  child: _built.contains(id) ? shellTabScreen(id) : const SizedBox.shrink(),
+                ),
+            ],
           ),
         ),
       ],
@@ -142,10 +165,25 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
+    final floating = _shellNativeTabs.contains(_current);
     return Scaffold(
       // Shell-native tabs pad for the floating bar; other pages need it outside.
-      extendBody: _shellNativeTabs.contains(_current),
-      body: stack,
+      extendBody: floating,
+      body: floating
+          ? Stack(
+              children: [
+                stack,
+                // Content fades into a soft blur behind the floating bar.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 120 + MediaQuery.paddingOf(context).bottom,
+                  child: const NxProgressiveBlur(height: double.infinity),
+                ),
+              ],
+            )
+          : stack,
       bottomNavigationBar: nav,
     );
   }

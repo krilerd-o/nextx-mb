@@ -114,6 +114,13 @@ class NxI {
   static const arrowsClockwiseFill = PhosphorIconsFill.arrowsClockwise;
   static const arrowCounterClockwise = PhosphorIconsRegular.arrowCounterClockwise;
   static const arrowCounterClockwiseFill = PhosphorIconsFill.arrowCounterClockwise;
+  static const sparkle = PhosphorIconsRegular.sparkle;
+  static const sparkleFill = PhosphorIconsFill.sparkle;
+  static const copySimple = PhosphorIconsRegular.copySimple;
+  static const archive = PhosphorIconsRegular.archive;
+  static const envelopeOpen = PhosphorIconsRegular.envelopeOpen;
+  static const crosshair = PhosphorIconsRegular.crosshair;
+  static const signIn = PhosphorIconsRegular.signIn;
   static const hammer = PhosphorIconsRegular.hammer;
 
   /// Header chrome prefers Regular weight icons.

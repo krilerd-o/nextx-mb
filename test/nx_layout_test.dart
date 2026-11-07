@@ -196,7 +196,7 @@ void main() {
     expect(find.byTooltip('เพิ่มเติม'), findsNothing);
   });
 
-  testWidgets('NxTabNav shows label only on selected tab', (tester) async {
+  testWidgets('NxTabNav shows every label like the setup preview', (tester) async {
     tester.view.physicalSize = const Size(320, 568);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -226,11 +226,12 @@ void main() {
       ),
     );
     expect(find.text('แดชบอร์ด'), findsOneWidget);
-    expect(find.text('ค้นหา'), findsNothing);
+    expect(find.text('ค้นหา'), findsOneWidget);
     expect(find.byIcon(NxI.squaresFourFill), findsOneWidget);
+    expect(find.byIcon(NxI.magnifyingGlass), findsOneWidget);
   });
 
-  testWidgets('NxTabNav selected label on mobile hides others', (tester) async {
+  testWidgets('NxTabNav shows unread badge', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -255,12 +256,12 @@ void main() {
             ],
             selectedIndex: 0,
             onSelect: (_) {},
+            badges: const {1: 3},
           ),
         ),
       ),
     );
-    expect(find.text('แดชบอร์ด'), findsOneWidget);
-    expect(find.text('ค้นหา'), findsNothing);
+    expect(find.text('3'), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
   });
 

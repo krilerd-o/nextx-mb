@@ -12,12 +12,14 @@ class NxEntityRow extends StatelessWidget {
     this.subtitle,
     this.meta,
     this.onTap,
+    this.onLongPress,
   });
 
   final String title;
   final String? subtitle;
   final String? meta;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +27,7 @@ class NxEntityRow extends StatelessWidget {
     return NxSurfaceCard(
       margin: const EdgeInsets.only(bottom: 12),
       onTap: onTap,
+      onLongPress: onLongPress,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         children: [
@@ -74,12 +77,14 @@ class NxEntityRow extends StatelessWidget {
     Map<String, dynamic> row, {
     String? module,
     VoidCallback? onTap,
+    VoidCallback? onLongPress,
   }) {
     return NxEntityRow(
       title: entityTitle(row, module: module),
       subtitle: entitySubtitle(row, module: module),
       meta: entityWhen(row) ?? entityStatus(row),
       onTap: onTap,
+      onLongPress: onLongPress,
     );
   }
 }

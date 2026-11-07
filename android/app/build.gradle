@@ -11,6 +11,14 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+// Google Maps key: env MAPS_API_KEY (CI secret) or `MAPS_API_KEY=` in android/local.properties.
+def localProps = new Properties()
+def localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.exists()) {
+    localProps.load(new FileInputStream(localPropsFile))
+}
+def mapsApiKey = System.getenv("MAPS_API_KEY") ?: (localProps.getProperty("MAPS_API_KEY") ?: "")
+
 android {
     namespace = "com.moai.nextt.mobile"
     compileSdk = flutter.compileSdkVersion
@@ -32,6 +40,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders = [mapsApiKey: mapsApiKey]
     }
 
     signingConfigs {

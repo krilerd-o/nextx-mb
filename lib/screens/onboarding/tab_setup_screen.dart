@@ -6,6 +6,7 @@ import '../../core/menu_access.dart';
 import '../../core/shell_tabs.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_tab_nav.dart';
 import '../../widgets/nx_step_header.dart';
 
 /// "เมนูของคุณ" — preview and arrange the bottom bar (max [kMaxCustomTabs]
@@ -198,41 +199,16 @@ class _BarPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final items = [
       for (final id in tabs) shellTabById(id)!,
       const ShellTabDef(id: kMenuTabId, label: 'เมนู', icon: NxI.dotsThreeCircle, selectedIcon: NxI.dotsThreeCircleFill),
     ];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 8))],
-      ),
-      child: Row(
-        children: [
-          for (var i = 0; i < items.length; i++)
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: i == 0 ? cs.primary : Colors.transparent,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(i == 0 ? items[i].selectedIcon : items[i].icon, size: 20, color: i == 0 ? cs.onPrimary : cs.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(items[i].label, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelSmall),
-                ],
-              ),
-            ),
-        ],
-      ),
+    // Same widget as the live bottom bar, so the preview never drifts.
+    return NxTabBarCard(
+      selectedIndex: 0,
+      destinations: [
+        for (final d in items) NxTabDestination(icon: d.icon, selectedIcon: d.selectedIcon, label: d.label),
+      ],
     );
   }
 }

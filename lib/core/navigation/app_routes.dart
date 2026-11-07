@@ -25,6 +25,7 @@ class AppRoutes {
 
   static const String globalSearch = '/search';
   static const String notifications = '/notifications';
+  static const String whatsNew = '/whats-new';
   static const String attendance = '/hr/attendance';
   static const String leaveList = '/hr/leave';
   static const String leaveRequest = '/hr/leave/request';

@@ -92,6 +92,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
         const _HubItem(NxI.wrench, 'งานช่าง', 'งานบริการที่ได้รับมอบหมาย', AppRoutes.jobs),
       const _HubItem(NxI.magnifyingGlass, 'ค้นหา', 'ค้นหาทุกโมดูล', AppRoutes.globalSearch),
       const _HubItem(NxI.bell, 'แจ้งเตือน', 'การแจ้งเตือนทั้งหมด', AppRoutes.notifications),
+      const _HubItem(NxI.sparkle, 'มีอะไรใหม่', 'ประกาศเวอร์ชันและฟีเจอร์ใหม่', AppRoutes.whatsNew),
       const _HubItem(NxI.gear, 'ตั้งค่า', 'ธุรกิจ Package เมนูล่าง ธีม', AppRoutes.settings),
     ];
 
