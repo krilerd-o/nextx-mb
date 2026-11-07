@@ -192,15 +192,24 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
 
   void _updateDrag(Offset global) {
     _pointer = global;
-    // Which column is under the finger?
+    // Which column is under the finger? Between two columns (the gap, or a
+    // fat finger at the edge) the nearest one wins, so a drop never misses.
     String? hover;
+    var best = 40.0;
     for (final s in widget.statuses) {
       final box = _columnKeys[s.id]?.currentContext?.findRenderObject() as RenderBox?;
       if (box == null || !box.attached) continue;
       final o = box.localToGlobal(Offset.zero);
-      if (Rect.fromLTWH(o.dx, o.dy, box.size.width, box.size.height).contains(global)) {
+      final r = Rect.fromLTWH(o.dx, o.dy, box.size.width, box.size.height);
+      if (r.contains(global)) {
         hover = s.id;
         break;
+      }
+      if (global.dy < r.top || global.dy > r.bottom) continue;
+      final d = global.dx < r.left ? r.left - global.dx : global.dx - r.right;
+      if (d < best) {
+        best = d;
+        hover = s.id;
       }
     }
     final idx = hover == null ? null : _indexAt(hover, global);

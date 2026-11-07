@@ -76,6 +76,26 @@ void main() {
     expect(moved!.$3, containsAll(['11', '13']));
   });
 
+  testWidgets('a drop in the gap between columns goes to the nearest column', (tester) async {
+    String? target;
+    await pumpBoard(tester, (_, sid, _) async {
+      target = sid;
+      return true;
+    });
+    // Columns: To do 12–302, gap 302–312, Doing 312–602. Release at x=309.
+    final g = await tester.startGesture(tester.getCenter(find.text('[QA] งาน B')));
+    await tester.pump(const Duration(milliseconds: 400));
+    for (var i = 0; i < 10; i++) {
+      await g.moveBy(const Offset(12, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await g.moveTo(const Offset(309, 300));
+    await tester.pump(const Duration(milliseconds: 16));
+    await g.up();
+    await tester.pumpAndSettle();
+    expect(target, '2');
+  });
+
   testWidgets('a refused move puts the card back', (tester) async {
     final key = await pumpBoard(tester, (_, _, _) async => false);
     final g = await dragToRightEdge(tester, '[QA] งาน A');
