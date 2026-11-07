@@ -214,8 +214,12 @@ void main() {
       AppTheme.light.filledButtonTheme.style?.backgroundColor?.resolve({}),
       AppTheme.primary,
     );
-    expect(AppTheme.dark.scaffoldBackgroundColor, const Color(0xFF16161D));
-    expect(AppTheme.dark.colorScheme.onSurface, const Color(0xFFF5F5F7));
+    expect(AppTheme.dark.scaffoldBackgroundColor, const Color(0xFF111114));
+    expect(AppTheme.dark.colorScheme.onSurface, const Color(0xFFE7E7EA));
+    for (final t in [AppTheme.light, AppTheme.dark]) {
+      expect(t.textTheme.bodyMedium?.fontFamily, AppTheme.fontFamily);
+      expect(t.textTheme.headlineSmall?.fontFamily, AppTheme.fontFamily);
+    }
     expect(AppTheme.dark.cardTheme.elevation, 0);
     expect(AppTheme.light.cardTheme.elevation, 0);
   });

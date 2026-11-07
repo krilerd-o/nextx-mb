@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_icons.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../screens/ai/ai_chat_screen.dart';
@@ -323,7 +324,7 @@ class _RouteNotFoundScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.link_off, size: 48, color: theme.colorScheme.onSurfaceVariant),
+              Icon(NxI.unlink, size: 48, color: theme.colorScheme.onSurfaceVariant),
               const SizedBox(height: 12),
               Text('ไม่พบหน้าที่ต้องการในแอป', style: theme.textTheme.titleMedium),
               const SizedBox(height: 4),

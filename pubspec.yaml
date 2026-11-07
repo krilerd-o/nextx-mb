@@ -30,8 +30,6 @@ dependencies:
   firebase_core: ^3.8.1
   firebase_messaging: ^15.1.6
   url_launcher: ^6.3.1
-  google_fonts: ^6.2.1
-  phosphor_icons: ^3.0.1
   share_plus: ^10.1.4
   flutter_local_notifications: ^17.2.4
   package_info_plus: ^8.3.1
@@ -40,6 +38,8 @@ dependencies:
   local_auth: ^3.0.2
   google_maps_flutter: ^2.19.0
   cached_network_image: ^4.0.6
+  lucide_icons_flutter: 4.0.1
+  simple_icons: ^16.23.0
 
 dev_dependencies:
   flutter_test:
@@ -50,8 +50,19 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
-    # Bundled Google Fonts (google_fonts uses these instead of downloading at first launch).
-    - assets/google_fonts/
+  # Noto Sans Thai — the only app font (OFL 1.1), weights 400–800.
+  fonts:
+    - family: NotoSansThai
+      fonts:
+        - asset: assets/fonts/NotoSansThai-Regular.ttf
+        - asset: assets/fonts/NotoSansThai-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansThai-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansThai-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/NotoSansThai-ExtraBold.ttf
+          weight: 800
   # fonts:
   #   - family: CustomFont
   #     fonts:

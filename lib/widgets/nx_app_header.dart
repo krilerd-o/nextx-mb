@@ -122,7 +122,7 @@ class _CircleBtn extends StatelessWidget {
               customBorder: const CircleBorder(),
               onTap: onTap,
               child: Center(
-                child: Icon(NxI.regularOf(icon), size: 22, color: theme.colorScheme.onSurface),
+                child: Icon(icon, size: 22, color: theme.colorScheme.onSurface),
               ),
             ),
           ),

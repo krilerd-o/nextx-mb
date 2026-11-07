@@ -256,7 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('ยินดีต้อนรับกลับ', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                Text('ยินดีต้อนรับกลับ', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
                 Text('เข้าสู่ระบบ MOAI NEXT ของธุรกิจคุณ',
                     textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
@@ -331,7 +331,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: _dec('รหัสผ่าน', NxI.password).copyWith(
                       suffixIcon: IconButton(
                         tooltip: _obscure ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน',
-                        icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                        icon: Icon(_obscure ? NxI.eye : NxI.eyeOff),
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
                     ),
@@ -430,7 +430,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             background: cs.surface,
                             foreground: cs.onSurface,
                             border: cs.outlineVariant,
-                            leading: const Text('G', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF4285F4))),
+                            leading: const Text('G', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: Color(0xFF4285F4))),
                             onPressed: _loading ? null : _google,
                           ),
                         ),

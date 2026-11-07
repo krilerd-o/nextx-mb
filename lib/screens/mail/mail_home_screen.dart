@@ -192,7 +192,14 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
           ),
           for (final a in _accounts)
             ListTile(
-              leading: CircleAvatar(child: Text(a.provider == 'outlook' ? 'O' : 'G')),
+              leading: CircleAvatar(
+                backgroundColor: (a.provider == 'outlook' ? NxBrandColor.outlook : NxBrandColor.gmail).withValues(alpha: 0.12),
+                child: Icon(
+                  a.provider == 'outlook' ? NxI.brandOutlook : NxI.brandGmail,
+                  size: 20,
+                  color: a.provider == 'outlook' ? NxBrandColor.outlook : NxBrandColor.gmail,
+                ),
+              ),
               title: Text(a.email.isEmpty ? a.providerLabel : a.email),
               subtitle: Text([a.providerLabel, if (a.readOnly) 'อ่านอย่างเดียว', if (a.status != null && a.status != 'active') a.status!].join(' · ')),
               trailing: _account == a ? const Icon(NxI.check) : null,
@@ -537,7 +544,7 @@ class _MailRow extends StatelessWidget {
                           [who.isEmpty ? '—' : who, if (count > 1) '($count)'].join(' '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: unread ? FontWeight.w800 : FontWeight.w600),
+                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w600),
                         ),
                       ),
                       Text(mailShortTime(m['sent_at'] ?? m['created_at']), style: theme.textTheme.bodySmall),
@@ -834,7 +841,7 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
                       Expanded(
                         child: FilledButton.icon(
                           onPressed: () => _respond(MailComposeMode.reply),
-                          icon: const Icon(Icons.reply),
+                          icon: const Icon(NxI.reply),
                           label: const Text('ตอบกลับ'),
                         ),
                       ),
@@ -843,7 +850,7 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () => _respond(MailComposeMode.forward),
-                        icon: const Icon(Icons.forward),
+                        icon: const Icon(NxI.forward),
                         label: const Text('ส่งต่อ'),
                       ),
                     ),

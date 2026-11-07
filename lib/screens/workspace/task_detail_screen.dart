@@ -282,7 +282,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             for (final e in taskPriorities.entries)
               ListTile(
                 leading: Icon(
-                  e.key == _task['priority'] ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  e.key == _task['priority'] ? NxI.radioOn : NxI.radioOff,
                 ),
                 title: Text(e.value),
                 onTap: () => Navigator.pop(ctx, e.key),

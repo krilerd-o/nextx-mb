@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// Atmosphere tokens — Inbox lavender fill, floating cards, comfortable ink.
 class AppTheme {
@@ -9,17 +8,20 @@ class AppTheme {
   static const Color primary = Color(0xFF6366F1);
 
   static const Color ink = Color(0xFF1C1C1E);
-  static const Color inkSecondary = Color(0xFF636366);
+  static const Color inkSecondary = Color(0xFF6B7280);
   static const Color inkTertiary = Color(0xFF8E8E93);
   static const Color lightBg = Color(0xFFF6F7FB);
   static const Color lightCard = Color(0xFFFFFFFF);
   static const Color lightLine = Color(0x147C7C80);
 
-  static const Color _darkSurface = Color(0xFF16161D);
+  static const Color _darkSurface = Color(0xFF111114);
   static const Color _darkVariant = Color(0xFF1E1F28);
-  static const Color _darkOn = Color(0xFFF5F5F7);
+  static const Color _darkOn = Color(0xFFE7E7EA);
   static const Color _darkMuted = Color(0xFFA1A1AA);
   static const Color _darkOutline = Color(0xFF4E4E57);
+
+  /// The one app font (pubspec `fonts:` family).
+  static const String fontFamily = 'NotoSansThai';
 
   static const double radius = 16;
   static const double cardRadius = 20;
@@ -27,7 +29,7 @@ class AppTheme {
   static ThemeData get dark => themed(brightness: Brightness.dark);
   static ThemeData get light => themed(brightness: Brightness.light);
 
-  /// Built themes by (brightness, accent). Building one runs three GoogleFonts
+  /// Built themes by (brightness, accent). Building a ThemeData is not free
   /// text themes, so rebuilding on every app notify caused visible hitches.
   static final Map<(Brightness, int), ThemeData> _cache = {};
 
@@ -53,6 +55,7 @@ class AppTheme {
             surfaceContainerHighest: _darkVariant,
             onSurfaceVariant: _darkMuted,
             outline: _darkOutline,
+            outlineVariant: const Color(0xFF2A2A31),
           )
         : ColorScheme.light(
             primary: primaryColor,
@@ -65,6 +68,7 @@ class AppTheme {
             surfaceContainerHighest: lightBg,
             onSurfaceVariant: inkSecondary,
             outline: const Color(0xFFD1D1D6),
+            outlineVariant: const Color(0xFFE5E7EB),
           );
     final scaffold = isDark ? _darkSurface : lightBg;
     final cardColor = isDark ? _darkVariant : lightCard;
@@ -101,7 +105,7 @@ class AppTheme {
       colorScheme: scheme,
       canvasColor: scaffold,
       scaffoldBackgroundColor: scaffold,
-      fontFamily: text.bodyMedium?.fontFamily,
+      fontFamily: fontFamily,
       fontFamilyFallback: const ['Noto Sans Thai', 'Leelawadee UI', 'Tahoma', 'sans-serif'],
       dialogTheme: DialogThemeData(
         backgroundColor: card,
@@ -211,12 +215,12 @@ class AppTheme {
         ),
       ),
       textTheme: text,
+      // Thin, soft lines + light-stroke icons in a muted colour (not pure black).
+      dividerTheme: DividerThemeData(thickness: 0.6, space: 1, color: scheme.outlineVariant),
+      iconTheme: IconThemeData(color: scheme.onSurfaceVariant, size: 22),
       extensions: [atmosphere],
     );
   }
-
-  static bool get _useSystemSf =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   static TextTheme _uiText(ColorScheme scheme) {
     const base = TextTheme(
@@ -238,33 +242,8 @@ class AppTheme {
       labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
       labelSmall: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
     );
-    final colored = base.apply(bodyColor: scheme.onSurface, displayColor: scheme.onSurface);
-    final binding = WidgetsBinding.instance.runtimeType.toString();
-    if (_useSystemSf || binding.contains('Test')) {
-      return colored;
-    }
-    try {
-      final inter = GoogleFonts.interTextTheme(colored);
-      final display = GoogleFonts.plusJakartaSansTextTheme(colored);
-      final thai = GoogleFonts.notoSansThaiTextTheme(colored);
-      return inter.copyWith(
-        displayLarge: display.displayLarge,
-        displayMedium: display.displayMedium,
-        headlineLarge: display.headlineLarge,
-        headlineMedium: display.headlineMedium,
-        titleLarge: thai.titleLarge ?? display.titleLarge,
-        titleMedium: thai.titleMedium ?? inter.titleMedium,
-        titleSmall: thai.titleSmall ?? inter.titleSmall,
-        bodyLarge: thai.bodyLarge ?? inter.bodyLarge,
-        bodyMedium: thai.bodyMedium ?? inter.bodyMedium,
-        bodySmall: thai.bodySmall ?? inter.bodySmall,
-        labelLarge: thai.labelLarge ?? inter.labelLarge,
-        labelMedium: thai.labelMedium ?? inter.labelMedium,
-        labelSmall: thai.labelSmall ?? inter.labelSmall,
-      );
-    } catch (_) {
-      return colored;
-    }
+    // Noto Sans Thai everywhere (bundled in assets/fonts — no network, no flicker).
+    return base.apply(fontFamily: fontFamily, bodyColor: scheme.onSurface, displayColor: scheme.onSurface);
   }
 }
 

@@ -339,7 +339,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 Text(
                   entityTitle(row, module: 'activity'),
                   style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 10),

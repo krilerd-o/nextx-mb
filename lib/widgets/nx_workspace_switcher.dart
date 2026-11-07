@@ -98,7 +98,7 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
             if (_packages == null && _error == null) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
             for (final p in _packages ?? const <Map<String, dynamic>>[])
               ListTile(
-                leading: Icon(p['code']?.toString() == current ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                leading: Icon(p['code']?.toString() == current ? NxI.radioOn : NxI.radioOff),
                 title: Text(p['name']?.toString() ?? p['code']?.toString() ?? 'Package'),
                 subtitle: (p['description']?.toString() ?? '').isEmpty ? null : Text(p['description'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
                 enabled: !_busy,

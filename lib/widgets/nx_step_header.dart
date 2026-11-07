@@ -134,7 +134,7 @@ class NxChoiceCard extends StatelessWidget {
               duration: const Duration(milliseconds: 180),
               child: selected
                   ? Icon(NxI.checkCircleFill, key: const ValueKey('on'), color: cs.primary, size: 24)
-                  : Icon(Icons.radio_button_unchecked, key: const ValueKey('off'), color: cs.outline, size: 24),
+                  : Icon(NxI.radioOff, key: const ValueKey('off'), color: cs.outline, size: 24),
             ),
           ],
         ),

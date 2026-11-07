@@ -248,7 +248,7 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
       controller: widget.controller,
       padding: EdgeInsets.fromLTRB(20, 4, 20, 24 + MediaQuery.paddingOf(context).bottom),
       children: [
-        Text('ยืนยัน$_verb', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+        Text('ยืนยัน$_verb', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
         if (widget.placeName != null && widget.placeName!.isNotEmpty)
           Text(widget.placeName!, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
         const SizedBox(height: 14),
@@ -403,7 +403,7 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
         Text(
           r.queued ? 'บันทึก$_verbไว้แล้ว' : '$_verbสำเร็จ',
           textAlign: TextAlign.center,
-          style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+          style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
         if (r.queued)
           Padding(
@@ -458,7 +458,7 @@ class _InfoRow extends StatelessWidget {
                 Text(
                   value,
                   style: (strong ? theme.textTheme.titleMedium : theme.textTheme.bodyLarge)?.copyWith(
-                    fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
+                    fontWeight: strong ? FontWeight.w700 : FontWeight.w600,
                     color: color,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),

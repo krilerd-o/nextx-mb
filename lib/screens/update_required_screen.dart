@@ -47,7 +47,7 @@ class UpdateRequiredScreen extends StatelessWidget {
               const SizedBox(height: 24),
               Icon(NxI.arrowsClockwise, size: 40, color: cs.primary),
               const SizedBox(height: 16),
-              Text('กรุณาอัปเดตแอป', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text('กรุณาอัปเดตแอป', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(
                 'เซิร์ฟเวอร์ ${serverLabel(config.apiBaseUrl)} ต้องใช้แอปเวอร์ชัน ${info?.minVersion ?? ''} ขึ้นไป\n'

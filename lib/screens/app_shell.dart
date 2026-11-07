@@ -227,7 +227,7 @@ class _PendingSyncBanner extends StatelessWidget {
             bottom: false,
             child: ListTile(
               dense: true,
-              leading: Icon(Icons.cloud_upload_outlined, color: cs.onTertiaryContainer),
+              leading: Icon(NxI.cloud, color: cs.onTertiaryContainer),
               title: Text('มี $n รายการรอส่ง (บันทึกตอนออฟไลน์)', style: TextStyle(color: cs.onTertiaryContainer)),
               trailing: TextButton(
                 onPressed: () => context.read<AppConfig>().flushOfflineQueue(),

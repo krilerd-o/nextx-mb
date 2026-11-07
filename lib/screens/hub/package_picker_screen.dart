@@ -121,7 +121,7 @@ class _PackagePickerScreenState extends State<PackagePickerScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
                 children: [
-                  Text('เลือก Package', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text('เลือก Package', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Text(
                     '${config.session.businessName ?? ''}\nเมนูที่เห็นจะเป็นไปตาม Package และสิทธิ์ของคุณ',

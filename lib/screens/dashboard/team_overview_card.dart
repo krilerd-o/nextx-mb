@@ -119,7 +119,7 @@ class _FigureCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(f.value, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                      Text(f.value, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                       Text(f.label, style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
                       if (f.hint != null) Text(f.hint!, style: theme.textTheme.labelSmall?.copyWith(color: cs.primary)),
                     ],

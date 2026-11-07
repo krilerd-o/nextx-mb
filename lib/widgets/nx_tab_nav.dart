@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../core/nx_motion.dart';
 import 'nx_press_scale.dart';
@@ -239,7 +238,7 @@ class _Item extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: GoogleFonts.notoSansThai(
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
               fontSize: 11,
               height: 1.2,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,

@@ -94,7 +94,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                 children: [
                   if (!widget.fromSettings) ...[
-                    Text('เมนูที่จัดไว้ให้คุณ', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('เมนูที่จัดไว้ให้คุณ', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
                     Text(
                       'จากบทบาทที่เลือก ปรับเพิ่ม ลด หรือลากเรียงลำดับได้\nเปลี่ยนได้ตลอดในหน้าตั้งค่า',
@@ -141,10 +141,10 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                                   children: [
                                     IconButton(
                                       tooltip: 'เอาออก',
-                                      icon: const Icon(Icons.remove_circle_outline),
+                                      icon: const Icon(NxI.circleMinus),
                                       onPressed: _tabs.length > 1 ? () => _toggle(d.id) : null,
                                     ),
-                                    ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_handle)),
+                                    ReorderableDragStartListener(index: i, child: const Icon(NxI.grip)),
                                   ],
                                 ),
                               );
@@ -157,7 +157,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                     leading: const Icon(NxI.dotsThreeCircle),
                     title: const Text('เมนู (ทุกโมดูล + ตั้งค่า)'),
                     subtitle: const Text('อยู่ขวาสุดเสมอ'),
-                    trailing: const Icon(Icons.lock_outline, size: 18),
+                    trailing: const Icon(NxI.lock, size: 18),
                     textColor: cs.onSurfaceVariant,
                     iconColor: cs.onSurfaceVariant,
                   ),

@@ -81,7 +81,7 @@ class _LinkConfirmScreenState extends State<LinkConfirmScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            Text('พบบัญชีเดิมในระบบ', textAlign: TextAlign.center, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Text('พบบัญชีเดิมในระบบ', textAlign: TextAlign.center, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             Text(
               widget.google

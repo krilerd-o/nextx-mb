@@ -80,7 +80,7 @@ class _ServerScreenState extends State<ServerScreen> {
                   ),
                   const SizedBox(height: 20),
                   Text('เชื่อมต่อระบบของคุณ',
-                      textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                      textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   Text(
                     'ใช้เซิร์ฟเวอร์ MOAI NEXT ของธุรกิจคุณ\nถ้าไม่แน่ใจ ใช้ค่าเริ่มต้นได้เลย',

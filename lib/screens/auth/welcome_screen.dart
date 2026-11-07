@@ -87,7 +87,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           Text(
                             s.title,
                             textAlign: TextAlign.center,
-                            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, height: 1.25),
+                            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700, height: 1.25),
                           ),
                           const SizedBox(height: 12),
                           Text(

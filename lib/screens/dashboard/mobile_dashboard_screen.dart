@@ -629,7 +629,7 @@ class _CountPill extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('$value', style: theme.textTheme.headlineSmall?.copyWith(color: color, fontWeight: FontWeight.w800)),
+          Text('$value', style: theme.textTheme.headlineSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
           Text(label, style: theme.textTheme.labelMedium),
         ],
       ),
@@ -746,7 +746,7 @@ class _StatCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('$value', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                Text('$value', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                 Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               ],
             ),

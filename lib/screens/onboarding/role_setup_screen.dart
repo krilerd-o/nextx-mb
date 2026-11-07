@@ -59,7 +59,7 @@ class _RoleSetupScreenState extends State<RoleSetupScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
                 children: [
-                  Text('คุณทำงานด้านไหน?', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text('คุณทำงานด้านไหน?', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Text(
                     'เลือกได้มากกว่า 1 ข้อ เราจะจัดเมนูด้านล่างให้เหมาะกับงานของคุณ',

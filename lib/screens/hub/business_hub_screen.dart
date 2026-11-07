@@ -76,7 +76,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
                   children: [
-                    Text('เลือกธุรกิจ', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('เลือกธุรกิจ', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
                     Text(
                       'สวัสดี ${config.session.displayName ?? ''}\nเลือกธุรกิจที่ต้องการทำงานวันนี้',

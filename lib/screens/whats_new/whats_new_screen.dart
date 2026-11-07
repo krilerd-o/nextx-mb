@@ -120,7 +120,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
                     const SizedBox(height: 10),
                     Text(
                       (it['title_th'] ?? it['title_en'] ?? '').toString(),
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 6),
                     NxHtmlView(html: (it['description_th'] ?? it['description_en'] ?? '').toString()),

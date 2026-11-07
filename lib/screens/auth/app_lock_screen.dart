@@ -52,7 +52,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
               const Spacer(),
               const NxAppLogo(size: 72),
               const SizedBox(height: 20),
-              Text('แอปถูกล็อก', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text('แอปถูกล็อก', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
               Text(
                 [session.displayName, session.businessName].whereType<String>().where((e) => e.isNotEmpty).join(' · '),

@@ -97,7 +97,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             children: [
               CircleAvatar(radius: 40, backgroundColor: cs.primary.withValues(alpha: 0.12), child: Icon(NxI.clockCountdown, size: 38, color: cs.primary)),
               const SizedBox(height: 20),
-              Text('ส่งคำขอสมัครแล้ว', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text('ส่งคำขอสมัครแล้ว', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text('ผู้ดูแลระบบจะตรวจสอบและอนุมัติบัญชีของคุณ\nเมื่ออนุมัติแล้วจะได้รับอีเมลแจ้ง',
                   textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
@@ -116,7 +116,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              Text('สร้างบัญชี MOAI NEXT', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text('สร้างบัญชี MOAI NEXT', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
               Text('มีรหัสเชิญ/ซีเรียลจากบริษัท ใช้งานได้ทันที ไม่มีรหัสจะรอผู้ดูแลอนุมัติ',
                   style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
@@ -139,7 +139,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 obscureText: _obscure,
                 decoration: _dec('รหัสผ่าน', NxI.password).copyWith(
                   suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    icon: Icon(_obscure ? NxI.eye : NxI.eyeOff),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                 ),

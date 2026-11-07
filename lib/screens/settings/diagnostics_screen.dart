@@ -100,7 +100,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               padding: const EdgeInsets.all(14),
               child: SelectableText(
                 report,
-                style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace', color: cs.onSurface),
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurface),
               ),
             ),
           ),
