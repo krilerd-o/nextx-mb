@@ -70,20 +70,25 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
   Object? _error;
   int _gen = 0;
 
-  Map<String, String> get _boxes => _account == null ? _mailBoxes : _externalBoxes;
+  Map<String, String> get _boxes =>
+      _account == null ? _mailBoxes : _externalBoxes;
 
   @override
   void initState() {
     super.initState();
     // External mail → 'mail:new'; internal mail arrives as a mail notification.
-    _live = RealtimeService.instance.events.where(isMailRealtimeEvent).listen((_) {
+    _live = RealtimeService.instance.events.where(isMailRealtimeEvent).listen((
+      _,
+    ) {
       _debounce?.cancel();
       _debounce = Timer(const Duration(milliseconds: 800), () {
-        if (mounted && (_box == 'inbox' || _box == 'drafts') && _query.isEmpty) _reload(keepSelection: true);
+        if (mounted && (_box == 'inbox' || _box == 'drafts') && _query.isEmpty)
+          _reload(keepSelection: true);
       });
     });
     _scroll.addListener(() {
-      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 400) _loadMore();
+      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 400)
+        _loadMore();
     });
     _loadAccounts();
     _reload();
@@ -128,12 +133,23 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
         });
       } else {
         // Internal mail lists are capped at 200 by the server (no paging there).
-        final page = await api.getMailPage(box: _box, account: _account, limit: _account == null ? 200 : 40);
+        final page = await api.getMailPage(
+          box: _box,
+          account: _account,
+          limit: _account == null ? 200 : 40,
+        );
         if (!mounted || gen != _gen) return;
         var rows = page.items;
         if (_query.isNotEmpty) {
           final q = _query.toLowerCase();
-          rows = rows.where((m) => '${m['subject']} ${m['snippet']} ${m['from_display']} ${m['from_email']}'.toLowerCase().contains(q)).toList();
+          rows = rows
+              .where(
+                (m) =>
+                    '${m['subject']} ${m['snippet']} ${m['from_display']} ${m['from_email']}'
+                        .toLowerCase()
+                        .contains(q),
+              )
+              .toList();
         }
         setState(() {
           _items
@@ -156,7 +172,12 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
     setState(() => _loadingMore = true);
     final gen = _gen;
     try {
-      final page = await context.read<AppConfig>().apiClient.getMailPage(box: _box, account: _account, cursor: cursor, limit: 40);
+      final page = await context.read<AppConfig>().apiClient.getMailPage(
+        box: _box,
+        account: _account,
+        cursor: cursor,
+        limit: 40,
+      );
       if (!mounted || gen != _gen) return;
       setState(() {
         _items.addAll(page.items);
@@ -194,22 +215,36 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
           for (final a in _accounts)
             ListTile(
               leading: CircleAvatar(
-                backgroundColor: (a.provider == 'outlook' ? NxBrandColor.outlook : NxBrandColor.gmail).withValues(alpha: 0.12),
+                backgroundColor:
+                    (a.provider == 'outlook'
+                            ? NxBrandColor.outlook
+                            : NxBrandColor.gmail)
+                        .withValues(alpha: 0.12),
                 child: Icon(
                   a.provider == 'outlook' ? NxI.brandOutlook : NxI.brandGmail,
                   size: 20,
-                  color: a.provider == 'outlook' ? NxBrandColor.outlook : NxBrandColor.gmail,
+                  color: a.provider == 'outlook'
+                      ? NxBrandColor.outlook
+                      : NxBrandColor.gmail,
                 ),
               ),
               title: Text(a.email.isEmpty ? a.providerLabel : a.email),
-              subtitle: Text([a.providerLabel, if (a.readOnly) 'อ่านอย่างเดียว', if (a.status != null && a.status != 'active') a.status!].join(' · ')),
+              subtitle: Text(
+                [
+                  a.providerLabel,
+                  if (a.readOnly) 'อ่านอย่างเดียว',
+                  if (a.status != null && a.status != 'active') a.status!,
+                ].join(' · '),
+              ),
               trailing: _account == a ? const Icon(NxI.check) : null,
               onTap: () => Navigator.pop(context, a),
             ),
           if (_accounts.isEmpty)
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Text('ยังไม่ได้เชื่อม Gmail / Outlook — เชื่อมได้ที่เว็บ เมนูเมล → ตั้งค่าบัญชี'),
+              child: Text(
+                'ยังไม่ได้เชื่อม Gmail / Outlook — เชื่อมได้ที่เว็บ เมนูเมล → ตั้งค่าบัญชี',
+              ),
             ),
         ],
       ),
@@ -226,7 +261,9 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
   Future<void> _compose() async {
     final sent = await nxPush<bool>(
       context,
-      _account == null ? const MailComposeScreen() : ExternalMailComposeScreen(account: _account!),
+      _account == null
+          ? const MailComposeScreen()
+          : ExternalMailComposeScreen(account: _account!),
     );
     if (sent == true && mounted) _reload();
   }
@@ -249,26 +286,39 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
       return;
     }
     // Opening marks it read: update the row now instead of reloading.
-    if (isMailUnread(m, _box)) setState(() => m['read_at'] = DateTime.now().toIso8601String());
+    if (isMailUnread(m, _box))
+      setState(() => m['read_at'] = DateTime.now().toIso8601String());
     if (twoPane) {
       setState(() => _selected = m);
       return;
     }
     final changed = await nxPush<bool>(
       context,
-      MailDetailScreen(id: m['id']?.toString() ?? '', preview: m, box: _box, account: _account),
+      MailDetailScreen(
+        id: m['id']?.toString() ?? '',
+        preview: m,
+        box: _box,
+        account: _account,
+      ),
     );
     if (mounted && changed == true) _reload();
   }
 
   void _removeRow(Map<String, dynamic> m) => setState(() => _items.remove(m));
 
-  Future<void> _rowAction(Future<void> Function() call, {String? done, Map<String, dynamic>? remove}) async {
+  Future<void> _rowAction(
+    Future<void> Function() call, {
+    String? done,
+    Map<String, dynamic>? remove,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
     if (remove != null) _removeRow(remove);
     try {
       await call();
-      if (done != null) messenger.showSnackBar(SnackBar(content: Text(done), duration: const Duration(seconds: 2)));
+      if (done != null)
+        messenger.showSnackBar(
+          SnackBar(content: Text(done), duration: const Duration(seconds: 2)),
+        );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
       _reload();
@@ -282,11 +332,17 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
     HapticFeedback.selectionClick();
     setState(() => m['starred'] = next);
     try {
-      await context.read<AppConfig>().apiClient.setMailStarred(m['id'].toString(), next, account: acc);
+      await context.read<AppConfig>().apiClient.setMailStarred(
+        m['id'].toString(),
+        next,
+        account: acc,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => m['starred'] = !next);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
     }
   }
 
@@ -299,7 +355,9 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
     return NxScrollScaffold(
       header: NxAppHeader(
         title: 'เมล',
-        subtitle: acc == null ? 'เมลภายใน NEXTX' : '${acc.providerLabel} · ${acc.email}',
+        subtitle: acc == null
+            ? 'เมลภายใน NEXTX'
+            : '${acc.providerLabel} · ${acc.email}',
         actions: [
           IconButton(
             tooltip: _searching ? 'ปิดค้นหา' : 'ค้นหาเมล',
@@ -315,11 +373,18 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
               if (!_searching) _reload();
             },
           ),
-          IconButton(tooltip: 'เลือกกล่องเมล', onPressed: _pickAccount, icon: const Icon(NxI.tray)),
+          IconButton(
+            tooltip: 'เลือกกล่องเมล',
+            onPressed: _pickAccount,
+            icon: const Icon(NxI.tray),
+          ),
           IconButton(
             tooltip: 'เปิดเว็บเมล',
             onPressed: () async {
-              final base = context.read<AppConfig>().apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
+              final base = context.read<AppConfig>().apiBaseUrl.replaceAll(
+                RegExp(r'/+$'),
+                '',
+              );
               final uri = Uri.parse('$base/mail');
               if (await canLaunchUrl(uri)) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -346,7 +411,10 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
                   prefixIcon: const Icon(NxI.magnifyingGlass),
                   filled: true,
                   isDense: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
                 onSubmitted: (v) {
                   setState(() => _query = v.trim());
@@ -376,11 +444,20 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
           if (_syncing)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Row(children: [
-                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-                const SizedBox(width: 8),
-                Text('กำลังซิงก์เมลจาก ${acc?.providerLabel ?? ''}…', style: theme.textTheme.bodySmall),
-              ]),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'กำลังซิงก์เมลจาก ${acc?.providerLabel ?? ''}…',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
           Expanded(child: _listBody(theme, cs, twoPane)),
         ],
@@ -392,21 +469,32 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
     if (_loading && _items.isEmpty) return const NxSkeletonList();
     if (_error != null && _items.isEmpty) {
       return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(formatApiError(_error!), textAlign: TextAlign.center),
-          TextButton(onPressed: _reload, child: const Text('ลองใหม่')),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(formatApiError(_error!), textAlign: TextAlign.center),
+            TextButton(onPressed: _reload, child: const Text('ลองใหม่')),
+          ],
+        ),
       );
     }
     if (_items.isEmpty) {
       return RefreshIndicator(
         onRefresh: _reload,
-        child: ListView(children: [
-          SizedBox(
-            height: 260,
-            child: Center(child: Text(_query.isNotEmpty ? 'ไม่พบเมลที่ตรงกับ "$_query"' : 'ไม่มีจดหมายใน${_boxes[_box]}')),
-          ),
-        ]),
+        child: ListView(
+          children: [
+            SizedBox(
+              height: 260,
+              child: Center(
+                child: Text(
+                  _query.isNotEmpty
+                      ? 'ไม่พบเมลที่ตรงกับ "$_query"'
+                      : 'ไม่มีจดหมายใน${_boxes[_box]}',
+                ),
+              ),
+            ),
+          ],
+        ),
       );
     }
     final acc = _account;
@@ -417,7 +505,11 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
         itemCount: _items.length + (_loadingMore ? 1 : 0),
         itemBuilder: (context, i) {
-          if (i >= _items.length) return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+          if (i >= _items.length)
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            );
           final m = _items[i];
           final id = m['id']?.toString() ?? '';
           final unread = isMailUnread(m, _box);
@@ -435,25 +527,50 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
           return Dismissible(
             key: ValueKey('mail-${acc?.id ?? 'in'}-$_box-$id'),
             background: _swipeBg(
-              acc != null && _box != 'archive' ? const Color(0xFF16A34A) : cs.primary,
+              acc != null && _box != 'archive'
+                  ? const Color(0xFF16A34A)
+                  : cs.primary,
               acc != null && _box != 'archive' ? NxI.archive : NxI.envelopeOpen,
-              acc != null && _box != 'archive' ? 'เก็บถาวร' : (unread ? 'อ่านแล้ว' : 'ยังไม่อ่าน'),
+              acc != null && _box != 'archive'
+                  ? 'เก็บถาวร'
+                  : (unread ? 'อ่านแล้ว' : 'ยังไม่อ่าน'),
               Alignment.centerLeft,
             ),
-            secondaryBackground: _swipeBg(cs.error, NxI.trash, _box == 'trash' ? 'ลบถาวร' : 'ลบ', Alignment.centerRight),
+            secondaryBackground: _swipeBg(
+              cs.error,
+              NxI.trash,
+              _box == 'trash' ? 'ลบถาวร' : 'ลบ',
+              Alignment.centerRight,
+            ),
             confirmDismiss: (dir) async {
               HapticFeedback.mediumImpact();
               if (dir == DismissDirection.startToEnd) {
                 if (acc != null && _box != 'archive') {
-                  _rowAction(() => api.archiveMail(id, account: acc), done: 'เก็บถาวรแล้ว', remove: m);
+                  _rowAction(
+                    () => api.archiveMail(id, account: acc),
+                    done: 'เก็บถาวรแล้ว',
+                    remove: m,
+                  );
                   return false;
                 }
-                setState(() => m['read_at'] = unread ? DateTime.now().toIso8601String() : null);
-                _rowAction(() => unread ? api.markMailRead(id, account: acc) : api.markMailUnread(id, account: acc));
+                setState(
+                  () => m['read_at'] = unread
+                      ? DateTime.now().toIso8601String()
+                      : null,
+                );
+                _rowAction(
+                  () => unread
+                      ? api.markMailRead(id, account: acc)
+                      : api.markMailUnread(id, account: acc),
+                );
                 return false;
               }
               _rowAction(
-                () => api.deleteMail(id, permanent: _box == 'trash', account: acc),
+                () => api.deleteMail(
+                  id,
+                  permanent: _box == 'trash',
+                  account: acc,
+                ),
                 done: _box == 'trash' ? 'ลบถาวรแล้ว' : 'ย้ายไปถังขยะแล้ว',
                 remove: m,
               );
@@ -484,13 +601,25 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 22),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(18),
+      ),
       alignment: align,
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, color: Colors.white),
-        const SizedBox(width: 8),
-        Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-      ]),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -518,8 +647,13 @@ class _MailRow extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final who = mailCounterparty(m, box);
-    final subject = m['subject']?.toString().trim().isNotEmpty == true ? m['subject'].toString() : '(ไม่มีหัวข้อ)';
-    final snippet = stripHtmlPreview(m['snippet']?.toString() ?? m['body_text']?.toString() ?? '', maxLen: 120);
+    final subject = m['subject']?.toString().trim().isNotEmpty == true
+        ? m['subject'].toString()
+        : '(ไม่มีหัวข้อ)';
+    final snippet = stripHtmlPreview(
+      m['snippet']?.toString() ?? m['body_text']?.toString() ?? '',
+      maxLen: 120,
+    );
     final starred = m['starred'] == true;
     final count = (m['thread_count'] as num?)?.toInt() ?? 1;
     return Padding(
@@ -539,16 +673,29 @@ class _MailRow extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      if (unread) ...[Icon(Icons.circle, size: 9, color: cs.primary), const SizedBox(width: 6)],
+                      if (unread) ...[
+                        Icon(Icons.circle, size: 9, color: cs.primary),
+                        const SizedBox(width: 6),
+                      ],
                       Expanded(
                         child: Text(
-                          [who.isEmpty ? '—' : who, if (count > 1) '($count)'].join(' '),
+                          [
+                            who.isEmpty ? '—' : who,
+                            if (count > 1) '($count)',
+                          ].join(' '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w600),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: unread
+                                ? FontWeight.w700
+                                : FontWeight.w600,
+                          ),
                         ),
                       ),
-                      Text(mailShortTime(m['sent_at'] ?? m['created_at']), style: theme.textTheme.bodySmall),
+                      Text(
+                        mailShortTime(m['sent_at'] ?? m['created_at']),
+                        style: theme.textTheme.bodySmall,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -556,10 +703,19 @@ class _MailRow extends StatelessWidget {
                     subject,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
+                    ),
                   ),
                   if (snippet.isNotEmpty)
-                    Text(snippet, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                    Text(
+                      snippet,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -570,9 +726,16 @@ class _MailRow extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                     tooltip: starred ? 'เอาดาวออก' : 'ติดดาว',
                     onPressed: onStar,
-                    icon: Icon(starred ? NxI.starFill : NxI.star, size: 20, color: starred ? const Color(0xFFF59E0B) : cs.onSurfaceVariant),
+                    icon: Icon(
+                      starred ? NxI.starFill : NxI.star,
+                      size: 20,
+                      color: starred
+                          ? const Color(0xFFF59E0B)
+                          : cs.onSurfaceVariant,
+                    ),
                   ),
-                if (m['has_attachments'] == true) Icon(NxI.paperclip, size: 16, color: cs.onSurfaceVariant),
+                if (m['has_attachments'] == true)
+                  Icon(NxI.paperclip, size: 16, color: cs.onSurfaceVariant),
               ],
             ),
           ],
@@ -586,7 +749,20 @@ class _MailRow extends StatelessWidget {
 String mailLongTime(dynamic raw) {
   final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
   if (d == null) return raw?.toString() ?? '';
-  const m = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  const m = [
+    'ม.ค.',
+    'ก.พ.',
+    'มี.ค.',
+    'เม.ย.',
+    'พ.ค.',
+    'มิ.ย.',
+    'ก.ค.',
+    'ส.ค.',
+    'ก.ย.',
+    'ต.ค.',
+    'พ.ย.',
+    'ธ.ค.',
+  ];
   return '${d.day} ${m[d.month - 1]} ${d.year + 543} · ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
 
@@ -598,7 +774,20 @@ String mailShortTime(dynamic raw) {
   if (d.year == now.year && d.month == now.month && d.day == now.day) {
     return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
-  const m = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  const m = [
+    'ม.ค.',
+    'ก.พ.',
+    'มี.ค.',
+    'เม.ย.',
+    'พ.ค.',
+    'มิ.ย.',
+    'ก.ค.',
+    'ส.ค.',
+    'ก.ย.',
+    'ต.ค.',
+    'พ.ย.',
+    'ธ.ค.',
+  ];
   return '${d.day} ${m[d.month - 1]}';
 }
 
@@ -612,13 +801,20 @@ String mailCounterparty(Map<String, dynamic> m, String box) {
     final to = m['to_display']?.toString() ?? '';
     return to.isEmpty ? '' : 'ถึง $to';
   }
-  final name = m['from_display']?.toString() ??
-      [m['from_first_name'] ?? m['first_name'], m['from_last_name'] ?? m['last_name']]
+  final name =
+      m['from_display']?.toString() ??
+      [
+            m['from_first_name'] ?? m['first_name'],
+            m['from_last_name'] ?? m['last_name'],
+          ]
           .where((e) => e != null && e.toString().trim().isNotEmpty)
           .join(' ')
           .trim();
   if (name.isNotEmpty) return name;
-  return m['from_email']?.toString() ?? m['from_name']?.toString() ?? m['from']?.toString() ?? '';
+  return m['from_email']?.toString() ??
+      m['from_name']?.toString() ??
+      m['from']?.toString() ??
+      '';
 }
 
 class MailDetailScreen extends StatefulWidget {
@@ -682,7 +878,9 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
       final inline = extractMapList(item['attachments']);
       if (inline.isNotEmpty) {
         if (mounted) setState(() => _attachments = inline);
-      } else if (acc != null && (item['has_attachments'] == true || widget.preview['has_attachments'] == true)) {
+      } else if (acc != null &&
+          (item['has_attachments'] == true ||
+              widget.preview['has_attachments'] == true)) {
         final rows = await api.getMailAttachments(widget.id, account: acc);
         if (mounted) setState(() => _attachments = rows);
       }
@@ -705,16 +903,26 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
       context,
       acc == null
           ? MailComposeScreen(mode: mode, original: _item ?? widget.preview)
-          : ExternalMailComposeScreen(account: acc, mode: mode, original: _item ?? widget.preview),
+          : ExternalMailComposeScreen(
+              account: acc,
+              mode: mode,
+              original: _item ?? widget.preview,
+            ),
     );
     if (sent == true && mounted) widget.onChanged?.call();
   }
 
-  Future<void> _act(Future<void> Function() call, String done, {bool close = false}) async {
+  Future<void> _act(
+    Future<void> Function() call,
+    String done, {
+    bool close = false,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await call();
-      messenger.showSnackBar(SnackBar(content: Text(done), duration: const Duration(seconds: 2)));
+      messenger.showSnackBar(
+        SnackBar(content: Text(done), duration: const Duration(seconds: 2)),
+      );
       if (close && mounted) _done();
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
@@ -728,13 +936,23 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
     final url = a['url']?.toString();
     try {
       if (acc != null && a['id'] != null) {
-        final bytes = await api.downloadMailAttachment(widget.id, a['id'].toString(), account: acc);
+        final bytes = await api.downloadMailAttachment(
+          widget.id,
+          a['id'].toString(),
+          account: acc,
+        );
         await openFileBytes(bytes, name);
       } else if (url != null && url.isNotEmpty) {
-        await launchUrl(Uri.parse(api.absoluteUrl(url)), mode: LaunchMode.externalApplication);
+        await launchUrl(
+          Uri.parse(api.absoluteUrl(url)),
+          mode: LaunchMode.externalApplication,
+        );
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
     }
   }
 
@@ -746,14 +964,24 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
         title: Text(permanent ? 'ลบถาวร?' : 'ย้ายไปถังขยะ?'),
         content: Text(permanent ? 'ลบแล้วกู้คืนไม่ได้' : 'กู้คืนได้จากถังขยะ'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ลบ')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('ลบ'),
+          ),
         ],
       ),
     );
     if (ok != true || !mounted) return;
     try {
-      await context.read<AppConfig>().apiClient.deleteMail(widget.id, permanent: permanent, account: widget.account);
+      await context.read<AppConfig>().apiClient.deleteMail(
+        widget.id,
+        permanent: permanent,
+        account: widget.account,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(permanent ? 'ลบถาวรแล้ว' : 'ย้ายไปถังขยะแล้ว')),
@@ -761,20 +989,29 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
       _done();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
       }
     }
   }
 
   Future<void> _restore() async {
     try {
-      await context.read<AppConfig>().apiClient.restoreMail(widget.id, account: widget.account);
+      await context.read<AppConfig>().apiClient.restoreMail(
+        widget.id,
+        account: widget.account,
+      );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กู้คืนแล้ว')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('กู้คืนแล้ว')));
       _done();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
       }
     }
   }
@@ -794,29 +1031,47 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
           NxHeaderMenuItem(
             label: 'ทำเป็นยังไม่อ่าน',
             icon: NxI.envelope,
-            onTap: () => _act(() => api.markMailUnread(widget.id, account: acc), 'ทำเป็นยังไม่อ่านแล้ว', close: true),
+            onTap: () => _act(
+              () => api.markMailUnread(widget.id, account: acc),
+              'ทำเป็นยังไม่อ่านแล้ว',
+              close: true,
+            ),
           ),
           if (acc != null && widget.box != 'archive')
             NxHeaderMenuItem(
               label: 'เก็บถาวร',
               icon: NxI.archive,
-              onTap: () => _act(() => api.archiveMail(widget.id, account: acc), 'เก็บถาวรแล้ว', close: true),
+              onTap: () => _act(
+                () => api.archiveMail(widget.id, account: acc),
+                'เก็บถาวรแล้ว',
+                close: true,
+              ),
             ),
           if (acc != null && widget.box == 'archive')
             NxHeaderMenuItem(
               label: 'ย้ายกลับกล่องเข้า',
               icon: NxI.tray,
-              onTap: () => _act(() => api.archiveMail(widget.id, account: acc, undo: true), 'ย้ายกลับกล่องเข้าแล้ว', close: true),
+              onTap: () => _act(
+                () => api.archiveMail(widget.id, account: acc, undo: true),
+                'ย้ายกลับกล่องเข้าแล้ว',
+                close: true,
+              ),
             ),
         ],
         actions: [
           if (acc != null)
             IconButton(
               tooltip: starred ? 'เอาดาวออก' : 'ติดดาว',
-              icon: Icon(starred ? NxI.starFill : NxI.star, color: starred ? const Color(0xFFF59E0B) : null),
+              icon: Icon(
+                starred ? NxI.starFill : NxI.star,
+                color: starred ? const Color(0xFFF59E0B) : null,
+              ),
               onPressed: () {
                 setState(() => _starred = !starred);
-                _act(() => api.setMailStarred(widget.id, !starred, account: acc), starred ? 'เอาดาวออกแล้ว' : 'ติดดาวแล้ว');
+                _act(
+                  () => api.setMailStarred(widget.id, !starred, account: acc),
+                  starred ? 'เอาดาวออกแล้ว' : 'ติดดาวแล้ว',
+                );
               },
             ),
           if (widget.box == 'trash')
@@ -860,62 +1115,81 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
                 ),
               ),
             ),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(16, 16 + NxScrollScaffold.topInset(context), 16, 16),
-        children: [
-          if (_error != null) Text(formatApiError(_error!)),
-          Text(
-            mailCounterparty(data, 'inbox'),
-            style: Theme.of(context).textTheme.titleSmall,
+      body: Builder(
+        builder: (context) => ListView(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16 + NxScrollScaffold.topInset(context),
+            16,
+            16,
           ),
-          if (_recipientsLine(data).isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                _recipientsLine(data),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+          children: [
+            if (_error != null) Text(formatApiError(_error!)),
+            Text(
+              mailCounterparty(data, 'inbox'),
+              style: Theme.of(context).textTheme.titleSmall,
             ),
-          if ((data['sent_at'] ?? data['created_at']) != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                mailLongTime(data['sent_at'] ?? data['created_at']),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          const SizedBox(height: 12),
-          NxHtmlView(
-            html: data['body_html']?.toString() ??
-                data['body']?.toString() ??
-                data['body_text']?.toString() ??
-                data['snippet']?.toString() ??
-                '',
-          ),
-          if (_attachments.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text('ไฟล์แนบ (${_attachments.length})', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 6),
-            for (final a in _attachments)
-              Card(
-                margin: const EdgeInsets.only(bottom: 6),
-                child: ListTile(
-                  leading: const Icon(NxI.paperclip),
-                  title: Text((a['filename'] ?? a['name'] ?? 'file').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: a['size'] == null ? null : Text(_fileSize(a['size'])),
-                  trailing: const Icon(NxI.arrowSquareOut, size: 18),
-                  onTap: () => _openAttachment(a),
+            if (_recipientsLine(data).isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  _recipientsLine(data),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
+            if ((data['sent_at'] ?? data['created_at']) != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  mailLongTime(data['sent_at'] ?? data['created_at']),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            const SizedBox(height: 12),
+            NxHtmlView(
+              html:
+                  data['body_html']?.toString() ??
+                  data['body']?.toString() ??
+                  data['body_text']?.toString() ??
+                  data['snippet']?.toString() ??
+                  '',
+            ),
+            if (_attachments.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'ไฟล์แนบ (${_attachments.length})',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 6),
+              for (final a in _attachments)
+                Card(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  child: ListTile(
+                    leading: const Icon(NxI.paperclip),
+                    title: Text(
+                      (a['filename'] ?? a['name'] ?? 'file').toString(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: a['size'] == null
+                        ? null
+                        : Text(_fileSize(a['size'])),
+                    trailing: const Icon(NxI.arrowSquareOut, size: 18),
+                    onTap: () => _openAttachment(a),
+                  ),
+                ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
 String _fileSize(dynamic raw) {
-  final n = (raw is num) ? raw.toDouble() : double.tryParse(raw.toString()) ?? 0;
+  final n = (raw is num)
+      ? raw.toDouble()
+      : double.tryParse(raw.toString()) ?? 0;
   if (n >= 1 << 20) return '${(n / (1 << 20)).toStringAsFixed(1)} MB';
   if (n >= 1024) return '${(n / 1024).round()} KB';
   return '${n.round()} B';
@@ -924,10 +1198,10 @@ String _fileSize(dynamic raw) {
 String _recipientsLine(Map<String, dynamic> m) {
   String names(dynamic raw) => raw is List
       ? raw
-          .whereType<Map>()
-          .map((e) => (e['display'] ?? e['email'] ?? '').toString())
-          .where((e) => e.isNotEmpty)
-          .join(', ')
+            .whereType<Map>()
+            .map((e) => (e['display'] ?? e['email'] ?? '').toString())
+            .where((e) => e.isNotEmpty)
+            .join(', ')
       : '';
   final to = names(m['to']);
   final cc = names(m['cc']);
@@ -941,6 +1215,7 @@ String _recipientsLine(Map<String, dynamic> m) {
 bool isMailRealtimeEvent(RealtimeEvent e) {
   if (e.type == 'mail:new' || e.type == 'mail:updated') return true;
   if (e.type != 'notification') return false;
-  final hint = '${e.data['type'] ?? ''} ${e.data['link_path'] ?? ''}'.toLowerCase();
+  final hint = '${e.data['type'] ?? ''} ${e.data['link_path'] ?? ''}'
+      .toLowerCase();
   return hint.contains('mail');
 }

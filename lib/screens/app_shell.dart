@@ -206,8 +206,8 @@ class _AppShellState extends State<AppShell> {
               left: 0,
               right: 0,
               bottom: 0,
-              // Just reaches past the floating bar's top edge (~14 px) — keeps content visible.
-            height: 100 + MediaQuery.paddingOf(context).bottom,
+              // Ends at about the middle of the floating tab bar (bar ≈ 76 + 10 margin).
+              height: 48 + MediaQuery.viewPaddingOf(context).bottom,
               child: const NxEdgeBlur(fromTop: false, solidFraction: 0.5),
             ),
         ],

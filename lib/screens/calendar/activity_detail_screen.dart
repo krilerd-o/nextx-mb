@@ -329,193 +329,203 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
           NxHeaderMenuItem(label: 'ลบ', icon: NxI.trash, onTap: _delete),
         ],
       ),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(16, 8 + NxScrollScaffold.topInset(context), 16, 32),
-        children: [
-          NxSurfaceCard(
-            radius: 26,
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entityTitle(row, module: 'activity'),
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                _line(
-                  context,
-                  NxI.calendarBlank,
-                  '${_when(row['date_start'])}  →  ${_when(row['date_end'])}',
-                ),
-                if ((row['location']?.toString() ?? '').isNotEmpty)
-                  _line(context, NxI.mapPin, row['location'].toString()),
-                if ((row['status']?.toString() ?? '').isNotEmpty)
-                  _line(context, NxI.flag, row['status'].toString()),
-              ],
-            ),
+      body: Builder(
+        builder: (context) => ListView(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8 + NxScrollScaffold.topInset(context),
+            16,
+            32,
           ),
-          if ((row['description']?.toString() ?? '').trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
+          children: [
             NxSurfaceCard(
-              padding: const EdgeInsets.all(16),
-              child: NxHtmlView(html: row['description'].toString()),
-            ),
-          ],
-          const SizedBox(height: 14),
-          NxSegmented(
-            labels: [
-              'ภาพรวม',
-              _comments.isEmpty
-                  ? 'ความคิดเห็น'
-                  : 'ความคิดเห็น ${_comments.length}',
-              'ไฟล์',
-              'ประวัติ',
-            ],
-            index: _tab,
-            onChanged: (i) {
-              setState(() => _tab = i);
-              if (i == 3) _loadTimeline();
-            },
-          ),
-          if (_tab == 1) ...[
-            const SizedBox(height: 14),
-            EntityCommentsPanel(
-              module: 'activity',
-              id: _id,
-              comments: _comments,
-              onChanged: _loadRecord,
-            ),
-          ],
-          if (_tab == 2) ...[
-            const SizedBox(height: 14),
-            EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
-          ],
-          if (_tab == 3) ...[
-            const SizedBox(height: 14),
-            EntityHistoryPanel(events: _timeline, loading: _timelineLoading),
-          ],
-          if (_tab == 0) ...[
-            const SizedBox(height: 16),
-            Text(
-              'การเยี่ยม',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            NxSurfaceCard(
-              radius: 24,
-              padding: const EdgeInsets.all(16),
+              radius: 26,
+              padding: const EdgeInsets.all(18),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _stepRow(
-                    context,
-                    done: checkedIn,
-                    title: 'เช็คอิน',
-                    value: checkedIn
-                        ? _when(_visit?['checkindate'])
-                        : 'ยังไม่เช็คอิน',
-                  ),
-                  _stepRow(
-                    context,
-                    done: checkedOut,
-                    title: 'เช็คเอาท์',
-                    value: checkedOut
-                        ? _when(_visit?['checkoutdate'])
-                        : 'ยังไม่เช็คเอาท์',
-                    last: true,
-                  ),
-                  const SizedBox(height: 12),
-                  if (!checkedIn)
-                    NxHeroCta(
-                      label: 'เช็คอิน',
-                      busy: _busy,
-                      onPressed: _busy ? null : () => _check(inn: true),
-                    )
-                  else if (!checkedOut)
-                    NxHeroCta(
-                      label: 'เช็คเอาท์',
-                      busy: _busy,
-                      onPressed: _busy ? null : () => _check(inn: false),
-                    )
-                  else
-                    Text(
-                      'เยี่ยมเสร็จแล้ว',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: const Color(0xFF16A34A),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'รูปถ่าย (${photos.length})',
-                    style: theme.textTheme.titleMedium?.copyWith(
+                  Text(
+                    entityTitle(row, module: 'activity'),
+                    style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'ถ่ายรูป',
-                  icon: const Icon(NxI.camera),
-                  onPressed: _busy ? null : () => _pickPhotos(camera: true),
-                ),
-                IconButton(
-                  tooltip: 'แนบรูป',
-                  icon: const Icon(NxI.images),
-                  onPressed: _busy ? null : () => _pickPhotos(camera: false),
-                ),
-              ],
-            ),
-            if (photos.isEmpty)
-              Text(
-                'ยังไม่มีรูป',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
-              )
-            else
-              AttachmentStrip(
-                items: [
-                  for (final p in photos)
-                    {
-                      'url': (p['url'] ?? '/uploads/${p['path']}').toString(),
-                      'name': p['name'],
-                      'mime': p['mime'] ?? 'image/jpeg',
-                    },
+                  const SizedBox(height: 10),
+                  _line(
+                    context,
+                    NxI.calendarBlank,
+                    '${_when(row['date_start'])}  →  ${_when(row['date_end'])}',
+                  ),
+                  if ((row['location']?.toString() ?? '').isNotEmpty)
+                    _line(context, NxI.mapPin, row['location'].toString()),
+                  if ((row['status']?.toString() ?? '').isNotEmpty)
+                    _line(context, NxI.flag, row['status'].toString()),
                 ],
               ),
-            if (_error != null) ...[
+            ),
+            if ((row['description']?.toString() ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text(formatApiError(_error!), style: TextStyle(color: cs.error)),
-            ],
-            const SizedBox(height: 20),
-            Text(
-              'ตอบรับนัด',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+              NxSurfaceCard(
+                padding: const EdgeInsets.all(16),
+                child: NxHtmlView(html: row['description'].toString()),
               ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final e in _rsvpLabels.entries)
-                  ActionChip(
-                    label: Text(e.value),
-                    onPressed: _busy ? null : () => _rsvp(e.key),
-                  ),
+            ],
+            const SizedBox(height: 14),
+            NxSegmented(
+              labels: [
+                'ภาพรวม',
+                _comments.isEmpty
+                    ? 'ความคิดเห็น'
+                    : 'ความคิดเห็น ${_comments.length}',
+                'ไฟล์',
+                'ประวัติ',
               ],
+              index: _tab,
+              onChanged: (i) {
+                setState(() => _tab = i);
+                if (i == 3) _loadTimeline();
+              },
             ),
+            if (_tab == 1) ...[
+              const SizedBox(height: 14),
+              EntityCommentsPanel(
+                module: 'activity',
+                id: _id,
+                comments: _comments,
+                onChanged: _loadRecord,
+              ),
+            ],
+            if (_tab == 2) ...[
+              const SizedBox(height: 14),
+              EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
+            ],
+            if (_tab == 3) ...[
+              const SizedBox(height: 14),
+              EntityHistoryPanel(events: _timeline, loading: _timelineLoading),
+            ],
+            if (_tab == 0) ...[
+              const SizedBox(height: 16),
+              Text(
+                'การเยี่ยม',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              NxSurfaceCard(
+                radius: 24,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    _stepRow(
+                      context,
+                      done: checkedIn,
+                      title: 'เช็คอิน',
+                      value: checkedIn
+                          ? _when(_visit?['checkindate'])
+                          : 'ยังไม่เช็คอิน',
+                    ),
+                    _stepRow(
+                      context,
+                      done: checkedOut,
+                      title: 'เช็คเอาท์',
+                      value: checkedOut
+                          ? _when(_visit?['checkoutdate'])
+                          : 'ยังไม่เช็คเอาท์',
+                      last: true,
+                    ),
+                    const SizedBox(height: 12),
+                    if (!checkedIn)
+                      NxHeroCta(
+                        label: 'เช็คอิน',
+                        busy: _busy,
+                        onPressed: _busy ? null : () => _check(inn: true),
+                      )
+                    else if (!checkedOut)
+                      NxHeroCta(
+                        label: 'เช็คเอาท์',
+                        busy: _busy,
+                        onPressed: _busy ? null : () => _check(inn: false),
+                      )
+                    else
+                      Text(
+                        'เยี่ยมเสร็จแล้ว',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: const Color(0xFF16A34A),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'รูปถ่าย (${photos.length})',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'ถ่ายรูป',
+                    icon: const Icon(NxI.camera),
+                    onPressed: _busy ? null : () => _pickPhotos(camera: true),
+                  ),
+                  IconButton(
+                    tooltip: 'แนบรูป',
+                    icon: const Icon(NxI.images),
+                    onPressed: _busy ? null : () => _pickPhotos(camera: false),
+                  ),
+                ],
+              ),
+              if (photos.isEmpty)
+                Text(
+                  'ยังไม่มีรูป',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                )
+              else
+                AttachmentStrip(
+                  items: [
+                    for (final p in photos)
+                      {
+                        'url': (p['url'] ?? '/uploads/${p['path']}').toString(),
+                        'name': p['name'],
+                        'mime': p['mime'] ?? 'image/jpeg',
+                      },
+                  ],
+                ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  formatApiError(_error!),
+                  style: TextStyle(color: cs.error),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Text(
+                'ตอบรับนัด',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final e in _rsvpLabels.entries)
+                    ActionChip(
+                      label: Text(e.value),
+                      onPressed: _busy ? null : () => _rsvp(e.key),
+                    ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

@@ -84,15 +84,15 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       try {
         catalog = await api.getTags(module: widget.module);
       } catch (e, s) {
-      ErrorReporting.report(e, s);
-    }
+        ErrorReporting.report(e, s);
+      }
       try {
         final schema = await api.getFieldSchema(widget.module);
         fields = schema.fields;
         picklists = schema.picklists;
       } catch (e, s) {
-      ErrorReporting.report(e, s);
-    }
+        ErrorReporting.report(e, s);
+      }
       if (!mounted) return;
       setState(() {
         if (record.isNotEmpty) _row = {..._row, ...record};
@@ -116,7 +116,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     if ((_timelineLoaded && !force) || _timelineLoading) return;
     setState(() => _timelineLoading = true);
     try {
-      final rows = await context.read<AppConfig>().apiClient.getEntityTimeline(widget.module, _id);
+      final rows = await context.read<AppConfig>().apiClient.getEntityTimeline(
+        widget.module,
+        _id,
+      );
       if (!mounted) return;
       setState(() {
         _timeline = rows;
@@ -152,13 +155,17 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final before = _row[key];
     setState(() => _row = {..._row, key: value});
     try {
-      await context.read<AppConfig>().apiClient.putEntity(widget.module, _id, {key: value});
+      await context.read<AppConfig>().apiClient.putEntity(widget.module, _id, {
+        key: value,
+      });
       _timelineLoaded = false;
       if (_tab == 3) _loadTimeline(force: true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _row = {..._row, key: before});
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
     }
   }
 
@@ -167,22 +174,37 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('ทำซ้ำรายการนี้?'),
-        content: Text('สร้างสำเนาของ ${entityTitle(_row, module: widget.module)}'),
+        content: Text(
+          'สร้างสำเนาของ ${entityTitle(_row, module: widget.module)}',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ทำซ้ำ')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('ทำซ้ำ'),
+          ),
         ],
       ),
     );
     if (ok != true || !mounted) return;
     try {
-      final newId = await context.read<AppConfig>().apiClient.duplicateEntity(widget.module, _id);
+      final newId = await context.read<AppConfig>().apiClient.duplicateEntity(
+        widget.module,
+        _id,
+      );
       if (!mounted || newId.isEmpty) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ทำซ้ำแล้ว — เปิดรายการใหม่')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ทำซ้ำแล้ว — เปิดรายการใหม่')),
+      );
       nxPush<void>(context, EntityByIdLoader(module: widget.module, id: newId));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
     }
   }
 
@@ -217,7 +239,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       await _reload();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
     }
   }
 
@@ -247,7 +271,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         title: title,
         automaticallyImplyLeading: !widget.embedded,
         actions: [
-          if (widget.module == 'quotation' || widget.module == 'inspection' || widget.module == 'job') ...[
+          if (widget.module == 'quotation' ||
+              widget.module == 'inspection' ||
+              widget.module == 'job') ...[
             IconButton(
               tooltip: 'เปิด PDF',
               icon: const Icon(NxI.filePdf),
@@ -268,8 +294,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         ],
         menu: canEdit && context.select((AppConfig c) => c.isLoggedIn)
             ? [
-                NxHeaderMenuItem(label: 'ทำซ้ำ', icon: NxI.copySimple, onTap: _duplicate),
-                NxHeaderMenuItem(label: 'ถ่ายรูป / แนบไฟล์', icon: NxI.camera, onTap: _quickAttach),
+                NxHeaderMenuItem(
+                  label: 'ทำซ้ำ',
+                  icon: NxI.copySimple,
+                  onTap: _duplicate,
+                ),
+                NxHeaderMenuItem(
+                  label: 'ถ่ายรูป / แนบไฟล์',
+                  icon: NxI.camera,
+                  onTap: _quickAttach,
+                ),
                 NxHeaderMenuItem(
                   label: 'ลบ',
                   icon: NxI.trash,
@@ -278,155 +312,201 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
               ]
             : null,
       ),
-      body: RefreshIndicator(
-        edgeOffset: NxScrollScaffold.topInset(context),
-        color: theme.colorScheme.primary,
-        onRefresh: _reload,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(16, 8 + NxScrollScaffold.topInset(context), 16, 28),
-          children: [
-            NxSurfaceCard(
-              radius: 28,
-              padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
-              child: Column(
-                children: [
-                  Hero(tag: 'entity-${widget.module}-$_id', child: NxAvatar(label: title, size: 76)),
-                  const SizedBox(height: 12),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  if (people != null && people.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      people,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                  if (status != null && statusOptions.isEmpty) ...[
-                    const SizedBox(height: 10),
-                    Chip(
-                      label: Text(status),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  EntityQuickActions(row: _row, onDuplicate: canEdit ? _duplicate : null),
-                ],
-              ),
+      body: Builder(
+        builder: (context) => RefreshIndicator(
+          edgeOffset: NxScrollScaffold.topInset(context),
+          color: theme.colorScheme.primary,
+          onRefresh: _reload,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              8 + NxScrollScaffold.topInset(context),
+              16,
+              28,
             ),
-            if (statusOptions.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              EntityStatusStepper(
-                options: statusOptions,
-                current: statusKey == null ? null : _row[statusKey]?.toString(),
-                onSelect: canEdit ? (v) => _changeStatus(statusKey!, v) : null,
-              ),
-            ],
-            const SizedBox(height: 14),
-            NxSegmented(
-              labels: [
-                'ข้อมูล',
-                _comments.isEmpty ? 'ความคิดเห็น' : 'ความคิดเห็น ${_comments.length}',
-                'ไฟล์',
-                'ประวัติ',
-              ],
-              index: _tab,
-              onChanged: (i) {
-                setState(() => _tab = i);
-                if (i == 3) _loadTimeline();
-              },
-            ),
-            if (_loading) ...[
-              const SizedBox(height: 16),
-              const SizedBox(height: 180, child: NxSkeletonForm(fields: 4)),
-            ],
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12, bottom: 12),
+            children: [
+              NxSurfaceCard(
+                radius: 28,
+                padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
                 child: Column(
                   children: [
-                    Text(formatApiError(_error!), style: TextStyle(color: theme.colorScheme.error)),
-                    TextButton(onPressed: _reload, child: const Text('ลองใหม่')),
+                    Hero(
+                      tag: 'entity-${widget.module}-$_id',
+                      child: NxAvatar(label: title, size: 76),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (people != null && people.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        people,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    if (status != null && statusOptions.isEmpty) ...[
+                      const SizedBox(height: 10),
+                      Chip(
+                        label: Text(status),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    EntityQuickActions(
+                      row: _row,
+                      onDuplicate: canEdit ? _duplicate : null,
+                    ),
                   ],
                 ),
               ),
-            const SizedBox(height: 14),
-            if (!_loading)
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                child: KeyedSubtree(
-                  key: ValueKey(_tab),
-                  child: switch (_tab) {
-                    1 => EntityCommentsPanel(module: widget.module, id: _id, comments: _comments, onChanged: _reload),
-                    2 => EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
-                    3 => EntityHistoryPanel(events: _timeline, loading: _timelineLoading, valueLabel: _valueLabel),
-                    _ => Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-              if (widget.module == 'job' && MenuAccess.allow(session, MenuAccess.inspection)) ...[
-                const SizedBox(height: 16),
-                NxHeroCta(
-                  label: 'สร้างใบตรวจรับ',
-                  onPressed: () => nxPush<void>(
-                    context,
-                    JobInspectionScreen(job: _row),
-                  ),
+              if (statusOptions.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                EntityStatusStepper(
+                  options: statusOptions,
+                  current: statusKey == null
+                      ? null
+                      : _row[statusKey]?.toString(),
+                  onSelect: canEdit
+                      ? (v) => _changeStatus(statusKey!, v)
+                      : null,
                 ),
               ],
-              NxSurfaceCard(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: Column(
-                  children: _valueRows(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              EntityOpsSection(
-                module: widget.module,
-                id: _id,
-                row: _row,
-                canEdit: canEdit,
-                onOpen: (module, id, {row}) {
-                  nxPush<void>(
-                    context,
-                    row != null
-                        ? EntityDetailScreen(module: module, row: {...row, 'id': id})
-                        : EntityByIdLoader(module: module, id: id),
-                  );
+              const SizedBox(height: 14),
+              NxSegmented(
+                labels: [
+                  'ข้อมูล',
+                  _comments.isEmpty
+                      ? 'ความคิดเห็น'
+                      : 'ความคิดเห็น ${_comments.length}',
+                  'ไฟล์',
+                  'ประวัติ',
+                ],
+                index: _tab,
+                onChanged: (i) {
+                  setState(() => _tab = i);
+                  if (i == 3) _loadTimeline();
                 },
               ),
-              const SizedBox(height: 20),
-              Text('แท็ก', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              NxSurfaceCard(
-                padding: const EdgeInsets.all(12),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final t in _tags)
-                      InputChip(
-                        label: Text(t['name']?.toString() ?? ''),
-                        onDeleted: () => _toggleTag(t),
+              if (_loading) ...[
+                const SizedBox(height: 16),
+                const SizedBox(height: 180, child: NxSkeletonForm(fields: 4)),
+              ],
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 12),
+                  child: Column(
+                    children: [
+                      Text(
+                        formatApiError(_error!),
+                        style: TextStyle(color: theme.colorScheme.error),
                       ),
-                    ActionChip(
-                      label: const Text('เลือกแท็ก'),
-                      onPressed: _catalog.isEmpty ? null : _pickTags,
-                    ),
-                  ],
+                      TextButton(
+                        onPressed: _reload,
+                        child: const Text('ลองใหม่'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              const SizedBox(height: 14),
+              if (!_loading)
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  child: KeyedSubtree(
+                    key: ValueKey(_tab),
+                    child: switch (_tab) {
+                      1 => EntityCommentsPanel(
+                        module: widget.module,
+                        id: _id,
+                        comments: _comments,
+                        onChanged: _reload,
+                      ),
+                      2 => EntityFilesPanel(
+                        comments: _comments,
+                        onAdd: _quickAttach,
+                      ),
+                      3 => EntityHistoryPanel(
+                        events: _timeline,
+                        loading: _timelineLoading,
+                        valueLabel: _valueLabel,
+                      ),
+                      _ => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (widget.module == 'job' &&
+                              MenuAccess.allow(
+                                session,
+                                MenuAccess.inspection,
+                              )) ...[
+                            const SizedBox(height: 16),
+                            NxHeroCta(
+                              label: 'สร้างใบตรวจรับ',
+                              onPressed: () => nxPush<void>(
+                                context,
+                                JobInspectionScreen(job: _row),
+                              ),
+                            ),
+                          ],
+                          NxSurfaceCard(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                            child: Column(children: _valueRows()),
+                          ),
+                          const SizedBox(height: 16),
+                          EntityOpsSection(
+                            module: widget.module,
+                            id: _id,
+                            row: _row,
+                            canEdit: canEdit,
+                            onOpen: (module, id, {row}) {
+                              nxPush<void>(
+                                context,
+                                row != null
+                                    ? EntityDetailScreen(
+                                        module: module,
+                                        row: {...row, 'id': id},
+                                      )
+                                    : EntityByIdLoader(module: module, id: id),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 20),
+                          Text('แท็ก', style: theme.textTheme.titleMedium),
+                          const SizedBox(height: 8),
+                          NxSurfaceCard(
+                            padding: const EdgeInsets.all(12),
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final t in _tags)
+                                  InputChip(
+                                    label: Text(t['name']?.toString() ?? ''),
+                                    onDeleted: () => _toggleTag(t),
+                                  ),
+                                ActionChip(
+                                  label: const Text('เลือกแท็ก'),
+                                  onPressed: _catalog.isEmpty
+                                      ? null
+                                      : _pickTags,
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                  },
+                    },
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -442,7 +522,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             for (final t in _catalog)
               CheckboxListTile(
                 title: Text(t['name']?.toString() ?? ''),
-                value: _tags.any((x) => x['id']?.toString() == t['id']?.toString()),
+                value: _tags.any(
+                  (x) => x['id']?.toString() == t['id']?.toString(),
+                ),
                 onChanged: (_) {
                   Navigator.pop(ctx);
                   _toggleTag(t);
@@ -487,7 +569,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     return [
       for (final name in keys)
         () {
-          var uiType = byName[name] == null ? FieldUiType.text : resolveFieldUiType(byName[name]!);
+          var uiType = byName[name] == null
+              ? FieldUiType.text
+              : resolveFieldUiType(byName[name]!);
           final recId = lookupRecordId(_row[name]);
           final related = uiType.entityModule ?? _relatedModuleForField(name);
           if (related != null && uiType.entityModule == null) {
@@ -499,7 +583,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             value: _row[name],
             relatedModule: related,
             options: [
-              for (final o in _picklists[name] ?? const <Map<String, dynamic>>[]) NxPickOption.fromMap(o),
+              for (final o
+                  in _picklists[name] ?? const <Map<String, dynamic>>[])
+                NxPickOption.fromMap(o),
               if (_row['${name}_name'] != null && _row[name] != null)
                 NxPickOption(
                   value: _row[name].toString(),
@@ -508,9 +594,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             ],
             onOpen: related != null && recId.isNotEmpty
                 ? () => nxPush<void>(
-                      context,
-                      EntityByIdLoader(module: related, id: recId),
-                    )
+                    context,
+                    EntityByIdLoader(module: related, id: recId),
+                  )
                 : null,
           );
         }(),
@@ -623,7 +709,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   Future<({List<int> bytes, String name})> _pdfPayload() async {
     final api = context.read<AppConfig>().apiClient;
     if (widget.module == 'inspection') {
-      return (bytes: await api.getInspectionPdf(_id), name: 'inspection-$_id.pdf');
+      return (
+        bytes: await api.getInspectionPdf(_id),
+        name: 'inspection-$_id.pdf',
+      );
     }
     if (widget.module == 'job') {
       return (bytes: await api.downloadJobPdf(_id), name: 'job-$_id.pdf');
@@ -637,7 +726,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       await openPdfBytes(pdf.bytes, pdf.name);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
     }
   }
 
@@ -647,7 +738,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       await sharePdfBytes(pdf.bytes, pdf.name);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
     }
   }
 
@@ -658,8 +751,14 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         title: const Text('ลบรายการนี้?'),
         content: Text('ลบ ${entityTitle(_row, module: widget.module)}'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ลบ')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('ยกเลิก'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('ลบ'),
+          ),
         ],
       ),
     );
@@ -690,9 +789,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       ),
     );
     if (saved == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกแล้ว')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('บันทึกแล้ว')));
       _reload();
     }
   }
 }
-

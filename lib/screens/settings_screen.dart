@@ -47,177 +47,179 @@ class SettingsScreen extends StatelessWidget {
     return NxScrollScaffold(
       insetBody: false,
       header: const NxAppHeader(title: 'ตั้งค่า'),
-      body: ListView(
-        padding: pad.copyWith(
-          top: pad.top + NxScrollScaffold.topInset(context),
-        ),
-        children: [
-          _ProfileCard(onTap: () => context.push(AppRoutes.profile)),
-          const _Section('Space ของคุณ'),
-          _Row(
-            icon: NxI.buildings,
-            title:
-                sp?.title ??
-                session.businessName ??
-                serverLabel(config.apiBaseUrl),
-            subtitle: [
-              serverLabel(config.apiBaseUrl),
-              if ((session.email ?? '').isNotEmpty) session.email!,
-            ].join(' · '),
-            trailing: Text(
-              'ปัจจุบัน',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
-            ),
+      body: Builder(
+        builder: (context) => ListView(
+          padding: pad.copyWith(
+            top: pad.top + NxScrollScaffold.topInset(context),
           ),
-          _Row(
-            icon: NxI.arrowsClockwise,
-            title: config.spaces.length > 1
-                ? 'สลับ Space (${config.spaces.length})'
-                : 'สลับ / เพิ่ม Space',
-            onTap: () => showSpaceSwitcher(context),
-          ),
-          _Row(
-            icon: NxI.deviceMobile,
-            title: 'อุปกรณ์ที่เข้าใช้งาน',
-            onTap: () => context.push(AppRoutes.devices),
-          ),
-          const _Section('ธุรกิจและเมนู'),
-          _Row(
-            icon: NxI.briefcase,
-            title: session.businessName ?? 'ธุรกิจ',
-            subtitle: 'สลับธุรกิจ',
-            onTap: () => config.clearBusiness(),
-          ),
-          _Row(
-            icon: NxI.package,
-            title:
-                'Package: ${(session.packageCode ?? '').isEmpty ? '—' : session.packageCode}',
-            subtitle: 'สลับ Package (เมนูเปลี่ยนตาม Package)',
-            onTap: () => config.clearPackage(),
-          ),
-          _Row(
-            icon: NxI.squaresFour,
-            title: 'ปรับแต่งเมนูล่าง',
-            subtitle: 'เลือกและเรียงแท็บที่ต้องการ',
-            onTap: () => context.push(AppRoutes.tabEditor),
-          ),
-          _Row(
-            icon: NxI.user,
-            title: 'บทบาทของฉัน',
-            subtitle: roleSummary(config.shellConfig?.roles ?? const []),
-            onTap: () => context.push(AppRoutes.roleEditor),
-          ),
-          const _Section('การตั้งค่า'),
-          _Row(
-            icon: NxI.moon,
-            title: 'โหมดมืด',
-            subtitle: config.themeMode == ThemeMode.system
-                ? 'ตามเครื่อง · กดค้างเพื่อกลับไปตามเครื่อง'
-                : 'กดค้างเพื่อให้ตามเครื่อง',
-            onLongPress: () => config.setThemeMode(ThemeMode.system),
-            trailing: Switch(
-              value: dark,
-              onChanged: (v) =>
-                  config.setThemeMode(v ? ThemeMode.dark : ThemeMode.light),
-            ),
-          ),
-          ValueListenableBuilder<EffectsPreference>(
-            valueListenable: Effects.preference,
-            builder: (context, pref, _) => _Row(
-              icon: NxI.sparkle,
-              title: 'เอฟเฟกต์และความลื่น',
-              subtitle: pref.label,
-              onTap: () => showAppBottomSheet<void>(
-                context: context,
-                title: 'เอฟเฟกต์และความลื่น',
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final p in EffectsPreference.values)
-                      ListTile(
-                        title: Text(p.label),
-                        trailing: p == pref
-                            ? Icon(NxI.check, color: cs.primary)
-                            : null,
-                        onTap: () async {
-                          await Effects.setPreference(p);
-                          if (context.mounted) Navigator.pop(context);
-                          config.refreshUi();
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          _Row(
-            icon: NxI.bell,
-            title: 'การแจ้งเตือน',
-            onTap: () => context.push(AppRoutes.notifications),
-          ),
-          _Row(
-            icon: NxI.shieldCheck,
-            title: 'โปรไฟล์และความปลอดภัย',
-            subtitle: 'ภาษา, รูปแบบวันที่, สีหลัก, เปลี่ยนรหัสผ่าน',
-            onTap: () => context.push(AppRoutes.profile),
-          ),
-          const _AppLockCard(),
-          const _Section('เกี่ยวกับ'),
-          _Row(
-            icon: NxI.info,
-            title: 'MOAI NEXT Mobile',
-            subtitle: 'เวอร์ชัน $appVersion',
-          ),
-          if (config.updateNeed == UpdateNeed.optional)
+          children: [
+            _ProfileCard(onTap: () => context.push(AppRoutes.profile)),
+            const _Section('Space ของคุณ'),
             _Row(
-              icon: NxI.arrowSquareOut,
+              icon: NxI.buildings,
               title:
-                  'มีแอปเวอร์ชันใหม่ ${config.serverInfo?.latestVersion ?? ''}',
-              subtitle: 'เวอร์ชันในเครื่อง ${AppVersion.value}',
-              onTap: storeUrlFor(config.serverInfo) == null
-                  ? null
-                  : () => openStore(config.serverInfo),
-            ),
-          _Row(
-            icon: NxI.clipboardText,
-            title: 'บันทึกปัญหา',
-            subtitle: 'ส่งข้อมูลให้ทีมพัฒนาเมื่อพบปัญหา',
-            onTap: () => context.push(AppRoutes.diagnostics),
-          ),
-          const SizedBox(height: 12),
-          _Row(
-            icon: NxI.signOut,
-            color: cs.error,
-            title: 'ออกจากระบบ Space นี้',
-            subtitle: config.spaces.length > 1
-                ? 'Space อื่นยังใช้งานได้ตามเดิม'
-                : null,
-            onTap: () async {
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('ออกจากระบบ?'),
-                  content: Text(
-                    'ออกจาก ${sp?.title ?? serverLabel(config.apiBaseUrl)} บนเครื่องนี้',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('ยกเลิก'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('ออก'),
-                    ),
-                  ],
+                  sp?.title ??
+                  session.businessName ??
+                  serverLabel(config.apiBaseUrl),
+              subtitle: [
+                serverLabel(config.apiBaseUrl),
+                if ((session.email ?? '').isNotEmpty) session.email!,
+              ].join(' · '),
+              trailing: Text(
+                'ปัจจุบัน',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
                 ),
-              );
-              if (ok == true) await config.logout();
-            },
-          ),
-        ],
+              ),
+            ),
+            _Row(
+              icon: NxI.arrowsClockwise,
+              title: config.spaces.length > 1
+                  ? 'สลับ Space (${config.spaces.length})'
+                  : 'สลับ / เพิ่ม Space',
+              onTap: () => showSpaceSwitcher(context),
+            ),
+            _Row(
+              icon: NxI.deviceMobile,
+              title: 'อุปกรณ์ที่เข้าใช้งาน',
+              onTap: () => context.push(AppRoutes.devices),
+            ),
+            const _Section('ธุรกิจและเมนู'),
+            _Row(
+              icon: NxI.briefcase,
+              title: session.businessName ?? 'ธุรกิจ',
+              subtitle: 'สลับธุรกิจ',
+              onTap: () => config.clearBusiness(),
+            ),
+            _Row(
+              icon: NxI.package,
+              title:
+                  'Package: ${(session.packageCode ?? '').isEmpty ? '—' : session.packageCode}',
+              subtitle: 'สลับ Package (เมนูเปลี่ยนตาม Package)',
+              onTap: () => config.clearPackage(),
+            ),
+            _Row(
+              icon: NxI.squaresFour,
+              title: 'ปรับแต่งเมนูล่าง',
+              subtitle: 'เลือกและเรียงแท็บที่ต้องการ',
+              onTap: () => context.push(AppRoutes.tabEditor),
+            ),
+            _Row(
+              icon: NxI.user,
+              title: 'บทบาทของฉัน',
+              subtitle: roleSummary(config.shellConfig?.roles ?? const []),
+              onTap: () => context.push(AppRoutes.roleEditor),
+            ),
+            const _Section('การตั้งค่า'),
+            _Row(
+              icon: NxI.moon,
+              title: 'โหมดมืด',
+              subtitle: config.themeMode == ThemeMode.system
+                  ? 'ตามเครื่อง · กดค้างเพื่อกลับไปตามเครื่อง'
+                  : 'กดค้างเพื่อให้ตามเครื่อง',
+              onLongPress: () => config.setThemeMode(ThemeMode.system),
+              trailing: Switch(
+                value: dark,
+                onChanged: (v) =>
+                    config.setThemeMode(v ? ThemeMode.dark : ThemeMode.light),
+              ),
+            ),
+            ValueListenableBuilder<EffectsPreference>(
+              valueListenable: Effects.preference,
+              builder: (context, pref, _) => _Row(
+                icon: NxI.sparkle,
+                title: 'เอฟเฟกต์และความลื่น',
+                subtitle: pref.label,
+                onTap: () => showAppBottomSheet<void>(
+                  context: context,
+                  title: 'เอฟเฟกต์และความลื่น',
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final p in EffectsPreference.values)
+                        ListTile(
+                          title: Text(p.label),
+                          trailing: p == pref
+                              ? Icon(NxI.check, color: cs.primary)
+                              : null,
+                          onTap: () async {
+                            await Effects.setPreference(p);
+                            if (context.mounted) Navigator.pop(context);
+                            config.refreshUi();
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            _Row(
+              icon: NxI.bell,
+              title: 'การแจ้งเตือน',
+              onTap: () => context.push(AppRoutes.notifications),
+            ),
+            _Row(
+              icon: NxI.shieldCheck,
+              title: 'โปรไฟล์และความปลอดภัย',
+              subtitle: 'ภาษา, รูปแบบวันที่, สีหลัก, เปลี่ยนรหัสผ่าน',
+              onTap: () => context.push(AppRoutes.profile),
+            ),
+            const _AppLockCard(),
+            const _Section('เกี่ยวกับ'),
+            _Row(
+              icon: NxI.info,
+              title: 'MOAI NEXT Mobile',
+              subtitle: 'เวอร์ชัน $appVersion',
+            ),
+            if (config.updateNeed == UpdateNeed.optional)
+              _Row(
+                icon: NxI.arrowSquareOut,
+                title:
+                    'มีแอปเวอร์ชันใหม่ ${config.serverInfo?.latestVersion ?? ''}',
+                subtitle: 'เวอร์ชันในเครื่อง ${AppVersion.value}',
+                onTap: storeUrlFor(config.serverInfo) == null
+                    ? null
+                    : () => openStore(config.serverInfo),
+              ),
+            _Row(
+              icon: NxI.clipboardText,
+              title: 'บันทึกปัญหา',
+              subtitle: 'ส่งข้อมูลให้ทีมพัฒนาเมื่อพบปัญหา',
+              onTap: () => context.push(AppRoutes.diagnostics),
+            ),
+            const SizedBox(height: 12),
+            _Row(
+              icon: NxI.signOut,
+              color: cs.error,
+              title: 'ออกจากระบบ Space นี้',
+              subtitle: config.spaces.length > 1
+                  ? 'Space อื่นยังใช้งานได้ตามเดิม'
+                  : null,
+              onTap: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('ออกจากระบบ?'),
+                    content: Text(
+                      'ออกจาก ${sp?.title ?? serverLabel(config.apiBaseUrl)} บนเครื่องนี้',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('ยกเลิก'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('ออก'),
+                      ),
+                    ],
+                  ),
+                );
+                if (ok == true) await config.logout();
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

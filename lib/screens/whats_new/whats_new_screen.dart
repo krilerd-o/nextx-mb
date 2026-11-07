@@ -57,7 +57,12 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
         _items = rows;
         _error = null;
       });
-      api.markWhatsNewViewed([for (final r in rows) if (int.tryParse('${r['id']}') case final id?) id]).catchError((_) {});
+      api
+          .markWhatsNewViewed([
+            for (final r in rows)
+              if (int.tryParse('${r['id']}') case final id?) id,
+          ])
+          .catchError((_) {});
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
@@ -72,7 +77,9 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => it['acknowledged'] = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(formatApiError(e))));
     }
   }
 
@@ -83,76 +90,138 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
     final items = _items;
     Widget body;
     if (_error != null && items == null) {
-      body = Center(child: TextButton(onPressed: _load, child: Text('${formatApiError(_error!)}\nลองใหม่', textAlign: TextAlign.center)));
+      body = Center(
+        child: TextButton(
+          onPressed: _load,
+          child: Text(
+            '${formatApiError(_error!)}\nลองใหม่',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
     } else if (items == null) {
       body = const NxSkeletonList();
     } else if (items.isEmpty) {
-      body = Center(child: Text('ยังไม่มีประกาศ', style: theme.textTheme.bodyLarge));
+      body = Center(
+        child: Text('ยังไม่มีประกาศ', style: theme.textTheme.bodyLarge),
+      );
     } else {
       body = RefreshIndicator(
         onRefresh: _load,
-        child: ListView.builder(
-          padding: EdgeInsets.fromLTRB(16, 8 + NxScrollScaffold.topInset(context), 16, 32),
-          itemCount: items.length,
-          itemBuilder: (context, i) {
-            final it = items[i];
-            final (label, color) = whatsNewType(it['type']?.toString());
-            final acked = it['acknowledged'] == true;
-            final link = it['link_path']?.toString() ?? '';
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: NxSurfaceCard(
-                radius: 22,
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                          decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999)),
-                          child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
-                        ),
-                        const Spacer(),
-                        Text(it['date']?.toString().split('T').first ?? '', style: theme.textTheme.bodySmall),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      (it['title_th'] ?? it['title_en'] ?? '').toString(),
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 6),
-                    NxHtmlView(html: (it['description_th'] ?? it['description_en'] ?? '').toString()),
-                    Row(
-                      children: [
-                        if (link.isNotEmpty)
-                          TextButton.icon(
-                            onPressed: () {
-                              final base = context.read<AppConfig>().apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
-                              launchUrl(Uri.parse(link.startsWith('http') ? link : '$base$link'), mode: LaunchMode.externalApplication);
-                            },
-                            icon: const Icon(NxI.arrowSquareOut, size: 16),
-                            label: Text((it['link_label_th'] ?? 'เปิดดู').toString()),
+        child: Builder(
+          builder: (context) => ListView.builder(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              8 + NxScrollScaffold.topInset(context),
+              16,
+              32,
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, i) {
+              final it = items[i];
+              final (label, color) = whatsNewType(it['type']?.toString());
+              final acked = it['acknowledged'] == true;
+              final link = it['link_path']?.toString() ?? '';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: NxSurfaceCard(
+                  radius: 22,
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                color: color,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
-                        const Spacer(),
-                        acked
-                            ? Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Text('รับทราบแล้ว', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-                              )
-                            : TextButton(onPressed: () => _ack(it), child: const Text('รับทราบ')),
-                      ],
-                    ),
-                  ],
+                          const Spacer(),
+                          Text(
+                            it['date']?.toString().split('T').first ?? '',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        (it['title_th'] ?? it['title_en'] ?? '').toString(),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      NxHtmlView(
+                        html:
+                            (it['description_th'] ?? it['description_en'] ?? '')
+                                .toString(),
+                      ),
+                      Row(
+                        children: [
+                          if (link.isNotEmpty)
+                            TextButton.icon(
+                              onPressed: () {
+                                final base = context
+                                    .read<AppConfig>()
+                                    .apiBaseUrl
+                                    .replaceAll(RegExp(r'/+$'), '');
+                                launchUrl(
+                                  Uri.parse(
+                                    link.startsWith('http')
+                                        ? link
+                                        : '$base$link',
+                                  ),
+                                  mode: LaunchMode.externalApplication,
+                                );
+                              },
+                              icon: const Icon(NxI.arrowSquareOut, size: 16),
+                              label: Text(
+                                (it['link_label_th'] ?? 'เปิดดู').toString(),
+                              ),
+                            ),
+                          const Spacer(),
+                          acked
+                              ? Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Text(
+                                    'รับทราบแล้ว',
+                                    style: theme.textTheme.labelMedium
+                                        ?.copyWith(color: cs.onSurfaceVariant),
+                                  ),
+                                )
+                              : TextButton(
+                                  onPressed: () => _ack(it),
+                                  child: const Text('รับทราบ'),
+                                ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       );
     }
-    return NxScrollScaffold(insetBody: false, header: const NxAppHeader(title: 'มีอะไรใหม่'), body: body);
+    return NxScrollScaffold(
+      insetBody: false,
+      header: const NxAppHeader(title: 'มีอะไรใหม่'),
+      body: body,
+    );
   }
 }

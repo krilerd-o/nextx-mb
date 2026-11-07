@@ -240,9 +240,6 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
 
     // Glass header floats over the page; content scrolls up beneath it.
     final pad = bp.scrollPadding(context, inShell: true);
-    final listPad = pad.copyWith(
-      top: pad.top + NxScrollScaffold.topInset(context),
-    );
     return NxScrollScaffold(
       insetBody: false,
       header: NxAppHeader.hub(
@@ -254,191 +251,207 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          const Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 360,
-            child: _PastelHero(),
-          ),
-          Column(
+      body: Builder(
+        builder: (context) {
+          final listPad = pad.copyWith(
+            // +12: greeting starts clear of the header's blur tail.
+            top: pad.top + 12 + NxScrollScaffold.topInset(context),
+          );
+          return Stack(
             children: [
-              if (_refreshing)
-                SizedBox(height: NxScrollScaffold.topInset(context)),
-              if (_refreshing) const LinearProgressIndicator(minHeight: 2),
-              Expanded(
-                child: _loading
-                    ? ListView(
-                        padding: listPad,
-                        children: const [NxSkeletonKpiGrid()],
-                      )
-                    : RefreshIndicator(
-                        edgeOffset: NxScrollScaffold.topInset(context),
-                        color: cs.primary,
-                        onRefresh: _load,
-                        child: ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: _refreshing ? pad : listPad,
-                          children: [
-                            Text(
-                              '${greetingFor(now)}${session.displayName != null ? ' ${session.displayName}' : ''}',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              thaiLongDate(now),
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const NxWorkspaceSwitcher(),
-                            if (_error != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: Text(
-                                  formatApiError(_error!),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: cs.error,
+              const Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 360,
+                child: _PastelHero(),
+              ),
+              Column(
+                children: [
+                  if (_refreshing)
+                    SizedBox(height: NxScrollScaffold.topInset(context)),
+                  if (_refreshing) const LinearProgressIndicator(minHeight: 2),
+                  Expanded(
+                    child: _loading
+                        ? ListView(
+                            padding: listPad,
+                            children: const [NxSkeletonKpiGrid()],
+                          )
+                        : RefreshIndicator(
+                            edgeOffset: NxScrollScaffold.topInset(context),
+                            color: cs.primary,
+                            onRefresh: _load,
+                            child: ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: _refreshing ? pad : listPad,
+                              children: [
+                                Text(
+                                  '${greetingFor(now)}${session.displayName != null ? ' ${session.displayName}' : ''}',
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  thaiLongDate(now),
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: cs.onSurfaceVariant,
                                   ),
                                 ),
-                              ),
-                            if (_whatsNew > 0) ...[
-                              const SizedBox(height: 12),
-                              NxSurfaceCard(
-                                radius: 20,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 12,
-                                ),
-                                onTap: () async {
-                                  await context.push(AppRoutes.whatsNew);
-                                  if (mounted) _load();
-                                },
-                                child: Row(
-                                  children: [
-                                    Icon(NxI.sparkleFill, color: cs.primary),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        'มีอะไรใหม่ $_whatsNew รายการ',
-                                        style: theme.textTheme.titleSmall,
-                                      ),
+                                const SizedBox(height: 8),
+                                const NxWorkspaceSwitcher(),
+                                if (_error != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12),
+                                    child: Text(
+                                      formatApiError(_error!),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: cs.error),
                                     ),
-                                    Icon(
-                                      NxI.caretRight,
-                                      size: 16,
-                                      color: cs.onSurfaceVariant,
+                                  ),
+                                if (_whatsNew > 0) ...[
+                                  const SizedBox(height: 12),
+                                  NxSurfaceCard(
+                                    radius: 20,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 16),
-                            _TodayCard(
-                              showAttendance: MenuAccess.allow(
-                                session,
-                                MenuAccess.attendance,
-                              ),
-                              clockIn: clockIn,
-                              clockOut: clockOut,
-                              next: _upcoming().isEmpty
-                                  ? null
-                                  : _upcoming().first,
-                              overdue: _count(counts, 'overdue'),
-                              today: _count(counts, 'today'),
-                              upcoming: _count(counts, 'upcoming'),
-                              hasWork: counts != null,
-                            ),
-                            if (MenuAccess.allow(session, MenuAccess.ai)) ...[
-                              const SizedBox(height: 12),
-                              _AiBriefCard(text: _brief(counts, clockIn)),
-                            ],
-                            if (quick.isNotEmpty) ...[
-                              const SizedBox(height: 20),
-                              _QuickGrid(actions: quick),
-                            ],
-                            if (counts != null && _workItems().isNotEmpty) ...[
-                              const SizedBox(height: 24),
-                              _SectionTitle(
-                                'งานของฉัน',
-                                action: 'ทั้งหมด',
-                                onAction: () =>
-                                    context.push(AppRoutes.workspaceHome),
-                              ),
-                              for (final it in _workItems()) _WorkRow(item: it),
-                            ],
-                            if (_upcoming().length > 1) ...[
-                              const SizedBox(height: 24),
-                              _SectionTitle(
-                                'กิจกรรมถัดไป',
-                                action: 'ปฏิทิน',
-                                onAction: () =>
-                                    context.push(AppRoutes.calendar),
-                              ),
-                              for (final a in _upcoming().skip(1))
-                                _ListRow(
-                                  icon: NxI.calendarBlank,
-                                  title:
-                                      a['subject']?.toString() ??
-                                      entityTitle(a, module: 'activity'),
-                                  subtitle: [
-                                    _hhmm(a['date_start']),
-                                    a['location']?.toString() ?? '',
-                                  ].where((e) => e.isNotEmpty).join(' · '),
-                                  onTap: a['id'] == null
-                                      ? null
-                                      : () => context.push(
-                                          AppRoutes.activity(
-                                            a['id'].toString(),
+                                    onTap: () async {
+                                      await context.push(AppRoutes.whatsNew);
+                                      if (mounted) _load();
+                                    },
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          NxI.sparkleFill,
+                                          color: cs.primary,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            'มีอะไรใหม่ $_whatsNew รายการ',
+                                            style: theme.textTheme.titleSmall,
                                           ),
                                         ),
+                                        Icon(
+                                          NxI.caretRight,
+                                          size: 16,
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 16),
+                                _TodayCard(
+                                  showAttendance: MenuAccess.allow(
+                                    session,
+                                    MenuAccess.attendance,
+                                  ),
+                                  clockIn: clockIn,
+                                  clockOut: clockOut,
+                                  next: _upcoming().isEmpty
+                                      ? null
+                                      : _upcoming().first,
+                                  overdue: _count(counts, 'overdue'),
+                                  today: _count(counts, 'today'),
+                                  upcoming: _count(counts, 'upcoming'),
+                                  hasWork: counts != null,
                                 ),
-                            ],
-                            if (statTiles.isNotEmpty) ...[
-                              const SizedBox(height: 24),
-                              const _SectionTitle('ภาพรวม'),
-                              _StatGrid(
-                                children: [
-                                  for (final (module, icon, n) in statTiles)
-                                    _StatCard(
-                                      label: EntityModules.titleOf(module),
-                                      value: n,
-                                      icon: icon,
-                                      onTap: () => context.push(
-                                        EntityModules.isFsm(module)
-                                            ? AppRoutes.fsmModule(module)
-                                            : AppRoutes.crmModule(module),
-                                      ),
+                                if (MenuAccess.allow(
+                                  session,
+                                  MenuAccess.ai,
+                                )) ...[
+                                  const SizedBox(height: 12),
+                                  _AiBriefCard(text: _brief(counts, clockIn)),
+                                ],
+                                if (quick.isNotEmpty) ...[
+                                  const SizedBox(height: 20),
+                                  _QuickGrid(actions: quick),
+                                ],
+                                if (counts != null &&
+                                    _workItems().isNotEmpty) ...[
+                                  const SizedBox(height: 24),
+                                  _SectionTitle(
+                                    'งานของฉัน',
+                                    action: 'ทั้งหมด',
+                                    onAction: () =>
+                                        context.push(AppRoutes.workspaceHome),
+                                  ),
+                                  for (final it in _workItems())
+                                    _WorkRow(item: it),
+                                ],
+                                if (_upcoming().length > 1) ...[
+                                  const SizedBox(height: 24),
+                                  _SectionTitle(
+                                    'กิจกรรมถัดไป',
+                                    action: 'ปฏิทิน',
+                                    onAction: () =>
+                                        context.push(AppRoutes.calendar),
+                                  ),
+                                  for (final a in _upcoming().skip(1))
+                                    _ListRow(
+                                      icon: NxI.calendarBlank,
+                                      title:
+                                          a['subject']?.toString() ??
+                                          entityTitle(a, module: 'activity'),
+                                      subtitle: [
+                                        _hhmm(a['date_start']),
+                                        a['location']?.toString() ?? '',
+                                      ].where((e) => e.isNotEmpty).join(' · '),
+                                      onTap: a['id'] == null
+                                          ? null
+                                          : () => context.push(
+                                              AppRoutes.activity(
+                                                a['id'].toString(),
+                                              ),
+                                            ),
                                     ),
                                 ],
-                              ),
-                            ],
-                            if (salesFigures(_sales).isNotEmpty ||
-                                caseFigures(_cases).isNotEmpty) ...[
-                              const SizedBox(height: 24),
-                              const _SectionTitle('ยอดขายและเคส'),
-                              TeamOverviewCard(
-                                sales: _sales,
-                                cases: _cases,
-                                onOpenSales: () =>
-                                    context.push(AppRoutes.crmModule('deal')),
-                                onOpenCases: () =>
-                                    context.push(AppRoutes.crmModule('case')),
-                              ),
-                            ],
-                            const SizedBox(height: 24),
-                          ],
-                        ),
-                      ),
+                                if (statTiles.isNotEmpty) ...[
+                                  const SizedBox(height: 24),
+                                  const _SectionTitle('ภาพรวม'),
+                                  _StatGrid(
+                                    children: [
+                                      for (final (module, icon, n) in statTiles)
+                                        _StatCard(
+                                          label: EntityModules.titleOf(module),
+                                          value: n,
+                                          icon: icon,
+                                          onTap: () => context.push(
+                                            EntityModules.isFsm(module)
+                                                ? AppRoutes.fsmModule(module)
+                                                : AppRoutes.crmModule(module),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                                if (salesFigures(_sales).isNotEmpty ||
+                                    caseFigures(_cases).isNotEmpty) ...[
+                                  const SizedBox(height: 24),
+                                  const _SectionTitle('ยอดขายและเคส'),
+                                  TeamOverviewCard(
+                                    sales: _sales,
+                                    cases: _cases,
+                                    onOpenSales: () => context.push(
+                                      AppRoutes.crmModule('deal'),
+                                    ),
+                                    onOpenCases: () => context.push(
+                                      AppRoutes.crmModule('case'),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 24),
+                              ],
+                            ),
+                          ),
+                  ),
+                ],
               ),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
