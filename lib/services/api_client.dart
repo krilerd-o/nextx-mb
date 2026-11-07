@@ -134,6 +134,8 @@ class ApiClient {
         onRequest: (options, handler) {
           // Tells NEXTX this is the app: Bearer wins over any stray cookie (backend mobileSupport.js).
           options.headers['X-Nextx-Client'] = 'mobile';
+          // Device list on the server (Settings → devices): name / platform / app version.
+          options.headers.addAll(deviceHeaders);
           final token = _accessToken;
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
@@ -167,6 +169,8 @@ class ApiClient {
           // for bad credentials — that must not log the current session out.
           final isAuthCall = path.contains('/api/auth/');
           if (code == 401 && !isAuthCall) {
+            // Signed out from another device (NEXTX X-Session-Revoked) vs token simply expired.
+            lastUnauthorizedRevoked = err.response?.headers.value('x-session-revoked') == '1';
             _onUnauthorized?.call();
           }
           handler.next(err);
@@ -190,6 +194,13 @@ class ApiClient {
 
   late final Dio _dio;
   VoidCallback? _onUnauthorized;
+
+  /// Sent with every request (set once at startup): X-Device-Name (URL-encoded),
+  /// X-Device-Platform, X-App-Version.
+  static Map<String, String> deviceHeaders = const {};
+
+  /// The last 401 said this session was signed out from another device.
+  bool lastUnauthorizedRevoked = false;
   String? _accessToken;
   String? _businessId;
   String? _packageCode;
@@ -427,6 +438,30 @@ class ApiClient {
       'code': code,
       'remember': true,
     }));
+  }
+
+  /// Devices signed in to this account (`GET /api/me/sessions`, feature `device_sessions`).
+  Future<({List<Map<String, dynamic>> list, String? currentSid})> getDeviceSessions() async {
+    final env = await _send('GET', '/api/me/sessions');
+    final data = env['data'];
+    return (
+      list: extractMapList(data),
+      currentSid: data is Map ? data['current_sid']?.toString() : null,
+    );
+  }
+
+  Future<void> revokeDeviceSession(String sid) async {
+    await _send('DELETE', '/api/me/sessions/${Uri.encodeComponent(sid)}');
+  }
+
+  /// Signs out every other device (this one stays signed in).
+  Future<void> revokeOtherDeviceSessions() async {
+    await _send('POST', '/api/me/sessions/revoke-others');
+  }
+
+  /// Signs out every device including this one.
+  Future<void> revokeAllDeviceSessions() async {
+    await _send('POST', '/api/me/sessions/revoke-all');
   }
 
   Future<void> logoutRemote() async {

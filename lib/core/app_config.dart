@@ -430,8 +430,14 @@ class AppConfig extends ChangeNotifier {
     _searchHistory = raw.split('|||').where((e) => e.isNotEmpty).toList();
   }
 
+  bool _sessionRevokedNotice = false;
+
+  /// Signed out because another device used "sign out this device / all devices".
+  bool get sessionRevokedNotice => _sessionRevokedNotice;
+
   void _handleUnauthorized() {
     if (_loggingOut || !_session.isLoggedIn) return;
+    _sessionRevokedNotice = _api.lastUnauthorizedRevoked;
     _sessionExpiredNotice = true;
     SharedPreferences.getInstance().then((p) => p.setBool(_keySessionExpired, true));
     logout();

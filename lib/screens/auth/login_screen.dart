@@ -52,7 +52,9 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     final config = context.read<AppConfig>();
     if (config.sessionExpiredNotice) {
-      _error = 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
+      _error = config.sessionRevokedNotice
+          ? 'ถูกออกจากระบบจากอุปกรณ์อื่น กรุณาเข้าสู่ระบบใหม่'
+          : 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
       WidgetsBinding.instance.addPostFrameCallback((_) => config.clearSessionExpiredNotice());
     }
     final recent = config.recentAccounts;
