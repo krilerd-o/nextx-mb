@@ -104,7 +104,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                     ),
                     const SizedBox(height: 20),
                   ],
-                  _BarPreview(tabs: _tabs),
+                  TabBarPreview(tabs: _tabs),
                   const SizedBox(height: 20),
                   Text(tr('แท็บที่แสดง (ลากเพื่อเรียงลำดับ)'), style: theme.textTheme.titleSmall),
                   const SizedBox(height: 8),
@@ -194,8 +194,8 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
 }
 
 /// Small mock of the bottom bar.
-class _BarPreview extends StatelessWidget {
-  const _BarPreview({required this.tabs});
+class TabBarPreview extends StatelessWidget {
+  const TabBarPreview({super.key, required this.tabs});
   final List<String> tabs;
 
   @override

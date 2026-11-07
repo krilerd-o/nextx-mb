@@ -290,7 +290,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                               padding: _refreshing ? pad : listPad,
                               children: [
                                 Text(
-                                  tr('${greetingFor(now)}${session.displayName != null ? ' ${session.displayName}' : ''}'),
+                                  '${tr(greetingFor(now))}${session.displayName != null ? ' ${session.displayName}' : ''}',
                                   style: theme.textTheme.headlineSmall
                                       ?.copyWith(fontWeight: FontWeight.w700),
                                 ),

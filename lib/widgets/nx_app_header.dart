@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -238,9 +239,12 @@ class _HubAvatar extends StatelessWidget {
       } catch (_) {}
     }
     return GestureDetector(
-      // Tap = Space switcher (Slack-style); long-press = profile.
-      onTap: () => showSpaceSwitcher(context),
-      onLongPress: () => GoRouter.maybeOf(context)?.push(AppRoutes.profile),
+      // Tap = profile hub (profile + all settings); long-press = Space switcher.
+      onTap: () => GoRouter.maybeOf(context)?.push(AppRoutes.settings),
+      onLongPress: () {
+        HapticFeedback.mediumImpact();
+        showSpaceSwitcher(context);
+      },
       child: SizedBox(
         width: NxAppHeader.controlSize,
         height: NxAppHeader.controlSize,

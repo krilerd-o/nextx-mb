@@ -112,6 +112,13 @@ class NxI {
   static const filePdf = LucideIcons300.fileText;
   static const note = LucideIcons300.stickyNote;
   static const users = LucideIcons300.users;
+  static const languages = LucideIcons300.languages;
+  static const monitorSmartphone = LucideIcons300.monitorSmartphone;
+  static const penLine = LucideIcons300.penLine;
+  static const megaphone = LucideIcons300.megaphone;
+  static const bug = LucideIcons300.bug;
+  static const calendarClock = LucideIcons300.calendarClock;
+  static const panelBottom = LucideIcons300.panelBottom;
   static const globe = LucideIcons300.globe;
   static const arrowClockwise = LucideIcons300.rotateCw;
   static const arrowClockwiseFill = LucideIcons500.rotateCw;

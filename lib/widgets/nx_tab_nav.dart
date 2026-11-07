@@ -227,7 +227,7 @@ class _Item extends StatelessWidget {
     final body = Semantics(
       button: true,
       selected: selected,
-      label: dest.label,
+      label: tr(dest.label),
       excludeSemantics: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,

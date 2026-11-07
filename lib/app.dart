@@ -79,6 +79,9 @@ class _NextXMobileAppState extends State<NextXMobileApp>
             accent: accent,
           ),
           themeMode: sel.$2,
+          // Theme/colour changes cross-fade instead of snapping.
+          themeAnimationDuration: const Duration(milliseconds: 420),
+          themeAnimationCurve: Curves.easeInOutCubic,
           builder: (context, child) => BackdropGroup(
             child: NxAtmosphere(
               child: NxLanguageSwitchLayer(

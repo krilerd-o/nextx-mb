@@ -81,11 +81,30 @@ class AppConfig extends ChangeNotifier {
     _load();
   }
 
+  /// Theme colours (index is what's stored — append only, never reorder).
   static const List<Color> accentOptions = [
     Color(0xFF6366F1),
     Color(0xFF0EA5E9),
     Color(0xFF10B981),
     Color(0xFFF59E0B),
+    Color(0xFFF43F5E),
+    Color(0xFF8B5CF6),
+    Color(0xFF14B8A6),
+    Color(0xFFF97316),
+    Color(0xFF475569),
+  ];
+
+  /// Names shown under each theme colour (Thai; translated by tr()).
+  static const List<String> accentNames = [
+    'คราม',
+    'ฟ้า',
+    'มรกต',
+    'อำพัน',
+    'กุหลาบ',
+    'ม่วง',
+    'เขียวน้ำทะเล',
+    'ส้ม',
+    'กราไฟต์',
   ];
 
   final ApiClient _api = ApiClient();

@@ -69,12 +69,16 @@ class ProfileScreen extends StatelessWidget {
                 Text(tr(email), style: theme.textTheme.titleMedium),
                 Text(
                   tr('v${SettingsScreen.appVersion}'),
-                  style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 Text(
                   tr('รูปโปรไฟล์อัปโหลดไปเซิร์ฟเวอร์'),
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 NxHeroCta(
@@ -98,7 +102,8 @@ class ProfileScreen extends StatelessWidget {
                   ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  onPressed: () => nxPush<bool>(context, const ProfileEditScreen()),
+                  onPressed: () =>
+                      nxPush<bool>(context, const ProfileEditScreen()),
                   icon: const Icon(NxI.pencilSimple),
                   label: Text(tr('แก้ไขข้อมูลส่วนตัว')),
                 ),
@@ -107,80 +112,10 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Text(
-            tr('การแสดงผล'),
-            style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 8),
-          NxSurfaceCard(
-            child: Column(
-              children: [
-                ListTile(
-                  title: Text(tr('ภาษาของแอป')),
-                  subtitle: Text(tr(config.uiLocaleCode == 'th' ? 'ไทย' : 'English')),
-                  trailing: DropdownButton<String>(
-                    value: config.uiLocaleCode,
-                    items: [
-                      DropdownMenuItem(value: 'th', child: Text(tr('ไทย'))),
-                      DropdownMenuItem(value: 'en', child: Text(tr('English'))),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) config.setUiLocaleCode(v);
-                    },
-                  ),
-                ),
-                ListTile(
-                  title: Text(tr('รูปแบบวันที่/เวลา')),
-                  subtitle: Text(tr(config.dateFormatPattern)),
-                  trailing: DropdownButton<String>(
-                    value: config.dateFormatPattern,
-                    items: [
-                      DropdownMenuItem(value: 'dd/MM/yyyy HH:mm', child: Text(tr('dd/MM/yyyy HH:mm'))),
-                      DropdownMenuItem(value: 'yyyy-MM-dd HH:mm', child: Text(tr('yyyy-MM-dd HH:mm'))),
-                      DropdownMenuItem(value: 'MM/dd/yyyy h:mm a', child: Text(tr('MM/dd/yyyy h:mm a'))),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) config.setDateFormatPattern(v);
-                    },
-                  ),
-                ),
-                ListTile(
-                  title: Text(tr('สีเน้น (accent)')),
-                  subtitle: Text(tr('เก็บใน SharedPreferences')),
-                  trailing: DropdownButton<int>(
-                    value: config.accentIndex.clamp(0, AppConfig.accentOptions.length - 1),
-                    items: List.generate(
-                      AppConfig.accentOptions.length,
-                      (i) => DropdownMenuItem(
-                        value: i,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 16,
-                              height: 16,
-                              decoration: BoxDecoration(
-                                color: AppConfig.accentOptions[i],
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(tr('ตัวเลือก ${i + 1}')),
-                          ],
-                        ),
-                      ),
-                    ),
-                    onChanged: (v) {
-                      if (v != null) config.setAccentIndex(v);
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
             tr('ความปลอดภัย'),
-            style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 8),
           NxSurfaceCard(
@@ -191,101 +126,39 @@ class ProfileScreen extends StatelessWidget {
                   title: Text(tr('ลายเซ็นของฉัน')),
                   subtitle: Text(tr('ใช้บนใบเสนอราคาและเอกสาร (TH / EN)')),
                   trailing: const Icon(NxI.caretRight),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MySignaturesScreen())),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const MySignaturesScreen(),
+                    ),
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(NxI.phone),
                   title: Text(tr('ยืนยันเบอร์มือถือ')),
                   subtitle: Text(tr('ใช้เข้าสู่ระบบด้วย OTP SMS')),
                   trailing: const Icon(NxI.caretRight),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneVerifyScreen())),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const PhoneVerifyScreen(),
+                    ),
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(NxI.password),
                   title: Text(tr('เปลี่ยนรหัสผ่าน')),
                   subtitle: Text(tr('รหัสปัจจุบัน + รหัสใหม่ (ยืนยัน)')),
-                  onTap: () async {
-                    final current = TextEditingController();
-                    final next = TextEditingController();
-                    final confirm = TextEditingController();
-                    final formKey = GlobalKey<FormState>();
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: Text(tr('เปลี่ยนรหัสผ่าน')),
-                        content: Form(
-                          key: formKey,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TextFormField(
-                                controller: current,
-                                obscureText: true,
-                                decoration: InputDecoration(labelText: tr('รหัสผ่านปัจจุบัน')),
-                                validator: (v) =>
-                                    (v == null || v.isEmpty) ? 'กรุณากรอก' : null,
-                              ),
-                              TextFormField(
-                                controller: next,
-                                obscureText: true,
-                                decoration: InputDecoration(labelText: tr('รหัสผ่านใหม่')),
-                                validator: (v) =>
-                                    (v == null || v.length < 6) ? 'อย่างน้อย 6 ตัวอักษร' : null,
-                              ),
-                              TextFormField(
-                                controller: confirm,
-                                obscureText: true,
-                                decoration: InputDecoration(labelText: tr('ยืนยันรหัสใหม่')),
-                                validator: (v) =>
-                                    v != next.text ? 'รหัสไม่ตรงกัน' : null,
-                              ),
-                            ],
-                          ),
-                        ),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
-                          FilledButton(
-                            onPressed: () {
-                              if (formKey.currentState?.validate() == true) {
-                                Navigator.pop(ctx, true);
-                              }
-                            },
-                            child: Text(tr('บันทึก')),
-                          ),
-                        ],
-                      ),
-                    );
-                    final value = next.text;
-                    final currentValue = current.text;
-                    current.dispose();
-                    next.dispose();
-                    confirm.dispose();
-                    if (ok == true) {
-                      try {
-                        await config.apiClient.changePassword(value, currentPassword: currentValue);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(tr('เปลี่ยนรหัสแล้ว'))),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(tr(formatApiError(e)))),
-                          );
-                        }
-                      }
-                    }
-                  },
+                  onTap: () => showChangePasswordDialog(context),
                 ),
                 ListTile(
                   leading: const Icon(NxI.bell),
                   title: Text(tr('โทเคนพุช (FCM)')),
                   subtitle: Text(
-                    tr(DevicePushService.instance.lastToken == null ||
-                            DevicePushService.instance.lastToken!.isEmpty
-                        ? 'ยังไม่มี — เปิดแอปบนมือถือจริงแล้วล็อกอิน'
-                        : DevicePushService.instance.lastToken!),
+                    tr(
+                      DevicePushService.instance.lastToken == null ||
+                              DevicePushService.instance.lastToken!.isEmpty
+                          ? 'ยังไม่มี — เปิดแอปบนมือถือจริงแล้วล็อกอิน'
+                          : DevicePushService.instance.lastToken!,
+                    ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -298,7 +171,13 @@ class ProfileScreen extends StatelessWidget {
                     if (token == null || token.isEmpty) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(tr('ยังไม่มีโทเคน — ใช้แอปบน Android หลังวาง google-services.json'))),
+                          SnackBar(
+                            content: Text(
+                              tr(
+                                'ยังไม่มีโทเคน — ใช้แอปบน Android หลังวาง google-services.json',
+                              ),
+                            ),
+                          ),
                         );
                       }
                       return;
@@ -306,7 +185,13 @@ class ProfileScreen extends StatelessWidget {
                     await Clipboard.setData(ClipboardData(text: token));
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(tr('คัดลอกโทเคนแล้ว — วางใน Firebase Cloud Messaging เพื่อทดสอบ'))),
+                        SnackBar(
+                          content: Text(
+                            tr(
+                              'คัดลอกโทเคนแล้ว — วางใน Firebase Cloud Messaging เพื่อทดสอบ',
+                            ),
+                          ),
+                        ),
                       );
                     }
                   },
@@ -321,11 +206,16 @@ class ProfileScreen extends StatelessWidget {
                       builder: (ctx) => AlertDialog(
                         title: Text(tr('Two-factor authentication')),
                         content: Text(
-                          tr('แอปยังไม่มี endpoint 2FA จาก NEXTX web API '
-                          'เมื่อเซิร์ฟเวอร์เปิดใช้ จะเชื่อมจากหน้านี้'),
+                          tr(
+                            'แอปยังไม่มี endpoint 2FA จาก NEXTX web API '
+                            'เมื่อเซิร์ฟเวอร์เปิดใช้ จะเชื่อมจากหน้านี้',
+                          ),
                         ),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ปิด'))),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: Text(tr('ปิด')),
+                          ),
                         ],
                       ),
                     );
@@ -337,5 +227,87 @@ class ProfileScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Change-password dialog (current + new + confirm), used by the profile hub.
+Future<void> showChangePasswordDialog(BuildContext context) async {
+  final config = context.read<AppConfig>();
+  final current = TextEditingController();
+  final next = TextEditingController();
+  final confirm = TextEditingController();
+  final formKey = GlobalKey<FormState>();
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(tr('เปลี่ยนรหัสผ่าน')),
+      content: Form(
+        key: formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: current,
+              obscureText: true,
+              decoration: InputDecoration(labelText: tr('รหัสผ่านปัจจุบัน')),
+              validator: (v) =>
+                  (v == null || v.isEmpty) ? tr('กรุณากรอก') : null,
+            ),
+            TextFormField(
+              controller: next,
+              obscureText: true,
+              decoration: InputDecoration(labelText: tr('รหัสผ่านใหม่')),
+              validator: (v) => (v == null || v.length < 6)
+                  ? tr('อย่างน้อย 6 ตัวอักษร')
+                  : null,
+            ),
+            TextFormField(
+              controller: confirm,
+              obscureText: true,
+              decoration: InputDecoration(labelText: tr('ยืนยันรหัสใหม่')),
+              validator: (v) => v != next.text ? tr('รหัสไม่ตรงกัน') : null,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: Text(tr('ยกเลิก')),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (formKey.currentState?.validate() == true) {
+              Navigator.pop(ctx, true);
+            }
+          },
+          child: Text(tr('บันทึก')),
+        ),
+      ],
+    ),
+  );
+  final value = next.text;
+  final currentValue = current.text;
+  current.dispose();
+  next.dispose();
+  confirm.dispose();
+  if (ok == true) {
+    try {
+      await config.apiClient.changePassword(
+        value,
+        currentPassword: currentValue,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(tr('เปลี่ยนรหัสแล้ว'))));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      }
+    }
   }
 }
