@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons_500.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -744,6 +745,21 @@ class _QuickAction {
   final IconData icon;
   final String label;
   final String route;
+
+  /// Bolder stroke + own colour so shortcuts read clearly in light mode.
+  static const Map<String, (IconData, Color)> _styles = {
+    'ลงเวลา': (LucideIcons500.clock, Color(0xFF6366F1)),
+    'ขอลา': (LucideIcons500.calendarCheck, Color(0xFF0D9488)),
+    'รออนุมัติ': (LucideIcons500.circleCheck, Color(0xFF16A34A)),
+    'แชท': (LucideIcons500.messageCircle, Color(0xFF0284C7)),
+    'ปฏิทิน': (LucideIcons500.calendar, Color(0xFFD97706)),
+    'งานบริการ': (LucideIcons500.wrench, Color(0xFFEA580C)),
+    'เมล': (LucideIcons500.mail, Color(0xFFE11D48)),
+    'AI': (LucideIcons500.bot, Color(0xFF7C3AED)),
+  };
+
+  IconData get boldIcon => _styles[label]?.$1 ?? icon;
+  Color colorIn(ColorScheme cs) => _styles[label]?.$2 ?? cs.primary;
 }
 
 class _QuickGrid extends StatelessWidget {
@@ -771,18 +787,19 @@ class _QuickGrid extends StatelessWidget {
                     child: Column(
                       children: [
                         Container(
-                          width: 52,
-                          height: 52,
+                          width: 54,
+                          height: 54,
                           decoration: BoxDecoration(
-                            color: cs.primaryContainer,
-                            borderRadius: BorderRadius.circular(16),
+                            color: a.colorIn(cs).withValues(alpha: theme.brightness == Brightness.dark ? 0.22 : 0.12),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: a.colorIn(cs).withValues(alpha: 0.18)),
                           ),
-                          child: Icon(a.icon, color: cs.onPrimaryContainer),
+                          child: Icon(a.boldIcon, size: 24, color: a.colorIn(cs)),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           a.label,
-                          style: theme.textTheme.labelMedium,
+                          style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w500),
                           textAlign: TextAlign.center,
                           maxLines: 1,
                         ),

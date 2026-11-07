@@ -112,7 +112,8 @@ class _AddSpaceCancelPill extends StatelessWidget {
     return Positioned(
       left: 0,
       right: 0,
-      bottom: MediaQuery.paddingOf(context).bottom + 12,
+      // Above the sign-in screens' full-width bottom button (~56 px + margins).
+      bottom: MediaQuery.paddingOf(context).bottom + 92,
       child: Center(
         child: Material(
           color: Theme.of(context).colorScheme.inverseSurface,
