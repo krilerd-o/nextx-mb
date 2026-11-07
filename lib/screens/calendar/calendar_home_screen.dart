@@ -92,6 +92,9 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
 
   Future<List<Map<String, dynamic>>> _fetch() {
     final extra = <String, String>{
+      // Only what the agenda draws (servers without `cols` return everything).
+      'cols': 'id,subject,date_start,date_end,status,activitytype,location,checkindate,checkoutdate,'
+          'smownerid,account_name,contact_name,related_module,related_id,all_day,due_date',
       'sort': 'date_start',
       'order': _mode == _CalMode.pending ? 'desc' : 'asc',
     };

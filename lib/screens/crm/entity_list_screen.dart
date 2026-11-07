@@ -187,7 +187,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     return f['name'] == 'smownerid' || f['name'] == 'assign_to' || t == 'PicklistUser' || t == '53';
   }
 
-  Future<void> _loadSchema() async {
+  Future<void> _loadSchema({bool beforeList = false}) async {
     final api = context.read<AppConfig>().apiClient;
     try {
       final schema = await api.getFieldSchema(widget.module);
@@ -226,7 +226,33 @@ class _EntityListScreenState extends State<EntityListScreen> {
         _nameCol = _nameCandidates.where(names.contains).firstOrNull;
         _amountCol = _amountCandidates.where(names.contains).firstOrNull;
       });
-      // Owners / periods need the CV meta (users, date fields, presets).
+      // Owners / periods need the CV meta (users, date fields, presets) — not
+      // needed for the first page, so it loads behind the list.
+      _loadMeta(schema);
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
+    if (widget.module == 'case') _loadCaseTags();
+  }
+
+  Future<void> _loadCaseTags() async {
+    final api = context.read<AppConfig>().apiClient;
+      try {
+        final tags = await api.getTags(module: 'case');
+        if (mounted) {
+          setState(() => _tagOptions = [
+                for (final t in tags)
+                  if (t['id'] != null) NxFilterOption(t['id'].toString(), t['name']?.toString() ?? '#${t['id']}'),
+              ]);
+        }
+      } catch (e, s) {
+        ErrorReporting.report(e, s);
+      }
+  }
+
+  Future<void> _loadMeta(ModuleFieldSchema schema) async {
+    final api = context.read<AppConfig>().apiClient;
+    try {
       final meta = await api.getCustomViewMeta(widget.module);
       final users = [
         for (final u in (meta['users'] as List? ?? const []))
@@ -261,19 +287,6 @@ class _EntityListScreenState extends State<EntityListScreen> {
       });
     } catch (e, s) {
       ErrorReporting.report(e, s);
-    }
-    if (widget.module == 'case') {
-      try {
-        final tags = await api.getTags(module: 'case');
-        if (mounted) {
-          setState(() => _tagOptions = [
-                for (final t in tags)
-                  if (t['id'] != null) NxFilterOption(t['id'].toString(), t['name']?.toString() ?? '#${t['id']}'),
-              ]);
-        }
-      } catch (e, s) {
-        ErrorReporting.report(e, s);
-      }
     }
   }
 
@@ -393,10 +406,14 @@ class _EntityListScreenState extends State<EntityListScreen> {
     if (!mounted) return;
     if (saved != null) _query = saved;
     _cvId = cv;
-    _load(reset: true);
-    if (!context.read<AppConfig>().isLoggedIn) return;
-    _loadSchema();
+    if (!context.read<AppConfig>().isLoggedIn) {
+      _load(reset: true);
+      return;
+    }
+    // Schema first (cached) so even page 1 asks for slim rows; views in parallel.
     _loadViews();
+    await _loadSchema(beforeList: true);
+    if (mounted) _load(reset: true);
   }
 
   @override
@@ -449,7 +466,35 @@ class _EntityListScreenState extends State<EntityListScreen> {
   String get _cacheKey =>
       '${context.read<AppConfig>().prefsScope}|${widget.module}|$_cvId|${_query.q}|${_query.toJson()}';
 
+  /// Bumped on every reset load; older responses are ignored.
+  int _loadGen = 0;
+
+  /// Columns this list actually draws (card slots, title, status, phone,
+  /// owner). Sent as `cols=` so big tables return slim rows; servers without
+  /// the option just return everything.
+  Map<String, String> _liteParams({required bool firstPage}) {
+    final out = <String, String>{
+      // Only the first page needs a total (COUNT is the slow part on big tables).
+      if (!firstPage) 'with_total': '0',
+    };
+    final ctx = _cardCtx;
+    if (ctx == null) return out;
+    final cols = <String>{
+      'id', 'smownerid', 'createdtime', 'modifiedtime',
+      ?_statusKey,
+      for (final slot in CardLayout.slots) ?_layout?.slot(slot),
+      ..._nameCandidates, '${widget.module}_no', 'customer_name', 'account_name', 'contact_name',
+      'firstname', 'lastname', 'lead_firstname', 'lead_lastname', 'contact_firstname', 'contact_lastname',
+      'mobile_1st', 'mobile', 'phone', 'contact_mobile', 'email_1st', 'email', 'image_url',
+      if (widget.module == 'activity') ...['date_start', 'date_end', 'status', 'activitytype', 'location', 'checkindate'],
+    }..removeWhere((c) => c.isEmpty || (!ctx.fields.containsKey(c) && !CardFieldContext.metaLabels.containsKey(c) && c != 'id'));
+    out['cols'] = cols.join(',');
+    return out;
+  }
+
   Future<void> _load({bool reset = false}) async {
+    if (reset) _loadGen++;
+    final gen = _loadGen;
     if (reset && _items.isEmpty) {
       final hit = _firstPageCache[_cacheKey];
       if (hit != null) {
@@ -484,9 +529,13 @@ class _EntityListScreenState extends State<EntityListScreen> {
         limit: 30,
         page: _page,
         q: _query.q.isEmpty ? null : _query.q,
-        extra: _extra(),
+        extra: {
+          ...?_extra(),
+          ..._liteParams(firstPage: reset),
+        },
       );
-      if (!mounted) return;
+      // A newer search/filter started while this page was loading: drop it.
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         if (reset) {
           _items

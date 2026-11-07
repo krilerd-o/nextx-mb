@@ -167,19 +167,23 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
     for (final module in _statModules.keys) {
       if (!MenuAccess.allow(session, EntityModules.menuKeyOf(module))) continue;
       try {
-        final page = await api.getEntityList(module, limit: 200, extra: const {
-          'period_field': 'createdtime',
-          'period_preset': 'last7days',
-          'sort': 'createdtime',
-          'order': 'desc',
-        });
-        final days = List<int>.filled(7, 0);
-        for (final r in page.items) {
-          final d = parseThai(r['createdtime']);
-          if (d == null) continue;
-          final diff = t0.difference(DateTime(d.year, d.month, d.day)).inDays;
-          if (diff >= 0 && diff < 7) days[6 - diff]++;
-        }
+        // One tiny COUNT per day (limit 1 + with_total) — cheap even on huge tables.
+        String ymd(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+        final days = await Future.wait([
+          for (var i = 6; i >= 0; i--)
+            () async {
+              final d = ymd(t0.subtract(Duration(days: i)));
+              final page = await api.getEntityList(module, limit: 1, extra: {
+                'period_field': 'createdtime',
+                'period_preset': 'custom',
+                'period_start': d,
+                'period_end': d,
+                'with_total': '1',
+                'cols': 'id',
+              });
+              return page.total ?? page.items.length;
+            }(),
+        ]);
         if (!mounted) return;
         setState(() => _sparks[module] = days);
       } catch (_) {

@@ -573,7 +573,19 @@ class ApiClient {
     return schema.fields;
   }
 
-  Future<ModuleFieldSchema> getFieldSchema(String module) async {
+  /// Field schemas change rarely; keep each for a few minutes per business.
+  final Map<String, ({DateTime at, ModuleFieldSchema schema})> _schemaCache = {};
+
+  Future<ModuleFieldSchema> getFieldSchema(String module, {bool fresh = false}) async {
+    final key = '${_businessId ?? ''}|$module';
+    final hit = _schemaCache[key];
+    if (!fresh && hit != null && DateTime.now().difference(hit.at) < const Duration(minutes: 5)) return hit.schema;
+    final schema = await _fetchFieldSchema(module);
+    _schemaCache[key] = (at: DateTime.now(), schema: schema);
+    return schema;
+  }
+
+  Future<ModuleFieldSchema> _fetchFieldSchema(String module) async {
     final env = await _send(
       'GET',
       '/api/fields/$module',
