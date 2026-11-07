@@ -14,6 +14,7 @@ import '../../services/unread_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/thai_time.dart';
 
 /// NEXTX notification categories (backend/src/services/notificationCategory.js).
 const notificationCategories = <String, String>{
@@ -43,9 +44,9 @@ IconData notificationIcon(Map<String, dynamic> n) {
 
 /// "5 นาทีที่แล้ว" style label.
 String relativeTime(dynamic raw, {DateTime? now}) {
-  final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+  final d = parseThai(raw?.toString() ?? '');
   if (d == null) return '';
-  final diff = (now ?? DateTime.now()).difference(d);
+  final diff = (now ?? thaiNow()).difference(d);
   if (diff.inMinutes < 1) return 'เมื่อสักครู่';
   if (diff.inMinutes < 60) return '${diff.inMinutes} นาทีที่แล้ว';
   if (diff.inHours < 24) return '${diff.inHours} ชั่วโมงที่แล้ว';
@@ -141,7 +142,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     setState(() {
       _items = [
         for (final it in _items)
-          if (it['id'] == n['id']) {...it, 'read_at': DateTime.now().toIso8601String()} else it,
+          if (it['id'] == n['id']) {...it, 'read_at': thaiNow().toIso8601String()} else it,
       ];
     });
     UnreadNotifications.instance.markedRead();
@@ -177,7 +178,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     try {
       await _api.markAllNotificationsRead();
       if (!mounted) return;
-      final now = DateTime.now().toIso8601String();
+      final now = thaiNow().toIso8601String();
       setState(() => _items = [for (final it in _items) {...it, 'read_at': it['read_at'] ?? now}]);
       UnreadNotifications.instance.clear();
     } catch (e) {

@@ -21,6 +21,7 @@ import '../../widgets/nx_surface_card.dart';
 import '../crm/entity_create_screen.dart';
 import 'activity_detail_screen.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/thai_time.dart';
 
 class CalendarHomeScreen extends StatefulWidget {
   const CalendarHomeScreen({super.key});
@@ -34,7 +35,7 @@ enum _CalMode { agenda, incoming, pending }
 class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   var _revision = 0;
   _CalMode _mode = _CalMode.agenda;
-  DateTime _selectedDay = DateTime.now();
+  DateTime _selectedDay = thaiNow();
   bool _weekView = false;
   StreamSubscription<RealtimeEvent>? _live;
   Timer? _debounce;
@@ -247,7 +248,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                   counts: {for (final e in byDay.entries) e.key: e.value.length},
                   onSelect: (d) => setState(() => _selectedDay = d),
                   onMonthChange: (m) => setState(() {
-                    final now = DateTime.now();
+                    final now = thaiNow();
                     _selectedDay = (m.year == now.year && m.month == now.month) ? now : m;
                     _revision++;
                   }),
@@ -330,7 +331,7 @@ Map<String, List<Map<String, dynamic>>> groupActivitiesByDay(List<Map<String, dy
     final d = DateTime.tryParse(raw);
     final key = d == null
         ? (raw.length >= 10 ? raw.substring(0, 10) : raw)
-        : _ymdOf(raw.length <= 10 ? d : d.toLocal());
+        : _ymdOf(raw.length <= 10 ? d : (parseThai(raw) ?? d));
     if (key.isEmpty) continue;
     (out[key] ??= []).add(r);
   }
@@ -346,7 +347,7 @@ String activityTimeLabel(Map<String, dynamic> row) {
     final raw = v?.toString() ?? '';
     final d = DateTime.tryParse(raw);
     if (d == null || raw.length <= 10) return '';
-    final l = d.toLocal();
+    final l = toThai(d);
     return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
   }
 
@@ -383,7 +384,7 @@ class NxMonthGrid extends StatelessWidget {
     final first = DateTime(month.year, month.month);
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
     final lead = first.weekday - 1;
-    final now = DateTime.now();
+    final now = thaiNow();
     final cells = <Widget>[
       for (final w in _thWeek)
         Center(child: Text(w, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
@@ -485,7 +486,7 @@ class NxWeekStrip extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final start = weekStart(selected);
-    final now = DateTime.now();
+    final now = thaiNow();
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(

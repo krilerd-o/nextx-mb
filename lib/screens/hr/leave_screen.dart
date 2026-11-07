@@ -14,6 +14,7 @@ import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/thai_time.dart';
 
 class LeaveScreen extends StatefulWidget {
   const LeaveScreen({super.key, this.initialTab = 0});
@@ -145,7 +146,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _pickRange() async {
-    final now = DateTime.now();
+    final now = thaiNow();
     final r = await showDateRangePicker(
       context: context,
       firstDate: DateTime(now.year - 1),

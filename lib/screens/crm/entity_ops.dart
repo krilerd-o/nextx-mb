@@ -21,6 +21,7 @@ import '../workspace/workspace_board_screen.dart';
 import 'entity_create_screen.dart';
 import 'order_summary_screen.dart';
 import '../../core/error_reporting.dart';
+import '../../core/thai_time.dart';
 
 typedef OpenEntityFn = void Function(String module, String id, {Map<String, dynamic>? row});
 
@@ -1479,9 +1480,9 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
   Future<void> _schedule(BuildContext context) async {
     final date = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDate: thaiNow(),
+      firstDate: thaiNow().subtract(const Duration(days: 1)),
+      lastDate: thaiNow().add(const Duration(days: 365)),
     );
     if (date == null || !context.mounted) return;
     final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());

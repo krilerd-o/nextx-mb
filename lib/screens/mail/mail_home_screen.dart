@@ -25,6 +25,7 @@ import 'mail_compose_screen.dart';
 import 'external_mail_compose_screen.dart';
 import '../../services/file_open.dart';
 import '../../services/realtime_service.dart';
+import '../../core/thai_time.dart';
 
 class MailHomeScreen extends StatefulWidget {
   const MailHomeScreen({super.key});
@@ -287,7 +288,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
     }
     // Opening marks it read: update the row now instead of reloading.
     if (isMailUnread(m, _box))
-      setState(() => m['read_at'] = DateTime.now().toIso8601String());
+      setState(() => m['read_at'] = thaiNow().toIso8601String());
     if (twoPane) {
       setState(() => _selected = m);
       return;
@@ -555,7 +556,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
                 }
                 setState(
                   () => m['read_at'] = unread
-                      ? DateTime.now().toIso8601String()
+                      ? thaiNow().toIso8601String()
                       : null,
                 );
                 _rowAction(
@@ -747,7 +748,7 @@ class _MailRow extends StatelessWidget {
 
 /// `7 พ.ย. 2569 · 14:05` (local time).
 String mailLongTime(dynamic raw) {
-  final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+  final d = parseThai(raw?.toString() ?? '');
   if (d == null) return raw?.toString() ?? '';
   const m = [
     'ม.ค.',
@@ -768,9 +769,9 @@ String mailLongTime(dynamic raw) {
 
 /// `14:05` today, `7 พ.ย.` otherwise.
 String mailShortTime(dynamic raw) {
-  final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+  final d = parseThai(raw?.toString() ?? '');
   if (d == null) return '';
-  final now = DateTime.now();
+  final now = thaiNow();
   if (d.year == now.year && d.month == now.month && d.day == now.day) {
     return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }

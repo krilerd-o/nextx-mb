@@ -19,6 +19,7 @@ import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_streaming_text.dart';
+import '../../core/thai_time.dart';
 
 /// Thai greeting for the hour of day.
 String greetingFor(DateTime now) {
@@ -56,7 +57,7 @@ String thaiLongDate(DateTime d) =>
     'วัน${_thaiDays[d.weekday - 1]}ที่ ${d.day} ${_thaiMonths[d.month - 1]} ${d.year + 543}';
 
 String _hhmm(dynamic raw) {
-  final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+  final d = parseThai(raw?.toString() ?? '');
   if (d == null) return '';
   return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
@@ -158,7 +159,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   }
 
   List<Map<String, dynamic>> _upcoming() {
-    final now = DateTime.now().subtract(const Duration(hours: 1));
+    final now = thaiNow().subtract(const Duration(hours: 1));
     final all = extractMapList(_summary?['activities']);
     return all
         .where((a) {
@@ -201,7 +202,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
     final cs = theme.colorScheme;
     final session = context.select((AppConfig c) => c.session);
     final bp = NxBreakpoint.of(context);
-    final now = DateTime.now();
+    final now = thaiNow();
 
     final clockIn = _attendance?['clock_in_at'] ?? _attendance?['clock_in'];
     final clockOut = _attendance?['clock_out_at'] ?? _attendance?['clock_out'];

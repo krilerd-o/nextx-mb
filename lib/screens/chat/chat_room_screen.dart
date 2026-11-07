@@ -21,6 +21,7 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/error_reporting.dart';
+import '../../core/thai_time.dart';
 
 const _quickReactions = ['👍', '❤️', '😂', '🎉', '🙏', '👀'];
 
@@ -465,15 +466,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   static String _time(dynamic raw) {
-    final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+    final d = parseThai(raw?.toString() ?? '');
     if (d == null) return '';
     return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 
   static String _day(dynamic raw) {
-    final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+    final d = parseThai(raw?.toString() ?? '');
     if (d == null) return '';
-    final now = DateTime.now();
+    final now = thaiNow();
     final today = DateTime(now.year, now.month, now.day);
     final day = DateTime(d.year, d.month, d.day);
     if (day == today) return 'วันนี้';

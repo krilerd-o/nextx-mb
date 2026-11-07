@@ -13,6 +13,7 @@ import '../../services/location_service.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_map_view.dart';
+import '../../core/thai_time.dart';
 
 /// Result of the sheet: what was recorded (for the caller to refresh).
 class VisitCheckResult {
@@ -93,7 +94,7 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
   Map<String, dynamic>? _validate;
   Object? _error;
   final List<XFile> _photos = [];
-  DateTime _now = DateTime.now();
+  DateTime _now = thaiNow();
   Timer? _clock;
   VisitCheckResult? _result;
 
@@ -103,7 +104,7 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
   void initState() {
     super.initState();
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _step != _Step.done) setState(() => _now = DateTime.now());
+      if (mounted && _step != _Step.done) setState(() => _now = thaiNow());
     });
     _locate();
   }
@@ -411,11 +412,11 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
             child: Text('ไม่มีสัญญาณ — จะส่งอัตโนมัติเมื่อกลับมาออนไลน์ (ใช้เวลาจริงที่บันทึก)', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
           ),
         const SizedBox(height: 18),
-        _InfoRow(icon: NxI.clock, label: 'เวลา', value: thaiDateTime(r.at), strong: true),
+        _InfoRow(icon: NxI.clock, label: 'เวลา', value: thaiDateTime(toThai(r.at)), strong: true),
         _InfoRow(icon: NxI.crosshair, label: 'พิกัด', value: '${r.lat.toStringAsFixed(6)}, ${r.lng.toStringAsFixed(6)}'),
         if (_photos.isNotEmpty) _InfoRow(icon: NxI.image, label: 'รูปถ่าย', value: '${_photos.length} รูป'),
         if (!r.checkIn && widget.checkedInAt != null)
-          _InfoRow(icon: NxI.timer, label: 'อยู่ในสถานที่', value: stayDuration(widget.checkedInAt!, r.at)),
+          _InfoRow(icon: NxI.timer, label: 'อยู่ในสถานที่', value: stayDuration(widget.checkedInAt!, toThai(r.at))),
         const SizedBox(height: 22),
         FilledButton(
           style: FilledButton.styleFrom(shape: const StadiumBorder(), minimumSize: const Size.fromHeight(52)),

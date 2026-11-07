@@ -15,6 +15,7 @@ import 'nx_lift_sheet.dart';
 import 'nx_pick_option.dart';
 import 'nx_picker_sheet.dart';
 import '../nx_icons.dart';
+import '../../core/thai_time.dart';
 
 const kFieldLocale = Locale('th', 'TH');
 
@@ -606,7 +607,7 @@ class NxFormField extends StatelessWidget {
   }
 
   Future<void> _pickDate(BuildContext context) async {
-    final now = DateTime.now();
+    final now = thaiNow();
     final initial = parseDate(value) ?? now;
     final picked = await showDatePicker(
       context: context,
@@ -634,7 +635,7 @@ class NxFormField extends StatelessWidget {
   }
 
   Future<void> _pickDateTime(BuildContext context) async {
-    final now = DateTime.now();
+    final now = thaiNow();
     final initial = parseDate(value) ?? now;
     final day = await showDatePicker(
       context: context,
@@ -658,13 +659,13 @@ class NxFormField extends StatelessWidget {
 
   Future<void> _pickDateRange(BuildContext context) async {
     final r = parseRange(value);
-    final start = parseDate(r['start']) ?? DateTime.now();
+    final start = parseDate(r['start']) ?? thaiNow();
     final a = await showDatePicker(
       context: context,
       locale: kFieldLocale,
       initialDate: start,
-      firstDate: DateTime(DateTime.now().year - 30),
-      lastDate: DateTime(DateTime.now().year + 15),
+      firstDate: DateTime(thaiNow().year - 30),
+      lastDate: DateTime(thaiNow().year + 15),
       helpText: 'วันเริ่ม',
     );
     if (a == null || !context.mounted) return;
@@ -673,7 +674,7 @@ class NxFormField extends StatelessWidget {
       locale: kFieldLocale,
       initialDate: parseDate(r['end']) ?? a,
       firstDate: a,
-      lastDate: DateTime(DateTime.now().year + 15),
+      lastDate: DateTime(thaiNow().year + 15),
       helpText: 'วันสิ้นสุด',
     );
     if (b == null) return;
@@ -681,7 +682,7 @@ class NxFormField extends StatelessWidget {
   }
 
   Future<void> _pickMonth(BuildContext context) async {
-    final now = DateTime.now();
+    final now = thaiNow();
     final cur = parseDate('${value ?? now.year}-${two(now.month)}-01') ?? now;
     final picked = await showDatePicker(
       context: context,
@@ -695,7 +696,7 @@ class NxFormField extends StatelessWidget {
   }
 
   Future<void> _pickYear(BuildContext context) async {
-    final years = [for (var y = DateTime.now().year + 5; y >= DateTime.now().year - 30; y--) y.toString()];
+    final years = [for (var y = thaiNow().year + 5; y >= thaiNow().year - 30; y--) y.toString()];
     final picked = await showNxPickerSheet(
       context: context,
       title: label,
@@ -710,9 +711,9 @@ class NxFormField extends StatelessWidget {
     final a = await showDatePicker(
       context: context,
       locale: kFieldLocale,
-      initialDate: parseDate('${r['start']}-01') ?? DateTime.now(),
-      firstDate: DateTime(DateTime.now().year - 20),
-      lastDate: DateTime(DateTime.now().year + 10),
+      initialDate: parseDate('${r['start']}-01') ?? thaiNow(),
+      firstDate: DateTime(thaiNow().year - 20),
+      lastDate: DateTime(thaiNow().year + 10),
       helpText: 'เดือนเริ่ม',
     );
     if (a == null || !context.mounted) return;
@@ -721,7 +722,7 @@ class NxFormField extends StatelessWidget {
       locale: kFieldLocale,
       initialDate: parseDate('${r['end']}-01') ?? a,
       firstDate: a,
-      lastDate: DateTime(DateTime.now().year + 10),
+      lastDate: DateTime(thaiNow().year + 10),
       helpText: 'เดือนสิ้นสุด',
     );
     if (b == null) return;
@@ -730,7 +731,7 @@ class NxFormField extends StatelessWidget {
 
   Future<void> _pickYearRange(BuildContext context) async {
     final r = parseRange(value, slice: 4);
-    final years = [for (var y = DateTime.now().year + 5; y >= DateTime.now().year - 30; y--) y.toString()];
+    final years = [for (var y = thaiNow().year + 5; y >= thaiNow().year - 30; y--) y.toString()];
     final opts = [for (final y in years) NxPickOption(value: y, label: y)];
     final a = await showNxPickerSheet(context: context, title: 'ปีเริ่ม', options: opts, value: r['start']);
     if (a == null || !context.mounted) return;

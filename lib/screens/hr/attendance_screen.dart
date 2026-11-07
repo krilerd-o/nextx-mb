@@ -11,6 +11,7 @@ import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../core/error_reporting.dart';
+import '../../core/thai_time.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -46,7 +47,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   static String _punchLabel(Map<String, dynamic> p) {
-    final at = DateTime.tryParse(p['at']?.toString() ?? '')?.toLocal();
+    final at = parseThai(p['at']?.toString() ?? '');
     final t = at == null ? '' : '${at.day}/${at.month} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
     return '${p['dir'] == 'out' ? 'ออก' : 'เข้า'} $t';
   }
@@ -64,7 +65,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     try {
       final api = context.read<AppConfig>().apiClient;
       final summary = await api.getAttendanceSummary();
-      final now = DateTime.now();
+      final now = thaiNow();
       final from = '${now.year}-${now.month.toString().padLeft(2, '0')}-01';
       final to =
           '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';

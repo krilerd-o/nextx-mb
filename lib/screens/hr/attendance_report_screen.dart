@@ -8,12 +8,13 @@ import '../../services/api_client.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/thai_time.dart';
 
 String _ymd(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 String punchTime(dynamic raw) {
-  final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+  final d = parseThai(raw?.toString() ?? '');
   if (d == null) return '—';
   return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
@@ -27,7 +28,7 @@ class AttendanceReportScreen extends StatefulWidget {
 }
 
 class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
-  DateTime _day = DateTime.now();
+  DateTime _day = thaiNow();
   List<Map<String, dynamic>> _rows = [];
   Map<String, dynamic> _dash = {};
   bool _loading = true;
@@ -71,7 +72,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   }
 
   Future<void> _pickDay() async {
-    final now = DateTime.now();
+    final now = thaiNow();
     final d = await showDatePicker(
       context: context,
       initialDate: _day,
@@ -95,7 +96,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final today = _ymd(_day) == _ymd(DateTime.now());
+    final today = _ymd(_day) == _ymd(thaiNow());
     final needle = _query.trim().toLowerCase();
     final rows = needle.isEmpty
         ? _rows

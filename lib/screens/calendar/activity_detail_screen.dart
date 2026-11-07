@@ -19,6 +19,7 @@ import '../../widgets/fields/field_ui_type.dart';
 import '../crm/entity_create_screen.dart';
 import '../crm/entity_detail_parts.dart';
 import 'visit_check_sheet.dart';
+import '../../core/thai_time.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
   const ActivityDetailScreen({super.key, required this.row});
@@ -216,9 +217,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   }
 
   Future<void> _check({required bool inn}) async {
-    final checkedAt = DateTime.tryParse(
-      _visit?['checkindate']?.toString().replaceFirst(' ', 'T') ?? '',
-    );
+    final checkedAt = parseThai(_visit?['checkindate']);
     final r = await showVisitCheckSheet(
       context,
       activityId: _id,
@@ -287,9 +286,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   };
 
   String _when(dynamic raw) {
-    final d = DateTime.tryParse(raw?.toString().replaceFirst(' ', 'T') ?? '');
+    final d = parseThai(raw);
     if (d == null) return raw?.toString() ?? '—';
-    return thaiDateTime(d.toLocal()).replaceFirst(RegExp(r':\d\d$'), '');
+    return thaiDateTime(d).replaceFirst(RegExp(r':\d\d$'), '');
   }
 
   @override

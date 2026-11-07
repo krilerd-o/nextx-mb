@@ -18,6 +18,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../mail/mail_compose_screen.dart' show plainTextToHtml;
 import 'smart_checklist_section.dart';
+import '../../core/thai_time.dart';
 
 /// NEXTX board priorities (backend/src/routes/boards.js).
 const taskPriorities = <String, String>{
@@ -261,7 +262,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   Future<void> _pickDueDate() async {
     final current = DateTime.tryParse(taskDateOnly(_task['due_date']) ?? '');
-    final now = DateTime.now();
+    final now = thaiNow();
     final picked = await showDatePicker(
       context: context,
       initialDate: current ?? now,
