@@ -86,7 +86,7 @@ class EntityOpsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

@@ -232,7 +232,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     final title = entityTitle(_row, module: widget.module);
     final people = entityPeopleLine(_row);
     final status = entityStatus(_row);
@@ -264,7 +264,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
               onPressed: () => _openEdit(context),
             ),
         ],
-        menu: canEdit && context.watch<AppConfig>().isLoggedIn
+        menu: canEdit && context.select((AppConfig c) => c.isLoggedIn)
             ? [
                 NxHeaderMenuItem(label: 'ทำซ้ำ', icon: NxI.copySimple, onTap: _duplicate),
                 NxHeaderMenuItem(label: 'ถ่ายรูป / แนบไฟล์', icon: NxI.camera, onTap: _quickAttach),

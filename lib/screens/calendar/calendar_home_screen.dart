@@ -128,7 +128,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final twoPane = NxBreakpoint.of(context).twoPane;
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     final showIncoming = MenuAccess.allow(session, MenuAccess.incoming);
     final showPending = MenuAccess.allow(session, MenuAccess.pending);
     return Scaffold(

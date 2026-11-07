@@ -109,7 +109,7 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     final bp = NxBreakpoint.of(context);
 
     final customers = <_CrmModule>[

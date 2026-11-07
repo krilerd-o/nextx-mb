@@ -14,7 +14,7 @@ class NxWorkspaceSwitcher extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final s = context.watch<AppConfig>().session;
+    final s = context.select((AppConfig c) => c.session);
     final pkg = (s.packageCode ?? '').isEmpty ? null : s.packageCode!.toUpperCase().replaceAll('_', ' ');
     return Align(
       alignment: Alignment.centerLeft,

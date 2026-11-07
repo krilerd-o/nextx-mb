@@ -195,7 +195,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       ),
                     ),
                   ],
-                  for (final f in context.watch<AppConfig>().failedPunches) ...[
+                  for (final f in context.select((AppConfig c) => c.failedPunches)) ...[
                     const SizedBox(height: 12),
                     NxSurfaceCard(
                       padding: const EdgeInsets.all(14),

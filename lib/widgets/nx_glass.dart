@@ -46,7 +46,8 @@ class NxGlass extends StatelessWidget {
       child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
     );
     if (level == EffectsLevel.full) {
-      body = BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: body);
+      // Grouped: blurs on screen share one backdrop capture (see BackdropGroup in app.dart).
+      body = BackdropFilter.grouped(filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: body);
     }
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -106,7 +107,7 @@ class NxProgressiveBlur extends StatelessWidget {
                   colors: const [Colors.black, Colors.transparent],
                 ).createShader(r),
                 child: ClipRect(
-                  child: BackdropFilter(
+                  child: BackdropFilter.grouped(
                     filter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
                     child: gradient,
                   ),

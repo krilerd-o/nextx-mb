@@ -104,7 +104,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     final theme = Theme.of(context);
     final no = _row['order_number'] ?? _row['order_no'] ?? widget.orderId;
     final paid = (_row['payment_status']?.toString() ?? '') == 'paid';
-    final isAdmin = context.watch<AppConfig>().session.isBusinessAdmin;
+    final isAdmin = context.select((AppConfig c) => c.session).isBusinessAdmin;
     final addr = _address;
     return Scaffold(
       appBar: NxAppHeader(

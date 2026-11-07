@@ -814,7 +814,8 @@ class _FallbackNetworkImageState extends State<_FallbackNetworkImage> {
       return const Padding(padding: EdgeInsets.all(12), child: Icon(NxI.image));
     }
     return Image(
-      image: CachedNetworkImageProvider(widget.urls[_i]),
+      // Decode at screen size, not full camera resolution.
+      image: ResizeImage(CachedNetworkImageProvider(widget.urls[_i]), width: 720, policy: ResizeImagePolicy.fit),
       key: ValueKey(widget.urls[_i]),
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) {

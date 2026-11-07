@@ -157,8 +157,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final config = context.watch<AppConfig>();
-    final session = config.session;
+    final session = context.select((AppConfig c) => c.session);
     final bp = NxBreakpoint.of(context);
     final now = DateTime.now();
 

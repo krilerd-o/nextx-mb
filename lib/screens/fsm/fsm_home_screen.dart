@@ -107,7 +107,7 @@ class _FsmHomeScreenState extends State<FsmHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     final bp = NxBreakpoint.of(context);
 
     final modules = <_FsmModule>[

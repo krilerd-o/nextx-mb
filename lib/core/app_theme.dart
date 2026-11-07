@@ -27,7 +27,16 @@ class AppTheme {
   static ThemeData get dark => themed(brightness: Brightness.dark);
   static ThemeData get light => themed(brightness: Brightness.light);
 
+  /// Built themes by (brightness, accent). Building one runs three GoogleFonts
+  /// text themes, so rebuilding on every app notify caused visible hitches.
+  static final Map<(Brightness, int), ThemeData> _cache = {};
+
   static ThemeData themed({required Brightness brightness, Color? accent}) {
+    final key = (brightness, (accent ?? primary).toARGB32());
+    return _cache[key] ??= _build(brightness: brightness, accent: accent);
+  }
+
+  static ThemeData _build({required Brightness brightness, Color? accent}) {
     final primaryColor = accent ?? primary;
     final isDark = brightness == Brightness.dark;
     final container = isDark

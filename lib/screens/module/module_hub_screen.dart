@@ -59,7 +59,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     final bp = NxBreakpoint.of(context);
 
     final items = <_HubItem>[

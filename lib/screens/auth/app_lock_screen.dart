@@ -41,7 +41,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     return Material(
       color: cs.surface,
       child: SafeArea(

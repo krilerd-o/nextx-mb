@@ -85,11 +85,31 @@ class _AppShellState extends State<AppShell> {
   /// Tabs opened at least once — others stay unbuilt so launch only loads
   /// the visible tab instead of every tab's API at once.
   final Set<String> _built = {};
+  bool _prewarmStarted = false;
+
+  /// After the first tab is on screen and idle, build the other tabs one at a
+  /// time so the first tap on them doesn't build + fetch in the same frame.
+  void _prewarm(List<String> ids) {
+    if (_prewarmStarted) return;
+    _prewarmStarted = true;
+    Future<void>(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      for (final id in ids) {
+        if (!mounted) return;
+        if (_built.contains(id)) continue;
+        setState(() => _built.add(id));
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final bp = NxBreakpoint.of(context);
-    final config = context.watch<AppConfig>();
+    // Only the tab list and invite matter here; a full watch rebuilt every
+    // open tab on each AppConfig notify (session refresh, unread, queue…).
+    context.select((AppConfig c) => (c.shellTabs.join(','), c.pendingInvite));
+    final config = context.read<AppConfig>();
     if (config.pendingInvite != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
@@ -107,6 +127,7 @@ class _AppShellState extends State<AppShell> {
     _built
       ..removeWhere((id) => !ids.contains(id))
       ..add(_current);
+    _prewarm(ids);
     final notifIndex = ids.indexOf('notifications');
     final destinations = [
       for (final id in ids)

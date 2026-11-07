@@ -50,7 +50,7 @@ class _HrShortcuts extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bp = NxBreakpoint.of(context);
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     final tiles = <_HrTile>[
       if (MenuAccess.allow(session, MenuAccess.attendance))
         const _HrTile(NxI.clock, 'ลงเวลา', 'เข้า-ออกงานด้วย GPS', AppRoutes.attendance),

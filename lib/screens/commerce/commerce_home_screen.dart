@@ -57,7 +57,7 @@ class CommerceHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     // Stock endpoints are owner/admin only on the server (requireCommercialAdmin).
     final tabs = <(String, Widget)>[
       if (MenuAccess.allow(session, ordersMenu)) ('ออเดอร์', const _OrdersTab()),

@@ -30,7 +30,7 @@ class _LeaveScreenState extends State<LeaveScreen> {
   @override
   Widget build(BuildContext context) {
     final canApprove = MenuAccess.allow(
-      context.watch<AppConfig>().session,
+      context.select((AppConfig c) => c.session),
       MenuAccess.leaveManagement,
     );
     final tabCount = canApprove ? 4 : 3;
@@ -237,7 +237,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
                 decoration: const InputDecoration(labelText: 'เหตุผล'),
                 maxLines: 3,
               ),
-              if (context.watch<AppConfig>().serverInfo?.has('leave_attachments') ?? false) ...[
+              if (context.select((AppConfig c) => c.serverInfo)?.has('leave_attachments') ?? false) ...[
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -598,7 +598,7 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
   @override
   Widget build(BuildContext context) {
     final api = context.read<AppConfig>().apiClient;
-    final canAdd = widget.editable && _files.length < 5 && (context.watch<AppConfig>().serverInfo?.has('leave_attachments') ?? false);
+    final canAdd = widget.editable && _files.length < 5 && (context.select((AppConfig c) => c.serverInfo)?.has('leave_attachments') ?? false);
     if (_files.isEmpty && !canAdd) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 6),

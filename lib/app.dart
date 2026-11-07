@@ -19,7 +19,8 @@ class NextXMobileApp extends StatefulWidget {
   State<NextXMobileApp> createState() => _NextXMobileAppState();
 }
 
-class _NextXMobileAppState extends State<NextXMobileApp> with WidgetsBindingObserver {
+class _NextXMobileAppState extends State<NextXMobileApp>
+    with WidgetsBindingObserver {
   late final GoRouter _router;
 
   @override
@@ -37,9 +38,12 @@ class _NextXMobileAppState extends State<NextXMobileApp> with WidgetsBindingObse
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) AppLock.instance.onPaused();
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden)
+      AppLock.instance.onPaused();
     if (state == AppLifecycleState.resumed) {
-      AppLock.instance.onResumed(loggedIn: context.read<AppConfig>().isLoggedIn);
+      AppLock.instance.onResumed(
+        loggedIn: context.read<AppConfig>().isLoggedIn,
+      );
       context.read<AppConfig>().flushOfflineQueue();
       UnreadNotifications.instance.refreshIfBound();
       context.read<AppConfig>().refreshSessionIfStale();
@@ -48,13 +52,19 @@ class _NextXMobileAppState extends State<NextXMobileApp> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppConfig>(
-      builder: (_, config, _) {
-        final accent = config.accentColor;
+    // Rebuild the app shell only when what it shows changes — not on every
+    // AppConfig notify (session refresh on resume, offline queue, …).
+    return Selector<AppConfig, (Color, ThemeMode, String, bool)>(
+      selector: (_, c) =>
+          (c.accentColor, c.themeMode, c.uiLocaleCode, c.isLoggedIn),
+      builder: (context, sel, _) {
+        final accent = sel.$1;
         return MaterialApp.router(
           title: 'MOAI NEXT',
           debugShowCheckedModeBanner: false,
-          locale: config.uiLocaleCode == 'en' ? const Locale('en', 'US') : const Locale('th', 'TH'),
+          locale: sel.$3 == 'en'
+              ? const Locale('en', 'US')
+              : const Locale('th', 'TH'),
           supportedLocales: const [Locale('th', 'TH'), Locale('en', 'US')],
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
@@ -62,17 +72,23 @@ class _NextXMobileAppState extends State<NextXMobileApp> with WidgetsBindingObse
             GlobalCupertinoLocalizations.delegate,
           ],
           theme: AppTheme.themed(brightness: Brightness.light, accent: accent),
-          darkTheme: AppTheme.themed(brightness: Brightness.dark, accent: accent),
-          themeMode: config.themeMode,
-          builder: (context, child) => NxAtmosphere(
-            child: AliceDebugLayer(
-              child: ListenableBuilder(
-                listenable: AppLock.instance,
-                builder: (context, _) => Stack(
-                  children: [
-                    ?child,
-                    if (AppLock.instance.locked && config.isLoggedIn) const Positioned.fill(child: AppLockScreen()),
-                  ],
+          darkTheme: AppTheme.themed(
+            brightness: Brightness.dark,
+            accent: accent,
+          ),
+          themeMode: sel.$2,
+          builder: (context, child) => BackdropGroup(
+            child: NxAtmosphere(
+              child: AliceDebugLayer(
+                child: ListenableBuilder(
+                  listenable: AppLock.instance,
+                  builder: (context, _) => Stack(
+                    children: [
+                      ?child,
+                      if (AppLock.instance.locked && sel.$4)
+                        const Positioned.fill(child: AppLockScreen()),
+                    ],
+                  ),
                 ),
               ),
             ),

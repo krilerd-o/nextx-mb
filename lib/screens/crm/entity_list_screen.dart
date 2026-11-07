@@ -253,7 +253,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: NxFilterChips(
             value: _filter,
-            showMine: _showMine && context.watch<AppConfig>().session.userId != null,
+            showMine: _showMine && context.select((AppConfig c) => c.session).userId != null,
             onChanged: (f) {
               setState(() => _filter = f);
               _load(reset: true);
