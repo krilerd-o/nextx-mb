@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -812,8 +813,8 @@ class _FallbackNetworkImageState extends State<_FallbackNetworkImage> {
     if (_i >= widget.urls.length) {
       return const Padding(padding: EdgeInsets.all(12), child: Icon(NxI.image));
     }
-    return Image.network(
-      widget.urls[_i],
+    return Image(
+      image: CachedNetworkImageProvider(widget.urls[_i]),
       key: ValueKey(widget.urls[_i]),
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) {

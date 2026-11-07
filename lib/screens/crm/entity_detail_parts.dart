@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart' show MultipartFile;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -462,12 +463,11 @@ class AttachmentStrip extends StatelessWidget {
                   onTap: () => openImageViewer(context, [for (final a in images) api.absoluteUrl(a['url'].toString())], i),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: Image.network(
-                      api.absoluteUrl(images[i]['url'].toString()),
+                    child: Image(
+                      image: ResizeImage(CachedNetworkImageProvider(api.absoluteUrl(images[i]['url'].toString())), width: 252),
                       width: 84,
                       height: 84,
                       fit: BoxFit.cover,
-                      cacheWidth: 252,
                       errorBuilder: (_, __, ___) => Container(width: 84, height: 84, color: Colors.black12, child: const Icon(NxI.image)),
                     ),
                   ),
@@ -511,7 +511,7 @@ class _ImageViewer extends StatelessWidget {
         itemCount: urls.length,
         itemBuilder: (context, i) => InteractiveViewer(
           maxScale: 5,
-          child: Center(child: Image.network(urls[i], fit: BoxFit.contain)),
+          child: Center(child: Image(image: CachedNetworkImageProvider(urls[i]), fit: BoxFit.contain)),
         ),
       ),
     );

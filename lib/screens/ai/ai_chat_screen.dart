@@ -10,6 +10,7 @@ import '../../services/api_client.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_streaming_text.dart';
 import '../../core/error_reporting.dart';
 
 /// One turn in the AI conversation (OpenAI-style role/content).
@@ -149,6 +150,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         if (cid != null && cid.isNotEmpty) _conversationId = cid;
         final reply = extractAiReply(data);
         _turns = [..._turns, AiTurn('assistant', reply.isEmpty ? '(ไม่มีคำตอบ)' : reply)];
+        _streamIndex = _turns.length - 1;
       });
     } catch (e) {
       if (mounted) setState(() => _turns = [..._turns, AiTurn('assistant', formatApiError(e), error: true)]);
@@ -172,7 +174,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
     }
   }
 
-  Widget _bubble(AiTurn t) {
+  /// The reply that just arrived streams in word by word; older ones render at once.
+  int _streamIndex = -1;
+
+  Widget _bubble(AiTurn t, {bool stream = false}) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final mine = t.role == 'user';
@@ -209,7 +214,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 ),
                 child: mine
                     ? Text(t.content, style: theme.textTheme.bodyMedium?.copyWith(color: fg))
-                    : NxHtmlView(html: t.content, style: theme.textTheme.bodyMedium?.copyWith(color: fg)),
+                    : stream && !t.content.contains('<')
+                        ? NxStreamingText(t.content, style: theme.textTheme.bodyMedium?.copyWith(color: fg, height: 1.5))
+                        : NxHtmlView(html: t.content, style: theme.textTheme.bodyMedium?.copyWith(color: fg)),
               ),
             ),
           ),
@@ -259,7 +266,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     controller: _scroll,
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                     children: [
-                      for (final t in _turns) _bubble(t),
+                      for (var i = 0; i < _turns.length; i++) _bubble(_turns[i], stream: i == _streamIndex),
                       if (_busy)
                         Padding(
                           padding: const EdgeInsets.only(left: 36, top: 8),

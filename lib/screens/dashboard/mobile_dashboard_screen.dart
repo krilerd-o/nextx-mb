@@ -264,7 +264,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                         const SizedBox(height: 20),
                         _QuickGrid(actions: quick),
                       ],
-                      if (counts != null) ...[
+                      if (counts != null && _workItems().isNotEmpty) ...[
                         const SizedBox(height: 24),
                         _SectionTitle('งานของฉัน', action: 'ทั้งหมด', onAction: () => context.push(AppRoutes.workspaceHome)),
                         for (final it in _workItems()) _WorkRow(item: it),

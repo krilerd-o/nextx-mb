@@ -1126,6 +1126,9 @@ class AppConfig extends ChangeNotifier {
     return _offlineQueue.enqueue(item);
   }
 
+  /// Repaints listeners after an app-wide visual setting changed (effects level).
+  void refreshUi() => notifyListeners();
+
   String get devicePlatform {
     if (kIsWeb) return 'web';
     switch (defaultTargetPlatform) {

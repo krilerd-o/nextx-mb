@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../core/effects.dart';
+import '../widgets/app_bottom_sheet.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -160,6 +162,37 @@ class SettingsScreen extends StatelessWidget {
                     onSelectionChanged: (Set<ThemeMode> selected) {
                       config.setThemeMode(selected.first);
                     },
+                  ),
+                ),
+                const Divider(height: 24),
+                // Blur / animation strength — "auto" picks from the device.
+                ValueListenableBuilder<EffectsPreference>(
+                  valueListenable: Effects.preference,
+                  builder: (context, pref, _) => ListTile(
+                    leading: Icon(NxI.sparkle, color: colorScheme.primary),
+                    title: const Text('เอฟเฟกต์และความลื่น'),
+                    subtitle: Text(pref.label),
+                    trailing: const Icon(NxI.caretRight),
+                    onTap: () => showAppBottomSheet<void>(
+                      context: context,
+                      title: 'เอฟเฟกต์และความลื่น',
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final p in EffectsPreference.values)
+                            ListTile(
+                              title: Text(p.label),
+                              trailing: p == pref ? Icon(NxI.check, color: colorScheme.primary) : null,
+                              onTap: () async {
+                                await Effects.setPreference(p);
+                                if (context.mounted) Navigator.pop(context);
+                                // Rebuild every screen with the new level.
+                                config.refreshUi();
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ],

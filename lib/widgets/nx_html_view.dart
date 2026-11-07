@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -188,7 +189,7 @@ class _HtmlBody extends StatelessWidget {
         final url = resolveHtmlUrl(src, baseUrl);
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Image.network(url, height: 160, fit: BoxFit.contain, errorBuilder: (_, _, _) {
+          child: Image(image: CachedNetworkImageProvider(url), height: 160, fit: BoxFit.contain, errorBuilder: (_, _, _) {
             return Text(node.attrs['alt'] ?? url, style: style);
           }),
         );

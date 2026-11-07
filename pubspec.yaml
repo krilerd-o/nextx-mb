@@ -39,6 +39,7 @@ dependencies:
   google_sign_in: ^7.2.0
   local_auth: ^3.0.2
   google_maps_flutter: ^2.19.0
+  cached_network_image: ^4.0.6
 
 dev_dependencies:
   flutter_test:
@@ -49,6 +50,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    # Bundled Google Fonts (google_fonts uses these instead of downloading at first launch).
+    - assets/google_fonts/
   # fonts:
   #   - family: CustomFont
   #     fonts:

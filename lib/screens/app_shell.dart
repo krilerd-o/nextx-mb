@@ -5,6 +5,7 @@ import '../core/app_config.dart';
 import '../core/nx_breakpoint.dart';
 import '../services/offline_queue.dart';
 import '../services/unread_service.dart';
+import '../widgets/nx_glass.dart';
 import '../widgets/nx_icons.dart';
 import '../widgets/nx_invite_prompt.dart';
 import '../widgets/nx_tab_nav.dart';
@@ -164,10 +165,25 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
+    final floating = _shellNativeTabs.contains(_current);
     return Scaffold(
       // Shell-native tabs pad for the floating bar; other pages need it outside.
-      extendBody: _shellNativeTabs.contains(_current),
-      body: stack,
+      extendBody: floating,
+      body: floating
+          ? Stack(
+              children: [
+                stack,
+                // Content fades into a soft blur behind the floating bar.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 120 + MediaQuery.paddingOf(context).bottom,
+                  child: const NxProgressiveBlur(height: double.infinity),
+                ),
+              ],
+            )
+          : stack,
       bottomNavigationBar: nav,
     );
   }
