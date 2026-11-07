@@ -102,6 +102,12 @@ class NxI {
   static const mapPin = LucideIcons300.mapPin;
   static const star = LucideIcons300.star;
   static const funnel = LucideIcons300.listFilter;
+  static const heart = LucideIcons300.heart;
+  static const arrowsLeftRight = LucideIcons300.arrowLeftRight;
+  static const prohibit = LucideIcons300.ban;
+  static const repeat = LucideIcons300.repeat;
+  static const gitBranch = LucideIcons300.gitBranch;
+  static const treeStructure = LucideIcons300.network;
   static const bookmark = LucideIcons300.bookmark;
   static const subtask = LucideIcons300.listTree;
   static const listChecks = LucideIcons300.listChecks;
