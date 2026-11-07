@@ -993,7 +993,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             value: tr(wsTypeStyle(_type).label),
             onTap: _online
                 ? () => _pickEnum('type', [
-                    for (final t in const ['task', 'bug', 'story', 'subtask', 'checklist'])
+                    for (final t in ['task', 'bug', 'story', 'subtask', if (_type == 'checklist') 'checklist'])
                       NxPickOption(value: t, label: tr(wsTypeStyle(t).label), color: wsTypeStyle(t).color),
                   ])
                 : null,

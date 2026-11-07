@@ -1282,6 +1282,11 @@ const Map<String, String> enStrings = {
   'การลงเวลา': 'Time log',
   'ถังขยะ Workspace': 'Workspace trash',
   'ถังขยะว่าง': 'Trash is empty',
+  'Smart Checklist': 'Smart Checklist',
+  'เพิ่มรายการใน Smart Checklist': 'Add a Smart Checklist item',
+  'คัดลอกงานย่อยและ Smart Checklist ด้วย': 'Also copy subtasks and Smart Checklist',
+  'แสดงงานย่อย': 'Show subtasks',
+  'รายการเช็ค': 'Checklist item',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

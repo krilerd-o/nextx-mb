@@ -171,7 +171,11 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
     Map<String, dynamic> o(String v, String th) => {'value': v, 'value_th': tr(th), 'value_en': tr(th)};
     final selfId = '${widget.edit?['id'] ?? ''}';
     return {
-      'type': [for (final t in const ['task', 'bug', 'story', 'subtask', 'checklist']) o(t, wsTypeStyle(t).label)],
+      'type': [
+        for (final t in const ['task', 'bug', 'story', 'subtask']) o(t, wsTypeStyle(t).label),
+        // "Checklist" on NEXTX = Smart Checklist inside a task; the old checklist item type is only kept for rows that already have it.
+        if (_values['type'] == 'checklist') o('checklist', wsTypeStyle('checklist').label),
+      ],
       'status_id': [for (final s in widget.statuses) o(s.id, s.label)],
       'priority': [for (final p in kWsPriorities) o(p, wsPriorityStyle(p).label)],
       'epic_id': [for (final e in widget.epics) o('${e['id']}', '${wsKey(e)} ${wsTitle(e)}')],
@@ -330,7 +334,7 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
                 if (widget.duplicateFrom != null && _kind == 'task')
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(tr('คัดลอกงานย่อยและเช็คลิสต์ด้วย')),
+                    title: Text(tr('คัดลอกงานย่อยและ Smart Checklist ด้วย')),
                     subtitle: Text(tr('ไม่รวมเวลาที่ลงไว้และคอมเมนต์')),
                     value: _copyChildren,
                     onChanged: (v) => setState(() => _copyChildren = v),

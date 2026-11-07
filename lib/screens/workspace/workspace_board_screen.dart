@@ -144,7 +144,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
     return [
       const NxFilterGroup(key: 'scope', label: 'ขอบเขต', multi: false, options: [NxFilterOption('mine', 'ของฉัน')]),
       NxFilterGroup(key: 'type', label: 'ประเภท', options: [
-        for (final t in const ['task', 'bug', 'story', 'subtask', 'checklist']) NxFilterOption(t, wsTypeStyle(t).label),
+        for (final t in ['task', 'bug', 'story', 'subtask', if (_tasks.any((x) => x['type'] == 'checklist')) 'checklist']) NxFilterOption(t, wsTypeStyle(t).label),
       ]),
       NxFilterGroup(key: 'priority', label: 'ความสำคัญ', options: [
         for (final p in kWsPriorities) NxFilterOption(p, wsPriorityStyle(p).label),
@@ -163,7 +163,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
             if (_tasks.any((t) => '${t['assignee_id']}' == e.key)) NxFilterOption(e.key, e.value),
         ]),
       if (labels.isNotEmpty) NxFilterGroup(key: 'label', label: 'ป้ายกำกับ', options: [for (final l in labels) NxFilterOption(l, l)]),
-      const NxFilterGroup(key: 'show', label: 'แสดง', options: [NxFilterOption('children', 'แสดงงานย่อย/เช็คลิสต์')]),
+      const NxFilterGroup(key: 'show', label: 'แสดง', options: [NxFilterOption('children', 'แสดงงานย่อย')]),
     ];
   }
 

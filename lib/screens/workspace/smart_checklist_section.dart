@@ -118,7 +118,7 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(tr('เช็คลิสต์'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                child: Text(tr('Smart Checklist'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
               ),
               if (_busy) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
               if (total > 0) Text('$done/$total', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
@@ -160,7 +160,7 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _addItem(),
             decoration: InputDecoration(
-              hintText: tr('เพิ่มรายการเช็คลิสต์'),
+              hintText: tr('เพิ่มรายการใน Smart Checklist'),
               isDense: true,
               border: InputBorder.none,
               prefixIcon: const Icon(NxI.plus, size: 18),

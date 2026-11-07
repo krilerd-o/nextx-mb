@@ -12,6 +12,7 @@
 | `lib/screens/workspace/ws_kanban.dart` | Kanban ลากวาง (การ์ดติดนิ้ว, เลื่อนเองชิดขอบ, แถบชิปสถานะ) |
 | `lib/screens/workspace/workspace_item_form.dart` | ฟอร์มสร้าง / แก้ไข / ทำซ้ำ ทุกประเภท |
 | `lib/screens/workspace/task_detail_screen.dart` | หน้ารายละเอียดงาน / Epic |
+| `lib/screens/workspace/smart_checklist_section.dart` | Smart Checklist ในงาน (ที่เว็บเรียก Checklist) |
 | `lib/screens/workspace/ws_detail_parts.dart` | stepper สถานะ, การ์ดเวลา, จับเวลา, แผ่นลงเวลา |
 | `lib/screens/workspace/ws_activity_panel.dart` | ความคิดเห็น / ลงเวลา / ประวัติการแก้ไข |
 | `lib/screens/workspace/workspace_trash_screen.dart` | ถังขยะ: กู้คืน / ลบถาวร |

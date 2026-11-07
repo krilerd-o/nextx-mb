@@ -38,7 +38,7 @@ const kWsTypes = ['epic', 'task', 'bug', 'story', 'subtask', 'checklist'];
       'bug' => (label: 'บั๊ก', icon: NxI.bug, color: const Color(0xFFEF4444)),
       'story' => (label: 'Story', icon: NxI.bookmark, color: const Color(0xFF10B981)),
       'subtask' => (label: 'งานย่อย', icon: NxI.subtask, color: const Color(0xFF0EA5E9)),
-      'checklist' => (label: 'เช็คลิสต์', icon: NxI.listChecks, color: const Color(0xFF14B8A6)),
+      'checklist' => (label: 'รายการเช็ค', icon: NxI.listChecks, color: const Color(0xFF14B8A6)),
       _ => (label: 'งาน', icon: NxI.checkSquare, color: const Color(0xFF3B82F6)),
     };
 
