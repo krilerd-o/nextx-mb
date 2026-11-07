@@ -14,6 +14,9 @@ import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
 import 'custom_views.dart';
+import 'card_layout_editor.dart';
+import '../../core/card_layout.dart';
+import '../../widgets/nx_entity_card.dart';
 import 'entity_create_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'entity_detail_parts.dart';
@@ -106,6 +109,32 @@ class _EntityListScreenState extends State<EntityListScreen> {
   String? _nameCol;
   String? _amountCol;
 
+  /// The user's card layout for this menu (shared default until customised).
+  CardLayout? _layout;
+  CardLayout? _defaultLayout;
+  CardFieldContext? _cardCtx;
+
+  Future<void> _openCardEditor() async {
+    final ctx = _cardCtx;
+    final def = _defaultLayout;
+    if (ctx == null || def == null) return;
+    final scope = context.read<AppConfig>().prefsScope;
+    final result = await nxPush<CardLayout>(
+      context,
+      CardLayoutEditorScreen(
+        module: widget.module,
+        initial: _layout ?? def,
+        defaults: def,
+        fields: ctx,
+        sample: _visible.isNotEmpty ? _visible.first : null,
+      ),
+      root: true,
+    );
+    if (result == null || !mounted) return;
+    setState(() => _layout = result);
+    await CardLayoutStore.save(widget.module, scope, result);
+  }
+
   /// Custom Views (มุมมอง CV) from the server, and the one applied.
   CustomViewList? _cvs;
   String? _cvId;
@@ -179,8 +208,13 @@ class _EntityListScreenState extends State<EntityListScreen> {
       }
       // Status first: it is also the inline quick-chip row.
       picks.sort((a, b) => (a.key == 'pl:$status' ? 0 : 1).compareTo(b.key == 'pl:$status' ? 0 : 1));
+      final saved = await CardLayoutStore.load(widget.module, context.read<AppConfig>().prefsScope);
       if (!mounted) return;
+      final def = CardLayout.defaults(widget.module, schema.fields, statusKey: status);
       setState(() {
+        _defaultLayout = def;
+        _layout = saved ?? def;
+        _cardCtx = CardFieldContext(fields: schema.fields, picklists: schema.picklists);
         _statusKey = status;
         _pickGroups = picks;
         _nameCol = _nameCandidates.where(names.contains).firstOrNull;
@@ -199,6 +233,11 @@ class _EntityListScreenState extends State<EntityListScreen> {
       ];
       if (!mounted) return;
       setState(() {
+        _cardCtx = CardFieldContext(
+          fields: schema.fields,
+          picklists: schema.picklists,
+          users: {for (final u in users) u.value: u.label},
+        );
         _ownerGroups = users.isEmpty
             ? const []
             : [
@@ -531,6 +570,10 @@ class _EntityListScreenState extends State<EntityListScreen> {
           )
         : NxAppHeader(
             title: widget.title,
+            menu: [
+              if (_cardCtx != null)
+                NxHeaderMenuItem(label: 'ปรับแต่งการ์ด', icon: NxI.squaresFour, onTap: _openCardEditor),
+            ],
             actions: [
               IconButton(
                 tooltip: tr('รีเฟรช'),
@@ -668,11 +711,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
           final phone = ['mobile_1st', 'mobile', 'phone', 'contact_mobile']
               .map((k) => row[k]?.toString().trim() ?? '')
               .firstWhere((v) => v.isNotEmpty && v != 'null', orElse: () => '');
-          final tile = NxEntityRow.fromRow(
-            row,
-            module: widget.module,
-            onLongPress: () => _togglePick(row),
-            onTap: () {
+          void open() {
               if (_picked.isNotEmpty) {
                 _togglePick(row);
                 return;
@@ -689,8 +728,23 @@ class _EntityListScreenState extends State<EntityListScreen> {
                 EntityDetailScreen(module: widget.module, row: row),
                 root: true,
               ).then((_) => _load(reset: true));
-            },
-          );
+          }
+
+          final tile = _layout != null && _cardCtx != null
+              ? NxEntityCard(
+                  row: row,
+                  layout: _layout!,
+                  fields: _cardCtx!,
+                  module: widget.module,
+                  onTap: open,
+                  onLongPress: () => _togglePick(row),
+                )
+              : NxEntityRow.fromRow(
+                  row,
+                  module: widget.module,
+                  onLongPress: () => _togglePick(row),
+                  onTap: open,
+                );
           final decorated = picked
               ? DecoratedBox(
                   decoration: BoxDecoration(

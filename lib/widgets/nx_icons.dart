@@ -101,6 +101,11 @@ class NxI {
   static const mapPin = LucideIcons300.mapPin;
   static const star = LucideIcons300.star;
   static const funnel = LucideIcons300.listFilter;
+  static const hash = LucideIcons300.hash;
+  static const textT = LucideIcons300.type;
+  static const textAlignLeft = LucideIcons300.textAlignStart;
+  static const currencyCircleDollar = LucideIcons300.circleDollarSign;
+  static const eyeSlash = LucideIcons300.eyeOff;
   static const sortAscending = LucideIcons300.arrowUpDown;
   static const starFill = LucideIcons500.star;
   static const videoCamera = LucideIcons300.video;
