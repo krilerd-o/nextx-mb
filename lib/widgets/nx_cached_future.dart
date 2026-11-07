@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_client.dart';
 import 'nx_skeleton.dart';
+import '../core/i18n.dart';
 
 /// Stale-while-revalidate loader — keeps last data while refreshing.
 class NxCachedFuture<T> extends StatefulWidget {
@@ -92,7 +93,7 @@ class NxCachedFutureState<T> extends State<NxCachedFuture<T>> {
     }
     final empty = widget.isEmpty?.call(data) ?? false;
     final child = empty
-        ? (widget.empty ?? const Center(child: Text('ไม่มีข้อมูล')))
+        ? (widget.empty ?? Center(child: Text(tr('ไม่มีข้อมูล'))))
         : widget.builder(context, data);
     final refreshable = widget.refresh
         ? RefreshIndicator(
@@ -115,7 +116,7 @@ class NxCachedFutureState<T> extends State<NxCachedFuture<T>> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Text(
-            formatApiError(_error!),
+            tr(formatApiError(_error!)),
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ),
@@ -141,12 +142,12 @@ class NxErrorRetry extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              formatApiError(error),
+              tr(formatApiError(error)),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyLarge,
             ),
             const SizedBox(height: 16),
-            FilledButton.tonal(onPressed: onRetry, child: const Text('ลองใหม่')),
+            FilledButton.tonal(onPressed: onRetry, child: Text(tr('ลองใหม่'))),
           ],
         ),
       ),

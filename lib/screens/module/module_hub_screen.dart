@@ -13,6 +13,7 @@ import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/error_reporting.dart';
+import '../../core/i18n.dart';
 
 class ModuleHubScreen extends StatefulWidget {
   const ModuleHubScreen({super.key});
@@ -59,7 +60,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     final bp = NxBreakpoint.of(context);
 
     final items = <_HubItem>[
@@ -131,9 +132,9 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
                                     child: Icon(item.icon, color: nxAvatarColor(item.title), size: 20),
                                   ),
                                   const SizedBox(height: 12),
-                                  Text(item.title, style: theme.textTheme.titleMedium),
+                                  Text(tr(item.title), style: theme.textTheme.titleMedium),
                                   Text(
-                                    item.subtitle,
+                                    tr(item.subtitle),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: theme.textTheme.bodySmall?.copyWith(
@@ -150,7 +151,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
                 ),
                 if (_recent.isNotEmpty) ...[
                   const SizedBox(height: 28),
-                  Text('ล่าสุด', style: theme.textTheme.titleLarge),
+                  Text(tr('ล่าสุด'), style: theme.textTheme.titleLarge),
                   const SizedBox(height: 12),
                   for (final item in _recent)
                     DenseCardTile(

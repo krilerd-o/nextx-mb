@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -7,12 +8,14 @@ import '../../services/api_client.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 String _ymd(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 String punchTime(dynamic raw) {
-  final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+  final d = parseThai(raw?.toString() ?? '');
   if (d == null) return '—';
   return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
@@ -26,7 +29,7 @@ class AttendanceReportScreen extends StatefulWidget {
 }
 
 class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
-  DateTime _day = DateTime.now();
+  DateTime _day = thaiNow();
   List<Map<String, dynamic>> _rows = [];
   Map<String, dynamic> _dash = {};
   bool _loading = true;
@@ -70,7 +73,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   }
 
   Future<void> _pickDay() async {
-    final now = DateTime.now();
+    final now = thaiNow();
     final d = await showDatePicker(
       context: context,
       initialDate: _day,
@@ -94,17 +97,17 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final today = _ymd(_day) == _ymd(DateTime.now());
+    final today = _ymd(_day) == _ymd(thaiNow());
     final needle = _query.trim().toLowerCase();
     final rows = needle.isEmpty
         ? _rows
         : _rows.where((r) => (r['user_name']?.toString() ?? '').toLowerCase().contains(needle)).toList();
     final stillIn = _rows.where((r) => r['clock_in_at'] != null && r['clock_out_at'] == null).length;
 
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'รายงานลงเวลา',
-        actions: [IconButton(tooltip: 'เลือกวัน', icon: const Icon(NxI.calendarBlank), onPressed: _pickDay)],
+        actions: [IconButton(tooltip: tr('เลือกวัน'), icon: const Icon(NxI.calendarBlank), onPressed: _pickDay)],
       ),
       body: RefreshIndicator(
         onRefresh: _load,
@@ -124,7 +127,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                 Expanded(
                   child: Center(
                     child: Text(
-                      '${today ? 'วันนี้ · ' : ''}${_day.day}/${_day.month}/${_day.year + 543}',
+                      tr('${today ? 'วันนี้ · ' : ''}${_day.day}/${_day.month}/${uiYear(_day.year)}'),
                       style: theme.textTheme.titleMedium,
                     ),
                   ),
@@ -155,7 +158,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
             const SizedBox(height: 12),
             TextField(
               decoration: InputDecoration(
-                hintText: 'ค้นหาชื่อพนักงาน',
+                hintText: tr('ค้นหาชื่อพนักงาน'),
                 prefixIcon: const Icon(NxI.magnifyingGlass),
                 filled: true,
                 isDense: true,
@@ -165,9 +168,9 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
             ),
             const SizedBox(height: 12),
             if (_loading) const NxSkeletonList(rows: 5),
-            if (_error != null) Text(formatApiError(_error!), style: TextStyle(color: cs.error)),
+            if (_error != null) Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error)),
             if (!_loading && _error == null && rows.isEmpty)
-              const Padding(padding: EdgeInsets.all(40), child: Center(child: Text('ยังไม่มีใครลงเวลาในวันนี้'))),
+              Padding(padding: EdgeInsets.all(40), child: Center(child: Text(tr('ยังไม่มีใครลงเวลาในวันนี้')))),
             if (!_loading)
               for (final r in rows)
                 Card(
@@ -177,18 +180,18 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
                       backgroundColor: r['clock_out_at'] == null ? cs.primaryContainer : cs.surfaceContainerHighest,
                       child: Icon(NxI.user, color: r['clock_out_at'] == null ? cs.onPrimaryContainer : cs.onSurfaceVariant),
                     ),
-                    title: Text(r['user_name']?.toString() ?? ''),
+                    title: Text(tr(r['user_name']?.toString() ?? '')),
                     subtitle: Text(
-                      [
+                      tr([
                         'เข้า ${punchTime(r['clock_in_at'])} · ออก ${punchTime(r['clock_out_at'])}',
                         if ((r['clock_in_address']?.toString() ?? '').isNotEmpty) r['clock_in_address'].toString(),
-                      ].join('\n'),
+                      ].join('\n')),
                     ),
                     isThreeLine: (r['clock_in_address']?.toString() ?? '').isNotEmpty,
                     trailing: r['clock_in_lat'] == null
                         ? null
                         : IconButton(
-                            tooltip: 'ดูตำแหน่ง',
+                            tooltip: tr('ดูตำแหน่ง'),
                             icon: const Icon(NxI.mapPin),
                             onPressed: () => _openMap(r['clock_in_lat'], r['clock_in_lng']),
                           ),
@@ -216,8 +219,8 @@ class _Stat extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: theme.textTheme.headlineSmall?.copyWith(color: color, fontWeight: FontWeight.w800)),
-          Text(label, style: theme.textTheme.labelMedium),
+          Text(tr(value), style: theme.textTheme.headlineSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
+          Text(tr(label), style: theme.textTheme.labelMedium),
         ],
       ),
     );

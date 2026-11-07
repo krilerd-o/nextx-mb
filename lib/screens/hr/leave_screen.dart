@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -13,6 +14,10 @@ import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_shake.dart';
 
 class LeaveScreen extends StatefulWidget {
   const LeaveScreen({super.key, this.initialTab = 0});
@@ -30,15 +35,15 @@ class _LeaveScreenState extends State<LeaveScreen> {
   @override
   Widget build(BuildContext context) {
     final canApprove = MenuAccess.allow(
-      context.watch<AppConfig>().session,
+      context.select((AppConfig c) => c.session),
       MenuAccess.leaveManagement,
     );
     final tabCount = canApprove ? 4 : 3;
     return DefaultTabController(
       length: tabCount,
       initialIndex: widget.initialTab.clamp(0, tabCount - 1),
-      child: Scaffold(
-        appBar: const NxAppHeader(title: 'การลา'),
+      child: NxScrollScaffold(
+        header: const NxAppHeader(title: 'การลา'),
         body: Column(
           children: [
             TabBar(
@@ -75,7 +80,7 @@ class _LeaveBalanceTab extends StatelessWidget {
       load: () => context.read<AppConfig>().apiClient.getLeaveBalance(),
       skeleton: const NxSkeletonList(rows: 4),
       isEmpty: (list) => list.isEmpty,
-      empty: const Center(child: Text('ไม่มีข้อมูลสิทธิ์ลา')),
+      empty: Center(child: Text(tr('ไม่มีข้อมูลสิทธิ์ลา'))),
       builder: (context, list) {
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -100,6 +105,8 @@ class _LeaveRequestTab extends StatefulWidget {
 class _LeaveRequestTabState extends State<_LeaveRequestTab> {
   List<Map<String, dynamic>> _types = [];
   int? _typeId;
+  final _typeShake = GlobalKey<NxShakeState>();
+  final _rangeShake = GlobalKey<NxShakeState>();
   final _reason = TextEditingController();
   DateTimeRange? _range;
   List<({List<int> bytes, String name})> _files = [];
@@ -144,7 +151,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Future<void> _pickRange() async {
-    final now = DateTime.now();
+    final now = thaiNow();
     final r = await showDateRangePicker(
       context: context,
       firstDate: DateTime(now.year - 1),
@@ -156,7 +163,10 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
 
   Future<void> _submit() async {
     if (_typeId == null || _range == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เลือกประเภทลาและวันที่')));
+      // Point at what's missing: scroll there, shake it, short vibration.
+      nxShakeField(_typeId == null ? _typeShake : _rangeShake);
+      if (_typeId == null && _range == null) _rangeShake.currentState?.shake(haptic: false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('เลือกประเภทลาและวันที่'))));
       return;
     }
     setState(() => _saving = true);
@@ -178,14 +188,14 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
         }
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(note)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(note))));
         _reason.clear();
         setState(() => _files = []);
         widget.onSubmitted();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -205,39 +215,45 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
           child: Column(
             children: [
-              DropdownButtonFormField<int>(
+              NxShake(
+                key: _typeShake,
+                child: DropdownButtonFormField<int>(
                 value: _typeId,
-                decoration: const InputDecoration(labelText: 'ประเภท'),
+                decoration: InputDecoration(label: nxRequiredLabel(context, tr('ประเภท'))),
                 items: _types
                     .map(
                       (e) => DropdownMenuItem(
                         value: int.tryParse(e['id']?.toString() ?? ''),
-                        child: Text(e['name']?.toString() ?? ''),
+                        child: Text(tr(e['name']?.toString() ?? '')),
                       ),
                     )
                     .where((e) => e.value != null)
                     .toList(),
                 onChanged: (v) => setState(() => _typeId = v),
               ),
+              ),
               const SizedBox(height: 12),
-              ListTile(
+              NxShake(
+                key: _rangeShake,
+                child: ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('ช่วงวันที่'),
+                title: nxRequiredLabel(context, tr('ช่วงวันที่')),
                 subtitle: Text(
-                  _range == null
+                  tr(_range == null
                       ? 'แตะเพื่อเลือก'
-                      : '${_range!.start.day}/${_range!.start.month} – ${_range!.end.day}/${_range!.end.month}',
+                      : '${_range!.start.day}/${_range!.start.month} – ${_range!.end.day}/${_range!.end.month}'),
                 ),
                 trailing: const Icon(NxI.calendarBlank),
                 onTap: _pickRange,
               ),
+              ),
               const SizedBox(height: 8),
               TextField(
                 controller: _reason,
-                decoration: const InputDecoration(labelText: 'เหตุผล'),
+                decoration: InputDecoration(labelText: tr('เหตุผล')),
                 maxLines: 3,
               ),
-              if (context.watch<AppConfig>().serverInfo?.has('leave_attachments') ?? false) ...[
+              if (context.select((AppConfig c) => c.serverInfo)?.has('leave_attachments') ?? false) ...[
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -249,7 +265,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
                             if (picked.isNotEmpty && mounted) setState(() => _files = [..._files, ...picked]);
                           },
                     icon: const Icon(NxI.paperclip, size: 18),
-                    label: const Text('แนบไฟล์ (เช่น ใบรับรองแพทย์)'),
+                    label: Text(tr('แนบไฟล์ (เช่น ใบรับรองแพทย์)')),
                   ),
                 ),
                 if (_files.isNotEmpty)
@@ -259,7 +275,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
                     children: [
                       for (final f in _files)
                         InputChip(
-                          label: Text(f.name, overflow: TextOverflow.ellipsis),
+                          label: Text(tr(f.name), overflow: TextOverflow.ellipsis),
                           onDeleted: () => setState(() => _files = _files.where((x) => !identical(x, f)).toList()),
                         ),
                     ],
@@ -288,17 +304,19 @@ class _LeaveMineTab extends StatefulWidget {
 }
 
 class _LeaveMineTabState extends State<_LeaveMineTab> {
+  NxListQuery _lq = const NxListQuery();
+
   var _local = 0;
 
   Future<void> _cancel(Map<String, dynamic> p) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยกเลิกคำขอลา?'),
-        content: Text('${p['leave_type_name'] ?? 'ลา'} ${p['start_date'] ?? ''} – ${p['end_date'] ?? ''}'),
+        title: Text(tr('ยกเลิกคำขอลา?')),
+        content: Text(tr('${p['leave_type_name'] ?? 'ลา'} ${p['start_date'] ?? ''} – ${p['end_date'] ?? ''}')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ไม่')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ยกเลิกคำขอ')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ไม่'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ยกเลิกคำขอ'))),
         ],
       ),
     );
@@ -306,11 +324,11 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
     try {
       await context.read<AppConfig>().apiClient.cancelLeave(p['id'].toString());
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ยกเลิกคำขอลาแล้ว')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ยกเลิกคำขอลาแล้ว'))));
       setState(() => _local++);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -322,12 +340,58 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
       load: () => context.read<AppConfig>().apiClient.getLeaveRequests(),
       skeleton: const NxSkeletonList(rows: 4),
       isEmpty: (list) => list.isEmpty,
-      empty: const Center(child: Text('ยังไม่มีคำขอลา')),
-      builder: (context, list) {
+      empty: Center(child: Text(tr('ยังไม่มีคำขอลา'))),
+      builder: (context, all) {
+        final now = thaiNow();
+        String ym(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}';
+        final thisMonth = ym(now);
+        final lastMonth = ym(DateTime(now.year, now.month - 1));
+        final list = nxApplyLocalQuery<Map<String, dynamic>>(
+          all,
+          _lq,
+          text: (p) => '${p['leave_type_name'] ?? ''} ${p['reason'] ?? ''}',
+          filters: {
+            'status': (p, v) => v.contains('${p['status'] ?? ''}'),
+            'month': (p, v) {
+              final m = '${p['start_date'] ?? ''}'.length >= 7 ? '${p['start_date']}'.substring(0, 7) : '';
+              return (v.contains('this') && m == thisMonth) ||
+                  (v.contains('last') && m == lastMonth) ||
+                  (v.contains('year') && m.startsWith('${now.year}'));
+            },
+          },
+          sorts: {
+            'new': (a, b) => '${b['start_date'] ?? ''}'.compareTo('${a['start_date'] ?? ''}'),
+            'old': (a, b) => '${a['start_date'] ?? ''}'.compareTo('${b['start_date'] ?? ''}'),
+          },
+        );
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: NxBreakpoint.of(context).scrollPadding(context),
           children: [
+            NxListToolbar(
+              query: _lq,
+              liveSearch: true,
+              showSearch: all.length > 5,
+              padding: const EdgeInsets.only(bottom: 8),
+              searchHint: 'ค้นหาประเภท / เหตุผล',
+              quickGroup: 'status',
+              resultCount: list.length,
+              groups: const [
+                NxFilterGroup(key: 'status', label: 'สถานะ', options: [
+                  NxFilterOption('Pending', 'รออนุมัติ'),
+                  NxFilterOption('Approved', 'อนุมัติแล้ว'),
+                  NxFilterOption('Rejected', 'ไม่อนุมัติ'),
+                  NxFilterOption('Cancelled', 'ยกเลิกแล้ว'),
+                ]),
+                NxFilterGroup(key: 'month', label: 'ช่วงเดือน', multi: false, options: [
+                  NxFilterOption('this', 'เดือนนี้'),
+                  NxFilterOption('last', 'เดือนที่แล้ว'),
+                  NxFilterOption('year', 'ปีนี้'),
+                ]),
+              ],
+              sorts: const [NxSortOption('new', 'วันที่ลาล่าสุด'), NxSortOption('old', 'วันที่ลาเก่าสุด')],
+              onChanged: (q) => setState(() => _lq = q),
+            ),
             for (final p in list)
               _LeaveRequestCard(
                 row: p,
@@ -389,7 +453,7 @@ class _LeaveRequestCard extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          who != null && who.isNotEmpty ? who : (row['leave_type_name']?.toString() ?? 'ลา'),
+                          tr(who != null && who.isNotEmpty ? who : (row['leave_type_name']?.toString() ?? 'ลา')),
                           style: theme.textTheme.titleSmall,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -398,27 +462,27 @@ class _LeaveRequestCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
-                        child: Text(label, style: theme.textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
+                        child: Text(tr(label), style: theme.textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    [
+                    tr([
                       if (who != null && who.isNotEmpty) row['leave_type_name']?.toString() ?? '',
                       '${d(row['start_date'])} – ${d(row['end_date'])}',
                       if (row['days'] != null) '${row['days']} วัน',
-                    ].where((e) => e.isNotEmpty).join(' · '),
+                    ].where((e) => e.isNotEmpty).join(' · ')),
                     style: theme.textTheme.bodySmall,
                   ),
-                  if (reason.isNotEmpty) Text('เหตุผล: $reason', style: theme.textTheme.bodySmall),
+                  if (reason.isNotEmpty) Text(tr('เหตุผล: $reason'), style: theme.textTheme.bodySmall),
                   if (reject.isNotEmpty)
-                    Text('เหตุผลที่ไม่อนุมัติ: $reject', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                    Text(tr('เหตุผลที่ไม่อนุมัติ: $reject'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
                   LeaveAttachments(row: row, editable: editableFiles),
                 ],
               ),
             ),
-            if (onCancel != null) TextButton(onPressed: onCancel, child: const Text('ยกเลิก')),
+            if (onCancel != null) TextButton(onPressed: onCancel, child: Text(tr('ยกเลิก'))),
             ?trailing,
           ],
         ),
@@ -448,8 +512,8 @@ class _BalanceCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text(row['leave_type_name']?.toString() ?? '', style: theme.textTheme.titleSmall)),
-                Text('คงเหลือ ${n(left < 0 ? 0 : left)} วัน', style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary)),
+                Expanded(child: Text(tr(row['leave_type_name']?.toString() ?? ''), style: theme.textTheme.titleSmall)),
+                Text(tr('คงเหลือ ${n(left < 0 ? 0 : left)} วัน'), style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary)),
               ],
             ),
             const SizedBox(height: 8),
@@ -458,7 +522,7 @@ class _BalanceCard extends StatelessWidget {
               child: LinearProgressIndicator(value: ratio, minHeight: 8),
             ),
             const SizedBox(height: 4),
-            Text('ใช้ไป ${n(used)} จาก ${n(total)} วัน', style: theme.textTheme.bodySmall),
+            Text(tr('ใช้ไป ${n(used)} จาก ${n(total)} วัน'), style: theme.textTheme.bodySmall),
           ],
         ),
       ),
@@ -483,11 +547,11 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
       reason = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('เหตุผลที่ไม่อนุมัติ'),
-          content: TextField(controller: ctrl, autofocus: true, maxLines: 3, decoration: const InputDecoration(hintText: 'ไม่บังคับ')),
+          title: Text(tr('เหตุผลที่ไม่อนุมัติ')),
+          content: TextField(controller: ctrl, autofocus: true, maxLines: 3, decoration: InputDecoration(hintText: tr('ไม่บังคับ'))),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('ไม่อนุมัติ')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('ไม่อนุมัติ'))),
           ],
         ),
       );
@@ -499,7 +563,7 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
       if (mounted) setState(() => _revision++);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -511,7 +575,7 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
       load: () => context.read<AppConfig>().apiClient.getLeaveRequests(all: true, status: 'Pending'),
       skeleton: const NxSkeletonList(rows: 4),
       isEmpty: (list) => list.isEmpty,
-      empty: const Center(child: Text('ไม่มีคำขอรออนุมัติ')),
+      empty: Center(child: Text(tr('ไม่มีคำขอรออนุมัติ'))),
       builder: (context, pending) {
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -578,7 +642,7 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
       final next = await f();
       if (mounted) setState(() => _files = next);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -591,14 +655,14 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
       final bytes = await api.downloadLeaveAttachment(f['url'].toString());
       await openFileBytes(bytes, f['name']?.toString() ?? 'file');
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final api = context.read<AppConfig>().apiClient;
-    final canAdd = widget.editable && _files.length < 5 && (context.watch<AppConfig>().serverInfo?.has('leave_attachments') ?? false);
+    final canAdd = widget.editable && _files.length < 5 && (context.select((AppConfig c) => c.serverInfo)?.has('leave_attachments') ?? false);
     if (_files.isEmpty && !canAdd) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 6),
@@ -610,7 +674,7 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
           for (final f in _files)
             InputChip(
               avatar: Icon((f['mime']?.toString() ?? '').startsWith('image/') ? NxI.image : NxI.file, size: 16),
-              label: Text(f['name']?.toString() ?? 'ไฟล์', overflow: TextOverflow.ellipsis),
+              label: Text(tr(f['name']?.toString() ?? 'ไฟล์'), overflow: TextOverflow.ellipsis),
               onPressed: _busy ? null : () => _open(f),
               onDeleted: widget.editable && !_busy ? () => _run(() => api.removeLeaveAttachment(_id, f['id'].toString())) : null,
               deleteButtonTooltipMessage: 'เอาไฟล์ออก',
@@ -618,7 +682,7 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
           if (canAdd)
             ActionChip(
               avatar: _busy ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.paperclip, size: 16),
-              label: const Text('แนบไฟล์'),
+              label: Text(tr('แนบไฟล์')),
               onPressed: _busy
                   ? null
                   : () async {

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../core/nx_motion.dart';
 import 'nx_press_scale.dart';
 import 'nx_glass.dart';
+import '../core/i18n.dart';
 
 class NxTabDestination {
   const NxTabDestination({
@@ -216,7 +216,7 @@ class _Item extends StatelessWidget {
                     border: Border.all(color: cs.surface, width: 1.5),
                   ),
                   child: Text(
-                    badge > 99 ? '99+' : '$badge',
+                    tr(badge > 99 ? '99+' : '$badge'),
                     textAlign: TextAlign.center,
                     style: TextStyle(color: cs.onError, fontSize: 10, fontWeight: FontWeight.w700, height: 1.3),
                   ),
@@ -227,7 +227,7 @@ class _Item extends StatelessWidget {
     final body = Semantics(
       button: true,
       selected: selected,
-      label: dest.label,
+      label: tr(dest.label),
       excludeSemantics: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -235,11 +235,11 @@ class _Item extends StatelessWidget {
           withBadge,
           const SizedBox(height: 4),
           Text(
-            dest.label,
+            tr(dest.label),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: GoogleFonts.notoSansThai(
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
               fontSize: 11,
               height: 1.2,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,

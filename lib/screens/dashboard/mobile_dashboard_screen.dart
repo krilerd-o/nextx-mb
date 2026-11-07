@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons_500.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -16,7 +17,11 @@ import '../../widgets/nx_workspace_switcher.dart';
 import 'team_overview_card.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_streaming_text.dart';
+import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
+import '../../core/recent_records.dart';
 
 /// Thai greeting for the hour of day.
 String greetingFor(DateTime now) {
@@ -26,13 +31,36 @@ String greetingFor(DateTime now) {
   return 'สวัสดีตอนเย็น';
 }
 
-const _thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-const _thaiDays = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'];
+const _thaiMonths = [
+  'ม.ค.',
+  'ก.พ.',
+  'มี.ค.',
+  'เม.ย.',
+  'พ.ค.',
+  'มิ.ย.',
+  'ก.ค.',
+  'ส.ค.',
+  'ก.ย.',
+  'ต.ค.',
+  'พ.ย.',
+  'ธ.ค.',
+];
+const _thaiDays = [
+  'จันทร์',
+  'อังคาร',
+  'พุธ',
+  'พฤหัสบดี',
+  'ศุกร์',
+  'เสาร์',
+  'อาทิตย์',
+];
 
-String thaiLongDate(DateTime d) => 'วัน${_thaiDays[d.weekday - 1]}ที่ ${d.day} ${_thaiMonths[d.month - 1]} ${d.year + 543}';
+String thaiLongDate(DateTime d) => L10n.isEn
+    ? '${tr(_thaiDays[d.weekday - 1])}, ${d.day} ${tr(_thaiMonths[d.month - 1])} ${d.year}'
+    : 'วัน${_thaiDays[d.weekday - 1]}ที่ ${d.day} ${_thaiMonths[d.month - 1]} ${uiYear(d.year)}';
 
 String _hhmm(dynamic raw) {
-  final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+  final d = parseThai(raw?.toString() ?? '');
   if (d == null) return '';
   return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }
@@ -70,6 +98,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   void initState() {
     super.initState();
     _load();
+    RecentRecords.instance.load(context.read<AppConfig>().prefsScope);
   }
 
   Future<void> _load() async {
@@ -83,7 +112,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
     final api = config.apiClient;
     final session = config.session;
     Object? firstError;
-  Future<Object?> guard(Future<Object?> f) async {
+    Future<Object?> guard(Future<Object?> f) async {
       try {
         return await f;
       } catch (e) {
@@ -93,12 +122,20 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
     }
 
     final results = await Future.wait<Object?>([
-      MenuAccess.allow(session, MenuAccess.attendance) ? guard(api.getAttendanceSummary()) : Future<Object?>.value(),
+      MenuAccess.allow(session, MenuAccess.attendance)
+          ? guard(api.getAttendanceSummary())
+          : Future<Object?>.value(),
       guard(api.getHomeSummary()),
-      MenuAccess.allow(session, MenuAccess.workspace) ? guard(api.getHomeWork(limit: 8)) : Future<Object?>.value(),
+      MenuAccess.allow(session, MenuAccess.workspace)
+          ? guard(api.getHomeWork(limit: 8))
+          : Future<Object?>.value(),
       guard(UnreadNotifications.instance.refresh(api).then((_) => null)),
-      MenuAccess.any(session, const ['deal', 'quotation']) ? guard(api.getSalesDashboard()) : Future<Object?>.value(),
-      MenuAccess.allow(session, 'case') ? guard(api.getCaseDashboard()) : Future<Object?>.value(),
+      MenuAccess.any(session, const ['deal', 'quotation'])
+          ? guard(api.getSalesDashboard())
+          : Future<Object?>.value(),
+      MenuAccess.allow(session, 'case')
+          ? guard(api.getCaseDashboard())
+          : Future<Object?>.value(),
       api.getWhatsNewUnread().then<Object?>((n) => n).catchError((_) => 0),
     ]);
     if (!mounted) return;
@@ -109,13 +146,54 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       _sales = results[4] as Map<String, dynamic>?;
       _cases = results[5] as Map<String, dynamic>?;
       _whatsNew = (results[6] as int?) ?? 0;
-      _error = (_summary == null && _attendance == null && _work == null) ? firstError : null;
+      _error = (_summary == null && _attendance == null && _work == null)
+          ? firstError
+          : null;
       _loading = false;
       _refreshing = false;
     });
+    _loadSparks();
   }
 
-  int _count(Map<String, dynamic>? m, String key) => int.tryParse(m?[key]?.toString() ?? '') ?? 0;
+  /// New records per day for the last 7 days (Thai days), per stat module.
+  final Map<String, List<int>> _sparks = {};
+
+  Future<void> _loadSparks() async {
+    final config = context.read<AppConfig>();
+    final session = config.session;
+    final api = config.apiClient;
+    final today = thaiNow();
+    final t0 = DateTime(today.year, today.month, today.day);
+    for (final module in _statModules.keys) {
+      if (!MenuAccess.allow(session, EntityModules.menuKeyOf(module))) continue;
+      try {
+        // One tiny COUNT per day (limit 1 + with_total) — cheap even on huge tables.
+        String ymd(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+        final days = await Future.wait([
+          for (var i = 6; i >= 0; i--)
+            () async {
+              final d = ymd(t0.subtract(Duration(days: i)));
+              final page = await api.getEntityList(module, limit: 1, extra: {
+                'period_field': 'createdtime',
+                'period_preset': 'custom',
+                'period_start': d,
+                'period_end': d,
+                'with_total': '1',
+                'cols': 'id',
+              });
+              return page.total ?? page.items.length;
+            }(),
+        ]);
+        if (!mounted) return;
+        setState(() => _sparks[module] = days);
+      } catch (_) {
+        // Sparklines are a nicety; the tile still shows its total.
+      }
+    }
+  }
+
+  int _count(Map<String, dynamic>? m, String key) =>
+      int.tryParse(m?[key]?.toString() ?? '') ?? 0;
 
   List<Map<String, dynamic>> _workItems() {
     final items = extractMapList(_work?['items'] ?? _work?['work']);
@@ -123,7 +201,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   }
 
   List<Map<String, dynamic>> _upcoming() {
-    final now = DateTime.now().subtract(const Duration(hours: 1));
+    final now = thaiNow().subtract(const Duration(hours: 1));
     final all = extractMapList(_summary?['activities']);
     return all
         .where((a) {
@@ -140,16 +218,23 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
     final overdue = _count(counts, 'overdue');
     final today = _count(counts, 'today');
     final next = _upcoming();
-    if (clockIn == null && MenuAccess.allow(context.read<AppConfig>().session, MenuAccess.attendance)) {
+    if (clockIn == null &&
+        MenuAccess.allow(
+          context.read<AppConfig>().session,
+          MenuAccess.attendance,
+        )) {
       parts.add('ยังไม่ได้ลงเวลาเข้างาน');
     }
     if (today > 0) parts.add('มีงานครบกำหนดวันนี้ $today รายการ');
     if (overdue > 0) parts.add('งานเลยกำหนด $overdue รายการ ควรเคลียร์ก่อน');
     if (next.isNotEmpty) {
       final a = next.first;
-      parts.add('นัดถัดไป "${a['subject'] ?? 'กิจกรรม'}" เวลา ${_hhmm(a['date_start'])}');
+      parts.add(
+        'นัดถัดไป "${a['subject'] ?? 'กิจกรรม'}" เวลา ${_hhmm(a['date_start'])}',
+      );
     }
-    if (parts.isEmpty) return 'วันนี้ยังไม่มีงานค้างหรือนัดหมาย ลองถาม AI ให้ช่วยวางแผนหรือสรุปลูกค้าที่ควรติดตาม';
+    if (parts.isEmpty)
+      return 'วันนี้ยังไม่มีงานค้างหรือนัดหมาย ลองถาม AI ให้ช่วยวางแผนหรือสรุปลูกค้าที่ควรติดตาม';
     return parts.join(' · ');
   }
 
@@ -157,167 +242,291 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final config = context.watch<AppConfig>();
-    final session = config.session;
+    final session = context.select((AppConfig c) => c.session);
     final bp = NxBreakpoint.of(context);
-    final now = DateTime.now();
+    final now = thaiNow();
 
     final clockIn = _attendance?['clock_in_at'] ?? _attendance?['clock_in'];
     final clockOut = _attendance?['clock_out_at'] ?? _attendance?['clock_out'];
-    final counts = _work?['counts'] is Map ? Map<String, dynamic>.from(_work!['counts'] as Map) : null;
-    final stats = _summary?['stats'] is Map ? Map<String, dynamic>.from(_summary!['stats'] as Map) : const <String, dynamic>{};
+    final counts = _work?['counts'] is Map
+        ? Map<String, dynamic>.from(_work!['counts'] as Map)
+        : null;
+    final stats = _summary?['stats'] is Map
+        ? Map<String, dynamic>.from(_summary!['stats'] as Map)
+        : const <String, dynamic>{};
 
     final quick = <_QuickAction>[
       if (MenuAccess.allow(session, MenuAccess.attendance))
         const _QuickAction(NxI.clock, 'ลงเวลา', AppRoutes.attendance),
-      if (MenuAccess.allow(session, MenuAccess.leave)) const _QuickAction(NxI.calendarCheck, 'ขอลา', AppRoutes.leaveRequest),
-      if (MenuAccess.allow(session, MenuAccess.quotation) || MenuAccess.allow(session, MenuAccess.leaveManagement))
+      if (MenuAccess.allow(session, MenuAccess.leave))
+        const _QuickAction(NxI.calendarCheck, 'ขอลา', AppRoutes.leaveRequest),
+      if (MenuAccess.allow(session, MenuAccess.quotation) ||
+          MenuAccess.allow(session, MenuAccess.leaveManagement))
         const _QuickAction(NxI.checkCircle, 'รออนุมัติ', AppRoutes.approvals),
-      if (MenuAccess.allow(session, MenuAccess.chat)) const _QuickAction(NxI.chatCircle, 'แชท', AppRoutes.chatHome),
-      if (MenuAccess.anyCalendar(session)) const _QuickAction(NxI.calendarBlank, 'ปฏิทิน', AppRoutes.calendar),
-      if (MenuAccess.allow(session, MenuAccess.job)) const _QuickAction(NxI.wrench, 'งานบริการ', AppRoutes.jobs),
-      if (MenuAccess.allow(session, MenuAccess.mailbox)) const _QuickAction(NxI.envelope, 'เมล', AppRoutes.mail),
-      if (MenuAccess.allow(session, MenuAccess.ai)) const _QuickAction(NxI.robot, 'AI', AppRoutes.aiChat),
+      if (MenuAccess.allow(session, MenuAccess.chat))
+        const _QuickAction(NxI.chatCircle, 'แชท', AppRoutes.chatHome),
+      if (MenuAccess.anyCalendar(session))
+        const _QuickAction(NxI.calendarBlank, 'ปฏิทิน', AppRoutes.calendar),
+      if (MenuAccess.allow(session, MenuAccess.job))
+        const _QuickAction(NxI.wrench, 'งานบริการ', AppRoutes.jobs),
+      if (MenuAccess.allow(session, MenuAccess.mailbox))
+        const _QuickAction(NxI.envelope, 'เมล', AppRoutes.mail),
+      if (MenuAccess.allow(session, MenuAccess.ai))
+        const _QuickAction(NxI.robot, 'AI', AppRoutes.aiChat),
     ];
 
     final statTiles = [
       for (final e in _statModules.entries)
-        if (stats.containsKey(e.key) && MenuAccess.allow(session, EntityModules.menuKeyOf(e.key)))
+        if (stats.containsKey(e.key) &&
+            MenuAccess.allow(session, EntityModules.menuKeyOf(e.key)))
           (e.key, e.value, _count(stats, e.key)),
     ];
 
-    return Stack(
-      children: [
-        const Positioned(top: 0, left: 0, right: 0, height: 320, child: _PastelHero()),
-        Column(
-      children: [
-        NxAppHeader.hub(
-          actions: [
-            IconButton(icon: const Icon(NxI.arrowCounterClockwise), tooltip: 'รีเฟรช', onPressed: _load),
-          ],
-        ),
-        if (_refreshing) const LinearProgressIndicator(minHeight: 2),
-        Expanded(
-          child: _loading
-              ? ListView(
-                  padding: bp.scrollPadding(context, inShell: true),
-                  children: const [NxSkeletonKpiGrid()],
-                )
-              : RefreshIndicator(
-                  color: cs.primary,
-                  onRefresh: _load,
-                  child: ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: bp.scrollPadding(context, inShell: true),
-                    children: [
-                      Text(
-                        '${greetingFor(now)}${session.displayName != null ? ' ${session.displayName}' : ''}',
-                        style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        thaiLongDate(now),
-                        style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-                      ),
-                      const SizedBox(height: 8),
-                      const NxWorkspaceSwitcher(),
-                      if (_error != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Text(formatApiError(_error!), style: theme.textTheme.bodySmall?.copyWith(color: cs.error)),
-                        ),
-                      if (_whatsNew > 0) ...[
-                        const SizedBox(height: 12),
-                        NxSurfaceCard(
-                          radius: 20,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          onTap: () async {
-                            await context.push(AppRoutes.whatsNew);
-                            if (mounted) _load();
-                          },
-                          child: Row(
-                            children: [
-                              Icon(NxI.sparkleFill, color: cs.primary),
-                              const SizedBox(width: 10),
-                              Expanded(child: Text('มีอะไรใหม่ $_whatsNew รายการ', style: theme.textTheme.titleSmall)),
-                              Icon(NxI.caretRight, size: 16, color: cs.onSurfaceVariant),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      _TodayCard(
-                        showAttendance: MenuAccess.allow(session, MenuAccess.attendance),
-                        clockIn: clockIn,
-                        clockOut: clockOut,
-                        next: _upcoming().isEmpty ? null : _upcoming().first,
-                        overdue: _count(counts, 'overdue'),
-                        today: _count(counts, 'today'),
-                        upcoming: _count(counts, 'upcoming'),
-                        hasWork: counts != null,
-                      ),
-                      if (MenuAccess.allow(session, MenuAccess.ai)) ...[
-                        const SizedBox(height: 12),
-                        _AiBriefCard(text: _brief(counts, clockIn)),
-                      ],
-                      if (quick.isNotEmpty) ...[
-                        const SizedBox(height: 20),
-                        _QuickGrid(actions: quick),
-                      ],
-                      if (counts != null && _workItems().isNotEmpty) ...[
-                        const SizedBox(height: 24),
-                        _SectionTitle('งานของฉัน', action: 'ทั้งหมด', onAction: () => context.push(AppRoutes.workspaceHome)),
-                        for (final it in _workItems()) _WorkRow(item: it),
-                      ],
-                      if (_upcoming().length > 1) ...[
-                        const SizedBox(height: 24),
-                        _SectionTitle('กิจกรรมถัดไป', action: 'ปฏิทิน', onAction: () => context.push(AppRoutes.calendar)),
-                        for (final a in _upcoming().skip(1))
-                          _ListRow(
-                            icon: NxI.calendarBlank,
-                            title: a['subject']?.toString() ?? entityTitle(a, module: 'activity'),
-                            subtitle: [
-                              _hhmm(a['date_start']),
-                              a['location']?.toString() ?? '',
-                            ].where((e) => e.isNotEmpty).join(' · '),
-                            onTap: a['id'] == null ? null : () => context.push(AppRoutes.activity(a['id'].toString())),
-                          ),
-                      ],
-                      if (statTiles.isNotEmpty) ...[
-                        const SizedBox(height: 24),
-                        const _SectionTitle('ภาพรวม'),
-                        _StatGrid(
-                          children: [
-                            for (final (module, icon, n) in statTiles)
-                              _StatCard(
-                                label: EntityModules.titleOf(module),
-                                value: n,
-                                icon: icon,
-                                onTap: () => context.push(
-                                  EntityModules.isFsm(module) ? AppRoutes.fsmModule(module) : AppRoutes.crmModule(module),
+    // Glass header floats over the page; content scrolls up beneath it.
+    final pad = bp.scrollPadding(context, inShell: true);
+    return NxScrollScaffold(
+      insetBody: false,
+      header: NxAppHeader.hub(
+        actions: [
+          IconButton(
+            icon: const Icon(NxI.arrowCounterClockwise),
+            tooltip: tr('รีเฟรช'),
+            onPressed: _load,
+          ),
+        ],
+      ),
+      body: Builder(
+        builder: (context) {
+          final listPad = pad.copyWith(
+            // +12: greeting starts clear of the header's blur tail.
+            top: pad.top + 12 + NxScrollScaffold.topInset(context),
+          );
+          return Stack(
+            children: [
+              const Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 360,
+                child: _PastelHero(),
+              ),
+              Column(
+                children: [
+                  if (_refreshing)
+                    SizedBox(height: NxScrollScaffold.topInset(context)),
+                  if (_refreshing) const LinearProgressIndicator(minHeight: 2),
+                  Expanded(
+                    child: _loading
+                        ? ListView(
+                            padding: listPad,
+                            children: const [NxSkeletonKpiGrid()],
+                          )
+                        : RefreshIndicator(
+                            edgeOffset: NxScrollScaffold.topInset(context),
+                            color: cs.primary,
+                            onRefresh: _load,
+                            child: ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: _refreshing ? pad : listPad,
+                              children: [
+                                Text(
+                                  '${tr(greetingFor(now))}${session.displayName != null ? ' ${session.displayName}' : ''}',
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(fontWeight: FontWeight.w700),
                                 ),
-                              ),
-                          ],
-                        ),
-                      ],
-                      if (salesFigures(_sales).isNotEmpty || caseFigures(_cases).isNotEmpty) ...[
-                        const SizedBox(height: 24),
-                        const _SectionTitle('ยอดขายและเคส'),
-                        TeamOverviewCard(
-                          sales: _sales,
-                          cases: _cases,
-                          onOpenSales: () => context.push(AppRoutes.crmModule('deal')),
-                          onOpenCases: () => context.push(AppRoutes.crmModule('case')),
-                        ),
-                      ],
-                      const SizedBox(height: 24),
-                    ],
+                                const SizedBox(height: 2),
+                                Text(
+                                  tr(thaiLongDate(now)),
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const NxWorkspaceSwitcher(),
+                                if (_error != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12),
+                                    child: Text(
+                                      tr(formatApiError(_error!)),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: cs.error),
+                                    ),
+                                  ),
+                                if (_whatsNew > 0) ...[
+                                  const SizedBox(height: 12),
+                                  NxSurfaceCard(
+                                    radius: 20,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    onTap: () async {
+                                      await context.push(AppRoutes.whatsNew);
+                                      if (mounted) _load();
+                                    },
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          NxI.sparkleFill,
+                                          color: cs.primary,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            tr('มีอะไรใหม่ $_whatsNew รายการ'),
+                                            style: theme.textTheme.titleSmall,
+                                          ),
+                                        ),
+                                        Icon(
+                                          NxI.caretRight,
+                                          size: 16,
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 16),
+                                _TodayCard(
+                                  showAttendance: MenuAccess.allow(
+                                    session,
+                                    MenuAccess.attendance,
+                                  ),
+                                  clockIn: clockIn,
+                                  clockOut: clockOut,
+                                  next: _upcoming().isEmpty
+                                      ? null
+                                      : _upcoming().first,
+                                  overdue: _count(counts, 'overdue'),
+                                  today: _count(counts, 'today'),
+                                  upcoming: _count(counts, 'upcoming'),
+                                  hasWork: counts != null,
+                                ),
+                                if (MenuAccess.allow(
+                                  session,
+                                  MenuAccess.ai,
+                                )) ...[
+                                  const SizedBox(height: 12),
+                                  _AiBriefCard(text: _brief(counts, clockIn)),
+                                ],
+                                if (quick.isNotEmpty) ...[
+                                  const SizedBox(height: 20),
+                                  _QuickGrid(actions: quick),
+                                ],
+                                if (counts != null &&
+                                    _workItems().isNotEmpty) ...[
+                                  const SizedBox(height: 24),
+                                  _SectionTitle(
+                                    'งานของฉัน',
+                                    action: 'ทั้งหมด',
+                                    onAction: () =>
+                                        context.push(AppRoutes.workspaceHome),
+                                  ),
+                                  for (final it in _workItems())
+                                    _WorkRow(item: it),
+                                ],
+                                if (_upcoming().length > 1) ...[
+                                  const SizedBox(height: 24),
+                                  _SectionTitle(
+                                    'กิจกรรมถัดไป',
+                                    action: 'ปฏิทิน',
+                                    onAction: () =>
+                                        context.push(AppRoutes.calendar),
+                                  ),
+                                  for (final a in _upcoming().skip(1))
+                                    _ListRow(
+                                      icon: NxI.calendarBlank,
+                                      title:
+                                          a['subject']?.toString() ??
+                                          entityTitle(a, module: 'activity'),
+                                      subtitle: [
+                                        _hhmm(a['date_start']),
+                                        a['location']?.toString() ?? '',
+                                      ].where((e) => e.isNotEmpty).join(' · '),
+                                      onTap: a['id'] == null
+                                          ? null
+                                          : () => context.push(
+                                              AppRoutes.activity(
+                                                a['id'].toString(),
+                                              ),
+                                            ),
+                                    ),
+                                ],
+                                // Records opened lately on this device (per user).
+                                ValueListenableBuilder<List<Map<String, String>>>(
+                                  valueListenable: RecentRecords.instance.items,
+                                  builder: (context, recent, _) {
+                                    final allowed = [
+                                      for (final r in recent)
+                                        if (MenuAccess.allow(session, EntityModules.menuKeyOf(r['module'] ?? ''))) r,
+                                    ].take(5).toList();
+                                    if (allowed.isEmpty) return const SizedBox.shrink();
+                                    return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        const SizedBox(height: 24),
+                                        const _SectionTitle('เปิดล่าสุด'),
+                                        for (final r in allowed)
+                                          _ListRow(
+                                            icon: NxI.clockCounterClockwise,
+                                            title: r['title'] ?? '',
+                                            subtitle: EntityModules.titleOf(r['module'] ?? ''),
+                                            onTap: () => context.push(
+                                              r['module'] == 'activity'
+                                                  ? AppRoutes.activity(r['id'] ?? '')
+                                                  : AppRoutes.crmRecord(r['module'] ?? '', r['id'] ?? ''),
+                                            ),
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                                if (statTiles.isNotEmpty) ...[
+                                  const SizedBox(height: 24),
+                                  const _SectionTitle('ภาพรวม'),
+                                  _StatGrid(
+                                    children: [
+                                      for (final (module, icon, n) in statTiles)
+                                        _StatCard(
+                                          label: EntityModules.titleOf(module),
+                                          value: n,
+                                          icon: icon,
+                                          spark: _sparks[module],
+                                          onTap: () => context.push(
+                                            EntityModules.isFsm(module)
+                                                ? AppRoutes.fsmModule(module)
+                                                : AppRoutes.crmModule(module),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                                if (salesFigures(_sales).isNotEmpty ||
+                                    caseFigures(_cases).isNotEmpty) ...[
+                                  const SizedBox(height: 24),
+                                  const _SectionTitle('ยอดขายและเคส'),
+                                  TeamOverviewCard(
+                                    sales: _sales,
+                                    cases: _cases,
+                                    onOpenSales: () => context.push(
+                                      AppRoutes.crmModule('deal'),
+                                    ),
+                                    onOpenCases: () => context.push(
+                                      AppRoutes.crmModule('case'),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 24),
+                              ],
+                            ),
+                          ),
                   ),
-                ),
-        ),
-      ],
-        ),
-      ],
+                ],
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -358,7 +567,10 @@ class _PastelHero extends StatelessWidget {
             Positioned(
               top: 120,
               left: 80,
-              child: _blob(220, const Color(0xFF93C5FD).withValues(alpha: a * 0.8)),
+              child: _blob(
+                220,
+                const Color(0xFF93C5FD).withValues(alpha: a * 0.8),
+              ),
             ),
           ],
         ),
@@ -367,13 +579,13 @@ class _PastelHero extends StatelessWidget {
   }
 
   static Widget _blob(double size, Color c) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(colors: [c, c.withValues(alpha: 0)]),
-        ),
-      );
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: RadialGradient(colors: [c, c.withValues(alpha: 0)]),
+    ),
+  );
 }
 
 /// One card for "today": attendance, next appointment and work counts.
@@ -418,90 +630,129 @@ class _TodayCard extends StatelessWidget {
     }
     final rows = <Widget>[];
     if (showAttendance) {
-      rows.add(Row(
-        children: [
-          _dot(cs.primary, NxI.clock, cs),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('ลงเวลาวันนี้', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-                Text(status, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: cs.onSurface,
-              foregroundColor: cs.surface,
-              shape: const StadiumBorder(),
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              minimumSize: const Size(0, 40),
-            ),
-            onPressed: () => context.push(AppRoutes.attendance),
-            child: Text(cta),
-          ),
-        ],
-      ));
-    }
-    final n = next;
-    if (n != null) {
-      if (rows.isNotEmpty) rows.add(const Divider(height: 24));
-      rows.add(InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: n['id'] == null ? null : () => context.push(AppRoutes.activity(n['id'].toString())),
-        child: Row(
+      rows.add(
+        Row(
           children: [
-            _dot(const Color(0xFFF59E0B), NxI.calendarBlank, cs),
+            _dot(cs.primary, NxI.clock, cs),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('นัดถัดไป · ${_hhmm(n['date_start'])}', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
                   Text(
-                    n['subject']?.toString() ?? entityTitle(n, module: 'activity'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    tr('ลงเวลาวันนี้'),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
                   ),
-                  if ((n['location']?.toString() ?? '').isNotEmpty)
-                    Text(n['location'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
+                  Text(
+                    tr(status),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ],
               ),
             ),
-            Icon(NxI.caretRight, size: 18, color: cs.onSurfaceVariant),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: cs.onSurface,
+                foregroundColor: cs.surface,
+                shape: const StadiumBorder(),
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                minimumSize: const Size(0, 40),
+              ),
+              onPressed: () => context.push(AppRoutes.attendance),
+              child: Text(tr(cta)),
+            ),
           ],
         ),
-      ));
+      );
+    }
+    final n = next;
+    if (n != null) {
+      if (rows.isNotEmpty) rows.add(const Divider(height: 24));
+      rows.add(
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: n['id'] == null
+              ? null
+              : () => context.push(AppRoutes.activity(n['id'].toString())),
+          child: Row(
+            children: [
+              _dot(const Color(0xFFF59E0B), NxI.calendarBlank, cs),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tr('นัดถัดไป · ${_hhmm(n['date_start'])}'),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      tr(n['subject']?.toString() ??
+                          entityTitle(n, module: 'activity')),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if ((n['location']?.toString() ?? '').isNotEmpty)
+                      Text(
+                        tr(n['location'].toString()),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                  ],
+                ),
+              ),
+              Icon(NxI.caretRight, size: 18, color: cs.onSurfaceVariant),
+            ],
+          ),
+        ),
+      );
     }
     if (hasWork) {
       if (rows.isNotEmpty) rows.add(const SizedBox(height: 14));
-      rows.add(Row(
-        children: [
-          Expanded(child: _CountPill('เลยกำหนด', overdue, cs.error)),
-          const SizedBox(width: 8),
-          Expanded(child: _CountPill('วันนี้', today, const Color(0xFFF59E0B))),
-          const SizedBox(width: 8),
-          Expanded(child: _CountPill('กำลังมา', upcoming, cs.primary)),
-        ],
-      ));
+      rows.add(
+        Row(
+          children: [
+            Expanded(child: _CountPill('เลยกำหนด', overdue, cs.error)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _CountPill('วันนี้', today, const Color(0xFFF59E0B)),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _CountPill('กำลังมา', upcoming, cs.primary)),
+          ],
+        ),
+      );
     }
     if (rows.isEmpty) return const SizedBox.shrink();
     return NxSurfaceCard(
       radius: 24,
       padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      ),
     );
   }
 
   static Widget _dot(Color c, IconData icon, ColorScheme cs) => Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(color: c.withValues(alpha: 0.12), shape: BoxShape.circle),
-        child: Icon(icon, color: c, size: 20),
-      );
+    width: 42,
+    height: 42,
+    decoration: BoxDecoration(
+      color: c.withValues(alpha: 0.12),
+      shape: BoxShape.circle,
+    ),
+    child: Icon(icon, color: c, size: 20),
+  );
 }
 
 /// Day summary that streams in word by word, with a shortcut to the AI chat.
@@ -523,18 +774,38 @@ class _AiBriefCard extends StatelessWidget {
           Row(
             children: [
               ShaderMask(
-                shaderCallback: (r) => const LinearGradient(colors: [Color(0xFFEC4899), Color(0xFF6366F1)]).createShader(r),
-                child: const Icon(NxI.sparkleFill, color: Colors.white, size: 18),
+                shaderCallback: (r) => const LinearGradient(
+                  colors: [Color(0xFFEC4899), Color(0xFF6366F1)],
+                ).createShader(r),
+                child: const Icon(
+                  NxI.sparkleFill,
+                  color: Colors.white,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 6),
-              Text('สรุปวันนี้', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+              Text(
+                tr('สรุปวันนี้'),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const Spacer(),
-              Text('ถาม AI', style: theme.textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w600)),
+              Text(
+                tr('ถาม AI'),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: cs.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               Icon(NxI.caretRight, size: 14, color: cs.primary),
             ],
           ),
           const SizedBox(height: 8),
-          NxStreamingText(text, style: theme.textTheme.bodyMedium?.copyWith(height: 1.5)),
+          NxStreamingText(
+            tr(text),
+            style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+          ),
           const SizedBox(height: 4),
         ],
       ),
@@ -547,6 +818,21 @@ class _QuickAction {
   final IconData icon;
   final String label;
   final String route;
+
+  /// Bolder stroke + own colour so shortcuts read clearly in light mode.
+  static const Map<String, (IconData, Color)> _styles = {
+    'ลงเวลา': (LucideIcons500.clock, Color(0xFF6366F1)),
+    'ขอลา': (LucideIcons500.calendarCheck, Color(0xFF0D9488)),
+    'รออนุมัติ': (LucideIcons500.circleCheck, Color(0xFF16A34A)),
+    'แชท': (LucideIcons500.messageCircle, Color(0xFF0284C7)),
+    'ปฏิทิน': (LucideIcons500.calendar, Color(0xFFD97706)),
+    'งานบริการ': (LucideIcons500.wrench, Color(0xFFEA580C)),
+    'เมล': (LucideIcons500.mail, Color(0xFFE11D48)),
+    'AI': (LucideIcons500.bot, Color(0xFF7C3AED)),
+  };
+
+  IconData get boldIcon => _styles[label]?.$1 ?? icon;
+  Color colorIn(ColorScheme cs) => _styles[label]?.$2 ?? cs.primary;
 }
 
 class _QuickGrid extends StatelessWidget {
@@ -557,37 +843,48 @@ class _QuickGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return LayoutBuilder(builder: (context, c) {
-      final cols = c.maxWidth >= 560 ? 8 : 4;
-      final w = c.maxWidth / cols;
-      return Wrap(
-        children: [
-          for (final a in actions)
-            SizedBox(
-              width: w,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => context.push(a.route),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(16)),
-                        child: Icon(a.icon, color: cs.onPrimaryContainer),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(a.label, style: theme.textTheme.labelMedium, textAlign: TextAlign.center, maxLines: 1),
-                    ],
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cols = c.maxWidth >= 560 ? 8 : 4;
+        final w = c.maxWidth / cols;
+        return Wrap(
+          children: [
+            for (final a in actions)
+              SizedBox(
+                width: w,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => context.push(a.route),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 54,
+                          height: 54,
+                          decoration: BoxDecoration(
+                            color: a.colorIn(cs).withValues(alpha: theme.brightness == Brightness.dark ? 0.22 : 0.12),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: a.colorIn(cs).withValues(alpha: 0.18)),
+                          ),
+                          child: Icon(a.boldIcon, size: 24, color: a.colorIn(cs)),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          tr(a.label),
+                          style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w500),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -604,8 +901,16 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Expanded(child: Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
-          if (action != null) TextButton(onPressed: onAction, child: Text(action!)),
+          Expanded(
+            child: Text(
+              tr(title),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (action != null)
+            TextButton(onPressed: onAction, child: Text(tr(action!))),
         ],
       ),
     );
@@ -630,8 +935,14 @@ class _CountPill extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('$value', style: theme.textTheme.headlineSmall?.copyWith(color: color, fontWeight: FontWeight.w800)),
-          Text(label, style: theme.textTheme.labelMedium),
+          Text(
+            tr('$value'),
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(tr(label), style: theme.textTheme.labelMedium),
         ],
       ),
     );
@@ -653,16 +964,25 @@ class _WorkRow extends StatelessWidget {
       title: item['title']?.toString() ?? '—',
       subtitle: [
         if (code.isNotEmpty) '$code-$no',
-        item['status_label_th']?.toString() ?? item['status_name']?.toString() ?? '',
+        item['status_label_th']?.toString() ??
+            item['status_name']?.toString() ??
+            '',
         if (item['due_at'] != null) 'ส่ง ${item['due_at']}',
       ].where((e) => e.isNotEmpty).join(' · '),
-      onTap: board == null || id == null ? null : () => context.push(AppRoutes.task(board, id)),
+      onTap: board == null || id == null
+          ? null
+          : () => context.push(AppRoutes.task(board, id)),
     );
   }
 }
 
 class _ListRow extends StatelessWidget {
-  const _ListRow({required this.icon, required this.title, this.subtitle, this.onTap});
+  const _ListRow({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.onTap,
+  });
   final IconData icon;
   final String title;
   final String? subtitle;
@@ -684,18 +1004,30 @@ class _ListRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+                  Text(
+                    tr(title),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall,
+                  ),
                   if (subtitle != null && subtitle!.isNotEmpty)
                     Text(
-                      subtitle!,
+                      tr(subtitle!),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                 ],
               ),
             ),
-            if (onTap != null) Icon(NxI.caretRight, size: 18, color: theme.colorScheme.onSurfaceVariant),
+            if (onTap != null)
+              Icon(
+                NxI.caretRight,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
           ],
         ),
       ),
@@ -709,25 +1041,38 @@ class _StatGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, c) {
-      final cols = c.maxWidth >= 720 ? 4 : (c.maxWidth >= 340 ? 2 : 1);
-      const gap = 12.0;
-      final w = (c.maxWidth - gap * (cols - 1)) / cols;
-      return Wrap(
-        spacing: gap,
-        runSpacing: gap,
-        children: [for (final child in children) SizedBox(width: w, child: child)],
-      );
-    });
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cols = c.maxWidth >= 720 ? 4 : (c.maxWidth >= 340 ? 2 : 1);
+        const gap = 12.0;
+        final w = (c.maxWidth - gap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final child in children) SizedBox(width: w, child: child),
+          ],
+        );
+      },
+    );
   }
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value, required this.icon, this.onTap});
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.onTap,
+    this.spark,
+  });
   final String label;
   final int value;
   final IconData icon;
   final VoidCallback? onTap;
+
+  /// New per day, oldest → today (7 values).
+  final List<int>? spark;
 
   @override
   Widget build(BuildContext context) {
@@ -747,8 +1092,40 @@ class _StatCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('$value', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                Text(
+                  tr('$value'),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  tr(label),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                if (spark != null && spark!.any((v) => v > 0))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 54,
+                          height: 18,
+                          child: CustomPaint(painter: _SparkPainter(spark!, theme.colorScheme.primary)),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            tr('+${spark!.fold(0, (a, b) => a + b)} ใน 7 วัน'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -756,4 +1133,41 @@ class _StatCard extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Tiny line chart for a stat tile.
+class _SparkPainter extends CustomPainter {
+  _SparkPainter(this.values, this.color);
+  final List<int> values;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final maxV = values.reduce((a, b) => a > b ? a : b).clamp(1, 1 << 30);
+    final dx = size.width / (values.length - 1);
+    final path = Path();
+    for (var i = 0; i < values.length; i++) {
+      final p = Offset(i * dx, size.height - 2 - (values[i] / maxV) * (size.height - 4));
+      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+    }
+    final fill = Path.from(path)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(fill, Paint()..color = color.withValues(alpha: 0.12));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..strokeWidth = 1.6
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SparkPainter old) => old.values != values || old.color != color;
 }

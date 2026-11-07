@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -9,9 +10,12 @@ import '../core/app_config.dart';
 import '../core/entity_display.dart';
 import '../core/navigation/app_routes.dart';
 import 'nx_icons.dart';
+import '../screens/spaces/space_switcher.dart' show showSpaceSwitcher;
 import 'nx_notif_morph.dart';
+import 'nx_scroll_scaffold.dart' show NxFloatingHeaderScope;
 import 'nx_overlay_panel.dart';
 import '../services/unread_service.dart';
+import '../core/i18n.dart';
 
 class NxHeaderMenuItem {
   const NxHeaderMenuItem({
@@ -77,8 +81,10 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Inside NxScrollScaffold the header floats over a progressive blur.
+    final floating = NxFloatingHeaderScope.of(context);
     return Material(
-      color: Theme.of(context).scaffoldBackgroundColor,
+      color: floating ? Colors.transparent : Theme.of(context).scaffoldBackgroundColor,
       child: SafeArea(
         bottom: false,
         child: mode == NxHeaderMode.hub ? _HubBar(actions: actions, unreadCount: unreadCount) : _PageBar(header: this),
@@ -122,7 +128,7 @@ class _CircleBtn extends StatelessWidget {
               customBorder: const CircleBorder(),
               onTap: onTap,
               child: Center(
-                child: Icon(NxI.regularOf(icon), size: 22, color: theme.colorScheme.onSurface),
+                child: Icon(icon, size: 22, color: theme.colorScheme.onSurface),
               ),
             ),
           ),
@@ -147,7 +153,7 @@ class _CircleBtn extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  count > 99 ? '99+' : '$count',
+                  tr(count > 99 ? '99+' : '$count'),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,
@@ -175,7 +181,7 @@ List<Widget> _circleActions(List<Widget>? actions) {
             ? _CircleBtn(
                 icon: w.icon is Icon ? (w.icon as Icon).icon ?? NxI.dotsThreeCircle : NxI.dotsThreeCircle,
                 onTap: w.onPressed ?? () {},
-                tooltip: w.tooltip,
+                tooltip: trn(w.tooltip),
               )
             : SizedBox(
                 width: NxAppHeader.controlSize,
@@ -233,7 +239,12 @@ class _HubAvatar extends StatelessWidget {
       } catch (_) {}
     }
     return GestureDetector(
-      onTap: () => GoRouter.maybeOf(context)?.push(AppRoutes.profile),
+      // Tap = profile hub (profile + all settings); long-press = Space switcher.
+      onTap: () => GoRouter.maybeOf(context)?.push(AppRoutes.settings),
+      onLongPress: () {
+        HapticFeedback.mediumImpact();
+        showSpaceSwitcher(context);
+      },
       child: SizedBox(
         width: NxAppHeader.controlSize,
         height: NxAppHeader.controlSize,
@@ -243,7 +254,7 @@ class _HubAvatar extends StatelessWidget {
           backgroundImage: image,
           child: image == null
               ? Text(
-                  entityInitials(name),
+                  tr(entityInitials(name)),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -269,7 +280,7 @@ class _HubBell extends StatelessWidget {
       listenable: UnreadNotifications.instance,
       builder: (context, _) => _CircleBtn(
         icon: NxI.bell,
-        tooltip: 'การแจ้งเตือน',
+        tooltip: tr('การแจ้งเตือน'),
         badgeCount: unreadCount ?? UnreadNotifications.instance.count,
         onTap: () async {
           final box = context.findRenderObject() as RenderBox?;
@@ -303,7 +314,7 @@ class _PageBar extends StatelessWidget {
             for (final item in items)
               ListTile(
                 leading: item.icon == null ? null : Icon(item.icon),
-                title: Text(item.label),
+                title: Text(tr(item.label)),
                 onTap: () {
                   Navigator.pop(ctx);
                   item.onTap();
@@ -334,7 +345,7 @@ class _PageBar extends StatelessWidget {
                   (canPop
                       ? _CircleBtn(
                           icon: NxI.arrowLeft,
-                          tooltip: 'กลับ',
+                          tooltip: tr('กลับ'),
                           onTap: () => Navigator.of(context).maybePop(),
                         )
                       : null),
@@ -346,7 +357,7 @@ class _PageBar extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    header.title,
+                    tr(header.title),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.start,
@@ -357,7 +368,7 @@ class _PageBar extends StatelessWidget {
                   ),
                   if (header.subtitle != null)
                     Text(
-                      header.subtitle!,
+                      tr(header.subtitle!),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.start,
@@ -374,7 +385,7 @@ class _PageBar extends StatelessWidget {
                 padding: const EdgeInsets.only(left: 10),
                 child: _CircleBtn(
                   icon: NxI.dotsThreeCircle,
-                  tooltip: 'เพิ่มเติม',
+                  tooltip: tr('เพิ่มเติม'),
                   onTap: () => _openMenu(context, items),
                 ),
               ),

@@ -13,6 +13,9 @@ import '../../services/location_service.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_map_view.dart';
+import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
+import '../../services/offline_photos.dart';
 
 /// Result of the sheet: what was recorded (for the caller to refresh).
 class VisitCheckResult {
@@ -28,7 +31,7 @@ class VisitCheckResult {
 String thaiDateTime(DateTime d) {
   const m = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
   String two(int v) => v.toString().padLeft(2, '0');
-  return '${d.day} ${m[d.month - 1]} ${d.year + 543} · ${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
+  return '${d.day} ${tr(m[d.month - 1])} ${uiYear(d.year)} · ${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
 }
 
 /// `2 ชม. 15 นาที` from a check-in time to now.
@@ -93,7 +96,7 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
   Map<String, dynamic>? _validate;
   Object? _error;
   final List<XFile> _photos = [];
-  DateTime _now = DateTime.now();
+  DateTime _now = thaiNow();
   Timer? _clock;
   VisitCheckResult? _result;
 
@@ -103,7 +106,7 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
   void initState() {
     super.initState();
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _step != _Step.done) setState(() => _now = DateTime.now());
+      if (mounted && _step != _Step.done) setState(() => _now = thaiNow());
     });
     _locate();
   }
@@ -192,8 +195,14 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
       });
     } on ApiException catch (e) {
       if (e.statusCode == 0) {
-        // No signal: keep it with the real time and send when back online.
+        // No signal: keep it (and its photos) with the real time, send when back online.
+        final saved = <String>[];
+        for (final p in _photos) {
+          final path = await OfflinePhotos.save(await p.readAsBytes(), p.name);
+          if (path != null) saved.add(path);
+        }
         await config.queueFieldAction({
+          if (saved.isNotEmpty) 'photos': saved,
           'type': widget.checkIn ? 'checkin' : 'checkout',
           'id': widget.activityId,
           'lat': fix.latitude,
@@ -248,9 +257,9 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
       controller: widget.controller,
       padding: EdgeInsets.fromLTRB(20, 4, 20, 24 + MediaQuery.paddingOf(context).bottom),
       children: [
-        Text('ยืนยัน$_verb', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+        Text(tr('ยืนยัน$_verb'), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
         if (widget.placeName != null && widget.placeName!.isNotEmpty)
-          Text(widget.placeName!, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+          Text(tr(widget.placeName!), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
         const SizedBox(height: 14),
         if (_step == _Step.locating)
           Container(
@@ -262,7 +271,7 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
               children: [
                 const CircularProgressIndicator(strokeWidth: 2.5),
                 const SizedBox(height: 12),
-                Text('กำลังหาตำแหน่งของคุณ…', style: theme.textTheme.bodyMedium),
+                Text(tr('กำลังหาตำแหน่งของคุณ…'), style: theme.textTheme.bodyMedium),
               ],
             ),
           )
@@ -275,11 +284,11 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
                 Icon(NxI.warningCircle, color: cs.onErrorContainer, size: 32),
                 const SizedBox(height: 8),
                 Text(
-                  _error is StateError ? (_error as StateError).message : 'หาตำแหน่งไม่สำเร็จ',
+                  tr(_error is StateError ? (_error as StateError).message : 'หาตำแหน่งไม่สำเร็จ'),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: cs.onErrorContainer),
                 ),
-                TextButton(onPressed: _locate, child: const Text('ลองอีกครั้ง')),
+                TextButton(onPressed: _locate, child: Text(tr('ลองอีกครั้ง'))),
               ],
             ),
           )
@@ -311,7 +320,7 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
         if (!widget.checkIn && widget.checkedInAt != null)
           _InfoRow(icon: NxI.timer, label: 'อยู่ในสถานที่', value: stayDuration(widget.checkedInAt!, _now)),
         const SizedBox(height: 10),
-        Text('รูปถ่าย$_verb', style: theme.textTheme.titleSmall),
+        Text(tr('รูปถ่าย$_verb'), style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
         SizedBox(
           height: 84,
@@ -350,7 +359,7 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
         ),
         if (_error != null && _step == _Step.review) ...[
           const SizedBox(height: 12),
-          Text(formatApiError(_error!), style: TextStyle(color: cs.error)),
+          Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error)),
         ],
         const SizedBox(height: 18),
         FilledButton(
@@ -364,10 +373,10 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
           onPressed: _step == _Step.review && fix != null && !_blocked ? _confirm : null,
           child: sending
               ? SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: cs.surface))
-              : Text(_blocked ? 'อยู่นอกระยะ$_verb' : 'ยืนยัน$_verb'),
+              : Text(tr(_blocked ? 'อยู่นอกระยะ$_verb' : 'ยืนยัน$_verb')),
         ),
         const SizedBox(height: 6),
-        TextButton(onPressed: sending ? null : () => Navigator.pop(context), child: const Text('ยกเลิก')),
+        TextButton(onPressed: sending ? null : () => Navigator.pop(context), child: Text(tr('ยกเลิก'))),
       ],
     );
   }
@@ -401,26 +410,26 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
         ),
         const SizedBox(height: 18),
         Text(
-          r.queued ? 'บันทึก$_verbไว้แล้ว' : '$_verbสำเร็จ',
+          tr(r.queued ? 'บันทึก$_verbไว้แล้ว' : '$_verbสำเร็จ'),
           textAlign: TextAlign.center,
-          style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+          style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
         if (r.queued)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text('ไม่มีสัญญาณ — จะส่งอัตโนมัติเมื่อกลับมาออนไลน์ (ใช้เวลาจริงที่บันทึก)', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+            child: Text(tr('ไม่มีสัญญาณ — จะส่งอัตโนมัติเมื่อกลับมาออนไลน์ (ใช้เวลาจริงที่บันทึก)'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
           ),
         const SizedBox(height: 18),
-        _InfoRow(icon: NxI.clock, label: 'เวลา', value: thaiDateTime(r.at), strong: true),
+        _InfoRow(icon: NxI.clock, label: 'เวลา', value: thaiDateTime(toThai(r.at)), strong: true),
         _InfoRow(icon: NxI.crosshair, label: 'พิกัด', value: '${r.lat.toStringAsFixed(6)}, ${r.lng.toStringAsFixed(6)}'),
         if (_photos.isNotEmpty) _InfoRow(icon: NxI.image, label: 'รูปถ่าย', value: '${_photos.length} รูป'),
         if (!r.checkIn && widget.checkedInAt != null)
-          _InfoRow(icon: NxI.timer, label: 'อยู่ในสถานที่', value: stayDuration(widget.checkedInAt!, r.at)),
+          _InfoRow(icon: NxI.timer, label: 'อยู่ในสถานที่', value: stayDuration(widget.checkedInAt!, toThai(r.at))),
         const SizedBox(height: 22),
         FilledButton(
           style: FilledButton.styleFrom(shape: const StadiumBorder(), minimumSize: const Size.fromHeight(52)),
           onPressed: () => Navigator.pop(context, r),
-          child: const Text('เสร็จสิ้น'),
+          child: Text(tr('เสร็จสิ้น')),
         ),
       ],
     );
@@ -454,11 +463,11 @@ class _InfoRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                Text(tr(label), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
                 Text(
-                  value,
+                  tr(value),
                   style: (strong ? theme.textTheme.titleMedium : theme.textTheme.bodyLarge)?.copyWith(
-                    fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
+                    fontWeight: strong ? FontWeight.w700 : FontWeight.w600,
                     color: color,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
@@ -492,7 +501,7 @@ class _PhotoButton extends StatelessWidget {
           height: 84,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: [Icon(icon, color: cs.primary), const SizedBox(height: 4), Text(label, style: TextStyle(color: cs.primary, fontSize: 12))],
+            children: [Icon(icon, color: cs.primary), const SizedBox(height: 4), Text(tr(label), style: TextStyle(color: cs.primary, fontSize: 12))],
           ),
         ),
       ),

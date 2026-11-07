@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'nx_icons.dart';
+import '../core/i18n.dart';
 
 /// True when the build has a Google Maps key (`--dart-define=NX_MAPS=1`).
 /// Without it a coordinate card is shown instead of a blank grey map.
@@ -122,13 +123,13 @@ class _Fallback extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  '${me.latitude.toStringAsFixed(6)}, ${me.longitude.toStringAsFixed(6)}',
+                  tr('${me.latitude.toStringAsFixed(6)}, ${me.longitude.toStringAsFixed(6)}'),
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()]),
                 ),
                 TextButton.icon(
                   onPressed: () => launchUrl(NxMapView.googleMapsLink(me), mode: LaunchMode.externalApplication),
                   icon: const Icon(NxI.arrowSquareOut, size: 16),
-                  label: const Text('ดูใน Google Maps'),
+                  label: Text(tr('ดูใน Google Maps')),
                 ),
               ],
             ),

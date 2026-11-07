@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -13,6 +14,8 @@ import '../../widgets/dense_card_tile.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 /// Everything waiting for the current user's decision, gathered from the
 /// NEXTX endpoints that already exist (quotation approval chain, HR leave,
@@ -33,22 +36,37 @@ class _Section {
 
 class _ApprovalsScreenState extends State<ApprovalsScreen> {
   var _revision = 0;
+  NxListQuery _query = const NxListQuery();
+  late final NxListPrefs _prefs = NxListPrefs('approvals_${context.read<AppConfig>().prefsScope}');
+
+  @override
+  void initState() {
+    super.initState();
+    _prefs.loadQuery().then((q) {
+      if (q != null && mounted) setState(() => _query = q);
+    });
+  }
+
+  void _onQuery(NxListQuery q) {
+    setState(() => _query = q);
+    _prefs.saveQuery(q.copyWith(q: ''));
+  }
 
   Future<String?> _askReason() async {
     final ctrl = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('เหตุผลที่ไม่อนุมัติ'),
+        title: Text(tr('เหตุผลที่ไม่อนุมัติ')),
         content: TextField(
           controller: ctrl,
           autofocus: true,
           maxLines: 3,
-          decoration: const InputDecoration(hintText: 'ไม่บังคับ'),
+          decoration: InputDecoration(hintText: tr('ไม่บังคับ')),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('ไม่อนุมัติ')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('ไม่อนุมัติ'))),
         ],
       ),
     );
@@ -60,11 +78,11 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     try {
       await action();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(done)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(done))));
       setState(() => _revision++);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     }
   }
@@ -109,8 +127,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         'join': _Section('คำขอเข้าร่วมธุรกิจ', NxI.userPlus, api.getJoinRequests),
     };
 
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'รออนุมัติ',
         actions: [
           IconButton(
@@ -120,20 +138,39 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         ],
       ),
       body: sections.isEmpty
-          ? const Center(child: Text('ไม่มีสิทธิ์อนุมัติรายการใด'))
+          ? Center(child: Text(tr('ไม่มีสิทธิ์อนุมัติรายการใด')))
           : RefreshIndicator(
               onRefresh: () async => setState(() => _revision++),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: NxBreakpoint.of(context).scrollPadding(context),
                 children: [
+                  NxListToolbar(
+                    query: _query,
+                    prefs: _prefs,
+                    liveSearch: true,
+                    padding: const EdgeInsets.only(bottom: 4),
+                    searchHint: 'ค้นหาชื่อผู้ขอ / เลขเอกสาร',
+                    quickGroup: 'type',
+                    groups: [
+                      NxFilterGroup(
+                        key: 'type',
+                        label: 'ประเภท',
+                        options: [for (final e in sections.entries) NxFilterOption(e.key, e.value.title)],
+                      ),
+                    ],
+                    sorts: const [NxSortOption('new', 'ใหม่ → เก่า'), NxSortOption('old', 'เก่า → ใหม่')],
+                    onChanged: _onQuery,
+                  ),
                   for (final e in sections.entries)
-                    _ApprovalSection(
-                      key: ValueKey('${e.key}-$_revision'),
-                      kind: e.key,
-                      section: e.value,
-                      onDecide: _decide,
-                    ),
+                    if (_query.values('type').isEmpty || _query.has('type', e.key))
+                      _ApprovalSection(
+                        key: ValueKey('${e.key}-$_revision'),
+                        kind: e.key,
+                        section: e.value,
+                        query: _query,
+                        onDecide: _decide,
+                      ),
                 ],
               ),
             ),
@@ -142,9 +179,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
 }
 
 class _ApprovalSection extends StatefulWidget {
-  const _ApprovalSection({super.key, required this.kind, required this.section, required this.onDecide});
+  const _ApprovalSection({
+    super.key,
+    required this.kind,
+    required this.section,
+    required this.onDecide,
+    this.query = const NxListQuery(),
+  });
 
   final String kind;
+  final NxListQuery query;
   final _Section section;
   final Future<void> Function(String kind, Map<String, dynamic> row, bool approve) onDecide;
 
@@ -184,6 +228,10 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
     }
   }
 
+  /// Request time for sorting (created / submitted / start date).
+  String _when(Map<String, dynamic> r) =>
+      '${r['created_at'] ?? r['createdtime'] ?? r['requested_at'] ?? r['start_date'] ?? r['id'] ?? ''}';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -196,7 +244,7 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
             children: [
               Icon(widget.section.icon, size: 18, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
-              Text(widget.section.title, style: theme.textTheme.titleSmall),
+              Text(tr(widget.section.title), style: theme.textTheme.titleSmall),
               if (snap.hasData) ...[
                 const SizedBox(width: 8),
                 Text('(${snap.data!.length})', style: theme.textTheme.bodySmall),
@@ -204,20 +252,34 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
             ],
           ),
         );
+        final rows = snap.hasData
+            ? nxApplyLocalQuery<Map<String, dynamic>>(
+                snap.data!,
+                widget.query.copyWith(filters: const {}),
+                text: (r) {
+                  final (t, sub) = _describe(r);
+                  return '$t $sub ${r['quotation_no'] ?? ''} ${r['user_name'] ?? ''}';
+                },
+                sorts: {
+                  'new': (a, b) => _when(b).compareTo(_when(a)),
+                  'old': (a, b) => _when(a).compareTo(_when(b)),
+                },
+              )
+            : const <Map<String, dynamic>>[];
         Widget body;
         if (snap.connectionState != ConnectionState.done) {
           body = const NxSkeletonList(rows: 2);
         } else if (snap.hasError) {
-          body = Text(formatApiError(snap.error!), style: TextStyle(color: theme.colorScheme.error));
-        } else if (snap.data!.isEmpty) {
+          body = Text(tr(formatApiError(snap.error!)), style: TextStyle(color: theme.colorScheme.error));
+        } else if (rows.isEmpty) {
           body = Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: Text('ไม่มีรายการรออนุมัติ', style: theme.textTheme.bodySmall),
+            child: Text(tr('ไม่มีรายการรออนุมัติ'), style: theme.textTheme.bodySmall),
           );
         } else {
           body = Column(
             children: [
-              for (final r in snap.data!)
+              for (final r in rows)
                 Builder(builder: (context) {
                   final (title, subtitle) = _describe(r);
                   final id = r['id']?.toString() ?? '';
@@ -240,12 +302,12 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                tooltip: 'อนุมัติ',
+                                tooltip: tr('อนุมัติ'),
                                 icon: const Icon(NxI.checkCircle, color: Colors.green),
                                 onPressed: () => act(true),
                               ),
                               IconButton(
-                                tooltip: 'ไม่อนุมัติ',
+                                tooltip: tr('ไม่อนุมัติ'),
                                 icon: const Icon(NxI.xCircle, color: Colors.red),
                                 onPressed: () => act(false),
                               ),

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_icons.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../screens/ai/ai_chat_screen.dart';
@@ -20,6 +21,7 @@ import '../../screens/jobs/my_jobs_screen.dart';
 import '../../screens/module/module_hub_screen.dart';
 import '../../screens/notifications/notification_center_screen.dart';
 import '../../screens/whats_new/whats_new_screen.dart';
+import '../../screens/settings/devices_screen.dart';
 import '../../screens/onboarding/getting_started_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/splash_screen.dart';
@@ -48,6 +50,7 @@ import '../../screens/settings_screen.dart';
 import '../../screens/settings/diagnostics_screen.dart';
 import 'notification_deep_link.dart';
 import 'route_access.dart';
+import '../i18n.dart';
 
 GoRouter createAppRouter(AppConfig config) {
   return GoRouter(
@@ -168,6 +171,10 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.notifications,
         builder: (_, _) => const NotificationCenterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.devices,
+        builder: (_, _) => const DevicesScreen(),
       ),
       GoRoute(
         path: AppRoutes.whatsNew,
@@ -316,26 +323,26 @@ class _RouteNotFoundScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('ไม่พบหน้า')),
+      appBar: AppBar(title: Text(tr('ไม่พบหน้า'))),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.link_off, size: 48, color: theme.colorScheme.onSurfaceVariant),
+              Icon(NxI.unlink, size: 48, color: theme.colorScheme.onSurfaceVariant),
               const SizedBox(height: 12),
-              Text('ไม่พบหน้าที่ต้องการในแอป', style: theme.textTheme.titleMedium),
+              Text(tr('ไม่พบหน้าที่ต้องการในแอป'), style: theme.textTheme.titleMedium),
               const SizedBox(height: 4),
               Text(
-                location,
+                tr(location),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () => context.go(AppRoutes.mainShell),
-                child: const Text('กลับหน้าหลัก'),
+                child: Text(tr('กลับหน้าหลัก')),
               ),
             ],
           ),

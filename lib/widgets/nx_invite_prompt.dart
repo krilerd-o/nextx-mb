@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_config.dart';
 import '../services/api_client.dart';
+import '../core/i18n.dart';
 
 bool _showing = false;
 
@@ -17,11 +18,11 @@ Future<bool> maybePromptInviteJoin(BuildContext context) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('เข้าร่วมธุรกิจจากลิงก์เชิญ'),
-        content: Text('เข้าร่วมธุรกิจด้วยบัญชี ${config.session.email ?? config.session.displayName ?? ''} ใช่ไหม'),
+        title: Text(tr('เข้าร่วมธุรกิจจากลิงก์เชิญ')),
+        content: Text(tr('เข้าร่วมธุรกิจด้วยบัญชี ${config.session.email ?? config.session.displayName ?? ''} ใช่ไหม')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ไม่ใช่ตอนนี้')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('เข้าร่วม')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ไม่ใช่ตอนนี้'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('เข้าร่วม'))),
         ],
       ),
     );
@@ -34,12 +35,12 @@ Future<bool> maybePromptInviteJoin(BuildContext context) async {
     try {
       final r = await config.joinWithInvite(invite.token);
       messenger?.showSnackBar(SnackBar(
-        content: Text(r['already_member'] == true ? 'คุณอยู่ในธุรกิจนี้แล้ว' : 'เข้าร่วมธุรกิจแล้ว — เลือกธุรกิจเพื่อเริ่มใช้งาน'),
+        content: Text(tr(r['already_member'] == true ? 'คุณอยู่ในธุรกิจนี้แล้ว' : 'เข้าร่วมธุรกิจแล้ว — เลือกธุรกิจเพื่อเริ่มใช้งาน')),
       ));
       return true;
     } catch (e) {
       config.clearPendingInvite();
-      messenger?.showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      messenger?.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       return false;
     }
   } finally {

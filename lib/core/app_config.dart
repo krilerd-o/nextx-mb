@@ -7,10 +7,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'i18n.dart';
+
 import '../services/api_client.dart';
 import '../services/app_lock.dart';
 import '../services/device_push_service.dart';
 import '../services/offline_queue.dart';
+import '../services/offline_photos.dart';
 import '../services/realtime_service.dart';
 import '../services/unread_service.dart';
 import 'app_version.dart';
@@ -22,6 +25,7 @@ import 'recent_accounts.dart';
 import 'server_profile.dart';
 import 'session_state.dart';
 import 'shell_tabs.dart';
+import 'spaces.dart';
 
 const String _keyApiBaseUrl = 'api_base_url';
 const String _keyThemeMode = 'theme_mode';
@@ -47,6 +51,28 @@ const String _keyServerInfo = 'server_mobile_info_v1';
 const String _keyPunchFailed = 'offline_punch_failed_v1';
 
 const _secureTokenKey = 'access_token';
+
+const String _keySpaces = 'spaces_v1';
+const String _keySpaceActive = 'spaces_active_v1';
+const String _keySpaceAddReturn = 'spaces_add_return_v1';
+String _spaceTokenKey(String id) => 'space_token_$id';
+
+/// Preferences that make up "the current session" — saved per Space and put
+/// back when switching, so the rest of the app keeps reading the same keys.
+const List<String> _spaceBundleKeys = [
+  _keyApiBaseUrl,
+  _keyUserId,
+  _keyBusinessId,
+  _keyBusinessName,
+  _keyEmail,
+  _keyDisplayName,
+  _keyPackageCode,
+  _keyMenuKeys,
+  _keyPackageId,
+  _keyServerConfirmed,
+  'offline_checkin_queue_v1',
+  _keyPunchFailed,
+];
 const int _maxAvatarBytes = 400000;
 
 class AppConfig extends ChangeNotifier {
@@ -56,11 +82,30 @@ class AppConfig extends ChangeNotifier {
     _load();
   }
 
+  /// Theme colours (index is what's stored — append only, never reorder).
   static const List<Color> accentOptions = [
     Color(0xFF6366F1),
     Color(0xFF0EA5E9),
     Color(0xFF10B981),
     Color(0xFFF59E0B),
+    Color(0xFFF43F5E),
+    Color(0xFF8B5CF6),
+    Color(0xFF14B8A6),
+    Color(0xFFF97316),
+    Color(0xFF475569),
+  ];
+
+  /// Names shown under each theme colour (Thai; translated by tr()).
+  static const List<String> accentNames = [
+    'คราม',
+    'ฟ้า',
+    'มรกต',
+    'อำพัน',
+    'กุหลาบ',
+    'ม่วง',
+    'เขียวน้ำทะเล',
+    'ส้ม',
+    'กราไฟต์',
   ];
 
   final ApiClient _api = ApiClient();
@@ -178,6 +223,8 @@ class AppConfig extends ChangeNotifier {
     _session = _session.copyWith(accessToken: fresh);
     try {
       await _secure.write(key: _secureTokenKey, value: fresh);
+      final id = _activeSpaceId;
+      if (id != null) await _secure.write(key: _spaceTokenKey(id), value: fresh);
     } catch (e) {
       debugPrint('save renewed token: $e');
     }
@@ -247,6 +294,8 @@ class AppConfig extends ChangeNotifier {
 
   /// `host_userId` — keeps per-user settings apart across servers and accounts.
   String get _userScope => '${serverLabel(_apiBaseUrl)}_${_session.userId ?? ''}';
+  /// Per server + user key prefix for local UI prefs (list filters, recents…).
+  String get prefsScope => _userScope;
   String get _shellKey => 'shell_v1_$_userScope';
   String get _lastTabKey => 'last_tab_$_userScope';
   String? _lastTab;
@@ -331,7 +380,8 @@ class AppConfig extends ChangeNotifier {
     final rawAccent = prefs.getInt(_keyAccentIndex) ?? 0;
     final maxA = accentOptions.length - 1;
     _accentIndex = rawAccent < 0 ? 0 : (rawAccent > maxA ? maxA : rawAccent);
-    _uiLocaleCode = prefs.getString(_keyUiLocale) ?? 'th';
+    _uiLocaleCode = prefs.getString(_keyUiLocale) == 'en' ? 'en' : 'th';
+    L10n.set(_uiLocaleCode);
     _dateFormatPattern = prefs.getString(_keyDateFormat) ?? 'dd/MM/yyyy HH:mm';
     _recentServers = prefs.getStringList(_keyRecentServers) ?? const [];
     _recentAccounts = decodeRecentAccounts(prefs.getString(_keyRecentAccounts));
@@ -375,6 +425,9 @@ class AppConfig extends ChangeNotifier {
     );
     // Existing installs were already on a server: don't make them pick again.
     _serverConfirmed = (prefs.getBool(_keyServerConfirmed) ?? false) || (token != null && token.isNotEmpty);
+    _spaces = decodeSpaces(prefs.getString(_keySpaces));
+    _activeSpaceId = prefs.getString(_keySpaceActive);
+    _addReturnId = prefs.getString(_keySpaceAddReturn);
     await _loadUserScoped(prefs);
     await AppLock.instance.load(loggedIn: _session.isLoggedIn);
     _loadServerInfo(prefs);
@@ -402,8 +455,14 @@ class AppConfig extends ChangeNotifier {
     _searchHistory = raw.split('|||').where((e) => e.isNotEmpty).toList();
   }
 
+  bool _sessionRevokedNotice = false;
+
+  /// Signed out because another device used "sign out this device / all devices".
+  bool get sessionRevokedNotice => _sessionRevokedNotice;
+
   void _handleUnauthorized() {
     if (_loggingOut || !_session.isLoggedIn) return;
+    _sessionRevokedNotice = _api.lastUnauthorizedRevoked;
     _sessionExpiredNotice = true;
     SharedPreferences.getInstance().then((p) => p.setBool(_keySessionExpired, true));
     logout();
@@ -514,11 +573,26 @@ class AppConfig extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Switches the whole app's language at once. When the app's switch layer
+  /// is mounted it covers the screen with a short animation and swaps the
+  /// strings underneath, so nothing flickers half-translated.
   Future<void> setUiLocaleCode(String code) async {
-    _uiLocaleCode = code;
+    final c = code == 'en' ? 'en' : 'th';
+    if (c == _uiLocaleCode) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyUiLocale, code);
-    notifyListeners();
+    await prefs.setString(_keyUiLocale, c);
+    void apply() {
+      _uiLocaleCode = c;
+      L10n.set(c);
+      notifyListeners();
+    }
+
+    final switcher = L10n.switcher;
+    if (switcher != null) {
+      await switcher(c, apply);
+    } else {
+      apply();
+    }
   }
 
   Future<void> setDateFormatPattern(String pattern) async {
@@ -813,6 +887,7 @@ class AppConfig extends ChangeNotifier {
       await prefs.setString(_shellKey, remote.encode());
     }
     notifyListeners();
+    await _syncActiveSpace();
   }
 
   Future<void> selectBusiness({
@@ -960,8 +1035,18 @@ class AppConfig extends ChangeNotifier {
     _session = const SessionState();
     _api.attachSession(baseUrl: _apiBaseUrl);
     AppLock.instance.reset();
+    // Signing out of a Space removes it; move on to the most recent other one.
+    final gone = _activeSpaceId;
+    if (gone != null) {
+      await _secure.delete(key: _spaceTokenKey(gone));
+      _spaces = [for (final sp in _spaces) if (sp.id != gone) sp];
+      _activeSpaceId = null;
+      await _saveSpaces(prefs);
+    }
     _loggingOut = false;
     notifyListeners();
+    final next = _recentSpace();
+    if (next != null) await switchSpace(next.id);
   }
 
   Future<void> addSearchHistory(String query) async {
@@ -1096,11 +1181,25 @@ class AppConfig extends ChangeNotifier {
         final lng = (item['lng'] as num?)?.toDouble();
         if ((type != 'checkin' && type != 'checkout') || id.isEmpty) continue;
         if (lat == null || lng == null || (lat == 0 && lng == 0)) continue;
+        // Photos taken offline were saved as files; upload them first.
+        String? imagename;
+        final photos = [for (final p in (item['photos'] as List? ?? const [])) '$p'];
+        if (photos.isNotEmpty) {
+          final parts = <MultipartFile>[
+            for (final path in photos)
+              if (await OfflinePhotos.exists(path)) await MultipartFile.fromFile(path, filename: path.split('/').last),
+          ];
+          if (parts.isNotEmpty) {
+            final saved = await apiClient.uploadActivityPhotos(id, parts);
+            if (saved.isNotEmpty) imagename = (saved.first['path'] ?? saved.first['name'])?.toString();
+          }
+        }
         if (type == 'checkout') {
           await apiClient.activityCheckout(id, lat: lat, lng: lng);
         } else {
-          await apiClient.activityCheckin(id, lat: lat, lng: lng);
+          await apiClient.activityCheckin(id, lat: lat, lng: lng, imagename: imagename);
         }
+        await OfflinePhotos.delete(photos);
       } on ApiException catch (e) {
         // Network still down → retry later; a real server rejection is dropped.
         if (e.statusCode == 0) {
@@ -1124,6 +1223,215 @@ class AppConfig extends ChangeNotifier {
     final lng = (item['lng'] as num?)?.toDouble() ?? 0;
     if (lat == 0 && lng == 0) return Future.value();
     return _offlineQueue.enqueue(item);
+  }
+
+  // ---------------------------------------------------------------- Spaces
+
+  List<Space> _spaces = const [];
+  String? _activeSpaceId;
+
+  /// Space to return to when "add Space" is cancelled.
+  String? _addReturnId;
+
+  List<Space> get spaces => _spaces;
+  Space? get activeSpace {
+    for (final s in _spaces) {
+      if (s.id == _activeSpaceId) return s;
+    }
+    return null;
+  }
+
+  /// True while the user is signing in to an additional Space.
+  bool get addingSpace => _addReturnId != null;
+
+  Space? _recentSpace() {
+    if (_spaces.isEmpty) return null;
+    final list = [..._spaces]
+      ..sort((a, b) => (b.lastUsedAt ?? DateTime(2000)).compareTo(a.lastUsedAt ?? DateTime(2000)));
+    return list.first;
+  }
+
+  Future<void> _saveSpaces(SharedPreferences prefs) async {
+    await prefs.setString(_keySpaces, encodeSpaces(_spaces));
+    if (_activeSpaceId != null) {
+      await prefs.setString(_keySpaceActive, _activeSpaceId!);
+    } else {
+      await prefs.remove(_keySpaceActive);
+    }
+    if (_addReturnId != null) {
+      await prefs.setString(_keySpaceAddReturn, _addReturnId!);
+    } else {
+      await prefs.remove(_keySpaceAddReturn);
+    }
+  }
+
+  Map<String, Object?> _readBundle(SharedPreferences prefs) => {
+        for (final k in _spaceBundleKeys)
+          if (prefs.get(k) != null) k: prefs.get(k),
+      };
+
+  Future<void> _writeBundle(SharedPreferences prefs, Map<String, Object?> bundle) async {
+    for (final k in _spaceBundleKeys) {
+      final v = bundle[k];
+      if (v == null) {
+        await prefs.remove(k);
+      } else if (v is bool) {
+        await prefs.setBool(k, v);
+      } else if (v is int) {
+        await prefs.setInt(k, v);
+      } else if (v is List) {
+        await prefs.setStringList(k, [for (final e in v) e.toString()]);
+      } else {
+        await prefs.setString(k, v.toString());
+      }
+    }
+  }
+
+  /// Saves the current session into its Space (creating one after a new login).
+  Future<void> _syncActiveSpace() async {
+    if (!_session.isLoggedIn) return;
+    final prefs = await SharedPreferences.getInstance();
+    var sp = activeSpace;
+    if (sp == null) {
+      sp = findSpaceFor(_spaces, _apiBaseUrl, _session.userId) ?? Space(id: newSpaceId(), baseUrl: _apiBaseUrl);
+      _activeSpaceId = sp.id;
+      _addReturnId = null;
+    }
+    sp = sp.copyWith(
+      baseUrl: _apiBaseUrl,
+      userId: _session.userId,
+      email: _session.email,
+      displayName: _session.displayName,
+      businessName: _session.businessName,
+      packageCode: _session.packageCode,
+      bundle: _readBundle(prefs),
+      lastUsedAt: DateTime.now(),
+    );
+    _spaces = upsertSpace(_spaces, sp);
+    final token = _session.accessToken;
+    if (token != null && token.isNotEmpty) await _secure.write(key: _spaceTokenKey(sp.id), value: token);
+    await _saveSpaces(prefs);
+  }
+
+  /// Puts [sp]'s saved session back and reloads the app state for it.
+  Future<void> _enterSpace(Space sp) async {
+    final prefs = await SharedPreferences.getInstance();
+    RealtimeService.instance.disconnect();
+    UnreadNotifications.instance.clear();
+    await _writeBundle(prefs, sp.bundle.isEmpty ? {_keyApiBaseUrl: sp.baseUrl, _keyServerConfirmed: true} : sp.bundle);
+    final token = await _secure.read(key: _spaceTokenKey(sp.id));
+    if (token != null && token.isNotEmpty) {
+      await _secure.write(key: _secureTokenKey, value: token);
+    } else {
+      await _secure.delete(key: _secureTokenKey);
+    }
+    _activeSpaceId = sp.id;
+    _addReturnId = null;
+    _shell = null;
+    _lastTab = null;
+    _spaces = upsertSpace(_spaces, sp.copyWith(lastUsedAt: DateTime.now()));
+    await _saveSpaces(prefs);
+    await _load();
+  }
+
+  /// Switches to another signed-in Space. Each Space keeps its own server,
+  /// account, business, package, settings and offline queue.
+  Future<void> switchSpace(String id) async {
+    if (id == _activeSpaceId && _session.isLoggedIn) return;
+    final target = _spaces.where((s) => s.id == id).firstOrNull;
+    if (target == null) return;
+    await _syncActiveSpace();
+    await _enterSpace(target);
+  }
+
+  /// Starts signing in to one more Space; the current one stays signed in.
+  /// [baseUrl] pre-fills the server (used by "duplicate" = another account).
+  Future<void> beginAddSpace({String? baseUrl}) async {
+    await _syncActiveSpace();
+    final prefs = await SharedPreferences.getInstance();
+    RealtimeService.instance.disconnect();
+    UnreadNotifications.instance.clear();
+    _addReturnId = _activeSpaceId ?? _addReturnId;
+    _activeSpaceId = null;
+    await _writeBundle(prefs, {if (baseUrl != null) _keyApiBaseUrl: baseUrl, if (baseUrl != null) _keyServerConfirmed: true});
+    await _secure.delete(key: _secureTokenKey);
+    _shell = null;
+    await _saveSpaces(prefs);
+    await _load();
+  }
+
+  /// Back to the Space the user was in before "add Space".
+  Future<void> cancelAddSpace() async {
+    final back = _spaces.where((s) => s.id == _addReturnId).firstOrNull ?? _recentSpace();
+    _addReturnId = null;
+    if (back != null) {
+      await _enterSpace(back);
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      await _saveSpaces(prefs);
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateSpace(String id, {String? label, int? colorValue}) async {
+    final sp = _spaces.where((s) => s.id == id).firstOrNull;
+    if (sp == null) return;
+    final trimmed = label?.trim();
+    _spaces = upsertSpace(
+      _spaces,
+      sp.copyWith(label: trimmed, clearLabel: trimmed != null && trimmed.isEmpty, colorValue: colorValue),
+    );
+    await _saveSpaces(await SharedPreferences.getInstance());
+    notifyListeners();
+  }
+
+  Future<void> reorderSpaces(int from, int to) async {
+    final list = [..._spaces];
+    final s = list.removeAt(from);
+    list.insert(to > from ? to - 1 : to, s);
+    _spaces = list;
+    await _saveSpaces(await SharedPreferences.getInstance());
+    notifyListeners();
+  }
+
+  /// A client signed in as [sp] (for its unread count / sign-out) without
+  /// touching the active session.
+  Future<ApiClient?> spaceClient(Space sp) async {
+    final token = await _secure.read(key: _spaceTokenKey(sp.id));
+    if (token == null || token.isEmpty) return null;
+    final api = ApiClient(dio: Dio(BaseOptions(baseUrl: sp.baseUrl, connectTimeout: const Duration(seconds: 10))));
+    api.attachSession(
+      baseUrl: sp.baseUrl,
+      accessToken: token,
+      userId: sp.userId,
+      businessId: sp.bundle[_keyBusinessId]?.toString(),
+      packageCode: sp.packageCode,
+    );
+    return api;
+  }
+
+  /// "Delete" a Space = sign out of it (server logout + local token removed).
+  /// Other Spaces stay signed in; push keeps working for them.
+  Future<void> removeSpace(String id) async {
+    if (id == _activeSpaceId) {
+      await logout();
+      return;
+    }
+    final sp = _spaces.where((s) => s.id == id).firstOrNull;
+    if (sp == null) return;
+    final api = await spaceClient(sp);
+    if (api != null) {
+      try {
+        await DevicePushService.instance.unregisterFrom(api);
+      } catch (_) {}
+      try {
+        await api.logoutRemote();
+      } catch (_) {}
+    }
+    await _secure.delete(key: _spaceTokenKey(id));
+    _spaces = [for (final s in _spaces) if (s.id != id) s];
+    await _saveSpaces(await SharedPreferences.getInstance());
+    notifyListeners();
   }
 
   /// Repaints listeners after an app-wide visual setting changed (effects level).

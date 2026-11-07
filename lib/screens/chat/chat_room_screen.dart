@@ -21,6 +21,8 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/error_reporting.dart';
+import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 const _quickReactions = ['👍', '❤️', '😂', '🎉', '🙏', '👀'];
 
@@ -223,16 +225,16 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text('ข้อความที่ปักหมุด (${_pins.length})', style: theme.textTheme.titleMedium),
+                child: Text(tr('ข้อความที่ปักหมุด (${_pins.length})'), style: theme.textTheme.titleMedium),
               ),
               for (final p in _pins)
                 ListTile(
                   leading: const Icon(NxI.pushPin),
-                  title: Text(stripHtmlPreview(asStringKeyedMap(p['message'])?['body']?.toString() ?? '', maxLen: 160),
+                  title: Text(tr(stripHtmlPreview(asStringKeyedMap(p['message'])?['body']?.toString() ?? '', maxLen: 160)),
                       maxLines: 3, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(_who(fillChatSender(asStringKeyedMap(p['message']) ?? <String, dynamic>{}, _messages))),
+                  subtitle: Text(tr(_who(fillChatSender(asStringKeyedMap(p['message']) ?? <String, dynamic>{}, _messages)))),
                   trailing: IconButton(
-                    tooltip: 'เลิกปักหมุด',
+                    tooltip: tr('เลิกปักหมุด'),
                     icon: const Icon(NxI.x, size: 18),
                     onPressed: () => Navigator.pop(ctx, p['message_id']?.toString()),
                   ),
@@ -291,7 +293,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   void _snack(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(text))));
   }
 
   // ---- actions ----------------------------------------------------------
@@ -349,9 +351,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(leading: const Icon(NxI.camera), title: const Text('ถ่ายรูป'), onTap: () => Navigator.pop(ctx, 'camera')),
-            ListTile(leading: const Icon(NxI.images), title: const Text('รูปจากคลัง'), onTap: () => Navigator.pop(ctx, 'gallery')),
-            ListTile(leading: const Icon(NxI.file), title: const Text('ไฟล์'), onTap: () => Navigator.pop(ctx, 'file')),
+            ListTile(leading: const Icon(NxI.camera), title: Text(tr('ถ่ายรูป')), onTap: () => Navigator.pop(ctx, 'camera')),
+            ListTile(leading: const Icon(NxI.images), title: Text(tr('รูปจากคลัง')), onTap: () => Navigator.pop(ctx, 'gallery')),
+            ListTile(leading: const Icon(NxI.file), title: Text(tr('ไฟล์')), onTap: () => Navigator.pop(ctx, 'file')),
           ],
         ),
       ),
@@ -397,25 +399,25 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       radius: 24,
                       child: Padding(
                         padding: const EdgeInsets.all(6),
-                        child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                        child: Text(tr(emoji), style: const TextStyle(fontSize: 26)),
                       ),
                     ),
                 ],
               ),
             ),
             const Divider(),
-            ListTile(leading: const Icon(NxI.clipboard), title: const Text('คัดลอก'), onTap: () => Navigator.pop(ctx, 'copy')),
+            ListTile(leading: const Icon(NxI.clipboard), title: Text(tr('คัดลอก')), onTap: () => Navigator.pop(ctx, 'copy')),
             ListTile(
               leading: const Icon(NxI.pushPin),
-              title: Text(_isPinned(m) ? 'เลิกปักหมุด' : 'ปักหมุด'),
+              title: Text(tr(_isPinned(m) ? 'เลิกปักหมุด' : 'ปักหมุด')),
               onTap: () => Navigator.pop(ctx, _isPinned(m) ? 'unpin' : 'pin'),
             ),
             if (mine)
-              ListTile(leading: const Icon(NxI.pencilSimple), title: const Text('แก้ไข'), onTap: () => Navigator.pop(ctx, 'edit')),
+              ListTile(leading: const Icon(NxI.pencilSimple), title: Text(tr('แก้ไข')), onTap: () => Navigator.pop(ctx, 'edit')),
             if (mine)
               ListTile(
                 leading: Icon(NxI.trash, color: Theme.of(ctx).colorScheme.error),
-                title: Text('ลบ', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                title: Text(tr('ลบ'), style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
                 onTap: () => Navigator.pop(ctx, 'delete'),
               ),
           ],
@@ -465,20 +467,20 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   static String _time(dynamic raw) {
-    final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+    final d = parseThai(raw?.toString() ?? '');
     if (d == null) return '';
     return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 
   static String _day(dynamic raw) {
-    final d = DateTime.tryParse(raw?.toString() ?? '')?.toLocal();
+    final d = parseThai(raw?.toString() ?? '');
     if (d == null) return '';
-    final now = DateTime.now();
+    final now = thaiNow();
     final today = DateTime(now.year, now.month, now.day);
     final day = DateTime(d.year, d.month, d.day);
     if (day == today) return 'วันนี้';
     if (day == today.subtract(const Duration(days: 1))) return 'เมื่อวาน';
-    return '${d.day}/${d.month}/${d.year + 543}';
+    return '${d.day}/${d.month}/${uiYear(d.year)}';
   }
 
   Widget _attachmentView(Map<String, dynamic> a, bool mine) {
@@ -519,7 +521,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             const SizedBox(width: 6),
             Flexible(
               child: Text(
-                name,
+                tr(name),
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodyMedium?.copyWith(color: fg, decoration: TextDecoration.underline),
               ),
@@ -565,7 +567,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             for (final a in attachments) _attachmentView(a, mine),
             const SizedBox(height: 2),
             Text(
-              '${edited ? 'แก้ไขแล้ว · ' : ''}${_time(m['created_at'])}',
+              tr('${edited ? 'แก้ไขแล้ว · ' : ''}${_time(m['created_at'])}'),
               style: theme.textTheme.labelSmall?.copyWith(color: fg.withValues(alpha: 0.7)),
             ),
           ],
@@ -591,7 +593,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 if (showName && !mine)
                   Padding(
                     padding: const EdgeInsets.only(left: 4, bottom: 2),
-                    child: Text(_who(m), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                    child: Text(tr(_who(m)), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
                   ),
                 bubble,
                 if (reactions.isNotEmpty)
@@ -608,7 +610,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(color: cs.outlineVariant),
                             ),
-                            child: Text('${r['emoji']} ${r['count'] ?? 1}', style: theme.textTheme.labelSmall),
+                            child: Text(tr('${r['emoji']} ${r['count'] ?? 1}'), style: theme.textTheme.labelSmall),
                           ),
                       ],
                     ),
@@ -641,7 +643,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(12)),
-              child: Text(day, style: theme.textTheme.labelSmall),
+              child: Text(tr(day), style: theme.textTheme.labelSmall),
             ),
           ),
         ));
@@ -661,7 +663,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         child: Align(
           alignment: Alignment.centerRight,
           child: Text(
-            seen == 0 ? 'ส่งแล้ว' : 'อ่านแล้ว${seen > 1 ? ' $seen' : ''}',
+            tr(seen == 0 ? 'ส่งแล้ว' : 'อ่านแล้ว${seen > 1 ? ' $seen' : ''}'),
             style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
           ),
         ),
@@ -690,14 +692,14 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        stripHtmlPreview(asStringKeyedMap(_pins.first['message'])?['body']?.toString() ?? '', maxLen: 120),
+                        tr(stripHtmlPreview(asStringKeyedMap(_pins.first['message'])?['body']?.toString() ?? '', maxLen: 120)),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium,
                       ),
                     ),
                     if (_pins.length > 1)
-                      Text('+${_pins.length - 1}', style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
+                      Text(tr('+${_pins.length - 1}'), style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
                   ]),
                 ),
               ),
@@ -712,7 +714,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                           children: [
                             Icon(NxI.chatCircle, size: 48, color: cs.onSurfaceVariant),
                             const SizedBox(height: 8),
-                            Text('เริ่มบทสนทนาได้เลย', style: theme.textTheme.bodyLarge),
+                            Text(tr('เริ่มบทสนทนาได้เลย'), style: theme.textTheme.bodyLarge),
                           ],
                         ),
                       )
@@ -737,7 +739,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 children: [
                   Icon(NxI.pencilSimple, size: 16, color: cs.primary),
                   const SizedBox(width: 8),
-                  const Expanded(child: Text('กำลังแก้ไขข้อความ')),
+                  Expanded(child: Text(tr('กำลังแก้ไขข้อความ'))),
                   IconButton(
                     icon: const Icon(NxI.x, size: 18),
                     onPressed: () {
@@ -756,7 +758,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   IconButton(
-                    tooltip: 'แนบไฟล์',
+                    tooltip: tr('แนบไฟล์'),
                     onPressed: _sending || _editing != null ? null : _attach,
                     icon: const Icon(NxI.plus),
                   ),
@@ -767,7 +769,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                       maxLines: 5,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
-                        hintText: 'พิมพ์ข้อความ…',
+                        hintText: tr('พิมพ์ข้อความ…'),
                         filled: true,
                         fillColor: cs.surfaceContainerHighest,
                         isDense: true,
@@ -780,7 +782,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   ),
                   const SizedBox(width: 4),
                   IconButton.filled(
-                    tooltip: 'ส่ง',
+                    tooltip: tr('ส่ง'),
                     onPressed: _sending || _controller.text.trim().isEmpty ? null : () => _send(),
                     icon: _sending
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
@@ -814,7 +816,8 @@ class _FallbackNetworkImageState extends State<_FallbackNetworkImage> {
       return const Padding(padding: EdgeInsets.all(12), child: Icon(NxI.image));
     }
     return Image(
-      image: CachedNetworkImageProvider(widget.urls[_i]),
+      // Decode at screen size, not full camera resolution.
+      image: ResizeImage(CachedNetworkImageProvider(widget.urls[_i]), width: 720, policy: ResizeImagePolicy.fit),
       key: ValueKey(widget.urls[_i]),
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) {

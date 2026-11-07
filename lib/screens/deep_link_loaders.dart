@@ -13,6 +13,7 @@ import 'crm/entity_detail_screen.dart';
 import 'crm/entity_list_screen.dart';
 import 'workspace/task_detail_screen.dart';
 import 'workspace/workspace_board_screen.dart';
+import '../core/i18n.dart';
 
 class EntityListRoute extends StatelessWidget {
   const EntityListRoute({super.key, required this.module});
@@ -51,7 +52,7 @@ class _EntityByIdLoaderState extends State<EntityByIdLoader> {
           return const Scaffold(body: NxSkeletonList());
         }
         if (snap.hasError) {
-          return Scaffold(body: Center(child: Text(formatApiError(snap.error!))));
+          return Scaffold(body: Center(child: Text(tr(formatApiError(snap.error!)))));
         }
         final row = {...?snap.data, 'id': widget.id};
         return EntityDetailScreen(
@@ -155,7 +156,7 @@ class _BoardByCodeLoaderState extends State<BoardByCodeLoader> {
         final board = snap.data;
         if (board == null) {
           return Scaffold(
-            body: Center(child: Text('ไม่พบบอร์ด ${widget.code}')),
+            body: Center(child: Text(tr('ไม่พบบอร์ด ${widget.code}'))),
           );
         }
         return WorkspaceBoardScreen(board: board);
@@ -237,7 +238,7 @@ class _WorkspaceItemBySlugLoaderState extends State<WorkspaceItemBySlugLoader> {
         final row = snap.data;
         if (row == null) {
           return Scaffold(
-            body: Center(child: Text('ไม่พบงาน ${widget.slug}')),
+            body: Center(child: Text(tr('ไม่พบงาน ${widget.slug}'))),
           );
         }
         return TaskDetailScreen(task: row);

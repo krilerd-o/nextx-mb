@@ -19,6 +19,7 @@ import 'package:nextx_mobile/widgets/nx_avatar.dart';
 import 'package:nextx_mobile/widgets/nx_entity_row.dart';
 import 'package:nextx_mobile/widgets/nx_filter_chips.dart';
 import 'package:nextx_mobile/widgets/nx_search_field.dart';
+import 'package:nextx_mobile/widgets/nx_list_toolbar.dart';
 import 'package:nextx_mobile/widgets/nx_icons.dart';
 
 void main() {
@@ -138,9 +139,9 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.text('ผู้มุ่งหวัง'), findsWidgets);
-      expect(find.byType(NxSearchField), findsOneWidget);
-      expect(find.text('ทั้งหมด'), findsOneWidget);
-      expect(find.text('ล่าสุด'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byType(NxListToolbar), findsOneWidget);
+      expect(find.text('เรียง'), findsOneWidget);
       expect(find.byIcon(NxI.plus), findsOneWidget);
       expect(find.textContaining('ยังไม่มี'), findsOneWidget);
     }
@@ -214,8 +215,12 @@ void main() {
       AppTheme.light.filledButtonTheme.style?.backgroundColor?.resolve({}),
       AppTheme.primary,
     );
-    expect(AppTheme.dark.scaffoldBackgroundColor, const Color(0xFF16161D));
-    expect(AppTheme.dark.colorScheme.onSurface, const Color(0xFFF5F5F7));
+    expect(AppTheme.dark.scaffoldBackgroundColor, const Color(0xFF111114));
+    expect(AppTheme.dark.colorScheme.onSurface, const Color(0xFFE7E7EA));
+    for (final t in [AppTheme.light, AppTheme.dark]) {
+      expect(t.textTheme.bodyMedium?.fontFamily, AppTheme.fontFamily);
+      expect(t.textTheme.headlineSmall?.fontFamily, AppTheme.fontFamily);
+    }
     expect(AppTheme.dark.cardTheme.elevation, 0);
     expect(AppTheme.light.cardTheme.elevation, 0);
   });

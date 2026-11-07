@@ -8,6 +8,7 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_invite_prompt.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_step_header.dart';
+import '../../core/i18n.dart';
 
 /// Step: choose the business (skipped automatically when there is only one).
 class BusinessHubScreen extends StatefulWidget {
@@ -76,23 +77,23 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
                   children: [
-                    Text('เลือกธุรกิจ', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(tr('เลือกธุรกิจ'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
                     Text(
-                      'สวัสดี ${config.session.displayName ?? ''}\nเลือกธุรกิจที่ต้องการทำงานวันนี้',
+                      tr('สวัสดี ${config.session.displayName ?? ''}\nเลือกธุรกิจที่ต้องการทำงานวันนี้'),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.5),
                     ),
                     const SizedBox(height: 24),
                     if (_error != null) ...[
-                      Text(formatApiError(_error!), textAlign: TextAlign.center, style: TextStyle(color: cs.error)),
-                      TextButton(onPressed: _load, child: const Text('ลองใหม่')),
+                      Text(tr(formatApiError(_error!)), textAlign: TextAlign.center, style: TextStyle(color: cs.error)),
+                      TextButton(onPressed: _load, child: Text(tr('ลองใหม่'))),
                     ] else if (list == null)
                       const NxSkeletonList(rows: 3)
                     else if (list.isEmpty)
                       Padding(
                         padding: const EdgeInsets.all(24),
-                        child: Text('บัญชีนี้ยังไม่มีธุรกิจที่เข้าถึงได้\nติดต่อผู้ดูแลระบบให้เชิญเข้าธุรกิจ',
+                        child: Text(tr('บัญชีนี้ยังไม่มีธุรกิจที่เข้าถึงได้\nติดต่อผู้ดูแลระบบให้เชิญเข้าธุรกิจ'),
                             textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
                       )
                     else

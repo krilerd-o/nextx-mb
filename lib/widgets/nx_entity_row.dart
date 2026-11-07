@@ -4,6 +4,7 @@ import '../core/entity_display.dart';
 import 'nx_avatar.dart';
 import 'nx_surface_card.dart';
 import 'nx_icons.dart';
+import '../core/i18n.dart';
 
 class NxEntityRow extends StatelessWidget {
   const NxEntityRow({
@@ -38,7 +39,7 @@ class NxEntityRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  tr(title),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleMedium,
@@ -46,7 +47,7 @@ class NxEntityRow extends StatelessWidget {
                 if (subtitle != null && subtitle!.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
-                    subtitle!,
+                    tr(subtitle!),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -60,7 +61,7 @@ class NxEntityRow extends StatelessWidget {
           if (meta != null && meta!.isNotEmpty) ...[
             const SizedBox(width: 8),
             Text(
-              meta!,
+              tr(meta!),
               style: theme.textTheme.labelLarge?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w500,

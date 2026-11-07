@@ -12,6 +12,8 @@ import 'field_ui_type.dart';
 import 'field_validate.dart';
 import 'nx_form_field.dart';
 import 'nx_pick_option.dart';
+import '../nx_shake.dart';
+import '../../core/i18n.dart';
 
 class NxEntityForm extends StatefulWidget {
   const NxEntityForm({
@@ -24,7 +26,15 @@ class NxEntityForm extends StatefulWidget {
     this.module,
     this.enabled = true,
     this.errors = const {},
+    this.sectionOf,
+    this.sections = const {},
+    this.sectionOrder = const [],
   });
+
+  /// Groups fields into titled cards (web "modern form" sections) when set.
+  final String Function(String name)? sectionOf;
+  final Map<String, ({String title, IconData icon, Color color})> sections;
+  final List<String> sectionOrder;
 
   final List<Map<String, dynamic>> fields;
   final Map<String, dynamic> values;
@@ -42,6 +52,7 @@ class NxEntityForm extends StatefulWidget {
 class NxEntityFormState extends State<NxEntityForm> {
   late final NxFieldHost _host;
   final _keys = <String, GlobalKey>{};
+  final _shakers = <String, GlobalKey<NxShakeState>>{};
 
   @override
   void initState() {
@@ -180,12 +191,26 @@ class NxEntityFormState extends State<NxEntityForm> {
     return true;
   }
 
+  /// Scrolls to [first] (the first missing/invalid field), then shakes every
+  /// field in [names] with a short vibration so the user sees what's left.
+  Future<void> revealErrors(String first, Iterable<String> names) async {
+    ensureVisible(first);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    var haptic = true;
+    for (final n in names) {
+      _shakers[n]?.currentState?.shake(haptic: haptic);
+      haptic = false;
+    }
+  }
+
   Widget _fieldAt(int i, Map<String, dynamic> f) {
     final name = fieldName(f);
-    final visKey = (name.isNotEmpty && !_keys.containsKey(name))
-        ? _keys.putIfAbsent(name, GlobalKey.new)
-        : null;
-    return KeyedSubtree(
+    // Same key on every build, so revealErrors() can always find the field.
+    final visKey = name.isNotEmpty ? _keys.putIfAbsent(name, GlobalKey.new) : null;
+    return NxShake(
+      key: name.isEmpty ? null : _shakers.putIfAbsent(name, GlobalKey<NxShakeState>.new),
+      child: KeyedSubtree(
       key: ValueKey('entity-field-$i-$name'),
       child: NxFormField(
         key: visKey,
@@ -197,30 +222,123 @@ class NxEntityFormState extends State<NxEntityForm> {
         required: fieldIsRequired(f),
         enabled: widget.enabled,
         readOnly: fieldIsReadonly(f),
-        errorText: widget.errors[name],
+        errorText: trn(widget.errors[name]),
         host: _host,
         onChanged: (v) => widget.onChanged(name, v),
+      ),
       ),
     );
   }
 
+  bool _filled(Map<String, dynamic> f) {
+    final v = unwrapFieldValue(widget.values[fieldName(f)]);
+    if (v == null) return false;
+    if (v is String) return v.trim().isNotEmpty;
+    if (v is List) return v.isNotEmpty;
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final all = _orderedFields();
+    final sectionOf = widget.sectionOf;
+    if (sectionOf == null) return _buildFields(context, all);
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final buckets = <String, List<Map<String, dynamic>>>{};
+    for (final f in all) {
+      buckets.putIfAbsent(sectionOf(fieldName(f)), () => []).add(f);
+    }
+    final order = [...widget.sectionOrder, ...buckets.keys.where((k) => !widget.sectionOrder.contains(k))];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final key in order)
+          if (buckets[key]?.isNotEmpty ?? false)
+            () {
+              final list = buckets[key]!;
+              final meta = widget.sections[key];
+              final req = list.where(fieldIsRequired).toList();
+              final done = req.where(_filled).length;
+              final hasError = list.any((f) => widget.errors.containsKey(fieldName(f)));
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: hasError ? cs.error.withValues(alpha: 0.6) : cs.outlineVariant.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: (meta?.color ?? cs.primary).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(meta?.icon ?? Icons.notes, size: 18, color: meta?.color ?? cs.primary),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            tr(meta?.title ?? key),
+                            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        if (req.isNotEmpty)
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: Container(
+                              key: ValueKey('$done/${req.length}'),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: (done == req.length ? const Color(0xFF10B981) : cs.error).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                done == req.length ? tr('ครบแล้ว') : tr('จำเป็น $done/${req.length}'),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: done == req.length ? const Color(0xFF10B981) : cs.error,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    _buildFields(context, list),
+                  ],
+                ),
+              );
+            }(),
+      ],
+    );
+  }
+
+  Widget _buildFields(BuildContext context, List<Map<String, dynamic>> fields) {
     final theme = Theme.of(context);
     final pairShort = NxBreakpoint.of(context).twoPane;
-    final fields = _orderedFields();
     final children = <Widget>[];
     String? lastBlock;
     for (var i = 0; i < fields.length; i++) {
       final f = fields[i];
-      final block = fieldBlockLabel(f);
+      final block = widget.sectionOf == null ? fieldBlockLabel(f) : null;
       if (block != null && block != lastBlock) {
         lastBlock = block;
         children.add(
           Padding(
             padding: const EdgeInsets.only(top: 8, bottom: 12),
             child: Text(
-              block,
+              tr(block),
               style: theme.textTheme.labelLarge?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
@@ -232,7 +350,7 @@ class NxEntityFormState extends State<NxEntityForm> {
       final next = i + 1 < fields.length ? fields[i + 1] : null;
       final canPair = pairShort &&
           next != null &&
-          fieldBlockLabel(next) == block &&
+          (widget.sectionOf == null ? fieldBlockLabel(next) : null) == block &&
           _isShortField(resolveFieldUiType(f)) &&
           _isShortField(resolveFieldUiType(next));
       if (canPair) {

@@ -5,6 +5,7 @@ import '../core/nx_breakpoint.dart';
 import 'nx_press_scale.dart';
 import 'nx_surface_card.dart';
 import 'nx_icons.dart';
+import '../core/i18n.dart';
 
 class NxSelectTile extends StatelessWidget {
   const NxSelectTile({
@@ -44,10 +45,10 @@ class NxSelectTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: theme.textTheme.titleMedium),
+                  Text(tr(title), style: theme.textTheme.titleMedium),
                   if (subtitle != null)
                     Text(
-                      subtitle!,
+                      tr(subtitle!),
                       style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                     ),
                 ],

@@ -15,6 +15,8 @@ import 'nx_lift_sheet.dart';
 import 'nx_pick_option.dart';
 import 'nx_picker_sheet.dart';
 import '../nx_icons.dart';
+import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
 
 const kFieldLocale = Locale('th', 'TH');
 
@@ -110,7 +112,7 @@ class NxFormField extends StatelessWidget {
       enabled: enabled,
       label: label,
       required: required,
-      errorText: errorText,
+      errorText: trn(errorText),
     );
   }
 
@@ -121,7 +123,7 @@ class NxFormField extends StatelessWidget {
         context,
         label: label,
         required: required,
-        errorText: errorText,
+        errorText: trn(errorText),
         floatLabel: !isEmpty,
       ),
       child: child,
@@ -156,7 +158,7 @@ class NxFormField extends StatelessWidget {
           hint: hint ?? 'name@email.com',
           keyboard: TextInputType.emailAddress,
           suffix: IconButton(
-            tooltip: 'ส่งอีเมล',
+            tooltip: tr('ส่งอีเมล'),
             onPressed: () => _launchAction(FieldUiType.email, value?.toString()),
             icon: Icon(nxTypeIcon(IconDataSpec.email), size: 20, color: _muted(context)),
           ),
@@ -169,7 +171,7 @@ class NxFormField extends StatelessWidget {
           hint: hint ?? '0xx-xxx-xxxx',
           keyboard: TextInputType.phone,
           suffix: IconButton(
-            tooltip: 'โทร',
+            tooltip: tr('โทร'),
             onPressed: () => _launchAction(FieldUiType.phone, digitsOnly(value, 10)),
             icon: Icon(nxTypeIcon(IconDataSpec.phone), size: 20, color: _muted(context)),
           ),
@@ -183,7 +185,7 @@ class NxFormField extends StatelessWidget {
           hint: hint ?? 'https://',
           keyboard: TextInputType.url,
           suffix: IconButton(
-            tooltip: 'เปิดลิงก์',
+            tooltip: tr('เปิดลิงก์'),
             onPressed: () => _launchAction(FieldUiType.link, value?.toString()),
             icon: Icon(nxTypeIcon(IconDataSpec.link), size: 20, color: _muted(context)),
           ),
@@ -213,9 +215,9 @@ class NxFormField extends StatelessWidget {
           onChanged: _on ? (v) => onChanged?.call(v) : null,
           keyboard: const TextInputType.numberWithOptions(decimal: true),
           align: TextAlign.right,
-          prefix: const Padding(
+          prefix: Padding(
             padding: EdgeInsets.only(left: 12, top: 12),
-            child: Text('฿'),
+            child: Text(tr('฿')),
           ),
           enabled: _on,
         );
@@ -227,7 +229,7 @@ class NxFormField extends StatelessWidget {
           align: TextAlign.right,
           suffix: Padding(
             padding: const EdgeInsets.only(right: 12, top: 12),
-            child: Text('กม.', style: TextStyle(color: _muted(context))),
+            child: Text(tr('กม.'), style: TextStyle(color: _muted(context))),
           ),
           enabled: _on,
         );
@@ -256,7 +258,7 @@ class NxFormField extends StatelessWidget {
         return _DateTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           text: _dateLabel(value),
           icon: NxI.calendarBlank,
           enabled: _on,
@@ -266,7 +268,7 @@ class NxFormField extends StatelessWidget {
         return _DateTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           text: value?.toString().isNotEmpty == true ? value.toString() : 'เลือกเวลา',
           icon: NxI.clock,
           enabled: _on,
@@ -276,7 +278,7 @@ class NxFormField extends StatelessWidget {
         return _DateTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           text: value?.toString().isNotEmpty == true ? value.toString() : 'เลือกวันและเวลา',
           icon: NxI.calendarCheck,
           enabled: _on,
@@ -286,7 +288,7 @@ class NxFormField extends StatelessWidget {
         return _DateTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           text: _rangeLabel(value, 10, 'เลือกช่วงวันที่'),
           icon: NxI.calendarBlank,
           enabled: _on,
@@ -296,7 +298,7 @@ class NxFormField extends StatelessWidget {
         return _DateTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           text: _rangeLabel(value, 7, 'เลือกช่วงเดือน'),
           icon: NxI.calendarBlank,
           enabled: _on,
@@ -306,7 +308,7 @@ class NxFormField extends StatelessWidget {
         return _DateTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           text: _rangeLabel(value, 4, 'เลือกช่วงปี'),
           icon: NxI.calendarBlank,
           enabled: _on,
@@ -316,7 +318,7 @@ class NxFormField extends StatelessWidget {
         return _DateTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           text: value?.toString().isNotEmpty == true ? value.toString() : 'เลือกเดือน',
           icon: NxI.calendarBlank,
           enabled: _on,
@@ -326,7 +328,7 @@ class NxFormField extends StatelessWidget {
         return _DateTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           text: value?.toString().isNotEmpty == true ? value.toString() : 'เลือกปี',
           icon: NxI.calendarBlank,
           enabled: _on,
@@ -339,7 +341,7 @@ class NxFormField extends StatelessWidget {
         return _SelectTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           label: _selectedLabel() ?? hint ?? 'เลือก',
           color: _selectedColor(),
           radio: uiType == FieldUiType.radioGroup,
@@ -351,7 +353,7 @@ class NxFormField extends StatelessWidget {
         return _ChipTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           values: splitMulti(value),
           options: options,
           hint: 'เลือกหลายค่า',
@@ -362,7 +364,7 @@ class NxFormField extends StatelessWidget {
         return _ChipTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           values: splitMulti(value),
           options: options,
           hint: 'เลือกแท็ก',
@@ -385,7 +387,7 @@ class NxFormField extends StatelessWidget {
         return _PersonTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           label: _selectedLabel() ?? hint ?? 'เลือกผู้ใช้',
           enabled: _on,
           onTap: () => _openUsers(context, multi: false),
@@ -395,7 +397,7 @@ class NxFormField extends StatelessWidget {
         return _ChipTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           values: splitMulti(value),
           options: options,
           hint: 'เลือกผู้ใช้หลายคน',
@@ -419,7 +421,7 @@ class NxFormField extends StatelessWidget {
         return _PersonTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           label: _selectedLabel() ?? hint ?? 'ค้นหาและเลือก',
           enabled: _on,
           onTap: () => _openEntity(context),
@@ -429,7 +431,7 @@ class NxFormField extends StatelessWidget {
         return _ColorTrigger(
           fieldLabel: label,
           required: required,
-          errorText: errorText,
+          errorText: trn(errorText),
           hex: displayHexColor(value),
           enabled: _on,
           onTap: () => _pickColor(context),
@@ -606,7 +608,7 @@ class NxFormField extends StatelessWidget {
   }
 
   Future<void> _pickDate(BuildContext context) async {
-    final now = DateTime.now();
+    final now = thaiNow();
     final initial = parseDate(value) ?? now;
     final picked = await showDatePicker(
       context: context,
@@ -634,7 +636,7 @@ class NxFormField extends StatelessWidget {
   }
 
   Future<void> _pickDateTime(BuildContext context) async {
-    final now = DateTime.now();
+    final now = thaiNow();
     final initial = parseDate(value) ?? now;
     final day = await showDatePicker(
       context: context,
@@ -658,13 +660,13 @@ class NxFormField extends StatelessWidget {
 
   Future<void> _pickDateRange(BuildContext context) async {
     final r = parseRange(value);
-    final start = parseDate(r['start']) ?? DateTime.now();
+    final start = parseDate(r['start']) ?? thaiNow();
     final a = await showDatePicker(
       context: context,
       locale: kFieldLocale,
       initialDate: start,
-      firstDate: DateTime(DateTime.now().year - 30),
-      lastDate: DateTime(DateTime.now().year + 15),
+      firstDate: DateTime(thaiNow().year - 30),
+      lastDate: DateTime(thaiNow().year + 15),
       helpText: 'วันเริ่ม',
     );
     if (a == null || !context.mounted) return;
@@ -673,7 +675,7 @@ class NxFormField extends StatelessWidget {
       locale: kFieldLocale,
       initialDate: parseDate(r['end']) ?? a,
       firstDate: a,
-      lastDate: DateTime(DateTime.now().year + 15),
+      lastDate: DateTime(thaiNow().year + 15),
       helpText: 'วันสิ้นสุด',
     );
     if (b == null) return;
@@ -681,7 +683,7 @@ class NxFormField extends StatelessWidget {
   }
 
   Future<void> _pickMonth(BuildContext context) async {
-    final now = DateTime.now();
+    final now = thaiNow();
     final cur = parseDate('${value ?? now.year}-${two(now.month)}-01') ?? now;
     final picked = await showDatePicker(
       context: context,
@@ -695,7 +697,7 @@ class NxFormField extends StatelessWidget {
   }
 
   Future<void> _pickYear(BuildContext context) async {
-    final years = [for (var y = DateTime.now().year + 5; y >= DateTime.now().year - 30; y--) y.toString()];
+    final years = [for (var y = thaiNow().year + 5; y >= thaiNow().year - 30; y--) y.toString()];
     final picked = await showNxPickerSheet(
       context: context,
       title: label,
@@ -710,9 +712,9 @@ class NxFormField extends StatelessWidget {
     final a = await showDatePicker(
       context: context,
       locale: kFieldLocale,
-      initialDate: parseDate('${r['start']}-01') ?? DateTime.now(),
-      firstDate: DateTime(DateTime.now().year - 20),
-      lastDate: DateTime(DateTime.now().year + 10),
+      initialDate: parseDate('${r['start']}-01') ?? thaiNow(),
+      firstDate: DateTime(thaiNow().year - 20),
+      lastDate: DateTime(thaiNow().year + 10),
       helpText: 'เดือนเริ่ม',
     );
     if (a == null || !context.mounted) return;
@@ -721,7 +723,7 @@ class NxFormField extends StatelessWidget {
       locale: kFieldLocale,
       initialDate: parseDate('${r['end']}-01') ?? a,
       firstDate: a,
-      lastDate: DateTime(DateTime.now().year + 10),
+      lastDate: DateTime(thaiNow().year + 10),
       helpText: 'เดือนสิ้นสุด',
     );
     if (b == null) return;
@@ -730,7 +732,7 @@ class NxFormField extends StatelessWidget {
 
   Future<void> _pickYearRange(BuildContext context) async {
     final r = parseRange(value, slice: 4);
-    final years = [for (var y = DateTime.now().year + 5; y >= DateTime.now().year - 30; y--) y.toString()];
+    final years = [for (var y = thaiNow().year + 5; y >= thaiNow().year - 30; y--) y.toString()];
     final opts = [for (final y in years) NxPickOption(value: y, label: y)];
     final a = await showNxPickerSheet(context: context, title: 'ปีเริ่ม', options: opts, value: r['start']);
     if (a == null || !context.mounted) return;
@@ -868,7 +870,7 @@ class NxFormField extends StatelessWidget {
           controller: scroll,
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
           children: [
-            Text(label, style: Theme.of(ctx).textTheme.titleMedium),
+            Text(tr(label), style: Theme.of(ctx).textTheme.titleMedium),
             const SizedBox(height: 16),
             Wrap(
               spacing: 10,
@@ -1029,7 +1031,7 @@ class _TextBoxState extends State<_TextBox> {
           onChanged: widget.onChanged,
           decoration: widget.bare
               ? InputDecoration(
-                  hintText: widget.hint,
+                  hintText: trn(widget.hint),
                   border: InputBorder.none,
                   isDense: true,
                   prefixIcon: widget.prefix,
@@ -1042,7 +1044,7 @@ class _TextBoxState extends State<_TextBox> {
                   hint: widget.hint,
                   prefixIcon: widget.prefix,
                   suffixIcon: widget.suffix,
-                  errorText: widget.errorText,
+                  errorText: trn(widget.errorText),
                   maxLines: widget.maxLines,
                   floatLabel: _focused || widget.text.trim().isNotEmpty,
                 ),
@@ -1076,12 +1078,12 @@ class _RichTextBox extends StatelessWidget {
         Row(
           children: [
             IconButton(
-              tooltip: 'ตัวหนา',
+              tooltip: tr('ตัวหนา'),
               onPressed: () => onChanged?.call('<b>$_plain</b>'),
               icon: const Icon(NxI.textB, size: 20),
             ),
             IconButton(
-              tooltip: 'รายการ',
+              tooltip: tr('รายการ'),
               onPressed: () => onChanged?.call('<ul><li>$_plain</li></ul>'),
               icon: const Icon(NxI.listBullets, size: 20),
             ),
@@ -1129,7 +1131,7 @@ class _SliderBox extends StatelessWidget {
             ),
             SizedBox(
               width: 44,
-              child: Text('${value.round()}%', textAlign: TextAlign.end),
+              child: Text(tr('${value.round()}%'), textAlign: TextAlign.end),
             ),
           ],
         ),
@@ -1148,7 +1150,7 @@ class _YesNoBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(value ? 'ใช่' : 'ไม่', style: Theme.of(context).textTheme.bodyLarge)),
+        Expanded(child: Text(tr(value ? 'ใช่' : 'ไม่'), style: Theme.of(context).textTheme.bodyLarge)),
         Switch.adaptive(value: value, onChanged: onChanged),
       ],
     );
@@ -1180,12 +1182,12 @@ class _DateTrigger extends StatelessWidget {
     return NxOutlinedTapField(
       label: fieldLabel,
       required: required,
-      errorText: errorText,
+      errorText: trn(errorText),
       isEmpty: empty,
       enabled: enabled,
       onTap: onTap,
       suffixIcon: Icon(icon, size: 20, color: muted),
-      child: empty ? const SizedBox(height: 22) : Text(text),
+      child: empty ? const SizedBox(height: 22) : Text(tr(text)),
     );
   }
 }
@@ -1218,7 +1220,7 @@ class _SelectTrigger extends StatelessWidget {
     return NxOutlinedTapField(
       label: fieldLabel,
       required: required,
-      errorText: errorText,
+      errorText: trn(errorText),
       isEmpty: empty,
       enabled: enabled,
       onTap: onTap,
@@ -1239,7 +1241,7 @@ class _SelectTrigger extends StatelessWidget {
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
                   ),
-                Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text(tr(label), overflow: TextOverflow.ellipsis)),
                 if (onClear != null)
                   IconButton(
                     icon: const Icon(NxI.x, size: 18),
@@ -1276,7 +1278,7 @@ class _PersonTrigger extends StatelessWidget {
     return NxOutlinedTapField(
       label: fieldLabel,
       required: required,
-      errorText: errorText,
+      errorText: trn(errorText),
       isEmpty: empty,
       enabled: enabled,
       onTap: onTap,
@@ -1287,7 +1289,7 @@ class _PersonTrigger extends StatelessWidget {
               children: [
                 NxAvatar(label: label, size: 28),
                 const SizedBox(width: 10),
-                Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text(tr(label), overflow: TextOverflow.ellipsis)),
                 if (onClear != null)
                   IconButton(
                     icon: const Icon(NxI.x, size: 18),
@@ -1334,7 +1336,7 @@ class _ChipTrigger extends StatelessWidget {
     return NxOutlinedTapField(
       label: fieldLabel,
       required: required,
-      errorText: errorText,
+      errorText: trn(errorText),
       isEmpty: values.isEmpty,
       enabled: enabled,
       onTap: onTap,
@@ -1359,7 +1361,7 @@ class _ChipTrigger extends StatelessWidget {
                           NxAvatar(label: lab(v), size: 18),
                           const SizedBox(width: 4),
                         ],
-                        Text(lab(v), style: Theme.of(context).textTheme.labelLarge),
+                        Text(tr(lab(v)), style: Theme.of(context).textTheme.labelLarge),
                       ],
                     ),
                   ),
@@ -1383,7 +1385,7 @@ class _EmojiRow extends StatelessWidget {
       children: [
         for (final o in options)
           ChoiceChip(
-            label: Text('${o.emoji ?? ''} ${o.label}'.trim()),
+            label: Text(tr('${o.emoji ?? ''} ${o.label}'.trim())),
             selected: o.value == value,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             onSelected: onChanged == null ? null : (_) => onChanged!(o.value),
@@ -1419,7 +1421,7 @@ class _ColorTrigger extends StatelessWidget {
     return NxOutlinedTapField(
       label: fieldLabel,
       required: required,
-      errorText: errorText,
+      errorText: trn(errorText),
       isEmpty: empty,
       enabled: enabled,
       onTap: onTap,
@@ -1438,7 +1440,7 @@ class _ColorTrigger extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(hex),
+                Text(tr(hex)),
               ],
             ),
     );
@@ -1494,7 +1496,7 @@ class _MediaBox extends StatelessWidget {
                 else
                   Icon(icon),
                 const SizedBox(width: 10),
-                Expanded(child: Text(url, overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text(tr(url), overflow: TextOverflow.ellipsis)),
               ],
             )
           : null,
@@ -1547,7 +1549,7 @@ class _LatLongBox extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: 'GPS',
+              tooltip: tr('GPS'),
               onPressed: !enabled || onGps == null
                   ? null
                   : () async {

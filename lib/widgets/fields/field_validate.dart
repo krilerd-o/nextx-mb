@@ -5,6 +5,13 @@ bool _isEmpty(dynamic value) {
   if (value == null) return true;
   if (value is String) return value.trim().isEmpty;
   if (value is Iterable) return value.isEmpty;
+  if (value is Map) {
+    if (value.isEmpty) return true;
+    final id = value['id'] ?? value['value'] ?? value['start'] ?? value['url'];
+    return value.containsKey('id') || value.containsKey('value') || value.containsKey('start') || value.containsKey('url')
+        ? _isEmpty(id)
+        : false;
+  }
   return value.toString().trim().isEmpty;
 }
 

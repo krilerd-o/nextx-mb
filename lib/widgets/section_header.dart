@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/i18n.dart';
 
 /// หัวข้อย่อยสำหรับกลุ่มการ์ด (mobile-first)
 class SectionHeader extends StatelessWidget {
@@ -11,7 +12,7 @@ class SectionHeader extends StatelessWidget {
     return Padding(
       padding: padding,
       child: Text(
-        title,
+        tr(title),
         style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
       ),
     );

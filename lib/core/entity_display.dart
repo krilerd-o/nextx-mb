@@ -1,4 +1,5 @@
 import 'html_display.dart';
+import 'thai_time.dart';
 
 String _plain(dynamic v) {
   if (v == null) return '';
@@ -255,9 +256,8 @@ String? entityWhen(Map<String, dynamic> row) {
   ]) {
     final v = row[k]?.toString();
     if (v == null || v.isEmpty) continue;
-    final parsed = DateTime.tryParse(v);
-    if (parsed == null) return v.length > 16 ? v.substring(0, 16) : v;
-    final local = parsed.toLocal();
+    final local = parseThai(v);
+    if (local == null) return v.length > 16 ? v.substring(0, 16) : v;
     final hh = local.hour.toString().padLeft(2, '0');
     final mm = local.minute.toString().padLeft(2, '0');
     return '$hh:$mm';

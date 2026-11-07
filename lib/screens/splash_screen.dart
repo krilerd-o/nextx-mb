@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/app_version.dart';
 
 import '../widgets/nx_app_logo.dart';
+import '../core/i18n.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
@@ -19,7 +20,7 @@ class SplashScreen extends StatelessWidget {
               const NxAppLogo(size: 96),
               const SizedBox(height: 20),
               Text(
-                'MOAI NEXT',
+                tr('MOAI NEXT'),
                 style: theme.textTheme.displayMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.8,
@@ -27,7 +28,7 @@ class SplashScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'v${AppVersion.value}',
+                tr('v${AppVersion.value}'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

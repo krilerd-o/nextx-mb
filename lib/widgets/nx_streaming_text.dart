@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/effects.dart';
+import '../core/i18n.dart';
 
 /// Text that appears word by word with a soft fade (expo-animated-streaming-text).
 /// Shows the full text at once when effects are off.
@@ -51,8 +52,12 @@ class _NxStreamingTextState extends State<NxStreamingText> with SingleTickerProv
     _reset();
   }
 
+  /// Text the words were split from (re-split when the UI language changes).
+  String _shown = '';
+
   void _reset() {
-    _words = split(widget.text);
+    _shown = tr(widget.text);
+    _words = split(_shown);
     final total = widget.wordDelay * _words.length + widget.fade;
     _c
       ..duration = total
@@ -75,7 +80,8 @@ class _NxStreamingTextState extends State<NxStreamingText> with SingleTickerProv
   Widget build(BuildContext context) {
     final raw = widget.style ?? DefaultTextStyle.of(context).style;
     final style = raw.color == null ? raw.copyWith(color: Theme.of(context).colorScheme.onSurface) : raw;
-    if (!Effects.animate(context)) return Text(widget.text, style: style);
+    if (!Effects.animate(context)) return Text(tr(widget.text), style: style);
+    if (tr(widget.text) != _shown) _words = split(_shown = tr(widget.text));
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) {
@@ -85,7 +91,7 @@ class _NxStreamingTextState extends State<NxStreamingText> with SingleTickerProv
         for (var i = 0; i < _words.length; i++) {
           final start = widget.wordDelay.inMicroseconds * i;
           final a = ((t - start) / widget.fade.inMicroseconds).clamp(0.0, 1.0);
-          spans.add(TextSpan(text: _words[i], style: style.copyWith(color: style.color!.withValues(alpha: style.color!.a * a))));
+          spans.add(TextSpan(text: trn(_words[i]), style: style.copyWith(color: style.color!.withValues(alpha: style.color!.a * a))));
         }
         return Text.rich(TextSpan(children: spans), style: style);
       },

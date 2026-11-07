@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/app_config.dart';
 import '../core/html_display.dart';
 import 'nx_icons.dart';
+import '../core/i18n.dart';
 
 class NxHtmlView extends StatelessWidget {
   const NxHtmlView({
@@ -30,9 +31,9 @@ class NxHtmlView extends StatelessWidget {
     if (!looksLikeHtmlString(html)) {
       final plain = decodeHtmlEntities(html);
       if (plain.trim().isEmpty) {
-        return Text('—', style: bodyStyle?.copyWith(color: theme.colorScheme.onSurfaceVariant));
+        return Text(tr('—'), style: bodyStyle?.copyWith(color: theme.colorScheme.onSurfaceVariant));
       }
-      return SelectableText(plain, style: bodyStyle);
+      return SelectableText(tr(plain), style: bodyStyle);
     }
     final prepared = prepareHtml(html);
     return Column(
@@ -105,10 +106,10 @@ class _FileChip extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(card.name, style: theme.textTheme.titleSmall),
+                    Text(tr(card.name), style: theme.textTheme.titleSmall),
                     if (card.date != null)
                       Text(
-                        card.date!,
+                        tr(card.date!),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -144,7 +145,7 @@ class _HtmlBody extends StatelessWidget {
     if (nodes.isEmpty) {
       final preview = stripHtmlPreview(html);
       if (preview.isEmpty) return const SizedBox.shrink();
-      return SelectableText(preview, style: style);
+      return SelectableText(tr(preview), style: style);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -172,7 +173,7 @@ class _HtmlBody extends StatelessWidget {
                       SizedBox(
                         width: 18,
                         child: Text(
-                          node.tag == 'ol' ? '${i + 1}.' : '•',
+                          tr(node.tag == 'ol' ? '${i + 1}.' : '•'),
                           style: style,
                         ),
                       ),
@@ -189,8 +190,8 @@ class _HtmlBody extends StatelessWidget {
         final url = resolveHtmlUrl(src, baseUrl);
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Image(image: CachedNetworkImageProvider(url), height: 160, fit: BoxFit.contain, errorBuilder: (_, _, _) {
-            return Text(node.attrs['alt'] ?? url, style: style);
+          child: Image(image: ResizeImage(CachedNetworkImageProvider(url), height: 480, policy: ResizeImagePolicy.fit), height: 160, fit: BoxFit.contain, errorBuilder: (_, _, _) {
+            return Text(tr(node.attrs['alt'] ?? url), style: style);
           }),
         );
       default:
@@ -218,7 +219,7 @@ class _HtmlBody extends StatelessWidget {
       if (t.isEmpty) return;
       out.add(
         TextSpan(
-          text: t,
+          text: trn(t),
           style: base?.copyWith(
             fontWeight: st.bold ? FontWeight.w700 : base.fontWeight,
             fontStyle: st.italic ? FontStyle.italic : base.fontStyle,
@@ -237,7 +238,7 @@ class _HtmlBody extends StatelessWidget {
       return;
     }
     if (node.tag == 'br') {
-      out.add(const TextSpan(text: '\n'));
+      out.add(TextSpan(text: tr('\n')));
       return;
     }
     var next = st;

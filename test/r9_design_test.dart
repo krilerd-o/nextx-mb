@@ -15,6 +15,13 @@ void main() {
     expect(Effects.resolve(EffectsPreference.full, reduceMotion: true), EffectsLevel.off);
   });
 
+  test('theme is built once per brightness + accent (no rebuild on notify)', () {
+    final a = AppTheme.themed(brightness: Brightness.light, accent: const Color(0xFF6366F1));
+    final b = AppTheme.themed(brightness: Brightness.light, accent: const Color(0xFF6366F1));
+    expect(identical(a, b), isTrue);
+    expect(identical(a, AppTheme.themed(brightness: Brightness.dark, accent: const Color(0xFF6366F1))), isFalse);
+  });
+
   test('unnamed lead shows its running number', () {
     expect(entityTitle({'id': 1, 'lead_no': 'L26110700001'}, module: 'lead'), 'L26110700001');
   });
@@ -22,7 +29,7 @@ void main() {
   testWidgets('streaming text ends with the full sentence', (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.light,
-      home: const Scaffold(body: NxStreamingText('มีงานวันนี้ 3 รายการ')),
+      home: Scaffold(body: NxStreamingText('มีงานวันนี้ 3 รายการ')),
     ));
     await tester.pumpAndSettle();
     final rich = tester.widget<Text>(find.byType(Text).first);

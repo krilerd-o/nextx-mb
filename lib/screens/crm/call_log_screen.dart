@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -17,6 +18,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 class CallLogScreen extends StatefulWidget {
   const CallLogScreen({super.key});
@@ -32,8 +34,8 @@ class _CallLogScreenState extends State<CallLogScreen> {
   @override
   Widget build(BuildContext context) {
     final twoPane = NxBreakpoint.of(context).twoPane;
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'บันทึกการโทร',
         actions: [
           IconButton(
@@ -47,7 +49,7 @@ class _CallLogScreenState extends State<CallLogScreen> {
         load: () => context.read<AppConfig>().apiClient.getCallLogWork(),
         skeleton: const NxSkeletonList(),
         isEmpty: (list) => list.isEmpty,
-        empty: const Center(child: Text('ไม่มีรายการโทร')),
+        empty: Center(child: Text(tr('ไม่มีรายการโทร'))),
         builder: (context, list) {
           final items = ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -116,14 +118,14 @@ class _CallLogResultScreenState extends State<CallLogResultScreen> {
           );
       if (mounted) {
         if (widget.embedded) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกแล้ว')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกแล้ว'))));
         } else {
           Navigator.pop(context, true);
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -132,8 +134,8 @@ class _CallLogResultScreenState extends State<CallLogResultScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: entityTitle(widget.row, module: 'call_log'),
         automaticallyImplyLeading: !widget.embedded,
       ),
@@ -182,16 +184,16 @@ class _CallLogResultScreenState extends State<CallLogResultScreen> {
                           }
                         },
                         icon: const Icon(NxI.phone),
-                        label: Text('โทร $phone'),
+                        label: Text(tr('โทร $phone')),
                       ),
                     ),
                     IconButton(
-                      tooltip: 'คัดลอกเบอร์',
+                      tooltip: tr('คัดลอกเบอร์'),
                       onPressed: () async {
                         await Clipboard.setData(ClipboardData(text: phone));
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('คัดลอกเบอร์แล้ว')),
+                            SnackBar(content: Text(tr('คัดลอกเบอร์แล้ว'))),
                           );
                         }
                       },
@@ -202,7 +204,7 @@ class _CallLogResultScreenState extends State<CallLogResultScreen> {
               );
             },
           ),
-          FilledButton(onPressed: _saving ? null : _save, child: const Text('บันทึกผล')),
+          FilledButton(onPressed: _saving ? null : _save, child: Text(tr('บันทึกผล'))),
         ],
       ),
     );

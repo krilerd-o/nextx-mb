@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../../core/app_theme.dart';
@@ -8,6 +9,7 @@ import '../../widgets/fields/nx_form_field.dart';
 import '../../widgets/fields/nx_pick_option.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 /// Debug gallery of every CRM UI type (light/dark toggle).
 class FieldGalleryScreen extends StatefulWidget {
@@ -51,12 +53,12 @@ class _FieldGalleryScreenState extends State<FieldGalleryScreen> {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: _dark ? ThemeMode.dark : ThemeMode.light,
-      home: Scaffold(
-        appBar: NxAppHeader(
+      home: NxScrollScaffold(
+        header: NxAppHeader(
           title: 'UI Type',
           actions: [
             IconButton(
-              tooltip: 'สลับธีม',
+              tooltip: tr('สลับธีม'),
               onPressed: () => setState(() => _dark = !_dark),
               icon: Icon(_dark ? NxI.sun : NxI.moon),
             ),

@@ -134,6 +134,8 @@ class ApiClient {
         onRequest: (options, handler) {
           // Tells NEXTX this is the app: Bearer wins over any stray cookie (backend mobileSupport.js).
           options.headers['X-Nextx-Client'] = 'mobile';
+          // Device list on the server (Settings → devices): name / platform / app version.
+          options.headers.addAll(deviceHeaders);
           final token = _accessToken;
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
@@ -167,6 +169,8 @@ class ApiClient {
           // for bad credentials — that must not log the current session out.
           final isAuthCall = path.contains('/api/auth/');
           if (code == 401 && !isAuthCall) {
+            // Signed out from another device (NEXTX X-Session-Revoked) vs token simply expired.
+            lastUnauthorizedRevoked = err.response?.headers.value('x-session-revoked') == '1';
             _onUnauthorized?.call();
           }
           handler.next(err);
@@ -190,6 +194,13 @@ class ApiClient {
 
   late final Dio _dio;
   VoidCallback? _onUnauthorized;
+
+  /// Sent with every request (set once at startup): X-Device-Name (URL-encoded),
+  /// X-Device-Platform, X-App-Version.
+  static Map<String, String> deviceHeaders = const {};
+
+  /// The last 401 said this session was signed out from another device.
+  bool lastUnauthorizedRevoked = false;
   String? _accessToken;
   String? _businessId;
   String? _packageCode;
@@ -429,6 +440,30 @@ class ApiClient {
     }));
   }
 
+  /// Devices signed in to this account (`GET /api/me/sessions`, feature `device_sessions`).
+  Future<({List<Map<String, dynamic>> list, String? currentSid})> getDeviceSessions() async {
+    final env = await _send('GET', '/api/me/sessions');
+    final data = env['data'];
+    return (
+      list: extractMapList(data),
+      currentSid: data is Map ? data['current_sid']?.toString() : null,
+    );
+  }
+
+  Future<void> revokeDeviceSession(String sid) async {
+    await _send('DELETE', '/api/me/sessions/${Uri.encodeComponent(sid)}');
+  }
+
+  /// Signs out every other device (this one stays signed in).
+  Future<void> revokeOtherDeviceSessions() async {
+    await _send('POST', '/api/me/sessions/revoke-others');
+  }
+
+  /// Signs out every device including this one.
+  Future<void> revokeAllDeviceSessions() async {
+    await _send('POST', '/api/me/sessions/revoke-all');
+  }
+
   Future<void> logoutRemote() async {
     try {
       await _send('POST', '/api/auth/logout');
@@ -538,7 +573,19 @@ class ApiClient {
     return schema.fields;
   }
 
-  Future<ModuleFieldSchema> getFieldSchema(String module) async {
+  /// Field schemas change rarely; keep each for a few minutes per business.
+  final Map<String, ({DateTime at, ModuleFieldSchema schema})> _schemaCache = {};
+
+  Future<ModuleFieldSchema> getFieldSchema(String module, {bool fresh = false}) async {
+    final key = '${_businessId ?? ''}|$module';
+    final hit = _schemaCache[key];
+    if (!fresh && hit != null && DateTime.now().difference(hit.at) < const Duration(minutes: 5)) return hit.schema;
+    final schema = await _fetchFieldSchema(module);
+    _schemaCache[key] = (at: DateTime.now(), schema: schema);
+    return schema;
+  }
+
+  Future<ModuleFieldSchema> _fetchFieldSchema(String module) async {
     final env = await _send(
       'GET',
       '/api/fields/$module',
@@ -553,6 +600,89 @@ class ApiClient {
       });
     }
     return ModuleFieldSchema(fields: fields, picklists: picklists);
+  }
+
+  /// `POST /api/entity/:m/bulk-update` — same fields on many records.
+  /// Sends in chunks of 100 (the server's per-request cap).
+  Future<void> bulkUpdateEntities(String module, List<String> ids, Map<String, dynamic> fields) async {
+    for (var i = 0; i < ids.length; i += 100) {
+      final chunk = ids.sublist(i, i + 100 > ids.length ? ids.length : i + 100);
+      await _send('POST', '/api/entity/$module/bulk-update', data: {
+        'ids': [for (final id in chunk) int.tryParse(id) ?? id],
+        ...fields,
+      });
+    }
+  }
+
+  /// Case watchers: `{list, following}` (only cases support following).
+  Future<Map<String, dynamic>> getCaseWatchers(String id) async =>
+      _dataMap(await _send('GET', '/api/entity/case/$id/watchers'));
+
+  Future<void> setCaseFollow(String id, bool follow) async {
+    await _send(follow ? 'POST' : 'DELETE', '/api/entity/case/$id/follow');
+  }
+
+  /// Link an external (Gmail/Outlook) message to a CRM record.
+  Future<void> linkMailToEntity({
+    required String connectionId,
+    required String messageId,
+    required String module,
+    required String entityId,
+    String? email,
+    String? name,
+  }) async {
+    await _send('POST', '/api/mail/entity-link', data: {
+      'connectionId': int.tryParse(connectionId) ?? connectionId,
+      'messageId': messageId,
+      'module': module,
+      'entity_id': int.tryParse(entityId) ?? entityId,
+      if (email != null) 'email': email,
+      if (name != null) 'name': name,
+    });
+  }
+
+  /// CRM records already known for an e-mail address.
+  Future<List<Map<String, dynamic>>> lookupEntityByEmail(String email) async {
+    final data = _dataMap(await _send('GET', '/api/mail/entity-lookup', query: {'email': email}));
+    return extractMapList(data['links']);
+  }
+
+  /// All messages of an external mail thread.
+  Future<List<Map<String, dynamic>>> getMailThreadMessages(String threadId, {required String connectionId}) async {
+    final env = await _send('GET', '/api/mail/threads/$threadId', query: {'connectionId': connectionId});
+    final data = env['data'];
+    return extractMapList(data is Map ? data['list'] : data);
+  }
+
+  // ── Custom Views (มุมมอง CV) — same API as the NEXTX web list.
+
+  /// `{list, groups, default_id}`; each view carries can_edit / can_delete / can_duplicate.
+  Future<Map<String, dynamic>> getCustomViews(String module) async {
+    return _dataMap(await _send('GET', '/api/customviews', query: {'module': module}));
+  }
+
+  /// Fields (+operators), period presets, date fields, users and roles for the editor.
+  Future<Map<String, dynamic>> getCustomViewMeta(String module) async {
+    return _dataMap(await _send('GET', '/api/customviews/meta', query: {'module': module}));
+  }
+
+  Map<String, dynamic> _cvOf(Map<String, dynamic> m) =>
+      m['customview'] is Map ? Map<String, dynamic>.from(m['customview'] as Map) : m;
+
+  Future<Map<String, dynamic>> createCustomView(Map<String, dynamic> body) async {
+    return _cvOf(_dataMap(await _send('POST', '/api/customviews', data: body)));
+  }
+
+  Future<Map<String, dynamic>> updateCustomView(String id, Map<String, dynamic> body) async {
+    return _cvOf(_dataMap(await _send('PUT', '/api/customviews/$id', data: body)));
+  }
+
+  Future<Map<String, dynamic>> duplicateCustomView(String id) async {
+    return _cvOf(_dataMap(await _send('POST', '/api/customviews/$id/duplicate')));
+  }
+
+  Future<void> deleteCustomView(String id) async {
+    await _send('DELETE', '/api/customviews/$id');
   }
 
   Future<List<Map<String, dynamic>>> getPicklists() async {

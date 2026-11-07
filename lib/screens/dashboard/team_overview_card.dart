@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
+import '../../core/i18n.dart';
 
 num _num(Object? v) => num.tryParse(v?.toString() ?? '') ?? 0;
 
@@ -103,8 +104,8 @@ class _FigureCard extends StatelessWidget {
           Row(children: [
             Icon(icon, size: 18, color: cs.primary),
             const SizedBox(width: 8),
-            Expanded(child: Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
-            Text('ปีนี้', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+            Expanded(child: Text(tr(title), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+            Text(tr('ปีนี้'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
             if (onTap != null) Icon(NxI.caretRight, size: 16, color: cs.onSurfaceVariant),
           ]),
           const SizedBox(height: 12),
@@ -119,9 +120,9 @@ class _FigureCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(f.value, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                      Text(f.label, style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-                      if (f.hint != null) Text(f.hint!, style: theme.textTheme.labelSmall?.copyWith(color: cs.primary)),
+                      Text(tr(f.value), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(tr(f.label), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                      if (f.hint != null) Text(tr(f.hint!), style: theme.textTheme.labelSmall?.copyWith(color: cs.primary)),
                     ],
                   ),
                 ),

@@ -5,7 +5,7 @@ import '../core/app_config.dart';
 import '../core/nx_breakpoint.dart';
 import '../services/offline_queue.dart';
 import '../services/unread_service.dart';
-import '../widgets/nx_glass.dart';
+import '../widgets/nx_scroll_scaffold.dart';
 import '../widgets/nx_icons.dart';
 import '../widgets/nx_invite_prompt.dart';
 import '../widgets/nx_tab_nav.dart';
@@ -26,6 +26,7 @@ import 'module/module_hub_screen.dart';
 import 'notifications/notification_center_screen.dart';
 import 'search/global_search_screen.dart';
 import 'workspace/workspace_home_screen.dart';
+import '../core/i18n.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -76,8 +77,8 @@ Widget shellTabScreen(String id) {
   }
 }
 
-/// Tabs drawn for the floating bar (content scrolls under it).
-const _shellNativeTabs = {'dashboard', 'search', 'hr', kMenuTabId};
+/// Tabs that draw their own header (no NxScrollScaffold).
+const _hubTabs = {kMenuTabId};
 
 class _AppShellState extends State<AppShell> {
   String _current = '';
@@ -85,11 +86,31 @@ class _AppShellState extends State<AppShell> {
   /// Tabs opened at least once — others stay unbuilt so launch only loads
   /// the visible tab instead of every tab's API at once.
   final Set<String> _built = {};
+  bool _prewarmStarted = false;
+
+  /// After the first tab is on screen and idle, build the other tabs one at a
+  /// time so the first tap on them doesn't build + fetch in the same frame.
+  void _prewarm(List<String> ids) {
+    if (_prewarmStarted) return;
+    _prewarmStarted = true;
+    Future<void>(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      for (final id in ids) {
+        if (!mounted) return;
+        if (_built.contains(id)) continue;
+        setState(() => _built.add(id));
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final bp = NxBreakpoint.of(context);
-    final config = context.watch<AppConfig>();
+    // Only the tab list and invite matter here; a full watch rebuilt every
+    // open tab on each AppConfig notify (session refresh, unread, queue…).
+    context.select((AppConfig c) => (c.shellTabs.join(','), c.pendingInvite));
+    final config = context.read<AppConfig>();
     if (config.pendingInvite != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
@@ -107,11 +128,16 @@ class _AppShellState extends State<AppShell> {
     _built
       ..removeWhere((id) => !ids.contains(id))
       ..add(_current);
+    _prewarm(ids);
     final notifIndex = ids.indexOf('notifications');
     final destinations = [
       for (final id in ids)
         if (id == kMenuTabId)
-          const NxTabDestination(icon: NxI.dotsThreeCircle, selectedIcon: NxI.dotsThreeCircleFill, label: 'เมนู')
+          const NxTabDestination(
+            icon: NxI.dotsThreeCircle,
+            selectedIcon: NxI.dotsThreeCircleFill,
+            label: 'เมนู',
+          )
         else
           NxTabDestination(
             icon: shellTabById(id)!.icon,
@@ -124,14 +150,14 @@ class _AppShellState extends State<AppShell> {
       builder: (context, _) {
         final unread = UnreadNotifications.instance.count;
         return NxTabNav(
-      destinations: destinations,
-      selectedIndex: selected,
-      onSelect: (i) {
-        setState(() => _current = ids[i]);
-        config.setLastTab(ids[i]);
-      },
-      rail: bp.useRail,
-      badges: {if (notifIndex >= 0 && unread > 0) notifIndex: unread},
+          destinations: destinations,
+          selectedIndex: selected,
+          onSelect: (i) {
+            setState(() => _current = ids[i]);
+            config.setLastTab(ids[i]);
+          },
+          rail: bp.useRail,
+          badges: {if (notifIndex >= 0 && unread > 0) notifIndex: unread},
         );
       },
     );
@@ -146,7 +172,9 @@ class _AppShellState extends State<AppShell> {
               for (final id in ids)
                 KeyedSubtree(
                   key: ValueKey('tab-$id'),
-                  child: _built.contains(id) ? shellTabScreen(id) : const SizedBox.shrink(),
+                  child: _built.contains(id)
+                      ? shellTabScreen(id)
+                      : const SizedBox.shrink(),
                 ),
             ],
           ),
@@ -165,25 +193,26 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
-    final floating = _shellNativeTabs.contains(_current);
+    // Every tab scrolls under the floating glass bar; content dissolves into a
+    // progressive blur toward the bottom edge (pages pad via MediaQuery).
     return Scaffold(
-      // Shell-native tabs pad for the floating bar; other pages need it outside.
-      extendBody: floating,
-      body: floating
-          ? Stack(
-              children: [
-                stack,
-                // Content fades into a soft blur behind the floating bar.
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: 120 + MediaQuery.paddingOf(context).bottom,
-                  child: const NxProgressiveBlur(height: double.infinity),
-                ),
-              ],
-            )
-          : stack,
+      extendBody: true,
+      body: Stack(
+        children: [
+          stack,
+          // Tabs built on NxScrollScaffold blur under their own FAB; the hub
+          // tabs (own header, no FAB) get the band from here.
+          if (_hubTabs.contains(_current))
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              // Ends at about the middle of the floating tab bar (bar ≈ 76 + 10 margin).
+              height: 48 + MediaQuery.viewPaddingOf(context).bottom,
+              child: const NxEdgeBlur(fromTop: false, solidFraction: 0.5),
+            ),
+        ],
+      ),
       bottomNavigationBar: nav,
     );
   }
@@ -206,11 +235,14 @@ class _PendingSyncBanner extends StatelessWidget {
             bottom: false,
             child: ListTile(
               dense: true,
-              leading: Icon(Icons.cloud_upload_outlined, color: cs.onTertiaryContainer),
-              title: Text('มี $n รายการรอส่ง (บันทึกตอนออฟไลน์)', style: TextStyle(color: cs.onTertiaryContainer)),
+              leading: Icon(NxI.cloud, color: cs.onTertiaryContainer),
+              title: Text(
+                tr('มี $n รายการรอส่ง (บันทึกตอนออฟไลน์)'),
+                style: TextStyle(color: cs.onTertiaryContainer),
+              ),
               trailing: TextButton(
                 onPressed: () => context.read<AppConfig>().flushOfflineQueue(),
-                child: const Text('ส่งตอนนี้'),
+                child: Text(tr('ส่งตอนนี้')),
               ),
             ),
           ),

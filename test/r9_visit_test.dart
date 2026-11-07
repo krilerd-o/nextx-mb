@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/session_state.dart';
+import 'package:nextx_mobile/core/thai_time.dart';
 import 'package:nextx_mobile/screens/calendar/visit_check_sheet.dart';
 import 'package:nextx_mobile/services/api_client.dart';
 import 'package:nextx_mobile/services/location_service.dart';
@@ -37,7 +38,7 @@ Future<(AppConfig, FakeNextxAdapter)> _pump(WidgetTester tester, Map<String, Obj
               activityId: '7',
               checkIn: checkIn,
               placeName: 'สยาม',
-              checkedInAt: DateTime.now().subtract(const Duration(minutes: 75)),
+              checkedInAt: thaiNow().subtract(const Duration(minutes: 75)),
               location: _FakeGps(),
             ),
             child: const Text('open'),

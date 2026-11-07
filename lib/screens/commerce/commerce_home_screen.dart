@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -11,6 +12,8 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
 import '../../widgets/nx_icons.dart';
 import '../crm/order_summary_screen.dart';
+import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 /// NEXTX order queues (backend/src/services/commercialOrderQueueService.js).
 const orderQueues = <String, String>{
@@ -57,22 +60,22 @@ class CommerceHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     // Stock endpoints are owner/admin only on the server (requireCommercialAdmin).
     final tabs = <(String, Widget)>[
       if (MenuAccess.allow(session, ordersMenu)) ('ออเดอร์', const _OrdersTab()),
       if (MenuAccess.allow(session, stockMenu) && session.isBusinessAdmin) ('สต็อก', const _StockTab()),
     ];
     if (tabs.isEmpty) {
-      return const Scaffold(
-        appBar: NxAppHeader(title: 'ร้านค้า'),
-        body: Center(child: Text('ไม่มีสิทธิ์เข้าถึงร้านค้า (สต็อกดูได้เฉพาะเจ้าของหรือแอดมิน)')),
+      return NxScrollScaffold(
+        header: NxAppHeader(title: 'ร้านค้า'),
+        body: Center(child: Text(tr('ไม่มีสิทธิ์เข้าถึงร้านค้า (สต็อกดูได้เฉพาะเจ้าของหรือแอดมิน)'))),
       );
     }
     return DefaultTabController(
       length: tabs.length,
-      child: Scaffold(
-        appBar: const NxAppHeader(title: 'ร้านค้า'),
+      child: NxScrollScaffold(
+        header: const NxAppHeader(title: 'ร้านค้า'),
         body: Column(
           children: [
             TabBar(tabs: [for (final t in tabs) Tab(text: t.$1)]),
@@ -93,6 +96,22 @@ class _OrdersTab extends StatefulWidget {
 
 class _OrdersTabState extends State<_OrdersTab> {
   String _queue = 'new_today';
+  NxListQuery _lq = const NxListQuery();
+
+  String _at(Map o) => '${o['created_at'] ?? o['order_date'] ?? o['id'] ?? ''}';
+  num _amount(Map o) => num.tryParse('${o['grand_total'] ?? 0}') ?? 0;
+
+  /// Queue comes from the server; search and sort apply to the loaded page.
+  List<Map<String, dynamic>> get _shown => nxApplyLocalQuery<Map<String, dynamic>>(
+        _items,
+        _lq,
+        text: (o) => '${o['order_number'] ?? ''} ${o['customer_name'] ?? ''} ${o['customer_phone'] ?? ''} ${o['id'] ?? ''}',
+        sorts: {
+          'new': (a, b) => _at(b).compareTo(_at(a)),
+          'old': (a, b) => _at(a).compareTo(_at(b)),
+          'amount': (a, b) => _amount(b).compareTo(_amount(a)),
+        },
+      );
   List<Map<String, dynamic>> _items = [];
   Map<String, dynamic> _counts = {};
   Map<String, dynamic>? _selected;
@@ -133,11 +152,11 @@ class _OrdersTabState extends State<_OrdersTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ยืนยันรับชำระ?'),
-        content: Text('ออเดอร์ ${o['order_number'] ?? o['id']} ${formatBaht(o['grand_total'])}'),
+        title: Text(tr('ยืนยันรับชำระ?')),
+        content: Text(tr('ออเดอร์ ${o['order_number'] ?? o['id']} ${formatBaht(o['grand_total'])}')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('รับชำระแล้ว')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('รับชำระแล้ว'))),
         ],
       ),
     );
@@ -145,10 +164,10 @@ class _OrdersTabState extends State<_OrdersTab> {
     try {
       await context.read<AppConfig>().apiClient.markCommercialOrderPaid(o['id'].toString());
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกการชำระแล้ว')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกการชำระแล้ว'))));
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -168,7 +187,7 @@ class _OrdersTabState extends State<_OrdersTab> {
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
-                    label: Text(_counts[e.key] != null ? '${e.value} (${_counts[e.key]})' : e.value),
+                    label: Text(tr(_counts[e.key] != null ? '${e.value} (${_counts[e.key]})' : e.value)),
                     selected: _queue == e.key,
                     showCheckmark: false,
                     onSelected: (_) {
@@ -182,6 +201,18 @@ class _OrdersTabState extends State<_OrdersTab> {
                 ),
             ],
           ),
+        ),
+        NxListToolbar(
+          query: _lq,
+          liveSearch: true,
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          searchHint: 'ค้นหาเลขออเดอร์ / ลูกค้า',
+          sorts: const [
+            NxSortOption('new', 'ใหม่ล่าสุด'),
+            NxSortOption('old', 'เก่าสุด'),
+            NxSortOption('amount', 'ยอดสูงสุด'),
+          ],
+          onChanged: (q) => setState(() => _lq = q),
         ),
         Expanded(
           child: NxSplitView(
@@ -200,10 +231,10 @@ class _OrdersTabState extends State<_OrdersTab> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     children: [
-                      if (_error != null) Text(formatApiError(_error!), style: TextStyle(color: cs.error)),
-                      if (_error == null && _items.isEmpty)
-                        const Padding(padding: EdgeInsets.all(48), child: Center(child: Text('ไม่มีออเดอร์ในคิวนี้'))),
-                      for (final o in _items)
+                      if (_error != null) Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error)),
+                      if (_error == null && _shown.isEmpty)
+                        Padding(padding: EdgeInsets.all(48), child: Center(child: Text(tr('ไม่มีออเดอร์ในคิวนี้')))),
+                      for (final o in _shown)
                         Card(
                           margin: const EdgeInsets.only(bottom: 10),
                           child: ListTile(
@@ -211,24 +242,24 @@ class _OrdersTabState extends State<_OrdersTab> {
                               backgroundColor: cs.primaryContainer,
                               child: Icon(NxI.receipt, color: cs.onPrimaryContainer),
                             ),
-                            title: Text('${o['order_number'] ?? '#${o['id']}'}', style: theme.textTheme.titleSmall),
+                            title: Text(tr('${o['order_number'] ?? '#${o['id']}'}'), style: theme.textTheme.titleSmall),
                             subtitle: Text(
-                              [
+                              tr([
                                 o['customer_name']?.toString() ?? '',
                                 paymentStatusLabel(o['payment_status']?.toString()),
                                 (o['order_date']?.toString() ?? '').split('T').first,
-                              ].where((e) => e.isNotEmpty).join(' · '),
+                              ].where((e) => e.isNotEmpty).join(' · ')),
                             ),
                             trailing: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text(formatBaht(o['grand_total']), style: theme.textTheme.titleSmall),
+                                Text(tr(formatBaht(o['grand_total'])), style: theme.textTheme.titleSmall),
                                 if ((o['payment_status']?.toString() ?? 'unpaid') != 'paid' &&
                                     context.read<AppConfig>().session.isBusinessAdmin)
                                   InkWell(
                                     onTap: () => _markPaid(o),
-                                    child: Text('รับชำระ', style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
+                                    child: Text(tr('รับชำระ'), style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
                                   ),
                               ],
                             ),
@@ -310,15 +341,15 @@ class _StockTabState extends State<_StockTab> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
-          title: Text('${product['name'] ?? ''}${variant != null ? ' · ${variant['sku_code'] ?? ''}' : ''}'),
+          title: Text(tr('${product['name'] ?? ''}${variant != null ? ' · ${variant['sku_code'] ?? ''}' : ''}')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'in', label: Text('รับเข้า')),
-                  ButtonSegment(value: 'out', label: Text('จ่ายออก')),
-                  ButtonSegment(value: 'adjust', label: Text('ปรับยอด')),
+                segments: [
+                  ButtonSegment(value: 'in', label: Text(tr('รับเข้า'))),
+                  ButtonSegment(value: 'out', label: Text(tr('จ่ายออก'))),
+                  ButtonSegment(value: 'adjust', label: Text(tr('ปรับยอด'))),
                 ],
                 selected: {kind},
                 onSelectionChanged: (v) => setD(() => kind = v.first),
@@ -328,14 +359,14 @@ class _StockTabState extends State<_StockTab> {
                 controller: qty,
                 autofocus: true,
                 keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
-                decoration: InputDecoration(labelText: kind == 'adjust' ? 'เพิ่ม/ลด (เช่น -2)' : 'จำนวน'),
+                decoration: InputDecoration(labelText: trn(kind == 'adjust' ? 'เพิ่ม/ลด (เช่น -2)' : 'จำนวน')),
               ),
-              TextField(controller: notes, decoration: const InputDecoration(labelText: 'หมายเหตุ')),
+              TextField(controller: notes, decoration: InputDecoration(labelText: tr('หมายเหตุ'))),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('บันทึก')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('บันทึก'))),
           ],
         ),
       ),
@@ -346,7 +377,7 @@ class _StockTabState extends State<_StockTab> {
     notes.dispose();
     if (ok != true || !mounted) return;
     if (amount == null || amount == 0 || (kind != 'adjust' && amount < 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('จำนวนไม่ถูกต้อง')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('จำนวนไม่ถูกต้อง'))));
       return;
     }
     try {
@@ -358,10 +389,10 @@ class _StockTabState extends State<_StockTab> {
             notes: note,
           );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกสต็อกแล้ว')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกสต็อกแล้ว'))));
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -380,7 +411,7 @@ class _StockTabState extends State<_StockTab> {
             textInputAction: TextInputAction.search,
             onSubmitted: (_) => _load(),
             decoration: InputDecoration(
-              hintText: 'ค้นหาชื่อหรือรหัสสินค้า',
+              hintText: tr('ค้นหาชื่อหรือรหัสสินค้า'),
               prefixIcon: const Icon(NxI.magnifyingGlass),
               filled: true,
               isDense: true,
@@ -389,9 +420,9 @@ class _StockTabState extends State<_StockTab> {
           ),
           const SizedBox(height: 12),
           if (_loading) const NxSkeletonList(rows: 6),
-          if (_error != null) Text(formatApiError(_error!), style: TextStyle(color: cs.error)),
+          if (_error != null) Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error)),
           if (!_loading && _error == null && _items.isEmpty)
-            const Padding(padding: EdgeInsets.all(48), child: Center(child: Text('ไม่พบสินค้า'))),
+            Padding(padding: EdgeInsets.all(48), child: Center(child: Text(tr('ไม่พบสินค้า')))),
           for (final p in _items)
             Card(
               margin: const EdgeInsets.only(bottom: 10),
@@ -399,12 +430,12 @@ class _StockTabState extends State<_StockTab> {
                 children: [
                   ListTile(
                     leading: CircleAvatar(backgroundColor: cs.surfaceContainerHighest, child: Icon(NxI.package, color: cs.onSurfaceVariant)),
-                    title: Text(p['name']?.toString() ?? ''),
-                    subtitle: Text(p['code']?.toString() ?? ''),
+                    title: Text(tr(p['name']?.toString() ?? '')),
+                    subtitle: Text(tr(p['code']?.toString() ?? '')),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('${p['stock_qty'] ?? '—'}', style: theme.textTheme.titleMedium?.copyWith(
+                        Text(tr('${p['stock_qty'] ?? '—'}'), style: theme.textTheme.titleMedium?.copyWith(
                           color: (num.tryParse('${p['stock_qty']}') ?? 1) <= 0 ? cs.error : null,
                         )),
                         IconButton(icon: const Icon(NxI.pencilSimple), onPressed: () => _move(p)),
@@ -415,11 +446,11 @@ class _StockTabState extends State<_StockTab> {
                     ListTile(
                       dense: true,
                       contentPadding: const EdgeInsets.only(left: 72, right: 16),
-                      title: Text(v['sku_code']?.toString() ?? 'ตัวเลือก'),
+                      title: Text(tr(v['sku_code']?.toString() ?? 'ตัวเลือก')),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('${v['stock_qty'] ?? '—'}'),
+                          Text(tr('${v['stock_qty'] ?? '—'}')),
                           IconButton(
                             icon: const Icon(NxI.pencilSimple, size: 18),
                             onPressed: () => _move(p, variant: Map<String, dynamic>.from(v)),

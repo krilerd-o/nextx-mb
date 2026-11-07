@@ -5,6 +5,7 @@ import '../core/app_config.dart';
 import '../core/hub_selection.dart';
 import '../services/api_client.dart';
 import 'nx_icons.dart';
+import '../core/i18n.dart';
 
 /// "ธุรกิจ · Package" chip; tap to switch package (or business) in place.
 class NxWorkspaceSwitcher extends StatelessWidget {
@@ -14,7 +15,7 @@ class NxWorkspaceSwitcher extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final s = context.watch<AppConfig>().session;
+    final s = context.select((AppConfig c) => c.session);
     final pkg = (s.packageCode ?? '').isEmpty ? null : s.packageCode!.toUpperCase().replaceAll('_', ' ');
     return Align(
       alignment: Alignment.centerLeft,
@@ -39,7 +40,7 @@ class NxWorkspaceSwitcher extends StatelessWidget {
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
-                  [s.businessName ?? 'ธุรกิจ', ?pkg].join(' · '),
+                  tr([s.businessName ?? 'ธุรกิจ', ?pkg].join(' · ')),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
@@ -90,17 +91,17 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(config.session.businessName ?? 'ธุรกิจ', style: theme.textTheme.titleMedium),
+            Text(tr(config.session.businessName ?? 'ธุรกิจ'), style: theme.textTheme.titleMedium),
             const SizedBox(height: 4),
-            Text('สลับ Package — เมนูจะเปลี่ยนตาม Package และสิทธิ์', style: theme.textTheme.bodySmall),
+            Text(tr('สลับ Package — เมนูจะเปลี่ยนตาม Package และสิทธิ์'), style: theme.textTheme.bodySmall),
             const SizedBox(height: 8),
-            if (_error != null) Text(formatApiError(_error!), style: TextStyle(color: theme.colorScheme.error)),
+            if (_error != null) Text(tr(formatApiError(_error!)), style: TextStyle(color: theme.colorScheme.error)),
             if (_packages == null && _error == null) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
             for (final p in _packages ?? const <Map<String, dynamic>>[])
               ListTile(
-                leading: Icon(p['code']?.toString() == current ? Icons.radio_button_checked : Icons.radio_button_unchecked),
-                title: Text(p['name']?.toString() ?? p['code']?.toString() ?? 'Package'),
-                subtitle: (p['description']?.toString() ?? '').isEmpty ? null : Text(p['description'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
+                leading: Icon(p['code']?.toString() == current ? NxI.radioOn : NxI.radioOff),
+                title: Text(tr(p['name']?.toString() ?? p['code']?.toString() ?? 'Package')),
+                subtitle: (p['description']?.toString() ?? '').isEmpty ? null : Text(tr(p['description'].toString()), maxLines: 1, overflow: TextOverflow.ellipsis),
                 enabled: !_busy,
                 onTap: p['code']?.toString() == current
                     ? () => Navigator.pop(context)
@@ -114,7 +115,7 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
             const Divider(),
             ListTile(
               leading: const Icon(NxI.buildings),
-              title: const Text('เปลี่ยนธุรกิจ'),
+              title: Text(tr('เปลี่ยนธุรกิจ')),
               enabled: !_busy,
               onTap: () {
                 Navigator.pop(context);

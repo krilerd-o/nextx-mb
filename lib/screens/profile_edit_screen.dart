@@ -5,6 +5,8 @@ import '../core/app_config.dart';
 import '../services/api_client.dart';
 import '../widgets/nx_app_header.dart';
 import '../widgets/nx_skeleton.dart';
+import '../core/i18n.dart';
+import '../widgets/nx_shake.dart';
 
 /// Editable fields of `PUT /api/me/profile` (NEXTX PROFILE_UPDATE_SETS).
 const profileEditableFields = <String, String>{
@@ -83,7 +85,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Future<void> _save() async {
-    if (_form.currentState?.validate() != true) return;
+    if (_form.currentState?.validate() != true) {
+      nxRevealFormError(context);
+      return;
+    }
     final changes = profileChanges(_original, {for (final e in _c.entries) e.key: e.value.text});
     if (changes.isEmpty) {
       Navigator.of(context).pop(false);
@@ -95,12 +100,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       await config.apiClient.updateMyProfile(changes);
       await config.refreshSession();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกโปรไฟล์แล้ว')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกโปรไฟล์แล้ว'))));
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -114,14 +119,14 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             onPressed: _saving || _loading ? null : _save,
             child: _saving
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('บันทึก'),
+                : Text(tr('บันทึก')),
           ),
         ],
       ),
       body: _loading
           ? const NxSkeletonList()
           : _error != null
-              ? Center(child: Text(formatApiError(_error!)))
+              ? Center(child: Text(tr(formatApiError(_error!))))
               : Form(
                   key: _form,
                   child: ListView(
@@ -130,17 +135,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       for (final e in profileEditableFields.entries)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12),
-                          child: TextFormField(
+                          child: NxShake(
+                            child: TextFormField(
                             controller: _c[e.key],
-                            decoration: InputDecoration(labelText: e.value, border: const OutlineInputBorder()),
+                            decoration: InputDecoration(
+                              label: e.key == 'first_name' ? nxRequiredLabel(context, tr(e.value)) : Text(tr(e.value)),
+                              border: const OutlineInputBorder(),
+                            ),
                             keyboardType: e.key.startsWith('phone') ? TextInputType.phone : TextInputType.text,
                             minLines: e.key == 'description' || e.key == 'signature' ? 3 : 1,
                             maxLines: e.key == 'description' || e.key == 'signature' ? 6 : 1,
                             validator: e.key == 'first_name'
                                 ? (v) => (v == null || v.trim().isEmpty) && (_c['first_name_th']!.text.trim().isEmpty)
-                                    ? 'กรุณาใส่ชื่ออย่างน้อยหนึ่งภาษา'
+                                    ? tr('กรุณาใส่ชื่ออย่างน้อยหนึ่งภาษา')
                                     : null
                                 : null,
+                          ),
                           ),
                         ),
                     ],

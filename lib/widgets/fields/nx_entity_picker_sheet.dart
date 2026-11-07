@@ -7,6 +7,7 @@ import 'nx_field_chrome.dart';
 import 'nx_lift_sheet.dart';
 import 'nx_pick_option.dart';
 import '../nx_icons.dart';
+import '../../core/i18n.dart';
 
 Future<NxPickOption?> showNxEntityPickerSheet({
   required BuildContext context,
@@ -94,11 +95,11 @@ class _NxEntityPickerBodyState extends State<_NxEntityPickerBody> {
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
           child: Row(
             children: [
-              Expanded(child: Text(widget.title, style: theme.textTheme.titleMedium)),
+              Expanded(child: Text(tr(widget.title), style: theme.textTheme.titleMedium)),
               if (widget.current != null)
                 TextButton(
                   onPressed: () => Navigator.pop(context, const NxPickOption(value: '', label: '')),
-                  child: const Text('ล้าง'),
+                  child: Text(tr('ล้าง')),
                 ),
             ],
           ),
@@ -126,8 +127,8 @@ class _NxEntityPickerBodyState extends State<_NxEntityPickerBody> {
               final selected = widget.current?.value == opt.value;
               return ListTile(
                 leading: NxAvatar(label: opt.label, size: 40),
-                title: Text(opt.label),
-                subtitle: opt.subtitle == null ? null : Text(opt.subtitle!),
+                title: Text(tr(opt.label)),
+                subtitle: opt.subtitle == null ? null : Text(tr(opt.subtitle!)),
                 trailing: selected ? const Icon(NxI.check) : null,
                 onTap: () => Navigator.pop(context, opt),
               );

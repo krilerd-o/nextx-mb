@@ -10,6 +10,7 @@ import 'field_format.dart';
 import 'field_ui_type.dart';
 import 'nx_field_chrome.dart';
 import 'nx_pick_option.dart';
+import '../../core/i18n.dart';
 
 class NxFieldValueView extends StatelessWidget {
   const NxFieldValueView({
@@ -57,7 +58,7 @@ class NxFieldValueView extends StatelessWidget {
           SizedBox(
             width: 120,
             child: Text(
-              label,
+              tr(label),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -72,7 +73,7 @@ class NxFieldValueView extends StatelessWidget {
   Widget _value(BuildContext context) {
     final theme = Theme.of(context);
     if (value == null || value.toString().trim().isEmpty) {
-      return Text('—', style: theme.textTheme.bodyMedium);
+      return Text(tr('—'), style: theme.textTheme.bodyMedium);
     }
     switch (uiType) {
       case FieldUiType.yesNo:
@@ -161,7 +162,7 @@ class NxFieldValueView extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text(hex, style: theme.textTheme.bodyMedium),
+            Text(tr(hex), style: theme.textTheme.bodyMedium),
           ],
         );
       case FieldUiType.percent:
@@ -170,7 +171,7 @@ class NxFieldValueView extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${p.round()}%', style: theme.textTheme.bodyMedium),
+            Text(tr('${p.round()}%'), style: theme.textTheme.bodyMedium),
             const SizedBox(height: 4),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
@@ -184,13 +185,13 @@ class NxFieldValueView extends StatelessWidget {
         if (looksLikeHtmlString(raw) || uiType == FieldUiType.richText) {
           return NxHtmlView(html: raw, style: theme.textTheme.bodyMedium);
         }
-        return SelectableText(_labelFor(raw), style: theme.textTheme.bodyMedium);
+        return SelectableText(tr(_labelFor(raw)), style: theme.textTheme.bodyMedium);
       default:
         final raw = _displayRaw();
         if (looksLikeHtmlString(raw)) {
           return NxHtmlView(html: raw, style: theme.textTheme.bodyMedium);
         }
-        return SelectableText(_labelFor(raw), style: theme.textTheme.bodyMedium);
+        return SelectableText(tr(_labelFor(raw)), style: theme.textTheme.bodyMedium);
     }
   }
 
@@ -202,7 +203,7 @@ class NxFieldValueView extends StatelessWidget {
         borderRadius: BorderRadius.circular(NxFieldStyle.radius),
       ),
       child: Text(
-        text,
+        tr(text),
         style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
       ),
     );
@@ -262,7 +263,7 @@ class _LookupChipState extends State<_LookupChip> {
         borderRadius: BorderRadius.circular(NxFieldStyle.radius),
       ),
       child: Text(
-        _label ?? widget.fallback,
+        tr(_label ?? widget.fallback),
         style: Theme.of(context).textTheme.labelLarge?.copyWith(color: widget.color),
       ),
     );

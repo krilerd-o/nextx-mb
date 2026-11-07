@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,7 @@ import '../../widgets/nx_search_field.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../crm/entity_detail_screen.dart';
 import 'search_modules.dart';
+import '../../core/i18n.dart';
 
 class GlobalSearchScreen extends StatefulWidget {
   const GlobalSearchScreen({super.key});
@@ -83,8 +85,8 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     final theme = Theme.of(context);
     final config = context.watch<AppConfig>();
 
-    return Scaffold(
-      appBar: const NxAppHeader.hub(),
+    return NxScrollScaffold(
+      header: const NxAppHeader.hub(),
       body: ListView(
         padding: NxBreakpoint.of(context).scrollPadding(context, inShell: true),
         children: [
@@ -114,13 +116,13 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('ล่าสุด', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              Text(tr('ล่าสุด'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
               TextButton(
                 onPressed: () async {
                   await config.clearSearchHistory();
                   setState(() {});
                 },
-                child: const Text('ล้าง'),
+                child: Text(tr('ล้าง')),
               ),
             ],
           ),

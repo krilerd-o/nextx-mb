@@ -22,6 +22,9 @@ void main() {
     expect(requiredMenusFor('/crm/lead/42'), [MenuAccess.lead]);
     expect(requiredMenusFor('/fsm/service_contract/7'), [MenuAccess.serviceContract]);
     expect(requiredMenusFor('/chat/9'), [MenuAccess.chat]);
+    expect(requiredMenusFor('/modules/quotation/3'), [MenuAccess.quotation]);
+    expect(accessRedirectFor(salesOnly, '/modules/quotation/3'), AppRoutes.mainShell);
+    expect(accessRedirectFor(salesOnly, '/modules/lead'), isNull);
   });
 
   test('allowed deep links pass, others go to the shell', () {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/html_display.dart';
 import '../../widgets/dense_card_tile.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 /// คีย์คอลัมน์จากสถานะบอร์ดจริง (keys ของ [grouped])
 List<String> kanbanColumnKeys(Map<String, List<Map<String, dynamic>>> grouped) {
@@ -84,7 +85,7 @@ class WorkspaceKanbanBoard extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  status,
+                                  tr(status),
                                   style: theme.textTheme.titleSmall?.copyWith(
                                     fontWeight: FontWeight.w700,
                                     color: theme.colorScheme.primary,
@@ -100,7 +101,7 @@ class WorkspaceKanbanBoard extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
-                                  '${rows.length}',
+                                  tr('${rows.length}'),
                                   style: theme.textTheme.labelMedium?.copyWith(
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -115,7 +116,7 @@ class WorkspaceKanbanBoard extends StatelessWidget {
                                   child: Padding(
                                     padding: const EdgeInsets.all(12),
                                     child: Text(
-                                      'ลากการ์ดมาวาง',
+                                      tr('ลากการ์ดมาวาง'),
                                       textAlign: TextAlign.center,
                                       style: theme.textTheme.bodySmall?.copyWith(
                                         color: theme.colorScheme.onSurfaceVariant,
@@ -134,7 +135,7 @@ class WorkspaceKanbanBoard extends StatelessWidget {
                                       subtitle: _shortSubtitle(row['description']?.toString()),
                                       onTap: () => onTaskTap(row),
                                       menu: PopupMenuButton<String>(
-                                        tooltip: 'เปลี่ยนสถานะ',
+                                        tooltip: tr('เปลี่ยนสถานะ'),
                                         icon: const Icon(NxI.dotsThreeVertical, size: 20),
                                         onSelected: (v) => onChangeStatus(context, row, v),
                                         itemBuilder: (ctx) => [
@@ -148,7 +149,7 @@ class WorkspaceKanbanBoard extends StatelessWidget {
                                                   else
                                                     const SizedBox(width: 18),
                                                   const SizedBox(width: 8),
-                                                  Text(opt),
+                                                  Text(tr(opt)),
                                                 ],
                                               ),
                                             ),
@@ -164,7 +165,7 @@ class WorkspaceKanbanBoard extends StatelessWidget {
                                           constraints: const BoxConstraints(maxWidth: 276),
                                           child: ListTile(
                                             title: Text(
-                                              _taskTitle(row),
+                                              tr(_taskTitle(row)),
                                               maxLines: 2,
                                               overflow: TextOverflow.ellipsis,
                                             ),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +13,7 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_streaming_text.dart';
 import '../../core/error_reporting.dart';
+import '../../core/i18n.dart';
 
 /// One turn in the AI conversation (OpenAI-style role/content).
 class AiTurn {
@@ -198,7 +200,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             child: GestureDetector(
               onLongPress: () async {
                 await Clipboard.setData(ClipboardData(text: t.content));
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('คัดลอกแล้ว')));
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('คัดลอกแล้ว'))));
               },
               child: Container(
                 constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.8),
@@ -213,9 +215,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   ),
                 ),
                 child: mine
-                    ? Text(t.content, style: theme.textTheme.bodyMedium?.copyWith(color: fg))
+                    ? Text(tr(t.content), style: theme.textTheme.bodyMedium?.copyWith(color: fg))
                     : stream && !t.content.contains('<')
-                        ? NxStreamingText(t.content, style: theme.textTheme.bodyMedium?.copyWith(color: fg, height: 1.5))
+                        ? NxStreamingText(tr(t.content), style: theme.textTheme.bodyMedium?.copyWith(color: fg, height: 1.5))
                         : NxHtmlView(html: t.content, style: theme.textTheme.bodyMedium?.copyWith(color: fg)),
               ),
             ),
@@ -229,8 +231,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'AI Assistant',
         subtitle: 'ผู้ช่วย MOAI NEXT',
         menu: [
@@ -247,9 +249,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       const SizedBox(height: 32),
                       CircleAvatar(radius: 32, backgroundColor: cs.primaryContainer, child: Icon(NxI.robot, size: 32, color: cs.onPrimaryContainer)),
                       const SizedBox(height: 16),
-                      Text('มีอะไรให้ช่วยไหม?', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
+                      Text(tr('มีอะไรให้ช่วยไหม?'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
                       const SizedBox(height: 4),
-                      Text('ถามเรื่องงาน ลูกค้า หรือให้ช่วยร่างข้อความได้เลย',
+                      Text(tr('ถามเรื่องงาน ลูกค้า หรือให้ช่วยร่างข้อความได้เลย'),
                           textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                       const SizedBox(height: 24),
                       Wrap(
@@ -257,7 +259,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          for (final s in _suggestions) ActionChip(label: Text(s), onPressed: () => _send(s)),
+                          for (final s in _suggestions) ActionChip(label: Text(tr(s)), onPressed: () => _send(s)),
                         ],
                       ),
                     ],
@@ -273,7 +275,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           child: Row(children: [
                             const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
                             const SizedBox(width: 8),
-                            Text('กำลังคิด…', style: theme.textTheme.bodySmall),
+                            Text(tr('กำลังคิด…'), style: theme.textTheme.bodySmall),
                           ]),
                         ),
                     ],
@@ -293,7 +295,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       maxLines: 5,
                       enabled: !_busy,
                       decoration: InputDecoration(
-                        hintText: 'พิมพ์คำถาม…',
+                        hintText: tr('พิมพ์คำถาม…'),
                         filled: true,
                         fillColor: cs.surfaceContainerHighest,
                         isDense: true,

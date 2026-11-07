@@ -7,6 +7,7 @@ import '../../core/navigation/app_routes.dart';
 import '../../core/shell_tabs.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_step_header.dart';
+import '../../core/i18n.dart';
 
 /// "คุณทำงานด้านไหน" — pick one or more roles; the bottom bar is suggested
 /// from them (and can be changed on the next step or later in Settings).
@@ -59,10 +60,10 @@ class _RoleSetupScreenState extends State<RoleSetupScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
                 children: [
-                  Text('คุณทำงานด้านไหน?', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(tr('คุณทำงานด้านไหน?'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Text(
-                    'เลือกได้มากกว่า 1 ข้อ เราจะจัดเมนูด้านล่างให้เหมาะกับงานของคุณ',
+                    tr('เลือกได้มากกว่า 1 ข้อ เราจะจัดเมนูด้านล่างให้เหมาะกับงานของคุณ'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.5),
                   ),

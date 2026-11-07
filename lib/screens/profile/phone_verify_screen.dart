@@ -6,6 +6,7 @@ import '../../core/auth_errors.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 /// Bind / verify the account's mobile number with an SMS code
 /// (`/api/me/phone/otp/request|verify`) — then "OTP SMS" sign-in works.
@@ -53,7 +54,7 @@ class _PhoneVerifyScreenState extends State<PhoneVerifyScreen> {
       } else {
         await api.verifyPhoneBindOtp(phone, _code.text.trim());
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ยืนยันเบอร์มือถือแล้ว')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ยืนยันเบอร์มือถือแล้ว'))));
         Navigator.of(context).pop(true);
         return;
       }
@@ -68,7 +69,7 @@ class _PhoneVerifyScreenState extends State<PhoneVerifyScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     InputDecoration dec(String label, IconData icon) => InputDecoration(
-          labelText: label,
+          labelText: trn(label),
           prefixIcon: Icon(icon),
           filled: true,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
@@ -78,7 +79,7 @@ class _PhoneVerifyScreenState extends State<PhoneVerifyScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text('ยืนยันเบอร์เพื่อเข้าสู่ระบบด้วย OTP SMS และรับการแจ้งเตือนทาง SMS',
+          Text(tr('ยืนยันเบอร์เพื่อเข้าสู่ระบบด้วย OTP SMS และรับการแจ้งเตือนทาง SMS'),
               style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 20),
           TextField(
@@ -101,13 +102,13 @@ class _PhoneVerifyScreenState extends State<PhoneVerifyScreen> {
               alignment: Alignment.centerLeft,
               child: TextButton(
                 onPressed: _busy ? null : () => setState(() => _sent = false),
-                child: const Text('เปลี่ยนเบอร์ / ขอรหัสใหม่'),
+                child: Text(tr('เปลี่ยนเบอร์ / ขอรหัสใหม่')),
               ),
             ),
           ],
-          if (_info != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_info!)),
+          if (_info != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(tr(_info!))),
           if (_error != null)
-            Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: theme.colorScheme.error))),
+            Padding(padding: const EdgeInsets.only(top: 8), child: Text(tr(_error!), style: TextStyle(color: theme.colorScheme.error))),
           const SizedBox(height: 24),
           NxHeroCta(label: _sent ? 'ยืนยัน' : 'ส่งรหัส OTP', busy: _busy, onPressed: _busy ? null : _go),
         ],

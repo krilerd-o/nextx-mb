@@ -8,6 +8,7 @@ import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_step_header.dart';
+import '../../core/i18n.dart';
 
 /// Friendly names for the standard NEXTX packages (API names win when present).
 const _packageHints = <String, (String, IconData)>{
@@ -121,17 +122,17 @@ class _PackagePickerScreenState extends State<PackagePickerScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
                 children: [
-                  Text('เลือก Package', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(tr('เลือก Package'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Text(
-                    '${config.session.businessName ?? ''}\nเมนูที่เห็นจะเป็นไปตาม Package และสิทธิ์ของคุณ',
+                    tr('${config.session.businessName ?? ''}\nเมนูที่เห็นจะเป็นไปตาม Package และสิทธิ์ของคุณ'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.5),
                   ),
                   const SizedBox(height: 24),
                   if (_error != null) ...[
-                    Text(formatApiError(_error!), textAlign: TextAlign.center, style: TextStyle(color: cs.error)),
-                    TextButton(onPressed: _load, child: const Text('ลองใหม่')),
+                    Text(tr(formatApiError(_error!)), textAlign: TextAlign.center, style: TextStyle(color: cs.error)),
+                    TextButton(onPressed: _load, child: Text(tr('ลองใหม่'))),
                   ] else if (list == null)
                     const NxSkeletonList(rows: 3)
                   else ...[
@@ -154,7 +155,7 @@ class _PackagePickerScreenState extends State<PackagePickerScreen> {
                       controlAffinity: ListTileControlAffinity.leading,
                       value: _setDefault,
                       onChanged: (v) => setState(() => _setDefault = v ?? false),
-                      title: const Text('ใช้ Package นี้เป็นค่าเริ่มต้น'),
+                      title: Text(tr('ใช้ Package นี้เป็นค่าเริ่มต้น')),
                     ),
                   ],
                 ],

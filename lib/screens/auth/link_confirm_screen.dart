@@ -5,6 +5,7 @@ import '../../core/app_config.dart';
 import '../../core/auth_errors.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 /// Confirms linking a new sign-in method (OTP) or merging a Google account
 /// with an existing NEXTX user — same as the web's /auth/link/confirm.
@@ -68,7 +69,7 @@ class _LinkConfirmScreenState extends State<LinkConfirmScreen> {
     final who = p?['display_name']?.toString() ?? '';
     final hint = p?['email_hint']?.toString() ?? p?['phone']?.toString() ?? '';
     return Scaffold(
-      appBar: AppBar(title: const Text('ยืนยันการเชื่อมบัญชี')),
+      appBar: AppBar(title: Text(tr('ยืนยันการเชื่อมบัญชี'))),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(24),
@@ -81,12 +82,12 @@ class _LinkConfirmScreenState extends State<LinkConfirmScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            Text('พบบัญชีเดิมในระบบ', textAlign: TextAlign.center, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Text(tr('พบบัญชีเดิมในระบบ'), textAlign: TextAlign.center, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             Text(
-              widget.google
+              tr(widget.google
                   ? 'อีเมล Google นี้ตรงกับบัญชีที่มีอยู่แล้ว ต้องการรวมเพื่อเข้าสู่ระบบด้วย Google ต่อจากนี้หรือไม่?'
-                  : 'ต้องการเพิ่มวิธีเข้าสู่ระบบนี้ให้กับบัญชีเดิมหรือไม่?',
+                  : 'ต้องการเพิ่มวิธีเข้าสู่ระบบนี้ให้กับบัญชีเดิมหรือไม่?'),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
             ),
@@ -96,18 +97,18 @@ class _LinkConfirmScreenState extends State<LinkConfirmScreen> {
               Card(
                 child: ListTile(
                   leading: const Icon(NxI.user),
-                  title: Text(who.isEmpty ? 'บัญชีของคุณ' : who),
-                  subtitle: hint.isEmpty ? null : Text(hint),
+                  title: Text(tr(who.isEmpty ? 'บัญชีของคุณ' : who)),
+                  subtitle: hint.isEmpty ? null : Text(tr(hint)),
                 ),
               ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: cs.error)),
+                child: Text(tr(_error!), textAlign: TextAlign.center, style: TextStyle(color: cs.error)),
               ),
             const SizedBox(height: 24),
             NxHeroCta(label: 'ยืนยันและเข้าสู่ระบบ', busy: _busy, onPressed: p == null || _busy ? null : _confirm),
-            TextButton(onPressed: _busy ? null : () => Navigator.of(context).pop(false), child: const Text('ยกเลิก')),
+            TextButton(onPressed: _busy ? null : () => Navigator.of(context).pop(false), child: Text(tr('ยกเลิก'))),
           ],
         ),
       ),

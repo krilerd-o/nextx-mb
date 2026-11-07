@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/i18n.dart';
 
 enum NxEntityFilter { all, mine, recent }
 
@@ -22,7 +23,7 @@ class NxFilterChips extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.only(right: 8),
         child: ChoiceChip(
-          label: Text(label),
+          label: Text(tr(label)),
           selected: selected,
           showCheckmark: false,
           onSelected: (_) => onChanged(f),

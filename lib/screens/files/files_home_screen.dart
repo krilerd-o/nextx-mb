@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -12,6 +13,8 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_create_fab.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 String formatBytes(dynamic raw) {
   final n = num.tryParse(raw?.toString() ?? '');
@@ -24,6 +27,20 @@ String formatBytes(dynamic raw) {
     i++;
   }
   return '${v.toStringAsFixed(v >= 10 || i == 0 ? 0 : 1)} ${units[i]}';
+}
+
+/// Rough file kind for the type filter: image / pdf / doc / sheet / video / other.
+String fileKindOf(String? mime, String? name) {
+  final m = (mime ?? '').toLowerCase();
+  final n = (name ?? '').toLowerCase();
+  if (m.startsWith('image/') || RegExp(r'\.(png|jpe?g|gif|webp|heic)$').hasMatch(n)) return 'image';
+  if (m.contains('pdf') || n.endsWith('.pdf')) return 'pdf';
+  if (m.startsWith('video/') || RegExp(r'\.(mp4|mov|avi|mkv)$').hasMatch(n)) return 'video';
+  if (m.contains('sheet') || m.contains('excel') || RegExp(r'\.(xlsx?|csv)$').hasMatch(n)) return 'sheet';
+  if (m.contains('word') || m.contains('document') || m.startsWith('text/') || RegExp(r'\.(docx?|txt|pptx?)$').hasMatch(n)) {
+    return 'doc';
+  }
+  return 'other';
 }
 
 IconData fileIconFor(String? mime, String? name) {
@@ -51,6 +68,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
   bool _busy = false;
   Object? _error;
   String _query = '';
+  NxListQuery _lq = const NxListQuery();
   final Set<String> _opening = {};
 
   ApiClient get _api => context.read<AppConfig>().apiClient;
@@ -63,7 +81,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
 
   void _snack(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(text))));
   }
 
   Future<void> _load() async {
@@ -122,10 +140,10 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(leading: const Icon(NxI.uploadSimple), title: const Text('อัปโหลดไฟล์'), onTap: () => Navigator.pop(ctx, 'file')),
-            ListTile(leading: const Icon(NxI.images), title: const Text('รูปจากคลัง'), onTap: () => Navigator.pop(ctx, 'gallery')),
-            ListTile(leading: const Icon(NxI.camera), title: const Text('ถ่ายรูป'), onTap: () => Navigator.pop(ctx, 'camera')),
-            ListTile(leading: const Icon(NxI.folder), title: const Text('สร้างโฟลเดอร์'), onTap: () => Navigator.pop(ctx, 'folder')),
+            ListTile(leading: const Icon(NxI.uploadSimple), title: Text(tr('อัปโหลดไฟล์')), onTap: () => Navigator.pop(ctx, 'file')),
+            ListTile(leading: const Icon(NxI.images), title: Text(tr('รูปจากคลัง')), onTap: () => Navigator.pop(ctx, 'gallery')),
+            ListTile(leading: const Icon(NxI.camera), title: Text(tr('ถ่ายรูป')), onTap: () => Navigator.pop(ctx, 'camera')),
+            ListTile(leading: const Icon(NxI.folder), title: Text(tr('สร้างโฟลเดอร์')), onTap: () => Navigator.pop(ctx, 'folder')),
           ],
         ),
       ),
@@ -163,11 +181,11 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(controller: ctrl, autofocus: true, decoration: const InputDecoration(labelText: 'ชื่อ')),
+        title: Text(tr(title)),
+        content: TextField(controller: ctrl, autofocus: true, decoration: InputDecoration(labelText: tr('ชื่อ'))),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('บันทึก')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('บันทึก'))),
         ],
       ),
     );
@@ -203,15 +221,15 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(title: Text(name, style: Theme.of(ctx).textTheme.titleMedium)),
+            ListTile(title: Text(tr(name), style: Theme.of(ctx).textTheme.titleMedium)),
             if (!folder) ...[
-              ListTile(leading: const Icon(NxI.arrowSquareOut), title: const Text('เปิด'), onTap: () => Navigator.pop(ctx, 'open')),
-              ListTile(leading: const Icon(NxI.shareNetwork), title: const Text('แชร์'), onTap: () => Navigator.pop(ctx, 'share')),
+              ListTile(leading: const Icon(NxI.arrowSquareOut), title: Text(tr('เปิด')), onTap: () => Navigator.pop(ctx, 'open')),
+              ListTile(leading: const Icon(NxI.shareNetwork), title: Text(tr('แชร์')), onTap: () => Navigator.pop(ctx, 'share')),
             ],
-            ListTile(leading: const Icon(NxI.pencilSimple), title: const Text('เปลี่ยนชื่อ'), onTap: () => Navigator.pop(ctx, 'rename')),
+            ListTile(leading: const Icon(NxI.pencilSimple), title: Text(tr('เปลี่ยนชื่อ')), onTap: () => Navigator.pop(ctx, 'rename')),
             ListTile(
               leading: Icon(NxI.trash, color: Theme.of(ctx).colorScheme.error),
-              title: Text('ลบ', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+              title: Text(tr('ลบ'), style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
               onTap: () => Navigator.pop(ctx, 'delete'),
             ),
           ],
@@ -235,11 +253,11 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
           final ok = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: Text('ลบ "$name"?'),
-              content: Text(folder ? 'ไฟล์และโฟลเดอร์ย่อยข้างในจะถูกลบด้วย' : 'ลบแล้วกู้คืนไม่ได้'),
+              title: Text(tr('ลบ "$name"?')),
+              content: Text(tr(folder ? 'ไฟล์และโฟลเดอร์ย่อยข้างในจะถูกลบด้วย' : 'ลบแล้วกู้คืนไม่ได้')),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('ลบ')),
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ลบ'))),
               ],
             ),
           );
@@ -258,12 +276,31 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final needle = _query.trim().toLowerCase();
-    final folders = needle.isEmpty
-        ? _folders
-        : _folders.where((f) => (f['name']?.toString() ?? '').toLowerCase().contains(needle)).toList();
-    final files = needle.isEmpty
-        ? _files
-        : _files.where((f) => (f['file_name']?.toString() ?? '').toLowerCase().contains(needle)).toList();
+    final lq = _lq.copyWith(q: _query);
+    int byName(Map a, Map b, String k) => '${a[k] ?? ''}'.toLowerCase().compareTo('${b[k] ?? ''}'.toLowerCase());
+    final folders = nxApplyLocalQuery<Map<String, dynamic>>(
+      _lq.values('kind').isEmpty || _lq.has('kind', 'folder') ? _folders : const [],
+      lq.copyWith(filters: const {}),
+      text: (f) => '${f['name'] ?? ''}',
+      sorts: {
+        'name': (a, b) => byName(a, b, 'name'),
+        'new': (a, b) => '${b['created_at'] ?? ''}'.compareTo('${a['created_at'] ?? ''}'),
+        'size': (a, b) => byName(a, b, 'name'),
+      },
+    );
+    final files = nxApplyLocalQuery<Map<String, dynamic>>(
+      _files,
+      lq,
+      text: (f) => '${f['file_name'] ?? ''}',
+      filters: {
+        'kind': (f, v) => v.contains(fileKindOf(f['mime_type']?.toString(), f['file_name']?.toString())),
+      },
+      sorts: {
+        'name': (a, b) => byName(a, b, 'file_name'),
+        'new': (a, b) => '${b['created_at'] ?? ''}'.compareTo('${a['created_at'] ?? ''}'),
+        'size': (a, b) => (num.tryParse('${b['file_size'] ?? 0}') ?? 0).compareTo(num.tryParse('${a['file_size'] ?? 0}') ?? 0),
+      },
+    );
 
     Widget body;
     if (_loading) {
@@ -271,33 +308,51 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
     } else if (_error != null) {
       body = ListView(children: [
         const SizedBox(height: 80),
-        Center(child: Text(formatApiError(_error!))),
-        Center(child: TextButton(onPressed: _load, child: const Text('ลองใหม่'))),
+        Center(child: Text(tr(formatApiError(_error!)))),
+        Center(child: TextButton(onPressed: _load, child: Text(tr('ลองใหม่')))),
       ]);
     } else {
       body = ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: [
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'ค้นหาในโฟลเดอร์นี้',
-              prefixIcon: const Icon(NxI.magnifyingGlass),
-              filled: true,
-              isDense: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-            ),
-            onChanged: (v) => setState(() => _query = v),
+          NxListToolbar(
+            key: ValueKey('files-${_folderId ?? 'root'}'),
+            query: lq,
+            liveSearch: true,
+            padding: EdgeInsets.zero,
+            searchHint: 'ค้นหาในโฟลเดอร์นี้',
+            quickGroup: 'kind',
+            groups: const [
+              NxFilterGroup(key: 'kind', label: 'ชนิดไฟล์', options: [
+                NxFilterOption('folder', 'โฟลเดอร์'),
+                NxFilterOption('image', 'รูปภาพ'),
+                NxFilterOption('pdf', 'PDF'),
+                NxFilterOption('doc', 'เอกสาร'),
+                NxFilterOption('sheet', 'ตาราง'),
+                NxFilterOption('video', 'วิดีโอ'),
+                NxFilterOption('other', 'อื่นๆ'),
+              ]),
+            ],
+            sorts: const [
+              NxSortOption('name', 'ชื่อ ก–ฮ'),
+              NxSortOption('new', 'ใหม่ล่าสุด'),
+              NxSortOption('size', 'ขนาดใหญ่สุด'),
+            ],
+            onChanged: (q) => setState(() {
+              _query = q.q;
+              _lq = q.copyWith(q: '');
+            }),
           ),
           const SizedBox(height: 8),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                ActionChip(avatar: const Icon(NxI.hardDrives, size: 18), label: const Text('ไฟล์ทั้งหมด'), onPressed: () => _goTo(null)),
+                ActionChip(avatar: const Icon(NxI.hardDrives, size: 18), label: Text(tr('ไฟล์ทั้งหมด')), onPressed: () => _goTo(null)),
                 for (final b in _breadcrumb) ...[
                   Icon(NxI.caretRight, size: 16, color: cs.onSurfaceVariant),
-                  ActionChip(label: Text(b['name']?.toString() ?? ''), onPressed: () => _goTo(b['id']?.toString())),
+                  ActionChip(label: Text(tr(b['name']?.toString() ?? '')), onPressed: () => _goTo(b['id']?.toString())),
                 ],
               ],
             ),
@@ -310,8 +365,8 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
                 children: [
                   Icon(NxI.folder, size: 56, color: cs.onSurfaceVariant),
                   const SizedBox(height: 8),
-                  Text(needle.isEmpty ? 'โฟลเดอร์นี้ว่าง' : 'ไม่พบไฟล์', style: theme.textTheme.titleMedium),
-                  if (needle.isEmpty) const Text('แตะ + เพื่ออัปโหลดหรือสร้างโฟลเดอร์'),
+                  Text(tr(needle.isEmpty ? 'โฟลเดอร์นี้ว่าง' : 'ไม่พบไฟล์'), style: theme.textTheme.titleMedium),
+                  if (needle.isEmpty) Text(tr('แตะ + เพื่ออัปโหลดหรือสร้างโฟลเดอร์')),
                 ],
               ),
             ),
@@ -320,7 +375,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 leading: CircleAvatar(backgroundColor: cs.primaryContainer, child: Icon(NxI.folder, color: cs.onPrimaryContainer)),
-                title: Text(f['name']?.toString() ?? ''),
+                title: Text(tr(f['name']?.toString() ?? '')),
                 trailing: IconButton(icon: const Icon(NxI.dotsThreeVertical), onPressed: () => _itemMenu(f, folder: true)),
                 onTap: () => _goTo(f['id']?.toString()),
                 onLongPress: () => _itemMenu(f, folder: true),
@@ -336,11 +391,11 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : Icon(fileIconFor(f['mime_type']?.toString(), f['file_name']?.toString()), color: cs.onSurfaceVariant),
                 ),
-                title: Text(f['file_name']?.toString() ?? 'ไฟล์', maxLines: 1, overflow: TextOverflow.ellipsis),
+                title: Text(tr(f['file_name']?.toString() ?? 'ไฟล์'), maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: Text(
-                  [formatBytes(f['file_size']), (f['created_at']?.toString() ?? '').split('T').first]
+                  tr([formatBytes(f['file_size']), (f['created_at']?.toString() ?? '').split('T').first]
                       .where((e) => e.isNotEmpty)
-                      .join(' · '),
+                      .join(' · ')),
                 ),
                 trailing: IconButton(icon: const Icon(NxI.dotsThreeVertical), onPressed: () => _itemMenu(f, folder: false)),
                 onTap: () => _openFile(f),
@@ -359,12 +414,12 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         final parent = _breadcrumb.length >= 2 ? _breadcrumb[_breadcrumb.length - 2]['id']?.toString() : null;
         _goTo(parent);
       },
-      child: Scaffold(
-        appBar: NxAppHeader(
+      child: NxScrollScaffold(
+        header: NxAppHeader(
           title: _breadcrumb.isEmpty ? 'ไฟล์' : (_breadcrumb.last['name']?.toString() ?? 'ไฟล์'),
           actions: [
             IconButton(onPressed: _load, icon: const Icon(NxI.arrowCounterClockwise)),
-            if (NxBreakpoint.of(context).twoPane) NxAddButton(tooltip: 'เพิ่ม', onPressed: _busy ? () {} : _addMenu),
+            if (NxBreakpoint.of(context).twoPane) NxAddButton(tooltip: tr('เพิ่ม'), onPressed: _busy ? () {} : _addMenu),
           ],
         ),
         floatingActionButton: NxCreateFab(label: 'เพิ่ม', onPressed: _busy ? () {} : _addMenu),

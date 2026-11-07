@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -10,6 +11,7 @@ import '../../core/error_reporting.dart';
 import '../../core/server_profile.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 /// Plain-text report a tester can paste into chat / email.
 String buildDiagnosticsReport(AppConfig config, List<String> errors) {
@@ -48,12 +50,12 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     final config = context.watch<AppConfig>();
     final errors = List.of(ErrorReporting.recent);
     final report = buildDiagnosticsReport(config, errors);
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'บันทึกปัญหา',
         actions: [
           IconButton(
-            tooltip: 'ล้างบันทึก',
+            tooltip: tr('ล้างบันทึก'),
             icon: const Icon(NxI.trash),
             onPressed: errors.isEmpty
                 ? null
@@ -67,14 +69,14 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('ส่งข้อมูลนี้ให้ทีมพัฒนาเมื่อพบปัญหา ช่วยให้แก้ได้เร็วขึ้น', style: theme.textTheme.bodyMedium),
+          Text(tr('ส่งข้อมูลนี้ให้ทีมพัฒนาเมื่อพบปัญหา ช่วยให้แก้ได้เร็วขึ้น'), style: theme.textTheme.bodyMedium),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: FilledButton.icon(
                   icon: const Icon(NxI.shareNetwork),
-                  label: const Text('แชร์'),
+                  label: Text(tr('แชร์')),
                   onPressed: () => Share.share(report, subject: 'MOAI NEXT Mobile – บันทึกปัญหา'),
                 ),
               ),
@@ -82,11 +84,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(NxI.clipboard),
-                  label: const Text('คัดลอก'),
+                  label: Text(tr('คัดลอก')),
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: report));
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('คัดลอกแล้ว')));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('คัดลอกแล้ว'))));
                     }
                   },
                 ),
@@ -99,8 +101,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: SelectableText(
-                report,
-                style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace', color: cs.onSurface),
+                tr(report),
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurface),
               ),
             ),
           ),

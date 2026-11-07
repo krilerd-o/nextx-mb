@@ -1,6 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
+import '../../services/api_exceptions.dart';
+import '../../widgets/app_bottom_sheet.dart';
+import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -17,6 +21,9 @@ import '../../widgets/nx_surface_card.dart';
 import '../crm/entity_create_screen.dart';
 import 'activity_detail_screen.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/thai_time.dart';
+import '../../core/i18n.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 class CalendarHomeScreen extends StatefulWidget {
   const CalendarHomeScreen({super.key});
@@ -30,7 +37,7 @@ enum _CalMode { agenda, incoming, pending }
 class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
   var _revision = 0;
   _CalMode _mode = _CalMode.agenda;
-  DateTime _selectedDay = DateTime.now();
+  DateTime _selectedDay = thaiNow();
   bool _weekView = false;
   StreamSubscription<RealtimeEvent>? _live;
   Timer? _debounce;
@@ -85,6 +92,9 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
 
   Future<List<Map<String, dynamic>>> _fetch() {
     final extra = <String, String>{
+      // Only what the agenda draws (servers without `cols` return everything).
+      'cols': 'id,subject,date_start,date_end,status,activitytype,location,checkindate,checkoutdate,'
+          'smownerid,account_name,contact_name,related_module,related_id,all_day,due_date',
       'sort': 'date_start',
       'order': _mode == _CalMode.pending ? 'desc' : 'asc',
     };
@@ -124,43 +134,116 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     if (mounted) setState(() => _revision++);
   }
 
+  /// Long-press an appointment: duplicate or delete (with undo).
+  Future<void> _rowActions(Map<String, dynamic> row) async {
+    final id = row['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    final api = context.read<AppConfig>().apiClient;
+    final messenger = ScaffoldMessenger.of(context);
+    final pick = await showAppBottomSheet<String>(
+      context: context,
+      title: entityTitle(row, module: 'activity'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(leading: const Icon(NxI.copySimple), title: Text(tr('ทำซ้ำ')), onTap: () => Navigator.pop(context, 'dup')),
+          ListTile(leading: const Icon(NxI.trash), title: Text(tr('ลบ')), onTap: () => Navigator.pop(context, 'del')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (pick == 'dup') {
+      try {
+        final newId = await api.duplicateEntity('activity', id);
+        if (!mounted) return;
+        setState(() => _revision++);
+        if (newId.isNotEmpty) nxPush<void>(context, ActivityDetailScreen(row: {'id': newId}));
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      }
+    } else if (pick == 'del') {
+      PendingEntityDeletes.instance.schedule(
+        messenger: messenger,
+        module: 'activity',
+        ids: [id],
+        label: entityTitle(row, module: 'activity'),
+        commit: () async {
+          await api.deleteEntity('activity', id);
+          if (mounted) setState(() => _revision++);
+        },
+      );
+      setState(() {});
+    }
+  }
+
+  NxListQuery _lq = const NxListQuery();
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final twoPane = NxBreakpoint.of(context).twoPane;
-    final session = context.watch<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     final showIncoming = MenuAccess.allow(session, MenuAccess.incoming);
     final showPending = MenuAccess.allow(session, MenuAccess.pending);
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: _title,
         actions: [
           IconButton(
-            tooltip: 'รีเฟรช',
+            tooltip: tr('รีเฟรช'),
             icon: const Icon(NxI.arrowCounterClockwise),
             onPressed: () => setState(() => _revision++),
           ),
-          if (twoPane) NxAddButton(tooltip: 'นัดหมาย', onPressed: _openCreate),
+          if (twoPane) NxAddButton(tooltip: tr('นัดหมาย'), onPressed: _openCreate),
         ],
       ),
       body: NxCachedFuture<List<Map<String, dynamic>>>(
         revision: _revision,
         load: _fetch,
         skeleton: const NxSkeletonList(),
-        builder: (context, list) {
+        builder: (context, all) {
+          Set<String> valuesOf(String k) => {
+                for (final r in all)
+                  if ('${r[k] ?? ''}'.isNotEmpty) '${r[k]}',
+              };
+          final types = valuesOf('activitytype').toList()..sort();
+          final statuses = valuesOf('status').toList()..sort();
+          final me = session.userId ?? '';
+          final list = nxApplyLocalQuery<Map<String, dynamic>>(
+            all,
+            _lq.copyWith(sort: null),
+            text: (r) => '${r['subject'] ?? ''} ${r['location'] ?? ''} ${r['account_name'] ?? ''} ${r['contact_name'] ?? ''}',
+            filters: {
+              'type': (r, v) => v.contains('${r['activitytype'] ?? ''}'),
+              'status': (r, v) => v.contains('${r['status'] ?? ''}'),
+              'checkin': (r, v) {
+                final done = '${r['checkindate'] ?? ''}'.isNotEmpty;
+                return (v.contains('done') && done) || (v.contains('not') && !done);
+              },
+              'scope': (r, v) => !v.contains('mine') || '${r['smownerid'] ?? ''}' == me,
+            },
+          );
           final dayKey = _ymd(_selectedDay);
           final byDay = groupActivitiesByDay(list);
-          final visible = _mode == _CalMode.agenda ? (byDay[dayKey] ?? const <Map<String, dynamic>>[]) : list;
+          final visible = nxApplyLocalQuery<Map<String, dynamic>>(
+            _mode == _CalMode.agenda ? (byDay[dayKey] ?? const <Map<String, dynamic>>[]) : list,
+            NxListQuery(sort: _lq.sort),
+            text: (_) => '',
+            sorts: {
+              'late': (a, b) => '${b['date_start'] ?? ''}'.compareTo('${a['date_start'] ?? ''}'),
+              'early': (a, b) => '${a['date_start'] ?? ''}'.compareTo('${b['date_start'] ?? ''}'),
+            },
+          );
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               SegmentedButton<_CalMode>(
                 segments: [
-                  const ButtonSegment(value: _CalMode.agenda, label: Text('ปฏิทิน'), icon: Icon(NxI.calendarBlank)),
+                  ButtonSegment(value: _CalMode.agenda, label: Text(tr('ปฏิทิน')), icon: Icon(NxI.calendarBlank)),
                   if (showIncoming)
-                    const ButtonSegment(value: _CalMode.incoming, label: Text('ใกล้ถึง'), icon: Icon(NxI.clockCountdown)),
+                    ButtonSegment(value: _CalMode.incoming, label: Text(tr('ใกล้ถึง')), icon: Icon(NxI.clockCountdown)),
                   if (showPending)
-                    const ButtonSegment(value: _CalMode.pending, label: Text('ค้าง'), icon: Icon(NxI.warningCircle)),
+                    ButtonSegment(value: _CalMode.pending, label: Text(tr('ค้าง')), icon: Icon(NxI.warningCircle)),
                 ],
                 selected: {_mode},
                 showSelectedIcon: false,
@@ -169,7 +252,27 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                   _revision++;
                 }),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+              NxListToolbar(
+                query: _lq,
+                liveSearch: true,
+                padding: const EdgeInsets.only(bottom: 4),
+                searchHint: 'ค้นหาชื่อนัด / สถานที่ / ลูกค้า',
+                quickGroup: 'scope',
+                groups: [
+                  const NxFilterGroup(key: 'scope', label: 'ขอบเขต', multi: false, options: [NxFilterOption('mine', 'ของฉัน')]),
+                  if (types.isNotEmpty)
+                    NxFilterGroup(key: 'type', label: 'ประเภท', options: [for (final t in types) NxFilterOption(t, t)]),
+                  if (statuses.isNotEmpty)
+                    NxFilterGroup(key: 'status', label: 'สถานะ', options: [for (final t in statuses) NxFilterOption(t, t)]),
+                  const NxFilterGroup(key: 'checkin', label: 'เช็คอิน', multi: false, options: [
+                    NxFilterOption('done', 'เช็คอินแล้ว'),
+                    NxFilterOption('not', 'ยังไม่เช็คอิน'),
+                  ]),
+                ],
+                sorts: const [NxSortOption('early', 'เวลาเช้า → ค่ำ'), NxSortOption('late', 'เวลาค่ำ → เช้า')],
+                onChanged: (q) => setState(() => _lq = q),
+              ),
               if (_mode == _CalMode.agenda) ...[
                 Align(
                   alignment: Alignment.centerRight,
@@ -179,7 +282,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                       _revision++;
                     }),
                     icon: Icon(_weekView ? NxI.calendarBlank : NxI.listBullets, size: 18),
-                    label: Text(_weekView ? 'ดูรายเดือน' : 'ดูรายสัปดาห์'),
+                    label: Text(tr(_weekView ? 'ดูรายเดือน' : 'ดูรายสัปดาห์')),
                   ),
                 ),
                 if (_weekView)
@@ -201,24 +304,25 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                   counts: {for (final e in byDay.entries) e.key: e.value.length},
                   onSelect: (d) => setState(() => _selectedDay = d),
                   onMonthChange: (m) => setState(() {
-                    final now = DateTime.now();
+                    final now = thaiNow();
                     _selectedDay = (m.year == now.year && m.month == now.month) ? now : m;
                     _revision++;
                   }),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${_selectedDay.day}/${_selectedDay.month}/${_selectedDay.year + 543} · ${visible.length} กิจกรรม',
+                  tr('${_selectedDay.day}/${_selectedDay.month}/${uiYear(_selectedDay.year)} · ${visible.length} กิจกรรม'),
                   style: theme.textTheme.titleSmall,
                 ),
                 const SizedBox(height: 8),
               ],
               if (visible.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.all(24),
-                  child: Center(child: Text('ไม่มีกิจกรรม')),
+                  child: Center(child: Text(tr('ไม่มีกิจกรรม'))),
                 ),
               for (final row in visible)
+                if (!PendingEntityDeletes.instance.isPending('activity', row['id']?.toString() ?? ''))
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: NxSurfaceCard(
@@ -227,6 +331,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                       nxPush<void>(context, ActivityDetailScreen(row: row))
                           .then((_) => setState(() => _revision++));
                     },
+                    onLongPress: () => _rowActions(row),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     child: Row(
                       children: [
@@ -244,15 +349,15 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                entityTitle(row, module: 'activity'),
+                                tr(entityTitle(row, module: 'activity')),
                                 style: theme.textTheme.titleMedium,
                               ),
                               Text(
-                                [
+                                tr([
                                   activityTimeLabel(row),
                                   row['status'],
                                   row['location'],
-                                ].where((e) => e != null && e.toString().isNotEmpty).join(' · '),
+                                ].where((e) => e != null && e.toString().isNotEmpty).join(' · ')),
                                 style: theme.textTheme.bodySmall,
                               ),
                             ],
@@ -282,7 +387,7 @@ Map<String, List<Map<String, dynamic>>> groupActivitiesByDay(List<Map<String, dy
     final d = DateTime.tryParse(raw);
     final key = d == null
         ? (raw.length >= 10 ? raw.substring(0, 10) : raw)
-        : _ymdOf(raw.length <= 10 ? d : d.toLocal());
+        : _ymdOf(raw.length <= 10 ? d : (parseThai(raw) ?? d));
     if (key.isEmpty) continue;
     (out[key] ??= []).add(r);
   }
@@ -298,7 +403,7 @@ String activityTimeLabel(Map<String, dynamic> row) {
     final raw = v?.toString() ?? '';
     final d = DateTime.tryParse(raw);
     if (d == null || raw.length <= 10) return '';
-    final l = d.toLocal();
+    final l = toThai(d);
     return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
   }
 
@@ -335,10 +440,10 @@ class NxMonthGrid extends StatelessWidget {
     final first = DateTime(month.year, month.month);
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
     final lead = first.weekday - 1;
-    final now = DateTime.now();
+    final now = thaiNow();
     final cells = <Widget>[
       for (final w in _thWeek)
-        Center(child: Text(w, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
+        Center(child: Text(tr(w), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
       for (var i = 0; i < lead; i++) const SizedBox.shrink(),
       for (var day = 1; day <= daysInMonth; day++)
         Builder(builder: (context) {
@@ -359,7 +464,7 @@ class NxMonthGrid extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    '$day',
+                    tr('$day'),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: isSel ? cs.onPrimary : null,
                       fontWeight: isToday || isSel ? FontWeight.w700 : null,
@@ -394,10 +499,10 @@ class NxMonthGrid extends StatelessWidget {
                 ),
                 Expanded(
                   child: Center(
-                    child: Text('${_thMonths[month.month - 1]} ${month.year + 543}', style: theme.textTheme.titleMedium),
+                    child: Text(tr('${tr(_thMonths[month.month - 1])} ${uiYear(month.year)}'), style: theme.textTheme.titleMedium),
                   ),
                 ),
-                TextButton(onPressed: () => onMonthChange(DateTime(now.year, now.month)), child: const Text('วันนี้')),
+                TextButton(onPressed: () => onMonthChange(DateTime(now.year, now.month)), child: Text(tr('วันนี้'))),
                 IconButton(
                   icon: const Icon(NxI.caretRight),
                   onPressed: () => onMonthChange(DateTime(month.year, month.month + 1)),
@@ -437,7 +542,7 @@ class NxWeekStrip extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final start = weekStart(selected);
-    final now = DateTime.now();
+    final now = thaiNow();
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -463,10 +568,10 @@ class NxWeekStrip extends StatelessWidget {
                       ),
                       child: Column(
                         children: [
-                          Text(_thWeek[i], style: theme.textTheme.labelSmall?.copyWith(color: isSel ? cs.onPrimary : cs.onSurfaceVariant)),
-                          Text('${d.day}', style: theme.textTheme.titleMedium?.copyWith(color: isSel ? cs.onPrimary : null)),
+                          Text(tr(_thWeek[i]), style: theme.textTheme.labelSmall?.copyWith(color: isSel ? cs.onPrimary : cs.onSurfaceVariant)),
+                          Text(tr('${d.day}'), style: theme.textTheme.titleMedium?.copyWith(color: isSel ? cs.onPrimary : null)),
                           Text(
-                            n == 0 ? ' ' : '$n',
+                            tr(n == 0 ? ' ' : '$n'),
                             style: theme.textTheme.labelSmall?.copyWith(color: isSel ? cs.onPrimary : cs.primary, fontWeight: FontWeight.w700),
                           ),
                         ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -9,6 +10,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../commerce/commerce_home_screen.dart' show formatBaht, paymentStatusLabel;
+import '../../core/i18n.dart';
 
 /// `GET /api/commercial/orders/:id` returns `{order, lines, address}`; older
 /// callers passed the order row directly — accept both.
@@ -79,7 +81,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
       final name = '${label ? 'label' : 'receipt'}-${_row['order_number'] ?? widget.orderId}.pdf';
       share ? await shareFileBytes(bytes, name) : await openFileBytes(bytes, name);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -90,10 +92,10 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     try {
       await context.read<AppConfig>().apiClient.markCommercialOrderPaid(widget.orderId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('บันทึกการชำระแล้ว')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกการชำระแล้ว'))));
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -104,10 +106,10 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     final theme = Theme.of(context);
     final no = _row['order_number'] ?? _row['order_no'] ?? widget.orderId;
     final paid = (_row['payment_status']?.toString() ?? '') == 'paid';
-    final isAdmin = context.watch<AppConfig>().session.isBusinessAdmin;
+    final isAdmin = context.select((AppConfig c) => c.session).isBusinessAdmin;
     final addr = _address;
-    return Scaffold(
-      appBar: NxAppHeader(
+    return NxScrollScaffold(
+      header: NxAppHeader(
         title: 'ออเดอร์ $no',
         menu: [
           NxHeaderMenuItem(label: 'แชร์ใบเสร็จ', icon: NxI.shareNetwork, onTap: () => _pdf(label: false, share: true)),
@@ -120,7 +122,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 if (_busy) const LinearProgressIndicator(minHeight: 2),
-                if (_error != null) Text(formatApiError(_error!), style: TextStyle(color: theme.colorScheme.error)),
+                if (_error != null) Text(tr(formatApiError(_error!)), style: TextStyle(color: theme.colorScheme.error)),
                 KeyValueCard(
                   entries: [
                     MapEntry('เลขที่', no.toString()),
@@ -138,9 +140,9 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                     margin: EdgeInsets.zero,
                     child: ListTile(
                       leading: const Icon(NxI.mapPin),
-                      title: const Text('ที่อยู่จัดส่ง'),
+                      title: Text(tr('ที่อยู่จัดส่ง')),
                       subtitle: Text(
-                        [
+                        tr([
                           addr['recipient_name'],
                           addr['address_line'] ?? addr['address'],
                           addr['subdistrict'],
@@ -148,27 +150,27 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                           addr['province'],
                           addr['postal_code'],
                           addr['phone'],
-                        ].where((e) => e != null && e.toString().trim().isNotEmpty).join(' '),
+                        ].where((e) => e != null && e.toString().trim().isNotEmpty).join(' ')),
                       ),
                     ),
                   ),
                 ],
                 const SizedBox(height: 16),
-                Text('รายการสินค้า (${_lines.length})', style: theme.textTheme.titleSmall),
+                Text(tr('รายการสินค้า (${_lines.length})'), style: theme.textTheme.titleSmall),
                 const SizedBox(height: 8),
                 for (final l in _lines)
                   Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
                       leading: const Icon(NxI.package),
-                      title: Text(l['product_name']?.toString() ?? 'สินค้า'),
+                      title: Text(tr(l['product_name']?.toString() ?? 'สินค้า')),
                       subtitle: Text(
-                        [
+                        tr([
                           if ((l['variant_options_label']?.toString() ?? '').isNotEmpty) l['variant_options_label'].toString(),
                           '${l['quantity'] ?? 0} ${l['unit'] ?? ''} × ${formatBaht(l['unit_price'])}',
-                        ].join(' · '),
+                        ].join(' · ')),
                       ),
-                      trailing: Text(formatBaht(l['line_total']), style: theme.textTheme.titleSmall),
+                      trailing: Text(tr(formatBaht(l['line_total'])), style: theme.textTheme.titleSmall),
                     ),
                   ),
                 const SizedBox(height: 16),
@@ -178,7 +180,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                       child: OutlinedButton.icon(
                         onPressed: _busy ? null : () => _pdf(label: false),
                         icon: const Icon(NxI.filePdf),
-                        label: const Text('ใบเสร็จ'),
+                        label: Text(tr('ใบเสร็จ')),
                       ),
                     ),
                     if (!paid && isAdmin) ...[
@@ -187,7 +189,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                         child: FilledButton.icon(
                           onPressed: _busy ? null : _markPaid,
                           icon: const Icon(NxI.checkCircle),
-                          label: const Text('รับชำระแล้ว'),
+                          label: Text(tr('รับชำระแล้ว')),
                         ),
                       ),
                     ],

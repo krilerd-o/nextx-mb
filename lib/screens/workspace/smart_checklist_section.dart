@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_config.dart';
 import '../../services/api_client.dart';
 import '../../widgets/nx_icons.dart';
+import '../../core/i18n.dart';
 
 /// (done, total) over checkable rows — headers don't count, like the web.
 (int, int) checklistProgress(List<Map<String, dynamic>> items) {
@@ -59,7 +60,7 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
     try {
       await f();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -100,7 +101,7 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(children: [
-          Expanded(child: Text('เช็คลิสต์${total > 0 ? ' ($done/$total)' : ''}', style: theme.textTheme.titleSmall)),
+          Expanded(child: Text(tr('เช็คลิสต์${total > 0 ? ' ($done/$total)' : ''}'), style: theme.textTheme.titleSmall)),
           if (_busy) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
         ]),
         if (total > 0)
@@ -116,7 +117,7 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
           if (item['item_kind']?.toString() == 'header')
             Padding(
               padding: const EdgeInsets.only(top: 10, bottom: 2),
-              child: Text(item['title']?.toString() ?? '', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+              child: Text(tr(item['title']?.toString() ?? ''), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
             )
           else
             CheckboxListTile(
@@ -126,13 +127,13 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
               value: item['status']?.toString() == 'done',
               onChanged: _busy ? null : (v) => _toggle(item, v ?? false),
               title: Text(
-                item['title']?.toString() ?? '',
+                tr(item['title']?.toString() ?? ''),
                 style: item['status']?.toString() == 'done' || item['status']?.toString() == 'skipped'
                     ? TextStyle(decoration: TextDecoration.lineThrough, color: cs.onSurfaceVariant)
                     : null,
               ),
               secondary: IconButton(
-                tooltip: 'ลบ',
+                tooltip: tr('ลบ'),
                 icon: const Icon(NxI.x, size: 16),
                 onPressed: _busy ? null : () => _delete(item),
               ),
@@ -143,7 +144,7 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _addItem(),
           decoration: InputDecoration(
-            hintText: 'เพิ่มรายการเช็คลิสต์',
+            hintText: tr('เพิ่มรายการเช็คลิสต์'),
             isDense: true,
             prefixIcon: const Icon(NxI.plus, size: 18),
             suffixIcon: IconButton(icon: const Icon(NxI.paperPlaneTilt, size: 18), onPressed: _busy ? null : _addItem),
