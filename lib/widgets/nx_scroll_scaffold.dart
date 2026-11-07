@@ -86,8 +86,8 @@ class NxScrollScaffold extends StatelessWidget {
             left: 0,
             right: 0,
             bottom: 0,
-            height: 96 + MediaQuery.paddingOf(context).bottom,
-            child: const NxEdgeBlur(fromTop: false),
+            height: 140 + MediaQuery.paddingOf(context).bottom,
+            child: const NxEdgeBlur(fromTop: false, solidFraction: 0.35),
           ),
         ],
       );
@@ -134,8 +134,12 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
           left: 0,
           right: 0,
           top: 0,
-          height: top + preferredSize.height + (extend ? 36 : 0),
-          child: const NxEdgeBlur(fromTop: true),
+          height: top + preferredSize.height + (extend ? 72 : 0),
+          child: NxEdgeBlur(
+            fromTop: true,
+            // Full blur over the status bar + most of the header, fade below.
+            solidFraction: extend ? (top + preferredSize.height * 0.7) / (top + preferredSize.height + 72) : 0.6,
+          ),
         ),
         NxFloatingHeaderScope(
           child: Column(
@@ -155,9 +159,28 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
 /// masked to a shorter band, so blur grows smoothly toward the edge instead
 /// of ending in a hard line. Lite/off devices get a background fade only.
 class NxEdgeBlur extends StatelessWidget {
-  const NxEdgeBlur({super.key, required this.fromTop, this.maxSigma = 16, this.steps = 3});
+  const NxEdgeBlur({super.key, required this.fromTop, this.maxSigma = 16, this.steps = 6, this.solidFraction = 0.45});
+
+  /// Fraction of the band covered by step [i] (0 = tallest).
+  double _bandHeight(int i) {
+    if (steps <= 1) return 1;
+    final t = i / (steps - 1);
+    // Ease so more, finer steps sit in the fade-out part.
+    return 1 - (1 - solidFraction) * (t * t * (3 - 2 * t));
+  }
+
+  /// Blur of step [i]: grows smoothly from ~1 to [maxSigma].
+  double _sigma(int i) {
+    if (steps <= 1) return maxSigma;
+    final t = (i + 1) / steps;
+    return 1 + (maxSigma - 1) * t * t;
+  }
 
   final bool fromTop;
+
+  /// Part of the band (from the edge) that stays fully blurred — e.g. the
+  /// header itself; the rest is an eased fade with no visible end line.
+  final double solidFraction;
   final double maxSigma;
   final int steps;
 
@@ -175,10 +198,11 @@ class NxEdgeBlur extends StatelessWidget {
           colors: [
             // Mostly blur, a light wash only — reads as frosted glass, not a white bar.
             bg.withValues(alpha: level == EffectsLevel.full ? 0.38 : 0.94),
-            bg.withValues(alpha: level == EffectsLevel.full ? 0.12 : 0.6),
+            bg.withValues(alpha: level == EffectsLevel.full ? 0.2 : 0.7),
+            bg.withValues(alpha: level == EffectsLevel.full ? 0.06 : 0.3),
             bg.withValues(alpha: 0),
           ],
-          stops: const [0, 0.55, 1],
+          stops: const [0, 0.4, 0.7, 1],
         ),
       ),
       child: const SizedBox.expand(),
@@ -188,23 +212,22 @@ class NxEdgeBlur extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          // Stepped progressive blur: bands anchored at the edge, tallest =
+          // lightest blur, shortest = strongest (drawn last, on top). Adjacent
+          // steps differ only slightly and the outermost step is barely blurred,
+          // so no edge line shows. Works without masking backdrop filters
+          // (ShaderMask doesn't fade a BackdropFilter on every renderer).
           for (var i = 0; i < steps; i++)
-            // Layer i covers the band nearest the edge: stronger blur, shorter band.
-            ShaderMask(
-              blendMode: BlendMode.dstIn,
-              shaderCallback: (r) => LinearGradient(
-                begin: edge,
-                end: away,
-                colors: const [Colors.black, Colors.black, Colors.transparent],
-                stops: [0, 0.15 + 0.25 * (steps - 1 - i) / steps, 1 - 0.3 * i / steps],
-              ).createShader(r),
-              child: ClipRect(
-                child: BackdropFilter.grouped(
-                  filter: ui.ImageFilter.blur(
-                    sigmaX: maxSigma * (i + 1) / (steps * 2),
-                    sigmaY: maxSigma * (i + 1) / steps,
+            Align(
+              alignment: edge,
+              child: FractionallySizedBox(
+                widthFactor: 1,
+                heightFactor: _bandHeight(i),
+                child: ClipRect(
+                  child: BackdropFilter.grouped(
+                    filter: ui.ImageFilter.blur(sigmaX: _sigma(i) * 0.6, sigmaY: _sigma(i)),
+                    child: const SizedBox.expand(),
                   ),
-                  child: const SizedBox.expand(),
                 ),
               ),
             ),
