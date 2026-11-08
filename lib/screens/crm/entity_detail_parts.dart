@@ -363,7 +363,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
                       focusNode: _focus,
                       minLines: 1,
                       maxLines: 5,
-                      decoration: InputDecoration(hintText: tr('เขียนความคิดเห็น'), border: InputBorder.none, filled: false),
+                      decoration: InputDecoration(hintText: tr('เขียนคอมเม้นท์'), border: InputBorder.none, filled: false),
                     ),
                   ),
                   _busy
@@ -378,7 +378,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
         if (threads.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Text(tr('ยังไม่มีความคิดเห็น'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+            child: Text(tr('ยังไม่มีคอมเม้นท์'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
           ),
         for (final (root, replies) in threads)
           Padding(
@@ -585,7 +585,7 @@ class EntityFilesPanel extends StatelessWidget {
     case 'engagement':
       final kind = (e['event_type'] ?? e['source'])?.toString() ?? '';
       const names = {
-        'comment': 'แสดงความคิดเห็น',
+        'comment': 'คอมเม้นท์',
         'email_open': 'เปิดอีเมล',
         'email_click': 'คลิกลิงก์ในอีเมล',
         'email_sent': 'ส่งอีเมล',
@@ -760,7 +760,7 @@ class PendingEntityDeletes extends ChangeNotifier {
       duration: window,
       behavior: SnackBarBehavior.floating,
       content: Text(tr('ลบ $label แล้ว')),
-      action: SnackBarAction(label: 'เลิกทำ', onPressed: () => undone = true),
+      action: SnackBarAction(label: tr('เลิกทำ'), onPressed: () => undone = true),
     ));
     ctrl.closed.then((_) async {
       if (!undone) {

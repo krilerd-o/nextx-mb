@@ -16,6 +16,7 @@ import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../calendar/activity_detail_screen.dart';
+import '../calendar/activity_form_screen.dart';
 import '../deep_link_loaders.dart';
 import '../workspace/workspace_board_screen.dart';
 import 'entity_create_screen.dart';
@@ -2020,10 +2021,9 @@ class CreateActivityFromCaseBar extends StatelessWidget {
       onPressed: () async {
         final saved = await nxPush<bool>(
           context,
-          EntityCreateScreen(
-            module: 'activity',
+          ActivityFormScreen(
             title: 'สร้างนัดหมายจากเคส',
-            initialValues: {'related_case_id': id},
+            initial: {'related_module': 'case', 'related_id': int.tryParse(id) ?? id, 'related_case_id': id},
           ),
         );
         if (saved == true && context.mounted) {

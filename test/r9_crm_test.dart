@@ -33,7 +33,7 @@ void main() {
       valueLabel: (f, v) => {'New': 'ใหม่', 'Qualified': 'ผ่านเกณฑ์'}[v] ?? v,
     );
     expect(th.detail, 'ใหม่ → ผ่านเกณฑ์');
-    expect(describeTimelineEvent({'type': 'engagement', 'event_type': 'comment'}).title, 'แสดงความคิดเห็น');
+    expect(describeTimelineEvent({'type': 'engagement', 'event_type': 'comment'}).title, 'คอมเม้นท์');
   });
 
   test('status key picks module field first', () {
@@ -108,7 +108,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(find.text('คุณเอ'), findsWidgets);
-    expect(find.text('ความคิดเห็น 1'), findsOneWidget);
+    expect(find.text('คอมเม้นท์ 1'), findsOneWidget);
     await tester.tap(find.text('ประวัติ'));
     for (var i = 0; i < 8; i++) {
       await tester.pump(const Duration(milliseconds: 50));

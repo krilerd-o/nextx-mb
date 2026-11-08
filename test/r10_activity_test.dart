@@ -18,7 +18,7 @@ void main() {
       'GET /api/entity/activity/5': {'id': 5, 'subject': '[QA] เยี่ยมลูกค้า', 'location': 'สยาม'},
       'GET /api/entity/activity/5/comments': {'list': []},
       'GET /api/activity/5/visit': {'checked_in': false},
-      'POST /api/entity/activity/5/duplicate': {'id': 9},
+      'POST /api/entity/activity': {'id': 9},
       'GET /api/entity/activity/9': {'id': 9, 'subject': '[QA] เยี่ยมลูกค้า (สำเนา)'},
       'GET /api/entity/activity/9/comments': {'list': []},
       'GET /api/activity/9/visit': {'checked_in': false},
@@ -38,16 +38,26 @@ void main() {
     }
     expect(find.text('[QA] เยี่ยมลูกค้า'), findsWidgets);
     expect(find.text('สยาม'), findsOneWidget);
-    expect(find.text('ความคิดเห็น'), findsOneWidget);
+    expect(find.text('คอมเม้นท์'), findsOneWidget);
 
     await tester.tap(find.byTooltip('เพิ่มเติม'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('ทำซ้ำ'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'ทำซ้ำ'));
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 60));
     }
-    expect(adapter.callKeys, contains('POST /api/entity/activity/5/duplicate'));
+    // Duplicate opens the activity form with a copy (not the server copy).
+    expect(find.text('ทำซ้ำกิจกรรม'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '[QA] เยี่ยมลูกค้า'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('act-save')));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    final post = adapter.calls.lastWhere((c) => c.method == 'POST' && c.path == '/api/entity/activity');
+    final body = Map<String, dynamic>.from(post.data as Map);
+    expect(body['subject'], '[QA] เยี่ยมลูกค้า');
+    expect(body['location'], 'สยาม');
+    expect(body.containsKey('id'), isFalse);
+    expect(body['status'], 'Planned');
   });
 }

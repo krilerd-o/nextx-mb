@@ -161,6 +161,16 @@ class AppTheme {
       // Chips must read as "pills" on any surface (cards and sheets are
       // _darkVariant in dark mode): a lighter fill plus a hairline outline;
       // selected = solid accent with white text.
+      // Explicit: ColorScheme.dark() without inversePrimary made the "เลิกทำ"
+      // action white on a light bar.
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: isDark ? const Color(0xFF2C2C34) : const Color(0xFF1F2937),
+        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+        actionTextColor: Color.lerp(scheme.primary, Colors.white, isDark ? 0.45 : 0.55),
+        closeIconColor: Colors.white70,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
       chipTheme: ChipThemeData(
         side: WidgetStateBorderSide.resolveWith(
           (states) => states.contains(WidgetState.selected)

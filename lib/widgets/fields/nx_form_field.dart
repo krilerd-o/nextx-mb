@@ -269,7 +269,7 @@ class NxFormField extends StatelessWidget {
           fieldLabel: label,
           required: required,
           errorText: trn(errorText),
-          text: value?.toString().isNotEmpty == true ? value.toString() : 'เลือกเวลา',
+          text: _timeLabel(value),
           icon: NxI.clock,
           enabled: _on,
           onTap: () => _pickTime(context),
@@ -279,7 +279,7 @@ class NxFormField extends StatelessWidget {
           fieldLabel: label,
           required: required,
           errorText: trn(errorText),
-          text: value?.toString().isNotEmpty == true ? value.toString() : 'เลือกวันและเวลา',
+          text: _dateTimeLabel(value),
           icon: NxI.calendarCheck,
           enabled: _on,
           onTap: () => _pickDateTime(context),
@@ -596,9 +596,25 @@ class NxFormField extends StatelessWidget {
   }
 
   String _dateLabel(dynamic raw) {
-    final d = parseDate(raw);
+    final d = parseThaiDate(raw);
     if (d == null) return 'เลือกวันที่';
-    return formatYmd(d);
+    return thaiDate(formatYmd(d), year: uiYear);
+  }
+
+  /// Date-time as Thai time (`04/11/2569 17:54`), never the raw ISO/UTC text.
+  DateTime? _dateTime(dynamic raw) => parseThaiField(raw, name);
+
+  String _dateTimeLabel(dynamic raw) {
+    final d = _dateTime(raw);
+    if (d == null) return 'เลือกวันและเวลา';
+    return '${two(d.day)}/${two(d.month)}/${uiYear(d.year)} ${two(d.hour)}:${two(d.minute)}';
+  }
+
+  /// `17:54:00` → `17:54`.
+  static String _timeLabel(dynamic raw) {
+    final m = RegExp(r'(\d{1,2}):(\d{2})').firstMatch('${raw ?? ''}');
+    if (m == null) return 'เลือกเวลา';
+    return '${m.group(1)!.padLeft(2, '0')}:${m.group(2)}';
   }
 
   String _rangeLabel(dynamic raw, int slice, String placeholder) {
@@ -609,7 +625,7 @@ class NxFormField extends StatelessWidget {
 
   Future<void> _pickDate(BuildContext context) async {
     final now = thaiNow();
-    final initial = parseDate(value) ?? now;
+    final initial = parseThaiDate(value) ?? now;
     final picked = await showDatePicker(
         switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
         switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
@@ -623,7 +639,7 @@ class NxFormField extends StatelessWidget {
   }
 
   Future<void> _pickTime(BuildContext context) async {
-    final parsed = parseDate('1970-01-01T${value ?? '00:00'}');
+    final parsed = parseDate('1970-01-01T${_timeLabel(value) == 'เลือกเวลา' ? '00:00' : _timeLabel(value)}');
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: parsed?.hour ?? 9, minute: parsed?.minute ?? 0),
@@ -639,7 +655,7 @@ class NxFormField extends StatelessWidget {
 
   Future<void> _pickDateTime(BuildContext context) async {
     final now = thaiNow();
-    final initial = parseDate(value) ?? now;
+    final initial = _dateTime(value) ?? now;
     final day = await showDatePicker(
         switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
         switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),

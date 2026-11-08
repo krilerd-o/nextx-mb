@@ -123,7 +123,7 @@ class _WorkspaceTrashScreenState extends State<WorkspaceTrashScreen> {
   ({IconData icon, Color color, String label}) _kindStyle(String kind) => switch (kind) {
         'board' => (icon: NxI.kanban, color: const Color(0xFF6366F1), label: 'บอร์ด'),
         'epic' => (icon: NxI.lightning, color: const Color(0xFF8B5CF6), label: 'Epic'),
-        'comment' => (icon: NxI.chatCircle, color: const Color(0xFF64748B), label: 'ความคิดเห็น'),
+        'comment' => (icon: NxI.chatCircle, color: const Color(0xFF64748B), label: 'คอมเม้นท์'),
         'worklog' => (icon: NxI.clock, color: const Color(0xFF0EA5E9), label: 'การลงเวลา'),
         _ => (icon: NxI.checkSquare, color: const Color(0xFF3B82F6), label: 'งาน'),
       };

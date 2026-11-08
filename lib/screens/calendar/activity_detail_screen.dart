@@ -15,9 +15,9 @@ import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/error_reporting.dart';
 import '../../core/nx_page_route.dart';
-import '../../widgets/fields/field_ui_type.dart';
-import '../crm/entity_create_screen.dart';
 import '../crm/entity_detail_parts.dart';
+import 'activity_form_screen.dart';
+import 'cal/cal_model.dart' show hm;
 import 'visit_check_sheet.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
@@ -97,76 +97,24 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   }
 
   Future<void> _edit() async {
-    final api = context.read<AppConfig>().apiClient;
-    try {
-      final schema = await api.getFieldSchema('activity');
-      if (!mounted) return;
-      final saved = await nxPush<bool>(
-        context,
-        EntityCreateScreen(
-          module: 'activity',
-          title: 'แก้ไขกิจกรรม',
-          recordId: _id,
-          initialValues: Map<String, dynamic>.from(_row),
-          fields: schema.fields
-              .where(
-                (f) =>
-                    !fieldIsReadonly(f) &&
-                    fieldName(f) != 'id' &&
-                    fieldName(f) != 'business_id',
-              )
-              .toList(),
-          picklists: schema.picklists,
-        ),
-      );
-      if (saved == true && mounted) {
-        _timelineLoaded = false;
-        await _loadRecord();
-      }
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    final saved = await nxPush<bool>(
+      context,
+      ActivityFormScreen(initial: Map<String, dynamic>.from(_row), recordId: _id, title: 'แก้ไขกิจกรรม'),
+    );
+    if (saved == true && mounted) {
+      _timelineLoaded = false;
+      await _loadRecord();
     }
   }
 
+  /// Opens the form with a copy (no check-in, new record), like the web.
   Future<void> _duplicate() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('ทำซ้ำกิจกรรมนี้?')),
-        content: Text(
-          tr('สร้างนัดใหม่จาก "${entityTitle(_row, module: 'activity')}" (ไม่รวมการเช็คอิน)'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('ยกเลิก')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ทำซ้ำ')),
-          ),
-        ],
-      ),
+    final saved = await nxPush<bool>(
+      context,
+      ActivityFormScreen(initial: ActivityFormScreen.duplicateSeed(_row), title: 'ทำซ้ำกิจกรรม'),
     );
-    if (ok != true || !mounted) return;
-    try {
-      final newId = await context.read<AppConfig>().apiClient.duplicateEntity(
-        'activity',
-        _id,
-      );
-      if (!mounted || newId.isEmpty) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('ทำซ้ำแล้ว — เปิดกิจกรรมใหม่'))),
-      );
-      nxPush<void>(context, ActivityDetailScreen(row: {'id': newId}));
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างกิจกรรมใหม่จากการทำซ้ำแล้ว'))));
     }
   }
 
@@ -300,6 +248,19 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     return thaiDateTime(d).replaceFirst(RegExp(r':\d\d$'), '');
   }
 
+  /// All-day → dates only; same day → `4 พ.ย. 2569 · 17:54–18:54`.
+  String _whenRange(Map<String, dynamic> row) {
+    final s = parseWall(row['date_start']);
+    final e = parseWall(row['date_end']);
+    if (s == null) return _when(row['date_start'], 'date_start');
+    final allDay = row['all_day'] == true || row['all_day'] == 1 || '${row['all_day']}' == 'true';
+    String day(DateTime d) => activityDayLabel(d);
+    final sameDay = e == null || (e.year == s.year && e.month == s.month && e.day == s.day);
+    if (allDay) return sameDay ? '${day(s)} · ${tr('ทั้งวัน')}' : '${day(s)} – ${day(e)}';
+    if (e == null) return '${day(s)} · ${hm(s)}';
+    return sameDay ? '${day(s)} · ${hm(s)}–${hm(e)}' : '${day(s)} ${hm(s)} → ${day(e)} ${hm(e)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -365,7 +326,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   _line(
                     context,
                     NxI.calendarBlank,
-                    '${_when(row['date_start'], 'date_start')}  →  ${_when(row['date_end'], 'date_end')}',
+                    _whenRange(row),
                   ),
                   if ((row['location']?.toString() ?? '').isNotEmpty)
                     _line(context, NxI.mapPin, row['location'].toString()),
@@ -386,8 +347,8 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               labels: [
                 'ภาพรวม',
                 _comments.isEmpty
-                    ? 'ความคิดเห็น'
-                    : 'ความคิดเห็น ${_comments.length}',
+                    ? 'คอมเม้นท์'
+                    : 'คอมเม้นท์ ${_comments.length}',
                 'ไฟล์',
                 'ประวัติ',
               ],
