@@ -1056,9 +1056,10 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
-  Future<List<Map<String, dynamic>>> getBoards({String? q}) async {
+  Future<List<Map<String, dynamic>>> getBoards({String? q, bool writable = false}) async {
     final env = await _send('GET', '/api/boards', query: {
       if (q != null && q.isNotEmpty) 'q': q,
+      if (writable) 'writable': 1,
     });
     return extractMapList(env['data']);
   }
@@ -1563,7 +1564,7 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> confirmAiTool(String proposalId, {String? boardId}) async =>
-      _dataMap(await _send('POST', '/api/ai/tools/confirm', data: {'proposalId': proposalId, 'board_id': ?boardId}));
+      _dataMap(await _send('POST', '/api/ai/tools/confirm', data: {'proposalId': proposalId, 'board_id': ?(boardId == null ? null : int.tryParse(boardId) ?? boardId)}));
 
   Future<Map<String, dynamic>> cancelAiTool(String proposalId) async =>
       _dataMap(await _send('POST', '/api/ai/tools/cancel', data: {'proposalId': proposalId}));

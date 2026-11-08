@@ -705,7 +705,7 @@ class PendingEntityDeletes extends ChangeNotifier {
       duration: window,
       behavior: SnackBarBehavior.floating,
       content: Text(tr('ลบ $label แล้ว')),
-// Actions make snackbars persist by default; these must time out.
+      // Actions make snackbars persist by default; these must time out.
       persist: false,
       action: SnackBarAction(label: tr('เลิกทำ'), onPressed: () => undone = true),
     ));

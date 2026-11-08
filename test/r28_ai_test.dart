@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/ai/assistant/ai_assistant_screen.dart';
+import 'package:nextx_mobile/widgets/nx_markdown.dart';
+import 'package:nextx_mobile/widgets/nx_mermaid_view.dart';
 
 import 'support/fake_api.dart';
 
@@ -153,5 +155,71 @@ void main() {
     expect(find.text('gemini-2.5-flash'), findsOneWidget);
     expect(find.text('gemini-2.5-pro'), findsNothing);
     expect(adapter.callKeys, isNot(contains('GET /api/ai/models')));
+  });
+
+  testWidgets('workspace tree proposal: pick a board, confirm sends board_id', (tester) async {
+    final adapter = await _pump(tester, size: const Size(1200, 900), extra: {
+      'GET /api/ai/conversations': [
+        {'id': 9, 'title': '[QA] แผนงาน', 'updated_at': '2026-11-08T03:00:00Z'},
+      ],
+      'GET /api/ai/conversations/9': {
+        'id': 9,
+        'title': '[QA] แผนงาน',
+        'messages': [
+          {'role': 'user', 'content': '[QA] วางแผนงาน'},
+          {
+            'role': 'assistant',
+            'content': 'พร้อมสร้างงาน',
+            'proposals': [
+              {
+                'proposalId': 'pt1',
+                'tool': 'execute_workspace_tree_plan',
+                'preview': {
+                  'fields': {'title': '[QA] Epic A'},
+                },
+              },
+            ],
+          },
+        ],
+      },
+      'GET /api/boards': [
+        {'id': 11, 'name': '[QA] บอร์ด 1'},
+        {'id': 12, 'name': '[QA] บอร์ด 2'},
+      ],
+      'POST /api/ai/tools/confirm': {'ok': true},
+    });
+    await tester.tap(find.text('[QA] แผนงาน').first);
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byKey(const ValueKey('ai-proposal-board')), findsOneWidget);
+    final boards = adapter.calls.firstWhere((c) => c.path == '/api/boards');
+    expect(boards.queryParameters['writable'], 1);
+    expect(find.text('[QA] บอร์ด 1'), findsOneWidget); // first board pre-picked
+    await tester.tap(find.byKey(const ValueKey('ai-proposal-board')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('[QA] บอร์ด 2').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('ai-proposal-confirm')));
+    await tester.tap(find.byKey(const ValueKey('ai-proposal-confirm')));
+    await tester.pump(const Duration(milliseconds: 200));
+    final confirm = adapter.calls.lastWhere((c) => c.path == '/api/ai/tools/confirm');
+    expect(Map<String, dynamic>.from(confirm.data as Map)['board_id'], 12);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  test('markdown detection and mermaid page', () {
+    expect(looksLikeMarkdown('วันนี้มี **3 งาน** ค้าง'), isTrue);
+    expect(looksLikeMarkdown('- งาน A\n- งาน B'), isTrue);
+    expect(looksLikeMarkdown('วันนี้ไม่มีงานค้าง'), isFalse);
+    final html = mermaidHtml('graph TD; A-->B; <script>x</script>');
+    expect(html, contains(kMermaidScript));
+    expect(html, contains('&lt;script&gt;'));
+    expect(html, isNot(contains('<script>x</script>')));
+  });
+
+  testWidgets('mermaid code block offers "ดูไดอะแกรม"', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SingleChildScrollView(child: NxMarkdown(data: '```mermaid\ngraph TD; A-->B\n```')))));
+    expect(find.byKey(const ValueKey('nx-mermaid-view')), findsOneWidget);
   });
 }

@@ -46,6 +46,41 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   DateTime? _finishedAt;
   bool _wasSending = false;
 
+  /// Boards for workspace tree proposals (loaded once) and the pick per proposal.
+  List<Map<String, dynamic>>? _boards;
+  bool _boardsLoading = false;
+  final Map<String, String?> _boardFor = {};
+
+  /// The board picked for [p]: the user's choice, else the proposal's board, else the first one (like the web).
+  String? _boardOf(Map<String, dynamic> p) {
+    final id = '${p['proposalId']}';
+    if (_boardFor.containsKey(id)) return _boardFor[id];
+    final pv = p['preview'] is Map ? p['preview'] as Map : const {};
+    final f = pv['fields'] is Map ? pv['fields'] as Map : const {};
+    final fromProposal = f['board_id']?.toString();
+    if (fromProposal != null && fromProposal.isNotEmpty) return fromProposal;
+    final list = _boards ?? const [];
+    return list.isEmpty ? null : '${list.first['id']}';
+  }
+
+  List<Map<String, dynamic>> _writableBoards() {
+    if (_boards == null && !_boardsLoading) {
+      _boardsLoading = true;
+      _c.api
+          .getBoards(writable: true)
+          .then((list) {
+            if (!mounted) return;
+            setState(() {
+              _boards = list;
+            });
+          })
+          .catchError((_) {
+            if (mounted) setState(() => _boards = const []);
+          });
+    }
+    return _boards ?? const [];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -192,7 +227,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             key: const ValueKey('ai-delete-undo'),
             content: Text(tr('ลบ "${c.title}" แล้ว')),
             duration: const Duration(seconds: 5),
-// Actions make snackbars persist by default; these must time out.
+            // Actions make snackbars persist by default; these must time out.
             persist: false,
             action: SnackBarAction(label: tr('เลิกทำ'), onPressed: () {}),
           ),
@@ -617,13 +652,21 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             AiProposalCard(
               proposal: p,
               state: _c.proposalState['${p['proposalId']}'],
+              boards: aiIsWorkspaceTree(p) ? _writableBoards() : null,
+              boardId: _boardOf(p),
+              onBoard: (v) => setState(() => _boardFor['${p['proposalId']}'] = v),
               onConfirm: () async {
-                final link = await _c.confirmProposal(p);
+                final board = _boardOf(p);
+                if (aiNeedsBoard(p) && (board == null || board.isEmpty)) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('เลือกบอร์ดก่อนยืนยัน'))));
+                  return;
+                }
+                final link = await _c.confirmProposal(p, boardId: aiIsWorkspaceTree(p) ? board : null);
                 if (link != null && link.isNotEmpty && mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(tr('ทำรายการแล้ว')),
-// Actions make snackbars persist by default; these must time out.
+                      // Actions make snackbars persist by default; these must time out.
                       persist: false,
                       action: SnackBarAction(label: tr('เปิด'), onPressed: () => _openLink(link)),
                     ),
@@ -739,46 +782,51 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     return Padding(
       key: const ValueKey('ai-usage'),
       padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(value: u.usedFraction, minHeight: 4, color: color, backgroundColor: cs.surfaceContainerHighest),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(value: u.usedFraction, minHeight: 4, color: color, backgroundColor: cs.surfaceContainerHighest),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                tr('เหลือ ${aiTokenCount(u.remaining)} / ${aiTokenCount(u.quota)}'),
+                style: theme.textTheme.labelSmall?.copyWith(color: u.exhausted || u.low ? color : cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+          if (u.dailyExhausted)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(tr('โมเดลนี้ใช้ครบโควตาวันนี้แล้ว'), style: theme.textTheme.labelSmall?.copyWith(color: cs.error)),
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            tr('เหลือ ${aiTokenCount(u.remaining)} / ${aiTokenCount(u.quota)}'),
-            style: theme.textTheme.labelSmall?.copyWith(color: u.exhausted || u.low ? color : cs.onSurfaceVariant),
-          ),
-        ]),
-        if (u.dailyExhausted)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(tr('โมเดลนี้ใช้ครบโควตาวันนี้แล้ว'), style: theme.textTheme.labelSmall?.copyWith(color: cs.error)),
-          ),
-        if (u.suggestSwitch)
-          SizedBox(
-            height: 40,
-            child: ListView(
-              key: const ValueKey('ai-usage-switch'),
-              scrollDirection: Axis.horizontal,
-              children: [
-                for (final alt in u.alternatives.take(3))
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6, top: 4),
-                    child: ActionChip(
-                      visualDensity: VisualDensity.compact,
-                      avatar: Icon(NxI.arrowsClockwise, size: 14, color: cs.primary),
-                      label: Text(tr('สลับไป ${aiModelBadge('${alt['provider'] ?? ''}', alt['model']?.toString() ?? alt['labelHint']?.toString())}')),
-                      onPressed: () => _c.setModel('${alt['provider']}', alt['model']?.toString()),
+          if (u.suggestSwitch)
+            SizedBox(
+              height: 40,
+              child: ListView(
+                key: const ValueKey('ai-usage-switch'),
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final alt in u.alternatives.take(3))
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6, top: 4),
+                      child: ActionChip(
+                        visualDensity: VisualDensity.compact,
+                        avatar: Icon(NxI.arrowsClockwise, size: 14, color: cs.primary),
+                        label: Text(tr('สลับไป ${aiModelBadge('${alt['provider'] ?? ''}', alt['model']?.toString() ?? alt['labelHint']?.toString())}')),
+                        onPressed: () => _c.setModel('${alt['provider']}', alt['model']?.toString()),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-      ]),
+        ],
+      ),
     );
   }
 

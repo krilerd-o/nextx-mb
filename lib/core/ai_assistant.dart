@@ -380,3 +380,13 @@ class AiModelPolicy {
 
   bool configured(String p) => catalogs[p]?['configured'] != false;
 }
+
+/// Workspace tree proposals create tasks on a board the user picks (web
+/// `AiToolProposalCard`); `execute_workspace_tree_plan` needs one.
+bool aiIsWorkspaceTree(Map<String, dynamic> p) {
+  final pv = p['preview'] is Map ? p['preview'] as Map : const {};
+  final tool = '${p['tool'] ?? ''}', pt = '${pv['tool'] ?? ''}';
+  return tool == 'execute_workspace_tree_plan' || tool == 'plan_workspace_tree' || pt == 'execute_workspace_tree_plan' || pv['module'] == 'workspace_tree';
+}
+
+bool aiNeedsBoard(Map<String, dynamic> p) => '${p['tool'] ?? ''}' == 'execute_workspace_tree_plan';

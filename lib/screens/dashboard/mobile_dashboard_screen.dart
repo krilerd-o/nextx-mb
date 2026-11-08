@@ -17,6 +17,7 @@ import '../../widgets/nx_workspace_switcher.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
+import '../../widgets/nx_markdown.dart';
 import '../../widgets/nx_streaming_text.dart';
 import '../../core/thai_time.dart';
 import '../../core/workspace_models.dart';
@@ -906,10 +907,15 @@ class _AiBriefCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          NxStreamingText(
-            tr(text),
-            style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-          ),
+          // Summaries from the AI are markdown: show headings / bold / lists
+          // like the chat; plain text keeps the word-by-word effect.
+          if (looksLikeMarkdown(text))
+            NxRevealMarkdown(data: text)
+          else
+            NxStreamingText(
+              tr(text),
+              style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+            ),
           const SizedBox(height: 4),
         ],
       ),

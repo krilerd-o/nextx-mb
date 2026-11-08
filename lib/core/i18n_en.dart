@@ -1661,6 +1661,11 @@ const Map<String, String> enStrings = {
   'กำลังอัปโหลดไฟล์': 'Uploading',
   'ทำรายการสำเร็จ': 'Success',
   'โมเดลนี้ใช้ครบโควตาวันนี้แล้ว': 'This model has used today\'s quota',
+  'บอร์ดที่จะสร้างงาน': 'Target board',
+  '— เลือกบอร์ด —': '— Select board —',
+  'เลือกบอร์ดก่อนยืนยัน': 'Select a board before confirming',
+  'ดูไดอะแกรม': 'View diagram',
+  'ไดอะแกรม': 'Diagram',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

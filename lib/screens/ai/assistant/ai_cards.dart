@@ -33,8 +33,22 @@ String _fieldLabel(String k) => _kFieldLabels[k] ?? k;
 
 /// "ยืนยันการทำงานบน CRM": what the AI wants to write, then ยืนยัน / ยกเลิก.
 class AiProposalCard extends StatelessWidget {
-  const AiProposalCard({super.key, required this.proposal, required this.state, required this.onConfirm, required this.onCancel});
+  const AiProposalCard({
+    super.key,
+    required this.proposal,
+    required this.state,
+    required this.onConfirm,
+    required this.onCancel,
+    this.boards,
+    this.boardId,
+    this.onBoard,
+  });
   final Map<String, dynamic> proposal;
+
+  /// Workspace tree proposals: boards the user can write to, and the pick.
+  final List<Map<String, dynamic>>? boards;
+  final String? boardId;
+  final ValueChanged<String?>? onBoard;
 
   /// null | working | done | cancelled
   final String? state;
@@ -112,6 +126,21 @@ class AiProposalCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 4),
               child: Text(tr('แสดง ${sample.take(5).length} จาก $total'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
             ),
+        ],
+        if (boards != null && !done && !cancelled) ...[
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            key: const ValueKey('ai-proposal-board'),
+            initialValue: boards!.any((b) => '${b['id']}' == boardId) ? boardId : null,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: tr('บอร์ดที่จะสร้างงาน'), isDense: true),
+            hint: Text(tr('— เลือกบอร์ด —')),
+            items: [
+              for (final b in boards!)
+                DropdownMenuItem(value: '${b['id']}', child: Text('${b['name'] ?? b['title'] ?? b['id']}', overflow: TextOverflow.ellipsis)),
+            ],
+            onChanged: working ? null : onBoard,
+          ),
         ],
         const SizedBox(height: 10),
         if (done)

@@ -8,8 +8,10 @@ import 'package:flutter_highlight/themes/atom-one-light.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import '../core/effects.dart';
 import '../core/i18n.dart';
 import 'nx_icons.dart';
+import 'nx_mermaid_view.dart';
 
 /// Markdown (GFM) like the web AI answer view (`AiAnswerView.jsx`): tables in
 /// a rounded box that scrolls sideways, code blocks with a language label +
@@ -178,6 +180,14 @@ class _NxCodeBlockState extends State<NxCodeBlock> {
                 icon: Icon(_open ? NxI.caretUp : NxI.caretDown, size: 16),
                 onPressed: () => setState(() => _open = !_open),
               ),
+            if (_lang == 'mermaid')
+              TextButton.icon(
+                key: const ValueKey('nx-mermaid-view'),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => NxMermaidView(code: widget.code))),
+                icon: const Icon(NxI.chartBar, size: 14),
+                label: Text(tr('ดูไดอะแกรม'), style: const TextStyle(fontSize: 12)),
+              ),
             TextButton.icon(
               key: const ValueKey('nx-code-copy'),
               style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
@@ -205,6 +215,29 @@ class _NxCodeBlockState extends State<NxCodeBlock> {
           ),
         ),
       ]),
+    );
+  }
+}
+
+/// True when [s] uses markdown the plain text view would show raw.
+bool looksLikeMarkdown(String s) =>
+    RegExp(r'(\*\*[^*]+\*\*)|(^#{1,6}\s)|(^\s*[-*]\s)|(^\s*\d+\.\s)|(^\|.*\|\s*$)|(`[^`]+`)', multiLine: true).hasMatch(s);
+
+/// Markdown that types itself in (home AI summary); all at once when effects are off.
+class NxRevealMarkdown extends StatelessWidget {
+  const NxRevealMarkdown({super.key, required this.data, this.charsPerSecond = 220});
+  final String data;
+  final int charsPerSecond;
+
+  @override
+  Widget build(BuildContext context) {
+    final still = MediaQuery.maybeDisableAnimationsOf(context) == true || Effects.of(context) == EffectsLevel.off;
+    if (still) return NxMarkdown(data: data, selectable: false);
+    final ms = (data.length * 1000 / charsPerSecond).clamp(300, 4000).round();
+    return TweenAnimationBuilder<int>(
+      tween: IntTween(begin: 0, end: data.length),
+      duration: Duration(milliseconds: ms),
+      builder: (context, n, _) => NxMarkdown(data: data.substring(0, n), streaming: n < data.length, selectable: false),
     );
   }
 }
