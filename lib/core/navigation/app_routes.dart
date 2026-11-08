@@ -39,6 +39,15 @@ class AppRoutes {
   static const String workspaceHome = '/workspace';
   static const String chatHome = '/chat';
   static const String aiChat = '/ai';
+  static String aiShared(String token) => '/share/ai/${Uri.encodeComponent(token)}';
+
+  /// AI Assistant about one record (web context_module / context_id).
+  static String aiAsk({required String module, required String id, String? title}) =>
+      Uri(path: aiChat, queryParameters: {'ctx_module': module, 'ctx_id': id, if (title != null && title.isNotEmpty) 'ctx_title': title}).toString();
+  static const String isaacNotebook = '/isaac';
+  static const String aiMinuteAuto = '/ai-minute-auto';
+  static const String isaacAgent = '/isaac-ai-agent';
+  static const String isaacSocialWatch = '/isaac-social-watch';
   static const String profile = '/profile';
   static const String profileSecurity = '/profile/security';
   static const String calendar = '/calendar';

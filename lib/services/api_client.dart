@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
+
+import '../core/ai_assistant.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/app_alice.dart';
@@ -1052,9 +1056,10 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
-  Future<List<Map<String, dynamic>>> getBoards({String? q}) async {
+  Future<List<Map<String, dynamic>>> getBoards({String? q, bool writable = false}) async {
     final env = await _send('GET', '/api/boards', query: {
       if (q != null && q.isNotEmpty) 'q': q,
+      if (writable) 'writable': 1,
     });
     return extractMapList(env['data']);
   }
@@ -1399,26 +1404,30 @@ class ApiClient {
 
   /// `GET /api/dashboard/sales` — deal + quotation pipeline (this year by default).
   /// [dateFrom]/[dateTo] are YYYY-MM-DD (Thai days); none = the server's default.
-  Future<Map<String, dynamic>> getSalesDashboard({String? dateFrom, String? dateTo}) async => _dataMap(await _send(
+  /// [userId] = only that owner's deals/quotes (the server checks it is visible).
+  Future<Map<String, dynamic>> getSalesDashboard({String? dateFrom, String? dateTo, String? userId}) async => _dataMap(await _send(
         'GET',
         '/api/dashboard/sales',
-        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo},
+        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo, if (userId != null) 'userId': userId},
       ));
 
   /// `GET /api/dashboard/case` — case counts by status / type / priority.
-  Future<Map<String, dynamic>> getCaseDashboard({String? dateFrom, String? dateTo}) async => _dataMap(await _send(
+  Future<Map<String, dynamic>> getCaseDashboard({String? dateFrom, String? dateTo, String? userId}) async => _dataMap(await _send(
         'GET',
         '/api/dashboard/case',
-        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo},
+        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo, if (userId != null) 'userId': userId},
       ));
 
   /// Service dashboard (menu `svc-dash-case-summary`): kpis open/closed/overdue + by_status.
-  Future<Map<String, dynamic>> getCaseSummary({required String dateFrom, required String dateTo}) async =>
-      _dataMap(await _send('GET', '/api/service-dashboard/case-summary', query: {'dateFrom': dateFrom, 'dateTo': dateTo}));
+  /// [owner] = only cases of that owner (`owners=`).
+  Future<Map<String, dynamic>> getCaseSummary({required String dateFrom, required String dateTo, String? owner}) async =>
+      _dataMap(await _send('GET', '/api/service-dashboard/case-summary',
+          query: {'dateFrom': dateFrom, 'dateTo': dateTo, if (owner != null) 'owners': owner}));
 
   /// Service dashboard (menu `svc-dash-case-performance`): SLA met / missed / %.
-  Future<Map<String, dynamic>> getCasePerformance({required String dateFrom, required String dateTo}) async =>
-      _dataMap(await _send('GET', '/api/service-dashboard/case-performance', query: {'dateFrom': dateFrom, 'dateTo': dateTo}));
+  Future<Map<String, dynamic>> getCasePerformance({required String dateFrom, required String dateTo, String? owner}) async =>
+      _dataMap(await _send('GET', '/api/service-dashboard/case-performance',
+          query: {'dateFrom': dateFrom, 'dateTo': dateTo, if (owner != null) 'owners': owner}));
 
   /// Light SLA summary for Home (any user with cases): `counts{open_ok, open_overdue, met, missed}`.
   Future<Map<String, dynamic>> getCaseSlaSummary({int days = 30}) async =>
@@ -1482,6 +1491,128 @@ class ApiClient {
       if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
     }));
   }
+
+  // ── AI Assistant (same endpoints as the web `/ai` page)
+
+  /// Streams `POST /api/ai/chat` (server-sent events). Errors before the
+  /// stream starts come back as JSON and are thrown like other API errors.
+  Stream<AiStreamEvent> streamAiChat(Map<String, dynamic> body, {CancelToken? cancel}) async* {
+    final Response<ResponseBody> res;
+    try {
+      res = await _dio.post<ResponseBody>(
+        '/api/ai/chat',
+        data: {...body, 'stream': true},
+        cancelToken: cancel,
+        options: Options(
+          responseType: ResponseType.stream,
+          headers: {'Accept': 'text/event-stream'},
+          receiveTimeout: const Duration(minutes: 6),
+          validateStatus: (_) => true,
+        ),
+      );
+    } on DioException catch (e) {
+      throw _fromDio(e);
+    }
+    final Stream<String> stream = res.data!.stream.cast<List<int>>().transform(utf8.decoder);
+    if ((res.statusCode ?? 200) >= 400) {
+      final text = await stream.join();
+      dynamic raw;
+      try {
+        raw = jsonDecode(text);
+      } catch (_) {
+        raw = text;
+      }
+      throw _envelopeError(res.statusCode ?? 500, raw);
+    }
+    yield* parseAiSse(stream);
+  }
+
+  Future<List<Map<String, dynamic>>> getAiConversations({String? q}) async {
+    final env = await _send('GET', '/api/ai/conversations', query: {if (q != null && q.trim().isNotEmpty) 'q': q.trim()});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
+
+  Future<Map<String, dynamic>> createAiConversation(Map<String, dynamic> body) async =>
+      _dataMap(await _send('POST', '/api/ai/conversations', data: body));
+
+  /// Conversation with `messages` (up to 500).
+  Future<Map<String, dynamic>> getAiConversation(String id) async => _dataMap(await _send('GET', '/api/ai/conversations/$id'));
+
+  Future<Map<String, dynamic>> updateAiConversation(String id, Map<String, dynamic> body) async =>
+      _dataMap(await _send('PATCH', '/api/ai/conversations/$id', data: body));
+
+  Future<void> deleteAiConversation(String id) async => _send('DELETE', '/api/ai/conversations/$id');
+
+  Future<Map<String, dynamic>> appendAiMessage(String conversationId, Map<String, dynamic> message) async =>
+      _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/messages', data: {'message': message}));
+
+  /// Drops the last assistant reply; the client then streams again.
+  Future<Map<String, dynamic>> regenerateAi(String conversationId) async =>
+      _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/regenerate'));
+
+  /// [accessMode]: `business` (members, signed in) or `public` (anyone with the link).
+  Future<Map<String, dynamic>> createAiShare(String conversationId, {String accessMode = 'business'}) async =>
+      _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/shares', data: {'access_mode': accessMode}));
+
+  /// Shared chat snapshot `{share: {title, owner_display, ...}, snapshot: {messages}}` (signed in).
+  Future<Map<String, dynamic>> getAiSharedChat(String token) async => _dataMap(await _send('GET', '/api/ai/shared/${Uri.encodeComponent(token)}'));
+
+  Future<List<Map<String, dynamic>>> getAiProjects() async {
+    final env = await _send('GET', '/api/ai/projects');
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
+
+  /// `{id, url, original_name, kind, extract_status?, extracted_text?, ...}`.
+  Future<Map<String, dynamic>> uploadAiAttachment(MultipartFile file, {String? conversationId}) async {
+    final form = FormData()..files.add(MapEntry('file', file));
+    if (conversationId != null) form.fields.add(MapEntry('conversation_id', conversationId));
+    return _dataMap(await _send('POST', '/api/ai/attachments', data: form));
+  }
+
+  Future<Map<String, dynamic>> confirmAiTool(String proposalId, {String? boardId}) async =>
+      _dataMap(await _send('POST', '/api/ai/tools/confirm', data: {'proposalId': proposalId, 'board_id': ?(boardId == null ? null : int.tryParse(boardId) ?? boardId)}));
+
+  Future<Map<String, dynamic>> cancelAiTool(String proposalId) async =>
+      _dataMap(await _send('POST', '/api/ai/tools/cancel', data: {'proposalId': proposalId}));
+
+  Future<List<Map<String, dynamic>>> getAiSuggestedPrompts({String? module}) async {
+    final env = await _send('GET', '/api/ai/suggested-prompts', query: {'module': ?module});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
+
+  /// Follow-up chips after a reply: `{items:[{label, prompt, kind}]}`.
+  Future<List<Map<String, dynamic>>> postAiReplySuggestions({required String lastReply, required String lastUserMessage, String locale = 'th'}) async {
+    final env = await _send('POST', '/api/ai/reply-suggestions', data: {'last_reply': lastReply, 'last_user_message': lastUserMessage, 'locale': locale});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
+
+  /// Plan, quota, used, remaining, modelDaily, alternatives.
+  Future<Map<String, dynamic>> getAiUsage({String? provider, String? model}) async =>
+      _dataMap(await _send('GET', '/api/ai/usage', query: {'provider': ?provider, 'model': ?model}));
+
+  /// `{policies: {provider: {provider_enabled, enabled_models}}, catalogs: {provider: {configured, models}}}`.
+  Future<Map<String, dynamic>> getAiModelPolicy() async => _dataMap(await _send('GET', '/api/ai/model-policy'));
+
+  Future<Map<String, dynamic>> getAiModels({String? provider}) async =>
+      _dataMap(await _send('GET', '/api/ai/models', query: {'provider': ?provider}));
+
+  // ── ISAAC AI (web menu group "ISAAC AI")
+
+  /// `{settings:{ai_chat,...}, keys}` — per-business AI feature flags.
+  Future<Map<String, dynamic>> getAiSettings() async => _dataMap(await _send('GET', '/api/ai/settings'));
+
+  /// `{config:{enabled, audience, menus{...}, minute_auto{...}}, source, connection}`.
+  Future<Map<String, dynamic>> getIsaacPluginEffective() async =>
+      _dataMap(await _send('GET', '/api/settings/isaac-plugin/effective'));
+
+  /// ISAAC key-login: `{next_step:'EXCHANGE', launch_url, app_origin, ...}` or
+  /// `{next_step:'PASSWORD_SETUP_EMAILED', email}`. `menu`: `bot` | `minute_auto`.
+  Future<Map<String, dynamic>> isaacLaunch(String menu) async =>
+      _dataMap(await _send('POST', '/api/integrations/isaac/launch', data: {'menu': menu}));
 
   Future<Map<String, dynamic>> activityRsvp(String id, String response) async {
     return _dataMap(await _send('POST', '/api/activity/$id/rsvp', data: {

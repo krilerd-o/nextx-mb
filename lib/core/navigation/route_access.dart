@@ -1,4 +1,5 @@
 import '../entity_modules.dart';
+import '../isaac_menu.dart';
 import '../menu_access.dart';
 import '../session_state.dart';
 import 'app_routes.dart';
@@ -53,12 +54,28 @@ List<String>? requiredMenusFor(String path) {
   }
 }
 
+/// The ISAAC AI menu item a path opens, or null.
+IsaacMenuItem? isaacItemFor(String path) {
+  final p = Uri.tryParse(path)?.path ?? path;
+  for (final item in IsaacMenu.all) {
+    if (p == item.route || (item.route == '/ai' && p.startsWith('/ai/'))) return item;
+  }
+  return null;
+}
+
 /// Returns where to send the user instead, or `null` when [path] is allowed.
 ///
 /// Before menus are loaded we let navigation through; screens still fail
 /// server-side for records the user cannot read.
 String? accessRedirectFor(SessionState session, String path) {
   if (!session.menusLoaded) return null;
+  // ISAAC AI pages follow the plugin / AI settings (like the web menu). Uses
+  // the last loaded access; before it is known the page itself checks.
+  final isaac = isaacItemFor(path);
+  if (isaac != null) {
+    final access = IsaacAccessCache.peek(session.businessId ?? '');
+    if (access != null && !access.visible(isaac, session)) return AppRoutes.mainShell;
+  }
   final keys = requiredMenusFor(path);
   if (keys == null) return null;
   if (MenuAccess.any(session, keys)) return null;

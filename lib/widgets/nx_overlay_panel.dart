@@ -72,7 +72,7 @@ Future<T?> showNxBlurPanel<T>({
   final tap = NxTapTracker.recent();
   final origin = anchor ??
       (tap != null ? Rect.fromCenter(center: tap, width: 40, height: 40) : Rect.fromLTWH(size.width - 56, pad.top + 8, 40, 40));
-  return Navigator.of(context).push<T>(_PopoverRoute<T>(
+  return Navigator.of(context, rootNavigator: true).push<T>(_PopoverRoute<T>(
     anchor: origin,
     builder: builder,
     blur: Effects.blur(context),

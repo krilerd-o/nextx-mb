@@ -1,3 +1,4 @@
+import '../../core/nx_number.dart';
 import 'package:flutter/material.dart';
 
 import '../../widgets/nx_icons.dart';
@@ -7,14 +8,7 @@ import '../../core/i18n.dart';
 num _num(Object? v) => num.tryParse(v?.toString() ?? '') ?? 0;
 
 /// ฿1.2M / ฿350k / ฿900
-String compactBaht(Object? raw) {
-  final v = _num(raw).toDouble();
-  final a = v.abs();
-  String f(double x, String unit) => '฿${x.toStringAsFixed(x >= 10 ? 0 : 1).replaceAll(RegExp(r'\.0$'), '')}$unit';
-  if (a >= 1e6) return f(v / 1e6, 'M');
-  if (a >= 1e3) return f(v / 1e3, 'k');
-  return '฿${v.round()}';
-}
+String compactBaht(Object? raw) => nxBaht(_num(raw));
 
 /// One figure on the team card.
 class TeamFigure {
@@ -33,17 +27,17 @@ List<TeamFigure> salesFigures(Map<String, dynamic>? data) {
   final quote = data['quotation'] is Map ? (data['quotation'] as Map) : const {};
   final out = <TeamFigure>[];
   if (modules == null || modules.contains('deal')) {
-    out.add(TeamFigure('ดีลเปิดอยู่', '${_num(deal['openCount'])}', hint: compactBaht(deal['openAmount'])));
-    out.add(TeamFigure('ปิดได้', compactBaht(deal['wonAmount']), hint: '${_num(deal['wonCount'])} ดีล'));
+    out.add(TeamFigure('ดีลเปิดอยู่', nxInt(deal['openCount']), hint: compactBaht(deal['openAmount'])));
+    out.add(TeamFigure('ปิดได้', compactBaht(deal['wonAmount']), hint: '${nxInt(deal['wonCount'])} ดีล'));
     final rate = deal['winRate'];
     if (rate != null) {
       final r = _num(rate).toDouble();
       out.add(TeamFigure('อัตราปิดได้', '${(r <= 1 ? r * 100 : r).round()}%'));
     }
-    if (_num(deal['atRiskCount']) > 0) out.add(TeamFigure('ดีลเสี่ยง', '${_num(deal['atRiskCount'])}'));
+    if (_num(deal['atRiskCount']) > 0) out.add(TeamFigure('ดีลเสี่ยง', nxInt(deal['atRiskCount'])));
   }
   if (modules == null || modules.contains('quotation')) {
-    out.add(TeamFigure('ใบเสนอรอตอบ', '${_num(quote['awaitingCount'])}', hint: compactBaht(quote['totalAmount'])));
+    out.add(TeamFigure('ใบเสนอรอตอบ', nxInt(quote['awaitingCount']), hint: compactBaht(quote['totalAmount'])));
   }
   return out;
 }
@@ -54,8 +48,8 @@ List<TeamFigure> caseFigures(Map<String, dynamic>? data) {
   if (rows.isEmpty) return const [];
   final total = rows.fold<num>(0, (s, r) => s + _num(r['value']));
   return [
-    TeamFigure('เคสทั้งหมด', '$total'),
-    for (final r in rows.take(3)) TeamFigure(r['name']?.toString() ?? '—', '${_num(r['value'])}'),
+    TeamFigure('เคสทั้งหมด', nxInt(total)),
+    for (final r in rows.take(3)) TeamFigure(r['name']?.toString() ?? '—', nxInt(r['value'])),
   ];
 }
 

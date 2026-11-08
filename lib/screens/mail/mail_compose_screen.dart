@@ -8,6 +8,8 @@ import '../../services/api_client.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
+import '../../widgets/app_bottom_sheet.dart' show nxSheetHeight;
+import '../../widgets/nx_unsaved_guard.dart';
 
 enum MailComposeMode { compose, reply, forward, draft }
 
@@ -33,14 +35,7 @@ class MailRecipient {
 
 /// Builds the initial fields for reply / forward / draft so the logic is testable.
 class MailComposeSeed {
-  const MailComposeSeed({
-    this.to = const [],
-    this.cc = const [],
-    this.subject = '',
-    this.body = '',
-    this.quotedHtml,
-    this.draftId,
-  });
+  const MailComposeSeed({this.to = const [], this.cc = const [], this.subject = '', this.body = '', this.quotedHtml, this.draftId});
 
   final List<MailRecipient> to;
   final List<MailRecipient> cc;
@@ -63,11 +58,13 @@ class MailComposeSeed {
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .where((e) => (e['user_id'] ?? e['id']) != null)
-        .map((e) => MailRecipient(
-              userId: (e['user_id'] ?? e['id']).toString(),
-              display: e['display']?.toString() ?? e['email']?.toString() ?? 'User #${e['user_id']}',
-              email: e['email']?.toString(),
-            ))
+        .map(
+          (e) => MailRecipient(
+            userId: (e['user_id'] ?? e['id']).toString(),
+            display: e['display']?.toString() ?? e['email']?.toString() ?? 'User #${e['user_id']}',
+            email: e['email']?.toString(),
+          ),
+        )
         .toList();
   }
 
@@ -78,8 +75,7 @@ class MailComposeSeed {
   }
 
   static String _sender(Map<String, dynamic> m) =>
-      m['from_display']?.toString() ??
-      [m['from_first_name'], m['from_last_name']].where((e) => e != null).join(' ').trim();
+      m['from_display']?.toString() ?? [m['from_first_name'], m['from_last_name']].where((e) => e != null).join(' ').trim();
 
   factory MailComposeSeed.from(MailComposeMode mode, Map<String, dynamic>? original) {
     final m = original ?? const <String, dynamic>{};
@@ -96,14 +92,14 @@ class MailComposeSeed {
               ? const []
               : [MailRecipient(userId: fromId, display: sender.isEmpty ? 'User #$fromId' : sender, email: m['from_email']?.toString())],
           subject: _prefixed('Re:', subject),
-          quotedHtml:
-              '<p>${escapeHtml('เมื่อ $when $sender เขียนว่า:'.trim())}</p><blockquote>${_originalHtml(m)}</blockquote>',
+          quotedHtml: '<p>${escapeHtml('เมื่อ $when $sender เขียนว่า:'.trim())}</p><blockquote>${_originalHtml(m)}</blockquote>',
         );
       case MailComposeMode.forward:
         final sender = _sender(m);
         return MailComposeSeed(
           subject: _prefixed('Fwd:', subject),
-          quotedHtml: '<p>---------- ข้อความที่ส่งต่อ ----------<br>'
+          quotedHtml:
+              '<p>---------- ข้อความที่ส่งต่อ ----------<br>'
               'จาก: ${escapeHtml(sender)}<br>เรื่อง: ${escapeHtml(subject)}</p>${_originalHtml(m)}',
         );
       case MailComposeMode.draft:
@@ -112,27 +108,19 @@ class MailComposeSeed {
           to: _recipients(m['to']),
           cc: _recipients(m['cc']),
           subject: subject,
-          body: m['body']?.toString() ??
-              (html == null ? '' : stripHtmlPreview(html, maxLen: 1 << 20)),
+          body: m['body']?.toString() ?? (html == null ? '' : stripHtmlPreview(html, maxLen: 1 << 20)),
           draftId: m['id']?.toString(),
         );
     }
   }
 }
 
-String escapeHtml(String s) => s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+String escapeHtml(String s) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 
 /// Plain text from the compose box → minimal safe HTML.
 String plainTextToHtml(String text) {
   if (text.trim().isEmpty) return '';
-  return text
-      .split(RegExp(r'\n{2,}'))
-      .map((p) => '<p>${escapeHtml(p).replaceAll('\n', '<br>')}</p>')
-      .join();
+  return text.split(RegExp(r'\n{2,}')).map((p) => '<p>${escapeHtml(p).replaceAll('\n', '<br>')}</p>').join();
 }
 
 class MailComposeScreen extends StatefulWidget {
@@ -190,6 +178,7 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
     final picked = await showModalBottomSheet<MailRecipient>(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       builder: (ctx) => _RecipientPicker(users: all, exclude: {..._to, ..._cc}),
     );
     if (picked != null && mounted) setState(() => target.add(picked));
@@ -207,9 +196,7 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
     setState(() => _busy = true);
     final api = context.read<AppConfig>().apiClient;
     final html = '${plainTextToHtml(_body.text)}${_seed.quotedHtml ?? ''}';
-    final bodyText = _seed.quotedHtml == null
-        ? _body.text
-        : '${_body.text}\n\n${stripHtmlPreview(_seed.quotedHtml, maxLen: 1 << 20)}';
+    final bodyText = _seed.quotedHtml == null ? _body.text : '${_body.text}\n\n${stripHtmlPreview(_seed.quotedHtml, maxLen: 1 << 20)}';
     try {
       final toIds = _to.map((r) => r.userId).toList();
       final ccIds = _cc.map((r) => r.userId).toList();
@@ -224,19 +211,10 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
           isDraft: draft,
         );
       } else {
-        await api.sendMail(
-          toUserIds: toIds,
-          ccUserIds: ccIds,
-          subject: _subject.text.trim(),
-          body: bodyText,
-          bodyHtml: html,
-          isDraft: draft,
-        );
+        await api.sendMail(toUserIds: toIds, ccUserIds: ccIds, subject: _subject.text.trim(), body: bodyText, bodyHtml: html, isDraft: draft);
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr(draft ? 'บันทึกฉบับร่างแล้ว' : 'ส่งจดหมายแล้ว'))),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(draft ? 'บันทึกฉบับร่างแล้ว' : 'ส่งจดหมายแล้ว'))));
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -267,15 +245,11 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
               children: [
                 for (final r in list)
                   InputChip(
-        deleteIcon: const Icon(NxI.x, size: 16),
+                    deleteIcon: const Icon(NxI.x, size: 16),
                     label: Text(tr(r.display)),
                     onDeleted: _busy ? null : () => setState(() => list.remove(r)),
                   ),
-                ActionChip(
-                  avatar: const Icon(NxI.userPlus, size: 18),
-                  label: Text(tr('เพิ่ม')),
-                  onPressed: _busy ? null : () => _pick(list),
-                ),
+                ActionChip(avatar: const Icon(NxI.userPlus, size: 18), label: Text(tr('เพิ่ม')), onPressed: _busy ? null : () => _pick(list)),
               ],
             ),
           ),
@@ -284,24 +258,26 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
     );
   }
 
+  // Back / swipe asks before throwing away what was typed.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => NxUnsavedGuard(
+        enabled: true,
+        snapshot: () => [_to, _cc, _subject.text, _body.text].join('|'),
+        child: _buildForm(context),
+      );
+
+
+  Widget _buildForm(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: NxAppHeader(
         title: _title,
         actions: [
-          IconButton(
-            tooltip: tr('บันทึกฉบับร่าง'),
-            onPressed: _busy ? null : () => _submit(draft: true),
-            icon: const Icon(NxI.note),
-          ),
+          IconButton(tooltip: tr('บันทึกฉบับร่าง'), onPressed: _busy ? null : () => _submit(draft: true), icon: const Icon(NxI.note)),
           IconButton(
             tooltip: tr('ส่ง'),
             onPressed: _busy ? null : () => _submit(draft: false),
-            icon: _busy
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(NxI.paperPlaneTilt),
+            icon: _busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.paperPlaneTilt),
           ),
         ],
       ),
@@ -314,10 +290,7 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
           else
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () => setState(() => _showCc = true),
-                child: Text(tr('+ สำเนา (CC)')),
-              ),
+              child: TextButton(onPressed: () => setState(() => _showCc = true), child: Text(tr('+ สำเนา (CC)'))),
             ),
           const Divider(),
           TextField(
@@ -333,11 +306,7 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
             minLines: 8,
             maxLines: null,
             keyboardType: TextInputType.multiline,
-            decoration: InputDecoration(
-              labelText: tr('ข้อความ'),
-              alignLabelWithHint: true,
-              border: OutlineInputBorder(),
-            ),
+            decoration: InputDecoration(labelText: tr('ข้อความ'), alignLabelWithHint: true, border: OutlineInputBorder()),
           ),
           if (_seed.quotedHtml != null) ...[
             const SizedBox(height: 16),
@@ -346,10 +315,7 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 4),
-            Text(
-              tr(stripHtmlPreview(_seed.quotedHtml, maxLen: 400)),
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
+            Text(tr(stripHtmlPreview(_seed.quotedHtml, maxLen: 400)), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ],
         ],
       ),
@@ -377,39 +343,40 @@ class _RecipientPickerState extends State<_RecipientPicker> {
       if (_needle.isEmpty) return true;
       return u.display.toLowerCase().contains(_needle) || (u.email ?? '').toLowerCase().contains(_needle);
     }).toList();
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: TextField(
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: tr('ค้นหาผู้รับ'),
-                  prefixIcon: Icon(NxI.magnifyingGlass),
+    return Padding(
+      // Above the keyboard: the search field and results stay visible.
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        child: SizedBox(
+          height: nxSheetHeight(context, 0.7),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  autofocus: true,
+                  decoration: InputDecoration(labelText: tr('ค้นหาผู้รับ'), prefixIcon: Icon(NxI.magnifyingGlass)),
+                  onChanged: (v) => setState(() => _needle = v.trim().toLowerCase()),
                 ),
-                onChanged: (v) => setState(() => _needle = v.trim().toLowerCase()),
               ),
-            ),
-            Expanded(
-              child: filtered.isEmpty
-                  ? Center(child: Text(tr('ไม่พบผู้ใช้')))
-                  : ListView.builder(
-                      itemCount: filtered.length,
-                      itemBuilder: (_, i) {
-                        final u = filtered[i];
-                        return ListTile(
-                          leading: const Icon(NxI.user),
-                          title: Text(tr(u.display)),
-                          subtitle: u.email == null ? null : Text(tr(u.email!)),
-                          onTap: () => Navigator.pop(context, u),
-                        );
-                      },
-                    ),
-            ),
-          ],
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(child: Text(tr('ไม่พบผู้ใช้')))
+                    : ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (_, i) {
+                          final u = filtered[i];
+                          return ListTile(
+                            leading: const Icon(NxI.user),
+                            title: Text(tr(u.display)),
+                            subtitle: u.email == null ? null : Text(tr(u.email!)),
+                            onTap: () => Navigator.pop(context, u),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -370,6 +370,8 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
           Text(tr('$count งาน'), style: const TextStyle(fontSize: 12)),
         ],
       ),
+      // Actions make snackbars persist by default; these must time out.
+      persist: false,
       action: SnackBarAction(
         label: tr('เลิกทำ'),
         onPressed: () => _undo(moved, from, before[from] ?? const []),

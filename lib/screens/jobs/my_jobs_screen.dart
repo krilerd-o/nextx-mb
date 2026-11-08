@@ -143,8 +143,9 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
             },
           );
           return NxSplitView(
+            onClose: () => setState(() => _selected = null),
             list: items,
-            detail: _selected == null ? null : EntityDetailScreen(key: ValueKey(_selected!['id']), module: 'job', row: _selected!, embedded: true),
+            detail: _selected == null ? null : EntityDetailScreen(key: ValueKey(_selected!['id']), module: 'job', row: _selected!, embedded: true, onDeleted: () => setState(() => _selected = null)),
           );
         },
       ),

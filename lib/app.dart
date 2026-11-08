@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'widgets/nx_keyboard_follow.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -83,6 +85,7 @@ class _NextXMobileAppState extends State<NextXMobileApp>
           themeAnimationDuration: const Duration(milliseconds: 420),
           themeAnimationCurve: Curves.easeInOutCubic,
           builder: (context, child) => BackdropGroup(
+            child: NxKeyboardFollow(
             child: NxAtmosphere(
               child: NxLanguageSwitchLayer(
                 child: AliceDebugLayer(
@@ -99,6 +102,7 @@ class _NextXMobileAppState extends State<NextXMobileApp>
                   ),
                 ),
               ),
+            ),
             ),
           ),
           routerConfig: _router,

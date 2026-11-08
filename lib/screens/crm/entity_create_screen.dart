@@ -15,6 +15,7 @@ import '../../core/i18n.dart';
 import '../../core/entity_form_rules.dart';
 import '../../widgets/fields/field_validate.dart';
 import 'package:flutter/services.dart';
+import '../../widgets/nx_unsaved_guard.dart';
 
 class EntityCreateScreen extends StatefulWidget {
   const EntityCreateScreen({
@@ -226,8 +227,16 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
     }
   }
 
+  // Back / swipe asks before throwing away what was typed.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => NxUnsavedGuard(
+        enabled: !widget.embedded,
+        snapshot: () => '$_values',
+        child: _buildForm(context),
+      );
+
+
+  Widget _buildForm(BuildContext context) {
     final api = context.read<AppConfig>().apiClient;
     final pad = NxBreakpoint.of(context).pagePadding;
     return Scaffold(

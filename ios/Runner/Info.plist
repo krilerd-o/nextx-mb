@@ -54,6 +54,10 @@
 	<string>ใช้ตำแหน่งเพื่อเช็คอินหน้างานและลงเวลา</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>ใช้ Face ID ปลดล็อกแอปแทนการเข้าสู่ระบบใหม่</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>แปลงเสียงพูดเป็นข้อความเมื่อถามผู้ช่วย AI</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ใช้ไมโครโฟนอัดเสียงประชุมใน AI Minute Auto และข้อความเสียงถึงผู้ช่วย AI</string>
 	<key>NSCameraUsageDescription</key>
 	<string>ใช้กล้องถ่ายหลักฐานเช็คอินและใบตรวจ</string>
 	<key>NSPhotoLibraryUsageDescription</key>

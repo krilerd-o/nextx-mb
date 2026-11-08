@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 
 /// Replies to `"METHOD /path"` with a NEXTX S/E envelope; records every call.
 class FakeNextxAdapter implements HttpClientAdapter {
-  FakeNextxAdapter(this.replies, {this.statusFor = const {}, this.headersFor = const {}, Set<String>? offline})
+  FakeNextxAdapter(this.replies, {this.statusFor = const {}, this.headersFor = const {}, this.sseFor = const {}, Set<String>? offline})
       : offline = offline ?? <String>{};
 
   /// `METHOD /path` that fail like a lost connection (no response). Mutable.
@@ -16,6 +16,8 @@ class FakeNextxAdapter implements HttpClientAdapter {
 
   /// Extra response headers per `METHOD /path` (e.g. `x-session-token`).
   final Map<String, Map<String, String>> headersFor;
+  /// Raw `text/event-stream` bodies per `METHOD /path` (AI chat stream).
+  final Map<String, String> sseFor;
   final calls = <RequestOptions>[];
 
   List<String> get callKeys => [for (final c in calls) '${c.method.toUpperCase()} ${c.path}'];
@@ -28,6 +30,11 @@ class FakeNextxAdapter implements HttpClientAdapter {
       throw DioException(requestOptions: options, type: DioExceptionType.connectionError, message: 'offline');
     }
     final code = statusFor[key];
+    if (sseFor.containsKey(key)) {
+      return ResponseBody.fromString(sseFor[key]!, code ?? 200, headers: {
+        Headers.contentTypeHeader: ['text/event-stream'],
+      });
+    }
     final Object body;
     if (replies.containsKey(key)) {
       body = {'status': 'S', 'messagestatus': 'Success', 'data': replies[key]};

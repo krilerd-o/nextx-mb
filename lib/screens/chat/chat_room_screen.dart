@@ -707,7 +707,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             ),
           Expanded(
             child: _loading && _messages.isEmpty
-                ? const NxSkeletonList(rows: 5)
+                ? const NxSkeletonChat()
                 : _messages.isEmpty
                     ? Center(
                         child: Column(

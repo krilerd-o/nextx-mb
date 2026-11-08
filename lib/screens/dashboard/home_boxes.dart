@@ -1,4 +1,6 @@
+import '../../core/nx_number.dart';
 import 'package:flutter/material.dart';
+import '../../widgets/nx_skeleton.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -98,7 +100,7 @@ class HomeBoxHeader extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-              child: Text('$count', style: theme.textTheme.labelLarge?.copyWith(color: Colors.white)),
+              child: Text(nxInt(count), style: theme.textTheme.labelLarge?.copyWith(color: Colors.white)),
             ),
           if (onToggle != null) ...[
             const SizedBox(width: 6),
@@ -326,10 +328,7 @@ class _MyWorkBoxState extends State<MyWorkBox> {
                       ),
                       const SizedBox(height: 4),
                       if (items == null)
-                        const Padding(
-                          padding: EdgeInsets.all(14),
-                          child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-                        )
+                        const Padding(padding: EdgeInsets.fromLTRB(14, 6, 14, 0), child: NxSkeletonBox())
                       else if (items.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -599,7 +598,7 @@ class _PeriodBox extends StatefulWidget {
   final IconData icon;
   final Color color;
   final NxPeriod fallback;
-  final Future<List<_Figure>> Function(ApiClient api, String from, String to) load;
+  final Future<List<_Figure>> Function(ApiClient api, String from, String to, String? me) load;
   final VoidCallback? onOpen;
   final int revision;
 
@@ -634,7 +633,8 @@ class _PeriodBoxState extends State<_PeriodBox> {
     final seq = ++_seq;
     final (from, to) = periodRange(_period, thaiNow());
     try {
-      final f = await widget.load(api, ymd(from), ymd(to));
+      final me = context.read<AppConfig>().session.userId;
+      final f = await widget.load(api, ymd(from), ymd(to), (me == null || me.isEmpty) ? null : me);
       if (mounted && seq == _seq) setState(() => _figs = f);
     } catch (_) {
       if (mounted && seq == _seq) setState(() => _figs = const []);
@@ -678,10 +678,7 @@ class _PeriodBoxState extends State<_PeriodBox> {
             duration: const Duration(milliseconds: 200),
             alignment: Alignment.topCenter,
             child: figs == null
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-                  )
+                ? const Padding(padding: EdgeInsets.fromLTRB(12, 4, 12, 0), child: NxSkeletonBox(rows: 2))
                 : figs.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -703,8 +700,9 @@ class SalesPeriodBox extends StatelessWidget {
   final int revision;
   final VoidCallback? onOpen;
 
-  static Future<List<_Figure>> loadFigures(ApiClient api, String from, String to) async {
-    final data = await api.getSalesDashboard(dateFrom: from, dateTo: to);
+  /// [me] = the signed-in user: the box shows *my* sales, not the whole team.
+  static Future<List<_Figure>> loadFigures(ApiClient api, String from, String to, {String? me}) async {
+    final data = await api.getSalesDashboard(dateFrom: from, dateTo: to, userId: me);
     return [
       for (final f in salesFigures(data)) _Figure(f.label, f.value, hint: f.hint, color: const Color(0xFF10B981)),
     ];
@@ -718,7 +716,7 @@ class SalesPeriodBox extends StatelessWidget {
         icon: NxI.handshake,
         color: const Color(0xFF10B981),
         fallback: NxPeriod.month,
-        load: loadFigures,
+        load: (api, f, t, me) => loadFigures(api, f, t, me: me),
         onOpen: onOpen,
         revision: revision,
       );
@@ -730,9 +728,10 @@ class CasePeriodBox extends StatelessWidget {
   final int revision;
   final VoidCallback? onOpen;
 
-  static Future<List<_Figure>> loadFigures(ApiClient api, String from, String to) async {
+  /// [me] = the signed-in user: only cases this user owns.
+  static Future<List<_Figure>> loadFigures(ApiClient api, String from, String to, {String? me}) async {
     try {
-      final s = await api.getCaseSummary(dateFrom: from, dateTo: to);
+      final s = await api.getCaseSummary(dateFrom: from, dateTo: to, owner: me);
       final k = s['kpis'] is Map ? Map<String, dynamic>.from(s['kpis'] as Map) : const <String, dynamic>{};
       final byStatus = <String, num>{
         for (final r in (s['by_status'] as List? ?? const []).whereType<Map>()) '${r['key']}': _n(r['count']),
@@ -740,35 +739,36 @@ class CasePeriodBox extends StatelessWidget {
       final working = (byStatus['in_progress'] ?? 0) + (byStatus['accepted'] ?? 0) + (byStatus['forwarded'] ?? 0);
       String? sla;
       try {
-        final p = await api.getCasePerformance(dateFrom: from, dateTo: to);
+        final p = await api.getCasePerformance(dateFrom: from, dateTo: to, owner: me);
         final pk = p['kpis'] is Map ? p['kpis'] as Map : p;
         if (pk['sla_pct'] != null) sla = '${_n(pk['sla_pct']).round()}%';
       } catch (_) {}
       return [
-        _Figure('เคสทั้งหมด', '${_n(k['opened'])}', color: const Color(0xFF6366F1)),
-        _Figure('เคสที่เปิด', '${_n(k['open_now'])}', color: const Color(0xFF3B82F6)),
-        _Figure('กำลังดำเนินการ', '$working', color: const Color(0xFFF59E0B)),
-        _Figure('เคสที่ปิด', '${_n(k['closed'])}', color: const Color(0xFF10B981)),
-        _Figure('เคสค้าง', '${_n(k['overdue_now'])}', color: const Color(0xFFEF4444)),
-        _Figure('รอปิด', '${byStatus['waiting'] ?? 0}', color: const Color(0xFF8B5CF6)),
+        _Figure('เคสทั้งหมด', nxInt(k['opened']), color: const Color(0xFF6366F1)),
+        _Figure('เคสที่เปิด', nxInt(k['open_now']), color: const Color(0xFF3B82F6)),
+        _Figure('กำลังดำเนินการ', nxInt(working), color: const Color(0xFFF59E0B)),
+        _Figure('เคสที่ปิด', nxInt(k['closed']), color: const Color(0xFF10B981)),
+        _Figure('เคสค้าง', nxInt(k['overdue_now']), color: const Color(0xFFEF4444)),
+        _Figure('รอปิด', nxInt(byStatus['waiting'] ?? 0), color: const Color(0xFF8B5CF6)),
         if (sla != null) _Figure('SLA', sla, color: const Color(0xFF0EA5E9)),
       ];
     } on ApiException catch (_) {
       // No service-dashboard menu: counts by status + light SLA summary.
     } on ApiEnvelopeException catch (_) {}
-    final d = await api.getCaseDashboard(dateFrom: from, dateTo: to);
+    final d = await api.getCaseDashboard(dateFrom: from, dateTo: to, userId: me);
     final rows = (d['byStatus'] as List? ?? const []).whereType<Map>().toList();
     final total = rows.fold<num>(0, (a, r) => a + _n(r['value']));
     String? sla;
-    try {
+    // The light SLA summary counts the whole team; skip it on a "mine" box.
+    if (me == null) try {
       final from0 = DateTime.parse(from);
       final days = thaiNow().difference(from0).inDays + 1;
       final h = await api.getCaseSlaSummary(days: days.clamp(1, 365));
       if (h['compliance_pct'] != null) sla = '${_n(h['compliance_pct']).round()}%';
     } catch (_) {}
     return [
-      _Figure('เคสทั้งหมด', '$total', color: const Color(0xFF6366F1)),
-      for (final r in rows.take(4)) _Figure('${r['name'] ?? '—'}', '${_n(r['value'])}'),
+      _Figure('เคสทั้งหมด', nxInt(total), color: const Color(0xFF6366F1)),
+      for (final r in rows.take(4)) _Figure('${r['name'] ?? '—'}', nxInt(r['value'])),
       if (sla != null) _Figure('SLA', sla, color: const Color(0xFF0EA5E9)),
     ];
   }
@@ -781,7 +781,7 @@ class CasePeriodBox extends StatelessWidget {
         icon: NxI.headset,
         color: const Color(0xFFEF4444),
         fallback: NxPeriod.week,
-        load: loadFigures,
+        load: (api, f, t, me) => loadFigures(api, f, t, me: me),
         onOpen: onOpen,
         revision: revision,
       );

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nextx_mobile/widgets/nx_app_header.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -94,8 +95,8 @@ void main() {
       ),
     );
     expect(find.text('[QA] งานต้นฉบับ (สำเนา)'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('คัดลอกงานย่อยและ Smart Checklist ด้วย'), 300, scrollable: find.byType(Scrollable).first);
-    expect(find.text('คัดลอกงานย่อยและ Smart Checklist ด้วย'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('คัดลอกงานย่อยและเช็กลิสต์ด้วย'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('คัดลอกงานย่อยและเช็กลิสต์ด้วย'), findsOneWidget);
     await save(tester);
     final b = _body(adapter, 'POST /api/boards/1/tasks');
     expect(b['title'], '[QA] งานต้นฉบับ (สำเนา)');
@@ -127,5 +128,7 @@ void main() {
     expect(adapter.callKeys, contains('GET /api/boards/1/tasks'));
     expect(find.text('[QA] การ์ด A'), findsOneWidget);
     expect(find.text('QAM-1'), findsOneWidget);
+    final header = tester.widget<NxAppHeader>(find.byType(NxAppHeader).first);
+    expect([for (final m in header.menu ?? const <NxHeaderMenuItem>[]) m.label], containsAllInOrder(['สร้าง Task', 'สร้าง Epic']));
   });
 }

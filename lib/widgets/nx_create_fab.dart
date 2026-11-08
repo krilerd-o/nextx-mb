@@ -46,10 +46,14 @@ class NxCreateFab extends StatelessWidget {
     super.key,
     required this.onPressed,
     this.label = 'สร้าง',
+    this.onLongPress,
   });
 
   final VoidCallback onPressed;
   final String label;
+
+  /// Optional: long-press for more create choices.
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +62,9 @@ class NxCreateFab extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(bottom: bp.useRail ? 8 : 4),
-      child: FloatingActionButton(
+      child: GestureDetector(
+        onLongPress: onLongPress,
+        child: FloatingActionButton(
         onPressed: onPressed,
         tooltip: trn(label),
         backgroundColor: scheme.primary,
@@ -67,6 +73,7 @@ class NxCreateFab extends StatelessWidget {
         highlightElevation: 6,
         shape: const CircleBorder(),
         child: const Icon(NxI.plus, size: 28),
+      ),
       ),
     );
   }

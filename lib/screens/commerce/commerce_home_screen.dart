@@ -218,6 +218,7 @@ class _OrdersTabState extends State<_OrdersTab> {
         ),
         Expanded(
           child: NxSplitView(
+            onClose: () => setState(() => _selected = null),
             detail: _selected == null
                 ? null
                 : OrderSummaryScreen(
@@ -343,6 +344,7 @@ class _StockTabState extends State<_StockTab> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
+          scrollable: true,
           title: Text(tr('${product['name'] ?? ''}${variant != null ? ' · ${variant['sku_code'] ?? ''}' : ''}')),
           content: Column(
             mainAxisSize: MainAxisSize.min,

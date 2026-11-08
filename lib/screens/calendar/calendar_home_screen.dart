@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../widgets/nx_skeleton.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -281,6 +282,8 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
         key: const ValueKey('cal-moved-snack'),
         behavior: SnackBarBehavior.floating,
         content: Text(tr('${e.title}: ${start.day} ${monthShort(start.month)} ${hm(start)}–${hm(end)}')),
+        // Actions make snackbars persist by default; these must time out.
+        persist: false,
         action: SnackBarAction(
           label: tr('เลิกทำ'),
           onPressed: () async {
@@ -536,7 +539,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
           future: _special,
           builder: (context, snap) {
             if (snap.hasError) return Center(child: Text(tr(formatApiError(snap.error!))));
-            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+            if (!snap.hasData) return const NxSkeletonCalendar();
             return CalAgendaView(
               store: _store,
               anchor: _date,

@@ -5,6 +5,7 @@ import '../../core/app_config.dart';
 import '../../services/api_client.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
+import 'ws_detail_parts.dart';
 
 /// (done, total) over checkable rows — headers don't count, like the web.
 (int, int) checklistProgress(List<Map<String, dynamic>> items) {
@@ -98,35 +99,21 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
     final cs = theme.colorScheme;
     final (done, total) = checklistProgress(_items);
     const accent = Color(0xFF14B8A6);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(14, 10, 10, 6),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
-      ),
+    // Same box, header and spacing as "งานย่อย" (WsSection).
+    return WsSection(
+      title: 'เช็กลิสต์',
+      icon: NxI.listChecks,
+      color: accent,
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (_busy) const Padding(padding: EdgeInsets.only(right: 8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+        if (total > 0) Text('$done/$total', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+      ]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-                child: const Icon(NxI.listChecks, size: 16, color: accent),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(tr('Smart Checklist'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-              ),
-              if (_busy) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-              if (total > 0) Text('$done/$total', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
-            ],
-          ),
           if (total > 0)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.only(bottom: 8),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(value: done / total, minHeight: 6, color: accent),
@@ -160,7 +147,7 @@ class _SmartChecklistSectionState extends State<SmartChecklistSection> {
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _addItem(),
             decoration: InputDecoration(
-              hintText: tr('เพิ่มรายการใน Smart Checklist'),
+              hintText: tr('เพิ่มรายการในเช็กลิสต์ แล้วกด Enter'),
               isDense: true,
               border: InputBorder.none,
               prefixIcon: const Icon(NxI.plus, size: 18),

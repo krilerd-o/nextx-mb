@@ -12,6 +12,7 @@ import '../../widgets/fields/nx_entity_form.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_unsaved_guard.dart';
 
 /// Create / edit / duplicate a Workspace item (Epic, Task, Bug, Story,
 /// Subtask, Checklist). Same fields and defaults as the NEXTX web form.
@@ -295,8 +296,16 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
     } catch (_) {}
   }
 
+  // Back / swipe asks before throwing away what was typed.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => NxUnsavedGuard(
+        enabled: true,
+        snapshot: () => '$_values',
+        child: _buildForm(context),
+      );
+
+
+  Widget _buildForm(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final type = wsTypeStyle(_kind == 'epic' ? 'epic' : '${_values['type'] ?? 'task'}');
     final title = _isEdit
@@ -343,7 +352,7 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
                 if (widget.duplicateFrom != null && _kind == 'task')
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(tr('คัดลอกงานย่อยและ Smart Checklist ด้วย')),
+                    title: Text(tr('คัดลอกงานย่อยและเช็กลิสต์ด้วย')),
                     subtitle: Text(tr('ไม่รวมเวลาที่ลงไว้และคอมเมนต์')),
                     value: _copyChildren,
                     onChanged: (v) => setState(() => _copyChildren = v),

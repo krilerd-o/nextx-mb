@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_skeleton.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -6,6 +7,7 @@ import '../../core/app_config.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_logout.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../notifications/notification_center_screen.dart' show relativeTime;
@@ -106,7 +108,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
   Future<void> _logoutHere() async {
     final config = context.read<AppConfig>();
-    if (!await _confirm('ออกจากระบบเครื่องนี้?', 'ออกจาก ${config.activeSpace?.title ?? 'Space นี้'} บนเครื่องนี้ (Space อื่นยังใช้งานได้)', 'ออกจากระบบ')) return;
+    if (!await confirmNxLogout(context, config)) return;
     await config.logout();
   }
 
@@ -132,7 +134,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
             if (_error != null)
               Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error))
             else if (list == null)
-              const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+              const NxSkeletonList(rows: 3)
             else if (!_supported)
               Text(
                 tr('ระบบ MOAI NEXT ของ Space นี้ยังไม่รองรับการดูอุปกรณ์อื่น (ต้องอัปเดตระบบ) — ออกจากระบบเครื่องนี้ได้ตามปกติ'),

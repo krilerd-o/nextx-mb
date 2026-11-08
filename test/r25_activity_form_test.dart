@@ -81,6 +81,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     final body = _lastPost(adapter);
     expect(body['all_day'], isTrue);
+    expect(body['activitytype'], 'Visit', reason: 'new activities default to a customer visit');
     expect(body['date_start'], '2026-11-10 00:00:00');
     expect(body['date_end'], '2026-11-10 23:59:00');
   });

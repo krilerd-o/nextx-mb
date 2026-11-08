@@ -19,6 +19,7 @@ import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_map_view.dart';
 import 'cal/cal_model.dart';
+import '../../widgets/nx_unsaved_guard.dart';
 
 /// Activity create / edit / duplicate, laid out like the web compose panel
 /// (and Google Calendar): title + type, all-day or times (hh:mm), guests with
@@ -88,7 +89,8 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
     _descInitial = stripHtmlPreview('${r['description'] ?? ''}', maxLen: 100000);
     _desc = TextEditingController(text: _descInitial);
     final t = '${r['activitytype'] ?? ''}';
-    _type = t.isEmpty ? 'Meeting' : t;
+    // New activities start as a customer visit (เยี่ยมลูกค้า).
+    _type = t.isEmpty ? 'Visit' : t;
     _allDay = r['all_day'] == true || r['all_day'] == 1 || '${r['all_day']}' == 'true';
     final s = parseWall(r['date_start']) ?? widget.start ?? _nextSlot(thaiNow());
     var e = parseWall(r['date_end']) ?? (_allDay ? _dayEnd(s) : s.add(const Duration(hours: 1)));
@@ -313,8 +315,16 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
 
   // ── UI ───────────────────────────────────────────────────────────────────
 
+  // Back / swipe asks before throwing away what was typed.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => NxUnsavedGuard(
+        enabled: true,
+        snapshot: () => [_subject.text, _location.text, _meetUrl.text, _desc.text, _start, _end].join('|'),
+        child: _buildForm(context),
+      );
+
+
+  Widget _buildForm(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final title = widget.title ?? (widget.isEdit ? 'แก้ไขกิจกรรม' : 'นัดหมายใหม่');

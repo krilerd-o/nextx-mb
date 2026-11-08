@@ -243,12 +243,18 @@ class WhatsNewBody extends StatefulWidget {
   State<WhatsNewBody> createState() => _WhatsNewBodyState();
 }
 
-class _WhatsNewBodyState extends State<WhatsNewBody> {
+class _WhatsNewBodyState extends State<WhatsNewBody> with AutomaticKeepAliveClientMixin {
   bool _open = false;
   double? _full;
 
+  // Keep the measured height / open state when the card scrolls off screen,
+  // so coming back does not rebuild and re-measure it (no jumps).
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final style = theme.textTheme.bodyMedium ?? const TextStyle(fontSize: 14);
@@ -264,7 +270,10 @@ class _WhatsNewBodyState extends State<WhatsNewBody> {
           curve: Curves.easeOutCubic,
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: _open || !tall ? double.infinity : max),
+            // Folded from the first frame: the card never lays out at full
+            // height and then shrinks (that moved the list under the finger
+            // when scrolling up). Short notes are smaller than [max] anyway.
+            constraints: BoxConstraints(maxHeight: _open ? double.infinity : max),
             child: ShaderMask(
               blendMode: BlendMode.dstIn,
               shaderCallback: (r) => LinearGradient(
@@ -278,7 +287,11 @@ class _WhatsNewBodyState extends State<WhatsNewBody> {
                   physics: const NeverScrollableScrollPhysics(),
                   child: _Measure(
                     onSize: (h) {
-                      if (_full != h) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? setState(() => _full = h) : null);
+                      // Only the "is it long?" answer changes the layout.
+                      final wasTall = (_full ?? 0) > max + 4;
+                      final isTall = h > max + 4;
+                      _full = h;
+                      if (wasTall != isTall) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? setState(() {}) : null);
                     },
                     child: widget.child,
                   ),

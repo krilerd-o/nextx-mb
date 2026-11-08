@@ -1,3 +1,4 @@
+import '../../core/nx_number.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons_500.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +18,7 @@ import '../../widgets/nx_workspace_switcher.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
+import '../../widgets/nx_markdown.dart';
 import '../../widgets/nx_streaming_text.dart';
 import '../../core/thai_time.dart';
 import '../../core/workspace_models.dart';
@@ -253,16 +255,46 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       _refreshing = false;
     });
     _loadOverdue();
+    _loadMine();
     _loadSparks();
   }
 
   /// New records per day for the last 7 days (Thai days), per stat module.
   final Map<String, List<int>> _sparks = {};
 
+  /// "ภาพรวม" = records I own (smownerid = me), not the whole system the
+  /// server lets an admin see. Same filter as the list's "ของฉัน".
+  final Map<String, int> _mine = {};
+
+  Map<String, String> _mineFilter() {
+    final uid = context.read<AppConfig>().session.userId;
+    return {if (uid != null && uid.isNotEmpty) 'filter[smownerid]': uid};
+  }
+
+  Future<void> _loadMine() async {
+    final config = context.read<AppConfig>();
+    final session = config.session;
+    final api = config.apiClient;
+    final mine = _mineFilter();
+    await Future.wait([
+      for (final module in _statModules.keys)
+        if (MenuAccess.allow(session, EntityModules.menuKeyOf(module)))
+          () async {
+            try {
+              final page = await api.getEntityList(module, limit: 1, extra: {'with_total': '1', 'cols': 'id', ...mine});
+              if (mounted) setState(() => _mine[module] = page.total ?? page.items.length);
+            } catch (_) {
+              // keep the tile out rather than show someone else's total
+            }
+          }(),
+    ]);
+  }
+
   Future<void> _loadSparks() async {
     final config = context.read<AppConfig>();
     final session = config.session;
     final api = config.apiClient;
+    final mine = _mineFilter();
     final today = thaiNow();
     final t0 = DateTime(today.year, today.month, today.day);
     for (final module in _statModules.keys) {
@@ -285,6 +317,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                   'period_end': d,
                   'with_total': '1',
                   'cols': 'id',
+                  ...mine,
                 },
               );
               return page.total ?? page.items.length;
@@ -328,8 +361,8 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
         )) {
       parts.add('ยังไม่ได้ลงเวลาเข้างาน');
     }
-    if (today > 0) parts.add('มีงานครบกำหนดวันนี้ $today รายการ');
-    if (overdue > 0) parts.add('งานเลยกำหนด $overdue รายการ ควรเคลียร์ก่อน');
+    if (today > 0) parts.add('มีงานครบกำหนดวันนี้ ${nxInt(today)} รายการ');
+    if (overdue > 0) parts.add('งานเลยกำหนด ${nxInt(overdue)} รายการ ควรเคลียร์ก่อน');
     if (next.isNotEmpty) {
       final a = next.first;
       parts.add(
@@ -382,7 +415,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       for (final e in _statModules.entries)
         if (stats.containsKey(e.key) &&
             MenuAccess.allow(session, EntityModules.menuKeyOf(e.key)))
-          (e.key, e.value, _count(stats, e.key)),
+          (e.key, e.value, _mine[e.key]),
     ];
 
     // Glass header floats over the page; content scrolls up beneath it.
@@ -906,10 +939,15 @@ class _AiBriefCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          NxStreamingText(
-            tr(text),
-            style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-          ),
+          // Summaries from the AI are markdown: show headings / bold / lists
+          // like the chat; plain text keeps the word-by-word effect.
+          if (looksLikeMarkdown(text))
+            NxRevealMarkdown(data: text)
+          else
+            NxStreamingText(
+              tr(text),
+              style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+            ),
           const SizedBox(height: 4),
         ],
       ),
@@ -1159,7 +1197,8 @@ class _StatCard extends StatelessWidget {
     this.spark,
   });
   final String label;
-  final int value;
+  /// null while my count is loading.
+  final int? value;
   final IconData icon;
   final VoidCallback? onTap;
 
@@ -1185,7 +1224,7 @@ class _StatCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  tr('$value'),
+                  value == null ? '…' : nxInt(value),
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -1214,7 +1253,7 @@ class _StatCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            '+${spark!.fold(0, (a, b) => a + b)}',
+                            '+${nxInt(spark!.fold<int>(0, (a, b) => a + b))}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.labelSmall?.copyWith(

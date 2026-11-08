@@ -192,8 +192,8 @@ void main() {
 
   // ---- Round 5 D ----
   test('sales / case dashboard figures', () {
-    expect(compactBaht(1250000), '฿1.3M');
-    expect(compactBaht(350000), '฿350k');
+    expect(compactBaht(1250000), '฿1,250,000');
+    expect(compactBaht(350000), '฿350,000');
     expect(compactBaht(900), '฿900');
     final s = salesFigures({
       'deal': {'openCount': 4, 'openAmount': 120000, 'wonCount': 2, 'wonAmount': 50000, 'winRate': 0.4, 'atRiskCount': 0},

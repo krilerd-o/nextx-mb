@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'nx_back_handler.dart';
+
 import '../core/nx_breakpoint.dart';
 import '../core/i18n.dart';
 
@@ -9,11 +11,15 @@ class NxSplitView extends StatelessWidget {
     required this.list,
     this.detail,
     this.empty,
+    this.onClose,
   });
 
   final Widget list;
   final Widget? detail;
   final Widget? empty;
+
+  /// Two-pane: system back closes the open detail first (clear the selection).
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +38,12 @@ class NxSplitView extends StatelessWidget {
       );
     }
     final hinge = bp.hinge;
-    if (hinge != null) return _HingeSplit(hinge: hinge, list: list, detail: _detail(context));
+    final Widget split = hinge != null ? NxHingeSplit(hinge: hinge, list: list, detail: _detail(context)) : _row(context, bp);
+    if (onClose == null) return split;
+    return NxBackHandler(active: detail != null, onBack: onClose!, child: split);
+  }
+
+  Widget _row(BuildContext context, NxBreakpoint bp) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -66,17 +77,17 @@ class NxSplitView extends StatelessWidget {
 /// List on one side of a foldable's fold, detail on the other — nothing sits
 /// under the hinge. The hinge rect is global, so the split is measured from
 /// where this view actually starts on screen (e.g. after a side rail).
-class _HingeSplit extends StatefulWidget {
-  const _HingeSplit({required this.hinge, required this.list, required this.detail});
+class NxHingeSplit extends StatefulWidget {
+  const NxHingeSplit({super.key, required this.hinge, required this.list, required this.detail});
   final Rect hinge;
   final Widget list;
   final Widget detail;
 
   @override
-  State<_HingeSplit> createState() => _HingeSplitState();
+  State<NxHingeSplit> createState() => _NxHingeSplitState();
 }
 
-class _HingeSplitState extends State<_HingeSplit> {
+class _NxHingeSplitState extends State<NxHingeSplit> {
   double _originX = 0;
 
   void _measure() {

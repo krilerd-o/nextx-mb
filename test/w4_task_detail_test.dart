@@ -103,7 +103,7 @@ void main() {
     expect(find.text('QA Tester'), findsWidgets, reason: 'assignee name from the users cache');
     expect(find.textContaining('[QA] Sub 1'), findsOneWidget);
     expect(find.text('[QA] เห็นด้วย'), findsOneWidget);
-    expect(find.text('Smart Checklist'), findsOneWidget, reason: 'checklist on NEXTX = Smart Checklist');
+    expect(find.text('เช็กลิสต์'), findsOneWidget, reason: 'checklist on NEXTX = Smart Checklist (Thai: เช็กลิสต์)');
   });
 
   testWidgets('tapping a status step updates status_id', (tester) async {

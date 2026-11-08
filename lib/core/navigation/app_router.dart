@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import '../../widgets/nx_icons.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../screens/ai/ai_chat_screen.dart';
+import '../../screens/ai/assistant/ai_assistant_screen.dart';
+import '../../screens/ai/assistant/ai_shared_chat_screen.dart';
+import '../../screens/ai/isaac_coming_soon_screen.dart';
+import '../../screens/ai/isaac_embed_screen.dart';
 import '../../screens/approvals/approvals_screen.dart';
 import '../../screens/commerce/commerce_home_screen.dart';
 import '../../screens/app_shell.dart';
@@ -106,7 +109,14 @@ GoRouter createAppRouter(AppConfig config) {
       }
       final pending = PushNavigation.instance.take();
       if (pending != null && pending.isNotEmpty && pending != loc) {
-        return accessRedirectFor(config.session, pending) ?? pending;
+        // A tapped notification opens ON TOP of the app (home stays below),
+        // so back returns into the app instead of closing it.
+        final target = accessRedirectFor(config.session, pending) ?? pending;
+        final router = GoRouter.of(context);
+        WidgetsBinding.instance.addPostFrameCallback((_) => router.push(target));
+        final current = accessRedirectFor(config.session, loc);
+        if (loc == AppRoutes.splash) return AppRoutes.mainShell;
+        return current;
       }
       return accessRedirectFor(config.session, loc);
     },
@@ -228,8 +238,20 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: AppRoutes.aiChat,
-        builder: (_, _) => const AiChatScreen(),
+        builder: (_, state) {
+          final q = state.uri.queryParameters;
+          return AiAssistantScreen(contextModule: q['ctx_module'], contextId: q['ctx_id'], contextTitle: q['ctx_title']);
+        },
       ),
+      GoRoute(
+        path: '/share/ai/:token',
+        builder: (_, state) => AiSharedChatScreen(token: state.pathParameters['token'] ?? ''),
+      ),
+      // ISAAC AI (same routes as the web menu group).
+      GoRoute(path: AppRoutes.isaacNotebook, builder: (_, _) => const IsaacEmbedScreen(menu: 'bot')),
+      GoRoute(path: AppRoutes.aiMinuteAuto, builder: (_, _) => const IsaacEmbedScreen(menu: 'minute_auto')),
+      GoRoute(path: AppRoutes.isaacAgent, builder: (_, _) => const IsaacComingSoonScreen(product: 'agent')),
+      GoRoute(path: AppRoutes.isaacSocialWatch, builder: (_, _) => const IsaacComingSoonScreen(product: 'social_watch')),
       GoRoute(
         path: AppRoutes.profile,
         builder: (_, _) => const ProfileHubScreen(),

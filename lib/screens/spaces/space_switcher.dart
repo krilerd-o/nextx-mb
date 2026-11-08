@@ -511,8 +511,13 @@ Future<void> runColorHandOff(
   try {
     await animate(grow, 1, 420);
     final router = GoRouter.maybeOf(context);
+    final rootNav = Navigator.maybeOf(context, rootNavigator: true);
     await action();
-    if (goHome) router?.go(AppRoutes.mainShell);
+    if (goHome) {
+      // Pages of the old business / Space must not stay under the new one.
+      rootNav?.popUntil((r) => r.isFirst || r.settings.name != null);
+      router?.go(AppRoutes.mainShell);
+    }
     await Future<void>.delayed(const Duration(milliseconds: 220));
     await animate(fade, 0, 320);
   } finally {

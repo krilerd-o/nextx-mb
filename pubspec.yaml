@@ -47,6 +47,10 @@ dependencies:
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
   mobile_scanner: ^7.5.0
+  flutter_markdown_plus: ^1.0.12
+  flutter_highlight: ^0.7.0
+  connectivity_plus: ^7.3.1
+  speech_to_text: ^7.5.0
 
 dev_dependencies:
   flutter_test:
@@ -57,6 +61,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    - assets/isaac/
   # Noto Sans Thai — the only app font (OFL 1.1), weights 400–800.
   fonts:
     - family: NotoSansThai

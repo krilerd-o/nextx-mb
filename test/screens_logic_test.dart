@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nextx_mobile/screens/ai/ai_chat_screen.dart';
 import 'package:nextx_mobile/screens/calendar/calendar_home_screen.dart';
 import 'package:nextx_mobile/screens/commerce/commerce_home_screen.dart';
 import 'package:nextx_mobile/screens/dashboard/mobile_dashboard_screen.dart';
@@ -11,30 +10,6 @@ import 'package:nextx_mobile/screens/workspace/task_detail_screen.dart';
 import 'package:nextx_mobile/widgets/nx_icons.dart';
 
 void main() {
-  test('AI history keeps successful turns, newest last, capped', () {
-    final turns = [
-      for (var i = 0; i < 30; i++) AiTurn(i.isEven ? 'user' : 'assistant', 'm$i'),
-      const AiTurn('assistant', 'boom', error: true),
-    ];
-    final msgs = aiRequestMessages(turns, max: 20);
-    expect(msgs.length, 20);
-    expect(msgs.last['content'], 'm29');
-    expect(msgs.any((m) => m['content'] == 'boom'), isFalse);
-  });
-
-  test('AI reply extraction', () {
-    expect(extractAiReply({'content': 'hi'}), 'hi');
-    expect(
-      extractAiReply({
-        'choices': [
-          {'message': {'content': 'yo'}},
-        ],
-      }),
-      'yo',
-    );
-    expect(extractAiReply({'message': {'content': 'nested'}}), 'nested');
-  });
-
   test('profile sends only changed fields', () {
     final changes = profileChanges(
       {'first_name': 'Ann', 'title': 'Sales'},

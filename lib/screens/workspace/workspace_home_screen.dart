@@ -1,3 +1,4 @@
+import '../../core/nx_number.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +18,7 @@ import 'task_detail_screen.dart';
 import 'workspace_board_screen.dart';
 import 'workspace_trash_screen.dart';
 import '../../widgets/nx_refresh.dart';
+import '../../widgets/nx_back_handler.dart';
 
 /// Which of my open items to show at the top.
 enum WsMyScope { today, overdue, week, all }
@@ -201,7 +203,10 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => NxBackHandler(active: _searching, onBack: _toggleSearch, child: _buildPage(context));
+
+
+  Widget _buildPage(BuildContext context) {
     final theme = Theme.of(context);
     final boards = _boards;
     final shownBoards = [
@@ -301,7 +306,7 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
                 Icon(NxI.user, size: 18, color: cs.primary),
                 const SizedBox(width: 6),
                 Expanded(child: Text(tr('งานของฉัน'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-                Text(tr('วันนี้ ${counts[WsMyScope.today]} · ค้าง ${all.length}'), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                Text('${tr('วันนี้')} ${nxInt(counts[WsMyScope.today])} · ${tr('ค้าง')} ${nxInt(all.length)}', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
                 const SizedBox(width: 4),
                 AnimatedRotation(
                   turns: _myOpen ? 0.5 : 0,
@@ -347,7 +352,7 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
             ),
           for (final it in shown) _myRow(context, it),
           if (list.length > shown.length)
-            TextButton(onPressed: () => setState(() => _expanded = true), child: Text(tr('ดูทั้งหมด ${list.length} งาน'))),
+            TextButton(onPressed: () => setState(() => _expanded = true), child: Text('${tr('ดูทั้งหมด')} ${nxInt(list.length)} ${tr('งาน')}')),
                     ],
                   ),
           ),
@@ -458,8 +463,8 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
                             // Automatic deal codes (D26…) say nothing to people — hide them.
                             if ('${b['code'] ?? ''}'.isNotEmpty && !RegExp(r'^D\d{8,}$').hasMatch('${b['code']}') && '${b['code']}'.toUpperCase() != '${b['name'] ?? ''}'.toUpperCase())
                               '${b['code']}',
-                            tr('$total งาน'),
-                            if (members > 0) tr('$members สมาชิก'),
+                            '${nxInt(total)} ${tr('งาน')}',
+                            if (members > 0) '${nxInt(members)} ${tr('สมาชิก')}',
                           ].join(' · '),
                           style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                         ),
@@ -478,7 +483,7 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(tr('เสร็จ $done/$total'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                    Text('${tr('เสร็จ')} ${nxInt(done)}/${nxInt(total)}', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
                   ]),
                 ],
               ],

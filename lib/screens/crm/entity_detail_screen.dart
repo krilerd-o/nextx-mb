@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../core/navigation/app_routes.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -40,10 +42,14 @@ class EntityDetailScreen extends StatefulWidget {
     required this.module,
     required this.row,
     this.embedded = false,
+    this.onDeleted,
   });
 
   final String module;
   final Map<String, dynamic> row;
+
+  /// Embedded (two-pane): close the pane after a delete.
+  final VoidCallback? onDeleted;
   final bool embedded;
 
   @override
@@ -430,6 +436,11 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   icon: NxI.shareNetwork,
                   onTap: _shareLink,
                 ),
+                NxHeaderMenuItem(
+                  label: 'ถาม Isaac',
+                  icon: NxI.sparkle,
+                  onTap: () => context.push(AppRoutes.aiAsk(module: widget.module, id: _id, title: entityTitle(_row, module: widget.module))),
+                ),
                 if (widget.module == 'case' && _following != null)
                   NxHeaderMenuItem(
                     label: _following! ? 'เลิกติดตามเคส' : 'ติดตามเคส',
@@ -553,7 +564,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
               ),
               if (_loading) ...[
                 const SizedBox(height: 16),
-                const SizedBox(height: 180, child: NxSkeletonForm(fields: 4)),
+                const NxSkeletonDetail(),
               ],
               if (_error != null)
                 Padding(
@@ -1013,7 +1024,11 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       label: entityTitle(_row, module: widget.module),
       commit: () => api.deleteEntity(widget.module, _id),
     );
-    if (!widget.embedded) Navigator.of(context).maybePop();
+    if (widget.embedded) {
+      widget.onDeleted?.call();
+    } else {
+      Navigator.of(context).maybePop();
+    }
   }
 
   Future<void> _openEdit(BuildContext context) async {

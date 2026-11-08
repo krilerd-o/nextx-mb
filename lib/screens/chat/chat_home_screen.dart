@@ -22,6 +22,7 @@ import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
 import '../../widgets/nx_refresh.dart';
+import '../../widgets/app_bottom_sheet.dart' show nxSheetHeight;
 
 class ChatHomeScreen extends StatefulWidget {
   const ChatHomeScreen({super.key});
@@ -102,11 +103,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
             icon: const Icon(NxI.magnifyingGlass),
             onPressed: () => nxPush<void>(context, ChatSearchScreen(rooms: _rooms)),
           ),
-          IconButton(
-            tooltip: tr('สร้างห้องกลุ่ม'),
-            icon: const Icon(NxI.users),
-            onPressed: _createGroup,
-          ),
+          IconButton(tooltip: tr('สร้างห้องกลุ่ม'), icon: const Icon(NxI.users), onPressed: _createGroup),
           IconButton(
             tooltip: tr('แชทส่วนตัว'),
             icon: const Icon(NxI.userPlus),
@@ -125,56 +122,55 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
               final selected = await showModalBottomSheet<Map<String, dynamic>>(
                 context: context,
                 isScrollControlled: true,
+                useRootNavigator: true,
                 builder: (ctx) {
                   final q = TextEditingController();
                   var filtered = users;
                   return StatefulBuilder(
                     builder: (ctx, setSheet) {
-                      return SafeArea(
-                        child: SizedBox(
-                          height: MediaQuery.of(ctx).size.height * 0.7,
-                          child: Column(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: TextField(
-                                  controller: q,
-                                  decoration: InputDecoration(
-                                    labelText: tr('ค้นหาผู้ใช้'),
-                                    prefixIcon: Icon(NxI.magnifyingGlass),
+                      return Padding(
+                        // Above the keyboard: the search field and results stay visible.
+                        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+                        child: SafeArea(
+                          child: SizedBox(
+                            height: nxSheetHeight(ctx, 0.7),
+                            child: Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: TextField(
+                                    controller: q,
+                                    decoration: InputDecoration(labelText: tr('ค้นหาผู้ใช้'), prefixIcon: Icon(NxI.magnifyingGlass)),
+                                    onChanged: (v) {
+                                      final needle = v.trim().toLowerCase();
+                                      setSheet(() {
+                                        filtered = users.where((u) {
+                                          final name = userDisplayName(u).toLowerCase();
+                                          final email = (userEmail(u) ?? '').toLowerCase();
+                                          final id = (u['id'] ?? '').toString();
+                                          return needle.isEmpty || name.contains(needle) || email.contains(needle) || id.contains(needle);
+                                        }).toList();
+                                      });
+                                    },
                                   ),
-                                  onChanged: (v) {
-                                    final needle = v.trim().toLowerCase();
-                                    setSheet(() {
-                                      filtered = users.where((u) {
-                                        final name = userDisplayName(u).toLowerCase();
-                                        final email = (userEmail(u) ?? '').toLowerCase();
-                                        final id = (u['id'] ?? '').toString();
-                                        return needle.isEmpty ||
-                                            name.contains(needle) ||
-                                            email.contains(needle) ||
-                                            id.contains(needle);
-                                      }).toList();
-                                    });
-                                  },
                                 ),
-                              ),
-                              Expanded(
-                                child: ListView.builder(
-                                  itemCount: filtered.length,
-                                  itemBuilder: (_, i) {
-                                    final u = filtered[i];
-                                    final name = userDisplayName(u);
-                                    return ListTile(
-                                      leading: const Icon(NxI.user),
-                                      title: Text(tr(name)),
-                                      subtitle: Text(tr(userEmail(u) ?? u['id']?.toString() ?? '')),
-                                      onTap: () => Navigator.pop(ctx, u),
-                                    );
-                                  },
+                                Expanded(
+                                  child: ListView.builder(
+                                    itemCount: filtered.length,
+                                    itemBuilder: (_, i) {
+                                      final u = filtered[i];
+                                      final name = userDisplayName(u);
+                                      return ListTile(
+                                        leading: const Icon(NxI.user),
+                                        title: Text(tr(name)),
+                                        subtitle: Text(tr(userEmail(u) ?? u['id']?.toString() ?? '')),
+                                        onTap: () => Navigator.pop(ctx, u),
+                                      );
+                                    },
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -188,9 +184,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
               try {
                 final room = await api.createChatDm(userId);
                 if (!mounted) return;
-                final map = room.isEmpty
-                    ? {'id': userId, 'name': userDisplayName(selected)}
-                    : room;
+                final map = room.isEmpty ? {'id': userId, 'name': userDisplayName(selected)} : room;
                 await _openRoom(map);
               } catch (e) {
                 if (mounted) {
@@ -239,19 +233,10 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                   searchHint: 'ค้นหาห้อง',
                   quickGroup: 'kind',
                   groups: const [
-                    NxFilterGroup(key: 'kind', label: 'ประเภทห้อง', multi: false, options: [
-                      NxFilterOption('group', 'กลุ่ม'),
-                      NxFilterOption('dm', 'ส่วนตัว'),
-                    ]),
-                    NxFilterGroup(key: 'state', label: 'สถานะ', multi: false, options: [
-                      NxFilterOption('unread', 'ยังไม่อ่าน'),
-                    ]),
+                    NxFilterGroup(key: 'kind', label: 'ประเภทห้อง', multi: false, options: [NxFilterOption('group', 'กลุ่ม'), NxFilterOption('dm', 'ส่วนตัว')]),
+                    NxFilterGroup(key: 'state', label: 'สถานะ', multi: false, options: [NxFilterOption('unread', 'ยังไม่อ่าน')]),
                   ],
-                  sorts: const [
-                    NxSortOption('recent', 'ข้อความล่าสุด'),
-                    NxSortOption('unread', 'ยังไม่อ่านมากสุด'),
-                    NxSortOption('name', 'ชื่อ ก–ฮ'),
-                  ],
+                  sorts: const [NxSortOption('recent', 'ข้อความล่าสุด'), NxSortOption('unread', 'ยังไม่อ่านมากสุด'), NxSortOption('name', 'ชื่อ ก–ฮ')],
                   onChanged: (q) => setState(() {
                     _query = q.q;
                     _lq = q.copyWith(q: '');
@@ -263,53 +248,40 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
                     child: Center(child: Text(tr('ไม่พบห้อง'))),
                   ),
                 for (final ch in rooms)
-                  Builder(builder: (context) {
-                    final name = ch['name']?.toString() ?? 'ห้อง';
-                    final unread = int.tryParse(ch['unread_count']?.toString() ?? '') ?? 0;
-                    final emoji = ch['icon_emoji']?.toString();
-                    final isDm = ch['room_type']?.toString() == 'dm';
-                    final preview = stripHtmlPreview(
-                      ch['last_message']?.toString() ?? ch['description']?.toString() ?? ch['topic']?.toString() ?? '',
-                    );
-                    return DenseCardTile(
-                      title: name,
-                      subtitle: [
-                        if (preview.isNotEmpty) preview,
-                        if (!isDm && ch['member_count'] != null) '${ch['member_count']} สมาชิก',
-                      ].join(' · '),
-                      leading: CircleAvatar(
-                        backgroundColor: theme.colorScheme.primaryContainer,
-                        child: emoji != null && emoji.isNotEmpty
-                            ? Text(tr(emoji))
-                            : Icon(isDm ? NxI.user : NxI.chatCircle, color: theme.colorScheme.onPrimaryContainer),
-                      ),
-                      trailing: unread > 0
-                          ? Badge(
-                              label: Text(tr(unread > 99 ? '99+' : '$unread')),
-                              backgroundColor: theme.colorScheme.primary,
-                            )
-                          : null,
-                      onTap: () {
-                        if (twoPane) {
-                          setState(() => _selected = ch);
-                          return;
-                        }
-                        _openRoom(ch);
-                      },
-                    );
-                  }),
+                  Builder(
+                    builder: (context) {
+                      final name = ch['name']?.toString() ?? 'ห้อง';
+                      final unread = int.tryParse(ch['unread_count']?.toString() ?? '') ?? 0;
+                      final emoji = ch['icon_emoji']?.toString();
+                      final isDm = ch['room_type']?.toString() == 'dm';
+                      final preview = stripHtmlPreview(ch['last_message']?.toString() ?? ch['description']?.toString() ?? ch['topic']?.toString() ?? '');
+                      return DenseCardTile(
+                        title: name,
+                        subtitle: [if (preview.isNotEmpty) preview, if (!isDm && ch['member_count'] != null) '${ch['member_count']} สมาชิก'].join(' · '),
+                        leading: CircleAvatar(
+                          backgroundColor: theme.colorScheme.primaryContainer,
+                          child: emoji != null && emoji.isNotEmpty
+                              ? Text(tr(emoji))
+                              : Icon(isDm ? NxI.user : NxI.chatCircle, color: theme.colorScheme.onPrimaryContainer),
+                        ),
+                        trailing: unread > 0 ? Badge(label: Text(tr(unread > 99 ? '99+' : '$unread')), backgroundColor: theme.colorScheme.primary) : null,
+                        onTap: () {
+                          if (twoPane) {
+                            setState(() => _selected = ch);
+                            return;
+                          }
+                          _openRoom(ch);
+                        },
+                      );
+                    },
+                  ),
               ],
             ),
           );
           return NxSplitView(
+            onClose: () => setState(() => _selected = null),
             list: items,
-            detail: _selected == null
-                ? null
-                : ChatRoomScreen(
-                    key: ValueKey(_selected!['id']),
-                    room: _selected!,
-                    embedded: true,
-                  ),
+            detail: _selected == null ? null : ChatRoomScreen(key: ValueKey(_selected!['id']), room: _selected!, embedded: true),
           );
         },
       ),
@@ -376,9 +348,7 @@ class _GroupCreateSheetState extends State<_GroupCreateSheet> {
                       value: _picked.contains(id),
                       title: Text(tr(userDisplayName(u))),
                       subtitle: userEmail(u) == null ? null : Text(tr(userEmail(u)!)),
-                      onChanged: id.isEmpty
-                          ? null
-                          : (v) => setState(() => v == true ? _picked.add(id) : _picked.remove(id)),
+                      onChanged: id.isEmpty ? null : (v) => setState(() => v == true ? _picked.add(id) : _picked.remove(id)),
                     );
                   },
                 ),
@@ -386,9 +356,7 @@ class _GroupCreateSheetState extends State<_GroupCreateSheet> {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: FilledButton(
-                  onPressed: canCreate
-                      ? () => Navigator.pop(context, (name: _name.text.trim(), ids: _picked.toList()))
-                      : null,
+                  onPressed: canCreate ? () => Navigator.pop(context, (name: _name.text.trim(), ids: _picked.toList())) : null,
                   child: Text(tr('สร้างห้อง (${_picked.length} คน)')),
                 ),
               ),
