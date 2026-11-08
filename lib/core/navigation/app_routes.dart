@@ -39,6 +39,10 @@ class AppRoutes {
   static const String workspaceHome = '/workspace';
   static const String chatHome = '/chat';
   static const String aiChat = '/ai';
+  static const String isaacNotebook = '/isaac';
+  static const String aiMinuteAuto = '/ai-minute-auto';
+  static const String isaacAgent = '/isaac-ai-agent';
+  static const String isaacSocialWatch = '/isaac-social-watch';
   static const String profile = '/profile';
   static const String profileSecurity = '/profile/security';
   static const String calendar = '/calendar';

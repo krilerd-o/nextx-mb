@@ -5,3 +5,4 @@
 "NSCameraUsageDescription" = "ใช้กล้องถ่ายหลักฐานเช็คอิน ลงเวลา และใบตรวจ";
 "NSPhotoLibraryUsageDescription" = "เลือกภาพหลักฐานเช็คอินและรูปโปรไฟล์";
 "NSPhotoLibraryAddUsageDescription" = "บันทึกไฟล์ที่ดาวน์โหลดจากแอป";
+"NSMicrophoneUsageDescription" = "ใช้ไมโครโฟนอัดเสียงประชุมใน AI Minute Auto และข้อความเสียงถึงผู้ช่วย AI";

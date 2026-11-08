@@ -4,6 +4,8 @@ import '../../widgets/nx_icons.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../screens/ai/ai_chat_screen.dart';
+import '../../screens/ai/isaac_coming_soon_screen.dart';
+import '../../screens/ai/isaac_embed_screen.dart';
 import '../../screens/approvals/approvals_screen.dart';
 import '../../screens/commerce/commerce_home_screen.dart';
 import '../../screens/app_shell.dart';
@@ -230,6 +232,11 @@ GoRouter createAppRouter(AppConfig config) {
         path: AppRoutes.aiChat,
         builder: (_, _) => const AiChatScreen(),
       ),
+      // ISAAC AI (same routes as the web menu group).
+      GoRoute(path: AppRoutes.isaacNotebook, builder: (_, _) => const IsaacEmbedScreen(menu: 'bot')),
+      GoRoute(path: AppRoutes.aiMinuteAuto, builder: (_, _) => const IsaacEmbedScreen(menu: 'minute_auto')),
+      GoRoute(path: AppRoutes.isaacAgent, builder: (_, _) => const IsaacComingSoonScreen(product: 'agent')),
+      GoRoute(path: AppRoutes.isaacSocialWatch, builder: (_, _) => const IsaacComingSoonScreen(product: 'social_watch')),
       GoRoute(
         path: AppRoutes.profile,
         builder: (_, _) => const ProfileHubScreen(),

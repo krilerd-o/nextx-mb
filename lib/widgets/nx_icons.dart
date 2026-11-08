@@ -184,6 +184,8 @@ class NxI {
   static const radioOff = LucideIcons300.circle;
   static const radioOn = LucideIcons500.circleDot;
   static const qrCode = LucideIcons300.qrCode;
+  static const bookOpen = LucideIcons300.bookOpen;
+  static const microphone = LucideIcons300.mic;
   static const scanLine = LucideIcons300.scanLine;
 
   // Brands (Simple Icons). Outlook / Lazada are not in Simple Icons → generic.

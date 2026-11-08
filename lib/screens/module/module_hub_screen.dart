@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/isaac_menu.dart';
 import '../../core/menu_access.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
@@ -21,6 +22,31 @@ class ModuleHubScreen extends StatefulWidget {
 }
 
 class _ModuleHubScreenState extends State<ModuleHubScreen> {
+  IsaacAccess? _isaac;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadIsaac());
+  }
+
+  Future<void> _loadIsaac({bool fresh = false}) async {
+    final config = context.read<AppConfig>();
+    if (!config.isLoggedIn) return;
+    final biz = config.session.businessId ?? '';
+    final cached = IsaacAccessCache.peek(biz);
+    if (cached != null && mounted) setState(() => _isaac = cached);
+    final a = await IsaacAccessCache.load(config.apiClient, biz, fresh: fresh);
+    if (mounted) setState(() => _isaac = a);
+  }
+
+  static IconData _isaacIcon(String key) => switch (key) {
+        'ai-assistant' => NxI.sparkle,
+        'isaac-notebook' => NxI.bookOpen,
+        'ai-minute-auto' => NxI.microphone,
+        'isaac-ai-agent' => NxI.robot,
+        _ => NxI.eye,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +69,6 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
         const _HubItem(NxI.kanban, 'Workspace', 'บอร์ดและ worklog', AppRoutes.workspaceHome),
       if (MenuAccess.allow(session, MenuAccess.chat))
         const _HubItem(NxI.chatCircle, 'แชท', 'ทีมเรียลไทม์', AppRoutes.chatHome),
-      if (MenuAccess.allow(session, MenuAccess.ai))
-        const _HubItem(NxI.robot, 'AI', 'ผู้ช่วย', AppRoutes.aiChat),
       if (MenuAccess.allow(session, MenuAccess.files))
         const _HubItem(NxI.folder, 'ไฟล์', 'กล้องและอัปโหลด', AppRoutes.files),
       if (MenuAccess.allow(session, MenuAccess.storeOrders) ||
@@ -68,7 +92,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
         Expanded(
           child: NxRefresh(
             color: theme.colorScheme.primary,
-            onRefresh: () async {},
+            onRefresh: () => _loadIsaac(fresh: true),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: bp.scrollPadding(context, inShell: true),
@@ -114,6 +138,36 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
                     );
                   },
                 ),
+                // ── ISAAC AI (same group, items and rules as the web menu)
+                if ((_isaac?.visibleItems(session) ?? const []).isNotEmpty) ...[
+                  const SizedBox(height: 26),
+                  Row(children: [
+                    Icon(NxI.sparkle, size: 18, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Text('ISAAC AI', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  ]),
+                  const SizedBox(height: 10),
+                  NxSurfaceCard(
+                    key: const ValueKey('hub-isaac'),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(children: [
+                      for (final it in _isaac!.visibleItems(session))
+                        ListTile(
+                          key: ValueKey('hub-isaac-${it.key}'),
+                          leading: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(color: theme.colorScheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+                            child: Icon(_isaacIcon(it.key), size: 20, color: theme.colorScheme.primary),
+                          ),
+                          title: Text(it.label, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                          subtitle: Text(tr(it.subtitle), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          trailing: Icon(NxI.caretRight, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                          onTap: () => context.push(it.route),
+                        ),
+                    ]),
+                  ),
+                ],
               ],
             ),
           ),

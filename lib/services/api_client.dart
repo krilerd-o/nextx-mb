@@ -1483,6 +1483,20 @@ class ApiClient {
     }));
   }
 
+  // ── ISAAC AI (web menu group "ISAAC AI")
+
+  /// `{settings:{ai_chat,...}, keys}` — per-business AI feature flags.
+  Future<Map<String, dynamic>> getAiSettings() async => _dataMap(await _send('GET', '/api/ai/settings'));
+
+  /// `{config:{enabled, audience, menus{...}, minute_auto{...}}, source, connection}`.
+  Future<Map<String, dynamic>> getIsaacPluginEffective() async =>
+      _dataMap(await _send('GET', '/api/settings/isaac-plugin/effective'));
+
+  /// ISAAC key-login: `{next_step:'EXCHANGE', launch_url, app_origin, ...}` or
+  /// `{next_step:'PASSWORD_SETUP_EMAILED', email}`. `menu`: `bot` | `minute_auto`.
+  Future<Map<String, dynamic>> isaacLaunch(String menu) async =>
+      _dataMap(await _send('POST', '/api/integrations/isaac/launch', data: {'menu': menu}));
+
   Future<Map<String, dynamic>> activityRsvp(String id, String response) async {
     return _dataMap(await _send('POST', '/api/activity/$id/rsvp', data: {
       'response': response,

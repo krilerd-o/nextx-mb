@@ -1494,6 +1494,25 @@ const Map<String, String> enStrings = {
   'ใช้ตำแหน่งปัจจุบัน': 'Use current location',
   'ดูเพิ่มเติม': 'Show more',
   'ปิดบัญชี': 'Close account',
+  'ผู้ช่วย AI ถามตอบงาน CRM': 'AI assistant for your CRM work',
+  'สมุดโน้ต AI จาก ISAAC': 'AI notebook by ISAAC',
+  'จดบันทึกการประชุมอัตโนมัติ': 'Automatic meeting minutes',
+  'เร็วๆ นี้': 'Coming soon',
+  'ยังไม่ได้ตั้งค่าหรือ Activate ISAAC — ให้ผู้ดูแลระบบตั้งค่าที่ Plugin Settings': 'ISAAC is not set up or activated yet — ask an admin to set it up in Plugin Settings',
+  'ธุรกิจนี้ยังไม่ได้เปิดใช้ ISAAC AI': 'ISAAC AI is not enabled for this business',
+  'เมนูนี้ถูกปิดในการตั้งค่า ISAAC AI': 'This menu is turned off in ISAAC AI settings',
+  'คุณยังไม่มีสิทธิ์ใช้เมนูนี้': 'You don\'t have access to this menu yet',
+  'เปิดบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่': 'Opened too often. Please wait a moment and try again',
+  'เปิด ISAAC ไม่สำเร็จ กรุณาลองใหม่': 'Could not open ISAAC. Please try again',
+  'เอเจนต์อัจฉริยะที่จะช่วยทำงานบน CRM และ Workspace ให้อัตโนมัติ — กำลังพัฒนา': 'A smart agent that will automate work in CRM and Workspace — in development',
+  'เฝ้าดูแชทโซเชียลและสรุปสัญญาณสำคัญให้อัตโนมัติ — กำลังพัฒนา': 'Watches social chats and summarizes key signals automatically — in development',
+  'ไปที่ ISAAC AI Assistant': 'Go to ISAAC AI Assistant',
+  'กำลังเปิด ISAAC Minute Auto…': 'Opening ISAAC Minute Auto…',
+  'กำลังเปิด ISAAC Notebook…': 'Opening ISAAC Notebook…',
+  'ตั้งรหัสผ่าน': 'Set password',
+  'ตั้งรหัสผ่านแล้ว เปิดอีกครั้ง': 'Password set — open again',
+  'เปิดไม่สำเร็จ': 'Could not open',
+  'เปิดใหม่': 'Reopen',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1694,4 +1713,5 @@ const Map<String, String> enPatterns = {
   'ผู้ใช้ #{}': 'User #{}',
   'วันนี้ {} · ค้าง {}': 'Today {} · open {}',
   'เกิน {}': 'Over {}',
+  'ส่งอีเมลรหัสผ่านชั่วคราวไปที่ {} แล้ว — ตั้งรหัสผ่านใหม่ตามอีเมล แล้วกลับมากดปุ่มด้านล่าง': 'A temporary password was emailed to {}. Set a new password from the email, then press the button below.',
 };
