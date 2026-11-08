@@ -349,7 +349,7 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
           key: ValueKey('ws-board-${b['id']}'),
           borderRadius: BorderRadius.circular(20),
           onTap: () => _openBoard(b),
-          onLongPress: () => _boardMenu(b),
+          onLongPress: () => _boardMenu(b), // long-press: anchored at the finger
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -386,7 +386,7 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
                       ],
                     ),
                   ),
-                  IconButton(tooltip: tr('เพิ่มเติม'), icon: const Icon(NxI.dotsThree), onPressed: () => _boardMenu(b)),
+                  Builder(builder: (bc) => IconButton(tooltip: tr('เพิ่มเติม'), icon: const Icon(NxI.dotsThree), onPressed: NxTapTracker.from(bc, () => _boardMenu(b)))),
                 ]),
                 if (total > 0) ...[
                   const SizedBox(height: 10),

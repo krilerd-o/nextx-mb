@@ -28,6 +28,23 @@ class NxTapTracker {
     });
   }
 
+  /// Records [context]'s widget (the button being activated) as the anchor.
+  /// Needed when a tap arrives without a pointer event (screen readers).
+  static void markFrom(BuildContext context) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return;
+    last = box.localToGlobal(box.size.center(Offset.zero));
+    _at = DateTime.now();
+  }
+
+  /// Wraps a button callback so the menu it opens grows from that button.
+  static VoidCallback? from(BuildContext context, VoidCallback? onTap) => onTap == null
+      ? null
+      : () {
+          markFrom(context);
+          onTap();
+        };
+
   /// The last press if it was recent enough to be the one opening a menu.
   static Offset? recent() {
     final at = _at;

@@ -256,7 +256,7 @@ class _SpaceSheetState extends State<_SpaceSheet> {
                     child: const Padding(padding: EdgeInsets.all(12), child: Icon(NxI.grip)),
                   )
                 else
-                  IconButton(tooltip: tr('ตัวเลือก'), icon: const Icon(NxI.dotsThreeVertical), onPressed: () => _menu(sp)),
+                  Builder(builder: (bc) => IconButton(tooltip: tr('ตัวเลือก'), icon: const Icon(NxI.dotsThreeVertical), onPressed: NxTapTracker.from(bc, () => _menu(sp)))),
               ],
             ),
           ),

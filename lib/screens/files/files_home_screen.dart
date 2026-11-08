@@ -381,7 +381,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
               child: ListTile(
                 leading: CircleAvatar(backgroundColor: cs.primaryContainer, child: Icon(NxI.folder, color: cs.onPrimaryContainer)),
                 title: Text(tr(f['name']?.toString() ?? '')),
-                trailing: IconButton(icon: const Icon(NxI.dotsThreeVertical), onPressed: () => _itemMenu(f, folder: true)),
+                trailing: Builder(builder: (bc) => IconButton(icon: const Icon(NxI.dotsThreeVertical), onPressed: NxTapTracker.from(bc, () => _itemMenu(f, folder: true)))),
                 onTap: () => _goTo(f['id']?.toString()),
                 onLongPress: () => _itemMenu(f, folder: true),
               ),
@@ -402,7 +402,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
                       .where((e) => e.isNotEmpty)
                       .join(' · ')),
                 ),
-                trailing: IconButton(icon: const Icon(NxI.dotsThreeVertical), onPressed: () => _itemMenu(f, folder: false)),
+                trailing: Builder(builder: (bc) => IconButton(icon: const Icon(NxI.dotsThreeVertical), onPressed: NxTapTracker.from(bc, () => _itemMenu(f, folder: false)))),
                 onTap: () => _openFile(f),
                 onLongPress: () => _itemMenu(f, folder: false),
               ),

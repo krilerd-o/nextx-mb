@@ -140,7 +140,8 @@ class _CircleBtn extends StatelessWidget {
             shadowColor: Colors.black.withValues(alpha: isDark ? 0.5 : 0.22),
             child: InkWell(
               customBorder: const CircleBorder(),
-              onTap: onTap,
+              // Menus opened from here grow out of this button.
+              onTap: NxTapTracker.from(context, onTap),
               child: Center(
                 child: Icon(icon, size: 22, color: theme.colorScheme.onSurface),
               ),
