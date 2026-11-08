@@ -27,6 +27,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/entity_display.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_measure_size.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_refresh.dart';
 
@@ -754,7 +755,20 @@ class _EntityListScreenState extends State<EntityListScreen> {
     return NxScrollScaffold(
       insetBody: false,
       header: header,
-      headerBottom: toolbar,
+      // Measured: the search box only takes room once it is opened.
+      headerBottom: OverflowBox(
+        alignment: Alignment.topCenter,
+        minHeight: 0,
+        maxHeight: 400,
+        child: NxMeasureSize(
+          onChange: (sz) {
+            // Ignore the folded (scrolled-away) toolbar: only real content changes count.
+            if (sz.height < 24) return;
+            if (mounted && (sz.height - _toolbarHeight).abs() > 0.5) setState(() => _toolbarHeight = sz.height);
+          },
+          child: toolbar,
+        ),
+      ),
       headerBottomHeight: _toolbarHeight,
       floatingActionButton: NxCreateFab(onPressed: _openCreate),
       body: Builder(
@@ -772,8 +786,8 @@ class _EntityListScreenState extends State<EntityListScreen> {
     );
   }
 
-  /// Search field + filter chips row (floating under the header on phones).
-  static const double _toolbarHeight = 140;
+  /// Status chips (+ search box when open) floating under the header on phones.
+  double _toolbarHeight = 96;
 
   /// Space the list leaves for the floating header + toolbar (phones only).
   double _top(bool twoPane) => twoPane ? 0 : _inset;
