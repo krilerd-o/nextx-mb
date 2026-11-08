@@ -4,6 +4,14 @@ on:
   push:
     branches: [main, 'claude/**']
   pull_request:
+  # Run by hand (Actions → Flutter CI → Run workflow). Tick "testflight" to upload
+  # the signed iOS build to TestFlight from any branch (no merge needed).
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: 'Upload the iOS build to TestFlight'
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -229,6 +237,11 @@ jobs:
           security list-keychain -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           echo "$PROFILE_B64" | base64 -d > "$RUNNER_TEMP/app.mobileprovision"
           security cms -D -i "$RUNNER_TEMP/app.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          APPID=$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")
+          case "$APPID" in
+            *.com.moai.nextt.mobile) echo "Profile is for $APPID" ;;
+            *) echo "::error::IOS_PROFILE_BASE64 is for '$APPID', not com.moai.nextt.mobile — make an App Store profile for com.moai.nextt.mobile"; exit 1 ;;
+          esac
           UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")
           NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/profile.plist")
           TEAM=$(/usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "$RUNNER_TEMP/profile.plist")
@@ -251,7 +264,7 @@ jobs:
 
       - name: Build IPA
         if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' }}
-        run: flutter build ipa --release $DEFINES --export-options-plist="$RUNNER_TEMP/ExportOptions.plist"
+        run: flutter build ipa --release $DEFINES --build-number=${{ github.run_number }} --export-options-plist="$RUNNER_TEMP/ExportOptions.plist"
 
       - uses: actions/upload-artifact@v4
         if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' }}
@@ -261,7 +274,7 @@ jobs:
           retention-days: 14
 
       - name: Upload to TestFlight
-        if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' && env.ASC_KEY_ID != '' && github.ref == 'refs/heads/main' }}
+        if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' && env.ASC_KEY_ID != '' && (github.ref == 'refs/heads/main' || inputs.testflight) }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$ASC_KEY_P8_B64" | base64 -d > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8

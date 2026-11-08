@@ -84,6 +84,40 @@ Settings → Secrets and variables → Actions ทุกตัวไม่บั
 6. ภาพหน้าจอ: iPhone 6.9" หรือ 6.7", iPhone 6.5", iPad 13"
 7. iPad รองรับ Split View / Stage Manager แล้ว (`UIRequiresFullScreen = false`) ทดสอบหน้าสองช่องที่หลายขนาดหน้าต่าง
 
+### 4.1 ส่งขึ้น TestFlight (ไม่ต้อง merge)
+
+**สร้างใบรับรอง .p12 แบบไม่มี Mac** (เครื่องไหนก็ได้ที่มี openssl; เก็บ `dist.key` เป็นความลับ ห้ามเข้า git)
+
+```bash
+openssl req -new -newkey rsa:2048 -nodes -keyout dist.key -out dist.csr -subj "/emailAddress=you@example.com/CN=A I System/C=TH"
+```
+
+อัปโหลด `dist.csr` ที่ developer.apple.com → Certificates → **+** → Apple Distribution แล้วดาวน์โหลด `distribution.cer`
+
+```bash
+openssl x509 -inform DER -in distribution.cer -out dist.pem
+```
+
+```bash
+openssl pkcs12 -export -legacy -inkey dist.key -in dist.pem -out dist.p12
+```
+
+(ตั้งรหัสผ่านตอน export → ใช้เป็น `IOS_DIST_CERT_PASSWORD`; openssl รุ่นเก่าไม่มี `-legacy` ให้ตัดออก)
+
+**แปลงไฟล์เป็น base64 เพื่อใส่ secret**
+
+```bash
+base64 -w0 dist.p12
+```
+
+(macOS: `base64 -i dist.p12`, Windows: `certutil -encode dist.p12 out.txt` แล้วลบบรรทัด BEGIN/END)
+ทำแบบเดียวกันกับ `.mobileprovision` และ `.p8`
+
+**สั่งอัป:** GitHub → Actions → Flutter CI → **Run workflow** → เลือก branch → ติ๊ก **testflight** → Run
+- เลขบิลด์ = เลขรอบของ CI (ไม่ซ้ำเอง), เวอร์ชันมาจาก `pubspec.yaml`
+- ประมวลผลใน App Store Connect → TestFlight ราว 5–30 นาที แล้วเพิ่ม Internal Testers
+- ไม่ต้องตอบคำถามการเข้ารหัส (ตั้ง `ITSAppUsesNonExemptEncryption = false` ไว้แล้ว)
+
 ## 5. Huawei AppGallery (EMUI / HarmonyOS 2–4)
 
 1. AppGallery Connect → สร้างแอป package `com.moai.nextt.mobile`

@@ -86,6 +86,7 @@ void main() {
       expect(info, contains('<string>lineauth2</string>'));
       expect(info, contains('<key>UIRequiresFullScreen</key>\n\t<false/>'));
       expect(info, isNot(contains('.apps.googleusercontent.com')));
+      expect(info, contains('<key>ITSAppUsesNonExemptEncryption</key>\n\t<false/>'));
       for (final f in ['Debug', 'Release']) {
         expect(File('ios/Flutter/$f.xcconfig').readAsStringSync(), contains('#include? "Secrets.xcconfig"'));
       }
