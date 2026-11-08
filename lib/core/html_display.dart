@@ -35,13 +35,16 @@ class PreparedHtml {
 final _tagRe = RegExp(r'<[a-zA-Z][^>]*>');
 final _closeOrVoidRe = RegExp(r'</[a-zA-Z]|/>');
 
+/// Void tags that never close (`a<br>b` from the web's plain comment box).
+final _voidTagRe = RegExp(r'<(br|hr|img|wbr)\b[^>]*>', caseSensitive: false);
+
 bool looksLikeHtmlString(String? raw) {
   final s = (raw ?? '').trim();
   if (s.isEmpty) return false;
   if (!s.contains('<')) {
     return s.contains('&amp;') || s.contains('&nbsp;') || s.contains('&lt;');
   }
-  return _tagRe.hasMatch(s) && (_closeOrVoidRe.hasMatch(s) || s.startsWith('<'));
+  return _voidTagRe.hasMatch(s) || (_tagRe.hasMatch(s) && (_closeOrVoidRe.hasMatch(s) || s.startsWith('<')));
 }
 
 String decodeHtmlEntities(String input) {
