@@ -27,13 +27,13 @@ final _base = <String, Object?>{
   'DELETE /api/ai/conversations/7': {'ok': true},
 };
 
-Future<FakeNextxAdapter> _pump(WidgetTester tester, {Size size = const Size(400, 860)}) async {
+Future<FakeNextxAdapter> _pump(WidgetTester tester, {Size size = const Size(400, 860), Map<String, Object?> extra = const {}}) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final config = AppConfig()..debugOverrideSession(_member);
-  final adapter = FakeNextxAdapter(_base);
+  final adapter = FakeNextxAdapter({..._base, ...extra});
   config.apiClient.debugSetHttpAdapter(adapter);
   await tester.pumpWidget(ChangeNotifierProvider.value(value: config, child: const MaterialApp(home: AiAssistantScreen())));
   for (var i = 0; i < 8; i++) {
@@ -96,5 +96,62 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     expect(adapter.callKeys, contains('DELETE /api/ai/conversations/7'));
+  });
+
+  testWidgets('quota meter, low quota → switch model chip reloads usage for that model', (tester) async {
+    final adapter = await _pump(tester, extra: {
+      'GET /api/ai/usage': {
+        'meters_cloud': true,
+        'quota': 100000,
+        'remaining': 5000,
+        'plan': {'name': 'Pro'},
+        'alternatives': [
+          {'provider': 'gemini', 'model': 'gemini-2.5-flash'},
+        ],
+      },
+    });
+    expect(find.byKey(const ValueKey('ai-usage')), findsOneWidget);
+    expect(find.text('เหลือ 5.0K / 100.0K'), findsOneWidget);
+    await tester.tap(find.textContaining('สลับไป'));
+    await tester.pump(const Duration(milliseconds: 200));
+    final last = adapter.calls.lastWhere((c) => c.path == '/api/ai/usage');
+    expect(last.queryParameters['provider'], 'gemini');
+    expect(last.queryParameters['model'], 'gemini-2.5-flash');
+    expect(find.text('gemini-2.5-flash'), findsWidgets); // model chip
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('no meter on non-metered plans', (tester) async {
+    await _pump(tester);
+    expect(find.byKey(const ValueKey('ai-usage')), findsNothing);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('model picker follows the business policy', (tester) async {
+    final adapter = await _pump(tester, extra: {
+      'GET /api/ai/model-policy': {
+        'policies': {
+          'openai': {'provider_enabled': false},
+          'gemini': {
+            'provider_enabled': true,
+            'enabled_models': ['gemini-2.5-flash'],
+          },
+        },
+        'catalogs': {
+          'gemini': {
+            'configured': true,
+            'models': ['gemini-2.5-flash', 'gemini-2.5-pro'],
+          },
+        },
+      },
+    });
+    await tester.tap(find.byKey(const ValueKey('ai-model')));
+    await tester.pumpAndSettle();
+    expect(find.text('ChatGPT'), findsNothing);
+    await tester.tap(find.text('Gemini'));
+    await tester.pumpAndSettle();
+    expect(find.text('gemini-2.5-flash'), findsOneWidget);
+    expect(find.text('gemini-2.5-pro'), findsNothing);
+    expect(adapter.callKeys, isNot(contains('GET /api/ai/models')));
   });
 }

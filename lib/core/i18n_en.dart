@@ -1660,6 +1660,7 @@ const Map<String, String> enStrings = {
   'กำลังเตรียมไฟล์': 'Preparing file',
   'กำลังอัปโหลดไฟล์': 'Uploading',
   'ทำรายการสำเร็จ': 'Success',
+  'โมเดลนี้ใช้ครบโควตาวันนี้แล้ว': 'This model has used today\'s quota',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1865,4 +1866,6 @@ const Map<String, String> enPatterns = {
   '"{}" จะถูกลบถาวร': '"{}" will be deleted permanently',
   'สวัสดี คุณ {}': 'Hello, {}',
   'ลบ "{}" แล้ว': 'Deleted "{}"',
+  'เหลือ {} / {}': '{} / {} left',
+  'สลับไป {}': 'Switch to {}',
 };

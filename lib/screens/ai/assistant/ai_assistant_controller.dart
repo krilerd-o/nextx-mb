@@ -46,6 +46,9 @@ class AiAssistantController extends ChangeNotifier {
   ({String provider, String model})? sticky;
 
   Map<String, dynamic>? usage;
+  AiModelPolicy? policy;
+
+  AiUsageView? get usageView => AiUsageView.from(usage);
   List<Map<String, dynamic>> suggestedPrompts = const [];
   List<Map<String, dynamic>> followUps = const [];
 
@@ -82,6 +85,7 @@ class AiAssistantController extends ChangeNotifier {
       loadConversations(),
       loadProjects(),
       api.getAiUsage().then((u) => usage = u).catchError((_) => <String, dynamic>{}),
+      api.getAiModelPolicy().then((p) => policy = AiModelPolicy.fromJson(p)).catchError((_) => const AiModelPolicy({}, {})),
       api.getAiSuggestedPrompts().then((p) => suggestedPrompts = p).catchError((_) => <Map<String, dynamic>>[]),
     ]);
     _notify();
@@ -268,6 +272,15 @@ class AiAssistantController extends ChangeNotifier {
     error = aiErrorText(e);
     sending = false;
     _notify();
+    // Quota errors: refresh the meter so "switch model" choices show up.
+    if ((errorCode ?? '').contains('EXHAUSTED')) unawaited(reloadUsage());
+  }
+
+  Future<void> reloadUsage() async {
+    try {
+      usage = await api.getAiUsage(provider: provider == 'auto' ? null : provider, model: model);
+      _notify();
+    } catch (_) {}
   }
 
   /// Stop generation (the web aborts the request the same way).
@@ -407,7 +420,9 @@ class AiAssistantController extends ChangeNotifier {
     provider = p;
     model = m;
     if (p == 'auto') sticky = null;
+    if ((errorCode ?? '').contains('EXHAUSTED')) clearError();
     _notify();
+    unawaited(reloadUsage());
   }
 
   void clearError() {

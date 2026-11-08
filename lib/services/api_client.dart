@@ -1582,7 +1582,11 @@ class ApiClient {
   }
 
   /// Plan, quota, used, remaining, modelDaily, alternatives.
-  Future<Map<String, dynamic>> getAiUsage() async => _dataMap(await _send('GET', '/api/ai/usage'));
+  Future<Map<String, dynamic>> getAiUsage({String? provider, String? model}) async =>
+      _dataMap(await _send('GET', '/api/ai/usage', query: {'provider': ?provider, 'model': ?model}));
+
+  /// `{policies: {provider: {provider_enabled, enabled_models}}, catalogs: {provider: {configured, models}}}`.
+  Future<Map<String, dynamic>> getAiModelPolicy() async => _dataMap(await _send('GET', '/api/ai/model-policy'));
 
   Future<Map<String, dynamic>> getAiModels({String? provider}) async =>
       _dataMap(await _send('GET', '/api/ai/models', query: {'provider': ?provider}));

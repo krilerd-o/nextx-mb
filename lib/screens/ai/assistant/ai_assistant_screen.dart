@@ -157,7 +157,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (ctx) => _ModelSheet(api: _c.api, current: (_c.provider, _c.model), providers: _providers),
+      builder: (ctx) => _ModelSheet(api: _c.api, current: (_c.provider, _c.model), providers: _providers, policy: _c.policy),
     );
     if (choice != null) _c.setModel(choice.$1, choice.$2);
   }
@@ -401,6 +401,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               onClose: _c.clearError,
             ),
           if (_c.followUps.isNotEmpty && !_c.sending) _followUps(context),
+          _usageStrip(context),
           _composer(context),
         ],
       ),
@@ -727,6 +728,60 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     );
   }
 
+  /// Quota meter under the chat (cloud-metered plans only) + "switch model"
+  /// choices when the month or this model's day runs out (web `AiUsageStrip`).
+  Widget _usageStrip(BuildContext context) {
+    final u = _c.usageView;
+    if (u == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final color = u.exhausted ? cs.error : (u.low ? const Color(0xFFF59E0B) : cs.primary);
+    return Padding(
+      key: const ValueKey('ai-usage'),
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(value: u.usedFraction, minHeight: 4, color: color, backgroundColor: cs.surfaceContainerHighest),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            tr('เหลือ ${aiTokenCount(u.remaining)} / ${aiTokenCount(u.quota)}'),
+            style: theme.textTheme.labelSmall?.copyWith(color: u.exhausted || u.low ? color : cs.onSurfaceVariant),
+          ),
+        ]),
+        if (u.dailyExhausted)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(tr('โมเดลนี้ใช้ครบโควตาวันนี้แล้ว'), style: theme.textTheme.labelSmall?.copyWith(color: cs.error)),
+          ),
+        if (u.suggestSwitch)
+          SizedBox(
+            height: 40,
+            child: ListView(
+              key: const ValueKey('ai-usage-switch'),
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final alt in u.alternatives.take(3))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6, top: 4),
+                    child: ActionChip(
+                      visualDensity: VisualDensity.compact,
+                      avatar: Icon(NxI.arrowsClockwise, size: 14, color: cs.primary),
+                      label: Text(tr('สลับไป ${aiModelBadge('${alt['provider'] ?? ''}', alt['model']?.toString() ?? alt['labelHint']?.toString())}')),
+                      onPressed: () => _c.setModel('${alt['provider']}', alt['model']?.toString()),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ]),
+    );
+  }
+
   Widget _composer(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -781,13 +836,16 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                   icon: const Icon(NxI.plus),
                   onPressed: locked || _c.sending ? null : _attachMenu,
                 ),
-                ActionChip(
-                  key: const ValueKey('ai-model'),
-                  avatar: Icon(NxI.sparkle, size: 14, color: cs.primary),
-                  label: Text(_c.provider == 'auto' ? 'Auto' : aiModelBadge(_c.provider, _c.model)),
-                  onPressed: _c.sending ? null : _pickModel,
-                  visualDensity: VisualDensity.compact,
+                Flexible(
+                  child: ActionChip(
+                    key: const ValueKey('ai-model'),
+                    avatar: Icon(NxI.sparkle, size: 14, color: cs.primary),
+                    label: Text(_c.provider == 'auto' ? 'Auto' : aiModelBadge(_c.provider, _c.model), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    onPressed: _c.sending ? null : _pickModel,
+                    visualDensity: VisualDensity.compact,
+                  ),
                 ),
+                const SizedBox(width: 8),
                 const Spacer(),
                 if (_c.sending)
                   IconButton.filled(key: const ValueKey('ai-stop'), tooltip: tr('หยุด'), onPressed: _c.stop, icon: const Icon(NxI.stop, size: 16))
@@ -953,10 +1011,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 }
 
 class _ModelSheet extends StatefulWidget {
-  const _ModelSheet({required this.api, required this.current, required this.providers});
+  const _ModelSheet({required this.api, required this.current, required this.providers, this.policy});
   final dynamic api;
   final (String, String?) current;
   final List<(String, String)> providers;
+
+  /// Business policy: hides disabled providers / models (null = all).
+  final AiModelPolicy? policy;
 
   @override
   State<_ModelSheet> createState() => _ModelSheetState();
@@ -973,6 +1034,12 @@ class _ModelSheetState extends State<_ModelSheet> {
       if (!_models.containsKey(p)) _loading.add(p);
     });
     if (_models.containsKey(p)) return;
+    final fromPolicy = widget.policy?.models(p);
+    if (fromPolicy != null) {
+      _models[p] = fromPolicy;
+      setState(() => _loading.remove(p));
+      return;
+    }
     try {
       final r = await widget.api.getAiModels(provider: p) as Map<String, dynamic>;
       final list = r['models'] is List ? r['models'] as List : const [];
@@ -1004,7 +1071,7 @@ class _ModelSheetState extends State<_ModelSheet> {
               onTap: () => Navigator.pop(context, ('auto', null)),
             ),
             const Divider(),
-            for (final (id, label) in widget.providers) ...[
+            for (final (id, label) in widget.providers.where((x) => widget.policy?.providerEnabled(x.$1) ?? true)) ...[
               ListTile(
                 title: Text(label),
                 trailing: _loading.contains(id)

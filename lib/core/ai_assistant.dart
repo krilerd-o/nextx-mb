@@ -300,3 +300,83 @@ String aiModelBadge(String? provider, String? model) {
   final p = (provider ?? '').trim();
   return p.isEmpty || p == 'auto' ? 'Auto' : p[0].toUpperCase() + p.substring(1);
 }
+
+/// Quota meter from `/ai/usage` (web `AiUsageStrip`).
+class AiUsageView {
+  const AiUsageView({this.plan, this.quota, this.remaining, this.dailyLimit = 0, this.dailyRemaining, this.alternatives = const []});
+  final String? plan;
+  final num? quota;
+  final num? remaining;
+  final num dailyLimit;
+  final num? dailyRemaining;
+  final List<Map<String, dynamic>> alternatives;
+
+  /// Only cloud-metered plans show a meter.
+  static AiUsageView? from(Map<String, dynamic>? u) {
+    if (u == null || u['meters_cloud'] != true) return null;
+    final plan = u['plan'] is Map ? '${(u['plan'] as Map)['name'] ?? (u['plan'] as Map)['code'] ?? ''}' : null;
+    final daily = u['modelDaily'] is Map ? Map<String, dynamic>.from(u['modelDaily'] as Map) : null;
+    return AiUsageView(
+      plan: plan == null || plan.isEmpty ? null : plan,
+      quota: num.tryParse('${u['quota'] ?? ''}'),
+      remaining: num.tryParse('${u['remaining'] ?? ''}'),
+      dailyLimit: num.tryParse('${daily?['limit'] ?? ''}') ?? 0,
+      dailyRemaining: num.tryParse('${daily?['remaining'] ?? ''}'),
+      alternatives: _maps(u['alternatives']),
+    );
+  }
+
+  double get usedFraction {
+    final q = quota, r = remaining;
+    if (q == null || q <= 0 || r == null) return 0;
+    return (1 - (r / q)).clamp(0, 1).toDouble();
+  }
+
+  bool get exhausted => remaining != null && remaining! <= 0;
+  bool get low => !exhausted && quota != null && quota! > 0 && remaining != null && remaining! / quota! < 0.1;
+  bool get dailyExhausted => dailyRemaining != null && dailyRemaining! <= 0;
+
+  /// Suggest switching models when the month or this model's day runs low.
+  bool get suggestSwitch => alternatives.isNotEmpty && (exhausted || low || dailyExhausted);
+}
+
+/// 12 345 → "12.3K", 1 200 000 → "1.2M" (web `formatTokenCount`).
+String aiTokenCount(num? n) {
+  if (n == null) return '—';
+  final a = n.abs();
+  if (a >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+  if (a >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+  return '${n.round()}';
+}
+
+/// Providers and models the business allows (`/ai/model-policy`); null when
+/// the server has no policy (everything allowed).
+class AiModelPolicy {
+  const AiModelPolicy(this.policies, this.catalogs);
+  final Map<String, Map<String, dynamic>> policies;
+  final Map<String, Map<String, dynamic>> catalogs;
+
+  factory AiModelPolicy.fromJson(Map<String, dynamic> j) {
+    Map<String, Map<String, dynamic>> m(dynamic v) =>
+        v is Map ? {for (final e in v.entries) '${e.key}': e.value is Map ? Map<String, dynamic>.from(e.value as Map) : <String, dynamic>{}} : {};
+    return AiModelPolicy(m(j['policies']), m(j['catalogs']));
+  }
+
+  bool providerEnabled(String p) => policies[p]?['provider_enabled'] != false;
+
+  /// Models to list for [p]: the catalog filtered by `enabled_models` when set;
+  /// null when the catalog is unknown (ask `/ai/models`).
+  List<String>? models(String p) {
+    final cat = catalogs[p];
+    if (cat == null || cat['models'] is! List) return null;
+    final all = [for (final x in cat['models'] as List) '$x'].where((e) => e.isNotEmpty).toList();
+    final allow = policies[p]?['enabled_models'];
+    if (allow is List && allow.isNotEmpty) {
+      final set = {for (final x in allow) '$x'};
+      return all.where(set.contains).toList();
+    }
+    return all;
+  }
+
+  bool configured(String p) => catalogs[p]?['configured'] != false;
+}
