@@ -65,5 +65,18 @@ keyPassword=รหัสผ่าน
 5. OAuth consent screen ต้องอยู่สถานะ In production
    - ถ้ายังเป็น Testing ต้องเพิ่มอีเมลที่จะใช้ใน Test users
 
+## ขั้นที่ 4: iPhone / iPad
+
+1. ในโปรเจกต์เดียวกัน สร้าง OAuth client ID ชนิด **iOS** ใส่ Bundle ID `com.moai.nextt.mobile`
+2. ใส่ค่า client id (`xxxx.apps.googleusercontent.com`) ใน GitHub secret `IOS_GOOGLE_CLIENT_ID`
+   - CI สร้าง `ios/Flutter/Secrets.xcconfig` ใส่ `GIDClientID` และ URL scheme แบบกลับด้านให้เอง
+   - ไม่มี secret นี้ ปุ่ม Google บน iPhone จะถูกซ่อน (ยังเข้าสู่ระบบด้วย Apple / LINE / OTP ได้)
+
+## ขั้นที่ 5: กุญแจของ store
+
+- Google Play (Play App Signing): Play Console → App integrity → SHA-1 ของ App signing key → สร้าง Android client เพิ่ม
+- Huawei AppGallery: SHA-1 ของกุญแจที่ AppGallery ใช้เซ็น → สร้าง Android client เพิ่ม
+  (สำหรับเครื่อง Huawei ที่ติดตั้ง GBox หรือ microG)
+
 ไม่ต้องแก้เซิร์ฟเวอร์ NEXTX การตั้งค่าใน Google มีผลภายในไม่กี่นาที
 จากนั้นติดตั้ง APK ที่ build ใหม่ แล้วลองเข้าสู่ระบบด้วย Google อีกครั้ง
