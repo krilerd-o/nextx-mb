@@ -16,4 +16,23 @@ void main() {
     await h.load('u2'); // another user: defaults
     expect(h.order, HomeLayout.defaultOrder);
   });
+
+  test('default Home order: ลงเวลา · AI · งานวันนี้ · งานค้าง · ทางลัด · เปิดล่าสุด · ยอดขาย · เคส · ภาพรวม', () {
+    expect(HomeLayout.defaultOrder.take(9), [
+      'today',
+      'ai',
+      'work',
+      'pending',
+      'quick',
+      'recent',
+      'sales',
+      'cases',
+      'stats',
+    ]);
+    expect(HomeLayout.sections.keys.toSet(), HomeLayout.defaultOrder.toSet());
+    expect(
+      [for (final k in HomeLayout.defaultOrder.take(9)) HomeLayout.sections[k]!.$1],
+      ['ลงเวลา', 'สรุปโดย AI', 'งานวันนี้', 'งานค้าง', 'ทางลัด', 'เปิดล่าสุด', 'ยอดขาย', 'เคส', 'ภาพรวม'],
+    );
+  });
 }

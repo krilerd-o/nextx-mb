@@ -12,6 +12,8 @@ class NxI {
 
   static const squaresFour = LucideIcons300.layoutGrid;
   static const squaresFourFill = LucideIcons500.layoutGrid;
+  static const house = LucideIcons300.house;
+  static const houseFill = LucideIcons500.house;
   static const magnifyingGlass = LucideIcons300.search;
   static const magnifyingGlassFill = LucideIcons500.search;
   static const buildings = LucideIcons300.building2;

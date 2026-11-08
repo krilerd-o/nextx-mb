@@ -542,11 +542,12 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                 const SizedBox(height: 20),
                 SalesPeriodBox(revision: _revision, onOpen: () => context.push(AppRoutes.crmModule('deal'))),
               ],
+            ],
+            'cases': [
               if (MenuAccess.allow(session, 'case')) ...[
                 const SizedBox(height: 16),
                 CasePeriodBox(revision: _revision, onOpen: () => context.push(AppRoutes.crmModule('case'))),
               ],
-              const SizedBox(height: 24),
             ],
           };
           return Stack(

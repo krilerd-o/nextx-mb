@@ -31,6 +31,7 @@ class _HomeLayoutEditorScreenState extends State<HomeLayoutEditorScreen> {
     'recent': NxI.clockCounterClockwise,
     'stats': NxI.chartBar,
     'sales': NxI.trendUp,
+    'cases': NxI.briefcase,
   };
 
   void _move(int i, int d) {

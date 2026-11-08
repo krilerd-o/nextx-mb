@@ -1733,6 +1733,12 @@ const Map<String, String> enStrings = {
   'สแกน QR เพิ่ม Space': 'Scan QR to add a Space',
   'กำลังเพิ่ม Space…': 'Adding Space…',
   'เปิดเว็บ MOAI NEXT → กดรูปโปรไฟล์ → คิวอาร์โค้ดเข้าสู่ระบบ แล้วส่องกล้องไปที่ QR': 'Open the MOAI NEXT web → tap your profile picture → Sign-in QR code, then point the camera at the QR',
+  'งานวันนี้': 'Today\'s work',
+  'ลงเวลาเข้า-ออก งานเลยกำหนด นัดถัดไป': 'Clock in/out, overdue work, next appointment',
+  'งาน Workspace ของฉัน (ค่าเริ่มต้นวันนี้)': 'My Workspace tasks (today by default)',
+  'ดีลและใบเสนอราคาของฉัน ตามช่วงเวลา': 'My deals and quotations by period',
+  'เคสของฉัน ตามช่วงเวลา': 'My cases by period',
+  'จำนวนรายการของฉัน + กราฟ 7 วัน': 'My record counts + 7-day chart',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

@@ -34,7 +34,7 @@ const kMenuTabId = 'menu';
 const kMaxCustomTabs = 4;
 
 const shellTabCatalog = <ShellTabDef>[
-  ShellTabDef(id: 'dashboard', label: 'หน้าหลัก', icon: NxI.squaresFour, selectedIcon: NxI.squaresFourFill, description: 'ภาพรวมงานวันนี้'),
+  ShellTabDef(id: 'dashboard', label: 'หน้าหลัก', icon: NxI.house, selectedIcon: NxI.houseFill, description: 'ภาพรวมงานวันนี้'),
   ShellTabDef(id: 'leads', label: 'ลีด/ดีล', icon: NxI.handshake, selectedIcon: NxI.handshake, anyMenu: ['lead', 'deal'], description: 'ผู้มุ่งหวังและดีล'),
   ShellTabDef(id: 'quotation', label: 'ใบเสนอ', icon: NxI.receipt, selectedIcon: NxI.receipt, anyMenu: ['quotation'], description: 'ใบเสนอราคา'),
   ShellTabDef(id: 'crm', label: 'ลูกค้า', icon: NxI.users, selectedIcon: NxI.users, anyMenu: MenuAccess.crmKeys, description: 'CRM ทั้งหมด'),
