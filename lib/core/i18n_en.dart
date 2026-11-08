@@ -1446,6 +1446,9 @@ const Map<String, String> enStrings = {
   'เคสที่ปิด': 'Closed cases',
   'เคสค้าง': 'Overdue cases',
   'รอปิด': 'Waiting to close',
+  'สัญญา': 'Contracts',
+  'ก่อนหน้า': 'Earlier',
+  'ย่อ': 'Show less',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

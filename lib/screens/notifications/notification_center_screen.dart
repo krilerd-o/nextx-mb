@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
-import '../../core/html_display.dart';
 import '../../core/navigation/notification_deep_link.dart';
 import '../../services/api_client.dart';
 import '../../services/realtime_service.dart';
@@ -14,6 +13,7 @@ import '../../services/unread_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_notification_view.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
@@ -153,7 +153,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
 
   void _open(Map<String, dynamic> item) {
     final id = item['id']?.toString() ?? '';
-    if (item['read_at'] == null && id.isNotEmpty) {
+    if (notifUnread(item) && id.isNotEmpty) {
       _api.markNotificationRead(id).catchError((Object e) {
         debugPrint('[notif] read: $e');
       });
@@ -167,7 +167,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     final id = item['id']?.toString() ?? '';
     final index = _items.indexOf(item);
     setState(() => _items = [..._items]..remove(item));
-    if (item['read_at'] == null) UnreadNotifications.instance.markedRead();
+    if (notifUnread(item)) UnreadNotifications.instance.markedRead();
     try {
       await _api.deleteNotification(id);
     } catch (e) {
@@ -192,10 +192,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   }
 
   Widget _tile(Map<String, dynamic> it) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final unread = it['read_at'] == null;
-    final body = stripHtmlPreview(it['body']?.toString() ?? '', maxLen: 140);
+    final cs = Theme.of(context).colorScheme;
+    final unread = notifUnread(it);
     return Dismissible(
       key: ValueKey('n-${it['id']}'),
       direction: DismissDirection.endToStart,
@@ -208,49 +206,11 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       onDismissed: (_) => _delete(it),
       child: Material(
         color: unread ? cs.primaryContainer.withValues(alpha: 0.25) : Colors.transparent,
-        child: InkWell(
-          onTap: () => _open(it),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: unread ? cs.primary : cs.surfaceContainerHighest,
-                  child: Icon(notificationIcon(it), size: 20, color: unread ? cs.onPrimary : cs.onSurfaceVariant),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        tr(stripHtmlPreview(it['title']?.toString() ?? '', maxLen: 80)),
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
-                        ),
-                      ),
-                      if (body.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(tr(body), maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
-                      ],
-                      const SizedBox(height: 4),
-                      Text(
-                        tr(relativeTime(it['created_at'])),
-                        style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-                if (unread)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6, left: 8),
-                    child: Container(width: 10, height: 10, decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle)),
-                  ),
-              ],
-            ),
-          ),
+        child: NxNotifTile(
+          item: it,
+          timeLabel: relativeTime(it['created_at']),
+          onOpen: () => _open(it),
+          onOpenLink: (path) => context.push(notificationDeepLink(path)),
         ),
       ),
     );
@@ -301,7 +261,19 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
               child: Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
             );
           }
-          return _tile(shown[i]);
+          final day = notifDayBucket(shown[i]['created_at']);
+          final first = i == 0 || notifDayBucket(shown[i - 1]['created_at']) != day;
+          if (!first) return _tile(shown[i]);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                child: Text(tr(day), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+              ),
+              _tile(shown[i]),
+            ],
+          );
         },
       );
     }
