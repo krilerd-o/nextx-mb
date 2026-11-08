@@ -385,6 +385,14 @@ class ApiClient {
     return _dataMap(await _send('POST', '/api/auth/google/one-tap', data: {'credential': idToken}));
   }
 
+  /// QR login: one-time code from the web → `{token, user, business}`.
+  Future<Map<String, dynamic>> qrRedeem(String code) async {
+    return _dataMap(await _send('POST', '/api/auth/qr/redeem', data: {'code': code}));
+  }
+
+  /// Browser Google sign-in that returns to the app (`moainext://app/login`).
+  String get googleAppLoginUrl => '${_dio.options.baseUrl.replaceAll(RegExp(r'/+$'), '')}/api/auth/google?app=1';
+
   /// Sign in with Apple (iOS): session, or `{needLinkConfirm, intentToken}`.
   Future<Map<String, dynamic>> appleLogin(String identityToken) async {
     return _dataMap(await _send('POST', '/api/auth/apple', data: {'identity_token': identityToken, 'remember': true}));

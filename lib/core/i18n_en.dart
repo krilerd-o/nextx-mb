@@ -1449,6 +1449,21 @@ const Map<String, String> enStrings = {
   'สัญญา': 'Contracts',
   'ก่อนหน้า': 'Earlier',
   'ย่อ': 'Show less',
+  'ยกเลิกการเข้าสู่ระบบด้วย Google': 'Google sign-in was cancelled',
+  'เซิร์ฟเวอร์นี้ยังไม่ได้ตั้งค่า Google Sign-In': 'This server has not set up Google Sign-In',
+  'อีเมล Google ยังไม่ได้ยืนยัน': 'Your Google email is not verified',
+  'สแกน QR จากเว็บ': 'Scan QR from the web',
+  'สแกน': 'Scan',
+  'เข้าสู่ระบบด้วย QR': 'Sign in with QR',
+  'บนเว็บ: ตั้งค่า → ความปลอดภัย → เข้าใช้งานแอปมือถือด้วย QR แล้วสแกนด้วยแอปนี้ เข้าได้ทันทีไม่ต้องพิมพ์รหัส': 'On the web: Settings → Security → Sign in to the mobile app with QR, then scan it with this app. No password needed.',
+  'QR นี้ไม่ใช่ QR เข้าสู่ระบบ MOAI NEXT': 'This is not a MOAI NEXT sign-in QR',
+  'QR หมดอายุหรือถูกใช้แล้ว — สร้าง QR ใหม่บนเว็บแล้วสแกนอีกครั้ง': 'QR expired or already used — create a new QR on the web and scan again',
+  'เชื่อมต่อเซิร์ฟเวอร์ของ QR ไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่': 'Cannot reach the QR\'s server. Check your internet and try again',
+  'สแกน QR เข้าสู่ระบบ': 'Scan QR to sign in',
+  'เปิดเว็บ MOAI NEXT → ตั้งค่า → ความปลอดภัย → เข้าใช้งานแอปมือถือด้วย QR แล้วส่องกล้องไปที่ QR': 'Open MOAI NEXT on the web → Settings → Security → Sign in to the mobile app with QR, then point the camera at the QR',
+  'กำลังเข้าสู่ระบบ…': 'Signing in…',
+  'สแกนอีกครั้ง': 'Scan again',
+  'เข้าสู่ระบบสำเร็จ': 'Signed in',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

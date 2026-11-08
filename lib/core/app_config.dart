@@ -22,6 +22,7 @@ import 'auth_redirect.dart';
 import 'menu_access.dart';
 import 'invite_link.dart';
 import 'recent_accounts.dart';
+import 'qr_login.dart';
 import '../services/apple_auth.dart';
 import 'server_profile.dart';
 import 'session_state.dart';
@@ -275,11 +276,64 @@ class AppConfig extends ChangeNotifier {
           _authLinkBusy = false;
           notifyListeners();
         }
+      } else if (r.mergeIntent != null) {
+        _pendingGoogleMerge = r.mergeIntent;
+        notifyListeners();
       } else if (r.error != null) {
         _authLinkError = authRedirectErrorText(r.error!);
         notifyListeners();
       }
     });
+  }
+
+  /// QR login step 1: use the one-time code on the QR's server.
+  /// Signed out → the app switches to that server; signed in → a temporary
+  /// client, so the current Space is untouched until step 2.
+  Future<Map<String, dynamic>> redeemQr(QrLoginLink link) async {
+    final url = normalizeServerUrl(link.server);
+    if (!_session.isLoggedIn) {
+      await setApiBaseUrl(url);
+      _api.attachSession(baseUrl: url);
+      return _api.qrRedeem(link.code);
+    }
+    final temp = ApiClient()..attachSession(baseUrl: url);
+    return temp.qrRedeem(link.code);
+  }
+
+  /// QR login step 2 (after the success animation): open the session.
+  Future<void> finishQrLogin(QrLoginLink link, Map<String, dynamic> data) async {
+    final url = normalizeServerUrl(link.server);
+    if (_session.isLoggedIn) {
+      await addSpaceWithLogin(baseUrl: url, data: data);
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    _recentServers = pushRecentServer(_recentServers, url);
+    await prefs.setStringList(_keyRecentServers, _recentServers);
+    _serverConfirmed = true;
+    await _completeLogin(data, fallbackEmail: '');
+  }
+
+  /// QR scanned with the phone camera app → `moainext://app/qr-login?...`.
+  QrLoginLink? _pendingQr;
+  bool get hasPendingQr => _pendingQr != null;
+  QrLoginLink? takePendingQr() {
+    final q = _pendingQr;
+    _pendingQr = null;
+    return q;
+  }
+
+  void stashQr(QrLoginLink link) {
+    _pendingQr = link;
+    notifyListeners();
+  }
+
+  /// Google browser sign-in matched an existing account → confirm merge in the app.
+  String? _pendingGoogleMerge;
+  String? takePendingGoogleMerge() {
+    final m = _pendingGoogleMerge;
+    _pendingGoogleMerge = null;
+    return m;
   }
 
   /// Joins the business of an invite link with the signed-in account.

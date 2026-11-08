@@ -183,6 +183,8 @@ class NxI {
   static const grip = LucideIcons300.gripVertical;
   static const radioOff = LucideIcons300.circle;
   static const radioOn = LucideIcons500.circleDot;
+  static const qrCode = LucideIcons300.qrCode;
+  static const scanLine = LucideIcons300.scanLine;
 
   // Brands (Simple Icons). Outlook / Lazada are not in Simple Icons → generic.
   static const IconData brandGmail = SimpleIcons.gmail;
