@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/app_config.dart';
 import '../core/i18n.dart';
 import 'nx_icons.dart';
+import 'nx_media.dart';
 
 /// Attachments the way the web shows them: image thumbnails (tap = full-screen
 /// viewer with zoom and swipe) and file cards with a type icon (tap = preview).
@@ -143,7 +144,13 @@ class NxAttachmentStrip extends StatelessWidget {
               child: InkWell(
                 key: ValueKey('nx-att-file-${nxAttachmentName(f)}'),
                 borderRadius: BorderRadius.circular(12),
-                onTap: () => openNxFile(api.absoluteUrl(nxAttachmentUrl(f))),
+                onTap: () {
+                  final url = api.absoluteUrl(nxAttachmentUrl(f));
+                  // Videos play in the app; other files open in the preview browser.
+                  nxIsVideoUrl(url) || nxIsVideoUrl(nxAttachmentName(f)) || '${f['mime'] ?? f['mime_type'] ?? ''}'.startsWith('video/')
+                      ? openNxVideoPlayer(context, url, name: nxAttachmentName(f))
+                      : openNxFile(url);
+                },
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
                   child: Row(children: [
@@ -238,7 +245,12 @@ class _NxImageViewerState extends State<_NxImageViewer> {
           if (widget.urls.length > 1) Text('${_i + 1} / ${widget.urls.length}', style: const TextStyle(fontSize: 12, color: Colors.white70)),
         ]),
         actions: [
-          IconButton(tooltip: tr('เปิดในเบราว์เซอร์'), icon: const Icon(NxI.arrowSquareOut), onPressed: () => openNxFile(widget.urls[_i])),
+          IconButton(
+            key: const ValueKey('image-download'),
+            tooltip: tr('ดาวน์โหลด'),
+            icon: const Icon(NxI.downloadSimple),
+            onPressed: () => nxSaveMedia(context, widget.urls[_i], video: false),
+          ),          IconButton(tooltip: tr('เปิดในเบราว์เซอร์'), icon: const Icon(NxI.arrowSquareOut), onPressed: () => openNxFile(widget.urls[_i])),
           IconButton(tooltip: tr('แชร์'), icon: const Icon(NxI.shareNetwork), onPressed: () => Share.share(widget.urls[_i])),
         ],
       ),

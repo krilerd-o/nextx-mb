@@ -51,6 +51,8 @@ dependencies:
   flutter_highlight: ^0.7.0
   connectivity_plus: ^7.3.1
   speech_to_text: ^7.5.0
+  video_player: ^2.14.1
+  gal: ^2.3.3
 
 dev_dependencies:
   flutter_test:
@@ -62,8 +64,54 @@ flutter:
   assets:
     - assets/
     - assets/isaac/
-  # Noto Sans Thai — the only app font (OFL 1.1), weights 400–800.
+  # App fonts (OFL 1.1) — same choices as the web; default Google Sans.
+  # Google Sans is subset to Latin + Thai to keep the app small.
   fonts:
+    - family: GoogleSans
+      fonts:
+        - asset: assets/fonts/GoogleSans-Regular.ttf
+        - asset: assets/fonts/GoogleSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/GoogleSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/GoogleSans-Bold.ttf
+          weight: 700
+    - family: IBMPlexSansThai
+      fonts:
+        - asset: assets/fonts/IBMPlexSansThai-Regular.ttf
+        - asset: assets/fonts/IBMPlexSansThai-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/IBMPlexSansThai-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/IBMPlexSansThai-Bold.ttf
+          weight: 700
+    - family: Sarabun
+      fonts:
+        - asset: assets/fonts/Sarabun-Regular.ttf
+        - asset: assets/fonts/Sarabun-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Sarabun-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Sarabun-Bold.ttf
+          weight: 700
+    - family: BaiJamjuree
+      fonts:
+        - asset: assets/fonts/BaiJamjuree-Regular.ttf
+        - asset: assets/fonts/BaiJamjuree-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/BaiJamjuree-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/BaiJamjuree-Bold.ttf
+          weight: 700
+    - family: Maitree
+      fonts:
+        - asset: assets/fonts/Maitree-Regular.ttf
+        - asset: assets/fonts/Maitree-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Maitree-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Maitree-Bold.ttf
+          weight: 700
     - family: NotoSansThai
       fonts:
         - asset: assets/fonts/NotoSansThai-Regular.ttf
