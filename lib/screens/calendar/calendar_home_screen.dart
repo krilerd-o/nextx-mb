@@ -282,6 +282,8 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
         key: const ValueKey('cal-moved-snack'),
         behavior: SnackBarBehavior.floating,
         content: Text(tr('${e.title}: ${start.day} ${monthShort(start.month)} ${hm(start)}–${hm(end)}')),
+// Actions make snackbars persist by default; these must time out.
+        persist: false,
         action: SnackBarAction(
           label: tr('เลิกทำ'),
           onPressed: () async {
