@@ -18,6 +18,14 @@ class AiAssistantController extends ChangeNotifier {
   bool listLoading = false;
   String query = '';
 
+  /// AI projects (folders for chats) and the one shown, null = all.
+  List<Map<String, dynamic>> projects = const [];
+  String? projectFilter;
+
+  /// Chats visible in the list (project filter applied).
+  List<AiConversation> get visibleConversations =>
+      projectFilter == null ? conversations : conversations.where((c) => c.projectId == projectFilter).toList();
+
   String? activeId;
   String activeTitle = '';
   bool activeStarred = false;
@@ -72,6 +80,7 @@ class AiAssistantController extends ChangeNotifier {
   Future<void> init() async {
     await Future.wait([
       loadConversations(),
+      loadProjects(),
       api.getAiUsage().then((u) => usage = u).catchError((_) => <String, dynamic>{}),
       api.getAiSuggestedPrompts().then((p) => suggestedPrompts = p).catchError((_) => <Map<String, dynamic>>[]),
     ]);
@@ -354,6 +363,44 @@ class AiAssistantController extends ChangeNotifier {
     if (id == activeId) newChat();
     conversations = conversations.where((c) => c.id != id).toList();
     _notify();
+  }
+
+  /// Hide a chat now; the caller deletes it on the server unless undone.
+  ({int index, AiConversation chat})? removeLocal(String id) {
+    final i = conversations.indexWhere((c) => c.id == id);
+    if (i < 0) return null;
+    final c = conversations[i];
+    conversations = [...conversations]..removeAt(i);
+    if (id == activeId) newChat();
+    _notify();
+    return (index: i, chat: c);
+  }
+
+  void restoreLocal(({int index, AiConversation chat}) r) {
+    final list = [...conversations];
+    list.insert(r.index.clamp(0, list.length), r.chat);
+    conversations = list;
+    _notify();
+  }
+
+  Future<void> loadProjects() async {
+    try {
+      projects = await api.getAiProjects();
+      if (projectFilter != null && !projects.any((p) => '${p['id']}' == projectFilter)) projectFilter = null;
+    } catch (_) {
+      projects = const [];
+    }
+    _notify();
+  }
+
+  void setProjectFilter(String? id) {
+    projectFilter = id;
+    _notify();
+  }
+
+  Future<void> moveToProject(String chatId, String? projectId) async {
+    await api.updateAiConversation(chatId, {'project_id': projectId});
+    await loadConversations();
   }
 
   void setModel(String p, String? m) {

@@ -1651,6 +1651,15 @@ const Map<String, String> enStrings = {
   'ลิงก์หมดอายุ — แตะเพื่อสร้างใหม่': 'Link expired — tap to regenerate',
   'โหลดใหม่': 'Reload',
   'สร้าง Task': 'Create task',
+  'ไม่อยู่ในโปรเจกต์': 'No project',
+  'ย้ายไปโปรเจกต์': 'Move to project',
+  'กำลังประมวลผล': 'Processing',
+  'กำลังเตรียม': 'Loading',
+  'กำลังพิมพ์คำตอบ': 'Typing',
+  'ตรวจสอบความถูกต้อง': 'Checking',
+  'กำลังเตรียมไฟล์': 'Preparing file',
+  'กำลังอัปโหลดไฟล์': 'Uploading',
+  'ทำรายการสำเร็จ': 'Success',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1855,4 +1864,5 @@ const Map<String, String> enPatterns = {
   'กำลังใช้ {}…': 'Using {}…',
   '"{}" จะถูกลบถาวร': '"{}" will be deleted permanently',
   'สวัสดี คุณ {}': 'Hello, {}',
+  'ลบ "{}" แล้ว': 'Deleted "{}"',
 };
