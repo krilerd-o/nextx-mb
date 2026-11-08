@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/i18n.dart';
 import '../../core/workspace_models.dart';
+import '../../widgets/nx_chrome.dart';
 import '../../widgets/nx_icons.dart';
 
 /// Result of a drop: item moved to [statusId], column order after the drop.
@@ -68,8 +70,19 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
   String? _hoverStatus;
   int? _hoverIndex;
   late final Ticker _ticker = createTicker(_tick);
-  String? _chipHover;
-  DateTime? _chipHoverSince;
+
+  // "ย้ายไปที่" dock: a pill at the bottom while dragging; finger on it opens
+  // the panel of statuses (end states as big buttons).
+  final _dockKey = GlobalKey();
+  final Map<String, GlobalKey> _dockRowKeys = {};
+  bool _dockOpen = false;
+  bool _overDock = false;
+  String? _dockHover;
+
+  /// Columns waiting for the server after a drop ("กำลังอัปเดต…").
+  final Set<String> _updating = {};
+  String? _flashId;
+  Timer? _flashTimer;
 
   static const _edge = 72.0;
   static const _maxSpeed = 18.0;
@@ -84,6 +97,8 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
 
   @override
   void dispose() {
+    if (_dragging != null) NxChromeBus.dragging.value = false;
+    _flashTimer?.cancel();
     _ticker.dispose();
     _hScroll.dispose();
     for (final c in _vScroll.values) {
@@ -116,6 +131,8 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
   void _tick(Duration _) {
     final p = _pointer;
     if (p == null || _dragging == null) return;
+    // Choosing in the dock: the board holds still.
+    if (_overDock || _dockOpen) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !_hScroll.hasClients) return;
     final local = box.globalToLocal(p);
@@ -151,12 +168,42 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
     }
     // Columns slid under a still finger: recompute the drop target.
     if (dx != 0 || scrolledV) _updateDrag(p);
-    // Hovering a status chip for a moment jumps the board to that column.
-    final chip = _chipHover;
-    if (chip != null && _chipHoverSince != null && DateTime.now().difference(_chipHoverSince!) > const Duration(milliseconds: 380)) {
-      _chipHoverSince = null;
-      _scrollToStatus(chip);
+  }
+
+  Rect? _rectOf(GlobalKey k) {
+    final box = k.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || !box.hasSize) return null;
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  /// Dock hit-testing by pointer; true when the finger is on the dock.
+  bool _updateDock(Offset global) {
+    final dock = _rectOf(_dockKey);
+    final on = dock != null && dock.inflate(_dockOpen ? 0 : 8).contains(global);
+    String? hover;
+    if (_dockOpen) {
+      for (final e in _dockRowKeys.entries) {
+        final r = _rectOf(e.value);
+        if (r != null && r.contains(global)) {
+          hover = e.key;
+          break;
+        }
+      }
     }
+    // Leaving the open panel upward folds it back to the pill.
+    final close = _dockOpen && dock != null && global.dy < dock.top - 24;
+    final open = !_dockOpen && on;
+    if (open || close || on != _overDock || hover != _dockHover) {
+      if (open) HapticFeedback.mediumImpact();
+      if (hover != null && hover != _dockHover) HapticFeedback.selectionClick();
+      setState(() {
+        if (open) _dockOpen = true;
+        if (close) _dockOpen = false;
+        _overDock = on;
+        _dockHover = close ? null : hover;
+      });
+    }
+    return on || _dockOpen;
   }
 
   void _scrollToStatus(String sid) {
@@ -182,16 +229,30 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
 
   void _startDrag(Map<String, dynamic> item, Offset at) {
     HapticFeedback.mediumImpact();
+    // Tab bar + FAB step aside so the dock owns the bottom edge.
+    NxChromeBus.dragging.value = true;
     setState(() {
       _dragging = item;
       _dragStart = at;
       _pointer = at;
+      _dockOpen = false;
+      _overDock = false;
+      _dockHover = null;
     });
     if (!_ticker.isActive) _ticker.start();
   }
 
   void _updateDrag(Offset global) {
     _pointer = global;
+    if (_updateDock(global)) {
+      if (_hoverStatus != null) {
+        setState(() {
+          _hoverStatus = null;
+          _hoverIndex = null;
+        });
+      }
+      return;
+    }
     // Which column is under the finger? Between two columns (the gap, or a
     // fat finger at the edge) the nearest one wins, so a drop never misses.
     String? hover;
@@ -224,24 +285,39 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
 
   Future<void> _endDrag({String? forceStatus, bool toEnd = false}) async {
     _ticker.stop();
+    NxChromeBus.dragging.value = false;
     final item = _dragging;
     final start = _dragStart;
     final end = _pointer;
-    final target = forceStatus ?? _hoverStatus;
+    // Dropped in the open dock: on a status row/button, or nowhere (cancel).
+    final viaDock = _dockOpen || _overDock;
+    if (viaDock) {
+      forceStatus = _dockOpen ? _dockHover : null;
+      toEnd = true;
+    }
+    final target = viaDock ? forceStatus : (forceStatus ?? _hoverStatus);
     final index = toEnd ? null : _hoverIndex;
     setState(() {
       _dragging = null;
       _hoverStatus = null;
       _hoverIndex = null;
-      _chipHover = null;
+      _dockOpen = false;
+      _overDock = false;
+      _dockHover = null;
     });
     if (item == null) return;
     // Long-press without moving = select.
-    if (forceStatus == null && start != null && end != null && (end - start).distance < 12) {
+    if (!viaDock && forceStatus == null && start != null && end != null && (end - start).distance < 12) {
       widget.onToggleSelect?.call(item);
       return;
     }
     if (target == null) return;
+    await _applyMove(item, target, index: index, scrollTo: viaDock);
+  }
+
+  /// Moves [item] to [target] (at [index] or the end), server call, rollback
+  /// on refusal, then an undo snackbar when the status changed.
+  Future<void> _applyMove(Map<String, dynamic> item, String target, {int? index, bool scrollTo = false, bool undoable = true}) async {
     final id = '${item['id']}';
     final from = '${item['status_id']}';
     final before = {for (final e in _cols.entries) e.key: List.of(e.value)};
@@ -257,12 +333,56 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
     at = at.clamp(0, dest.length);
     final moved = {...item, 'status_id': int.tryParse(target) ?? target};
     dest.insert(at, moved);
-    final unchanged = from == target && before[from]!.indexWhere((e) => '${e['id']}' == id) == at;
+    final unchanged = from == target && (before[from]?.indexWhere((e) => '${e['id']}' == id) ?? -1) == at;
     if (unchanged) return;
-    setState(() => _cols = next);
+    setState(() {
+      _cols = next;
+      _updating.add(target);
+      _flashId = id;
+    });
     HapticFeedback.lightImpact();
+    if (scrollTo) _scrollToStatus(target);
     final ok = await widget.onMove(item, target, [for (final e in dest) '${e['id']}']);
-    if (!ok && mounted) setState(() => _cols = before);
+    if (!mounted) return;
+    setState(() {
+      _updating.remove(target);
+      if (!ok) _cols = before;
+    });
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted && _flashId == id) setState(() => _flashId = null);
+    });
+    if (!ok || !undoable || from == target) return;
+    final s = widget.statuses.where((x) => x.id == target).firstOrNull;
+    final count = next[target]?.length ?? 0;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(SnackBar(
+      key: const ValueKey('ws-move-snack'),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 5),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(tr('ย้ายไปยัง ${s?.label ?? ''} แล้ว'), style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text(tr('$count งาน'), style: const TextStyle(fontSize: 12)),
+        ],
+      ),
+      action: SnackBarAction(
+        label: tr('เลิกทำ'),
+        onPressed: () => _undo(moved, from, before[from] ?? const []),
+      ),
+    ));
+  }
+
+  /// Puts the card back in its old column at its old place.
+  Future<void> _undo(Map<String, dynamic> moved, String from, List<Map<String, dynamic>> oldOrder) async {
+    if (!mounted) return;
+    HapticFeedback.selectionClick();
+    final id = '${moved['id']}';
+    final at = oldOrder.indexWhere((e) => '${e['id']}' == id);
+    await _applyMove(moved, from, index: at < 0 ? null : at, scrollTo: true, undoable: false);
   }
 
   @override
@@ -283,62 +403,182 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
             itemBuilder: (context, i) => _column(context, widget.statuses[i]),
           ),
         ),
-        // Status chips appear while dragging: hover to jump, drop to move.
-        AnimatedPositioned(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          left: 0,
-          right: 0,
-          top: _dragging == null ? -70 : widget.padding.top + 4,
+        // "ย้ายไปที่" dock: rises from the bottom while dragging.
+        Positioned.fill(
           child: IgnorePointer(
             ignoring: _dragging == null,
-            child: SizedBox(
-              height: 52,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                children: [
-                  for (final s in widget.statuses)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8, top: 6, bottom: 6),
-                      child: DragTarget<Map<String, dynamic>>(
-                        onWillAcceptWithDetails: (_) {
-                          if (_chipHover != s.id) {
-                            _chipHover = s.id;
-                            _chipHoverSince = DateTime.now();
-                            HapticFeedback.selectionClick();
-                            setState(() {});
-                          }
-                          return true;
-                        },
-                        onLeave: (_) => setState(() => _chipHover = null),
-                        onAcceptWithDetails: (_) => _endDrag(forceStatus: s.id, toEnd: true),
-                        builder: (context, cand, _) {
-                          final on = _chipHover == s.id;
-                          return AnimatedContainer(
-                            duration: const Duration(milliseconds: 160),
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: on ? s.color : cs.surface.withValues(alpha: 0.96),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: s.color, width: 1.4),
-                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 10)],
-                            ),
-                            child: Text(
-                              s.label,
-                              style: TextStyle(
-                                color: on ? Colors.white : s.color,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                ],
-              ),
+            child: LayoutBuilder(builder: (context, box) => _dock(context, cs, box.maxHeight)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _dock(BuildContext context, ColorScheme cs, double maxH) {
+    final theme = Theme.of(context);
+    final dragging = _dragging != null;
+    final bottom = MediaQuery.viewPaddingOf(context).bottom + 12;
+    final from = '${_dragging?['status_id'] ?? ''}';
+    final rows = [for (final s in widget.statuses) if (!s.isTerminal) s];
+    final ends = [for (final s in widget.statuses) if (s.isTerminal) s];
+    final hoverIdx = rows.indexWhere((s) => s.id == _dockHover);
+    final panelH = math.min(maxH * 0.62, 52.0 + rows.length * 60 + (ends.isEmpty ? 8 : 104));
+    final reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final dur = Duration(milliseconds: reduced ? 0 : 320);
+
+    Widget row(WsStatus s) {
+      final on = _dockHover == s.id;
+      final current = s.id == from;
+      final items = _cols[s.id] ?? const [];
+      final est = items.fold<int>(0, (a, r) => a + (wsInt(r['original_estimate_minutes']) ?? 0));
+      return AnimatedScale(
+        key: _dockRowKeys.putIfAbsent(s.id, GlobalKey.new),
+        scale: on ? 1.02 : 1,
+        duration: const Duration(milliseconds: 140),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          height: 56,
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: on ? cs.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: on ? [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 14, offset: const Offset(0, 4))] : null,
+          ),
+          child: Opacity(
+            opacity: current ? 0.45 : 1,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(children: [
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: s.color, shape: BoxShape.circle)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(s.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+                  Text(
+                    current ? tr('ปัจจุบัน') : [tr('${items.length} งาน'), if (est > 0) formatMinutes(est)].join(' · '),
+                    style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ]),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: on ? 1 : 0.18,
+                    minHeight: 3,
+                    color: s.color,
+                    backgroundColor: s.color.withValues(alpha: 0.12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget end(WsStatus s) {
+      final on = _dockHover == s.id;
+      final icon = s.isDone ? NxI.checkCircle : NxI.prohibit;
+      final color = s.isDone ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+      return Expanded(
+        child: AnimatedContainer(
+          key: _dockRowKeys.putIfAbsent(s.id, GlobalKey.new),
+          duration: const Duration(milliseconds: 140),
+          margin: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: on ? color.withValues(alpha: 0.16) : cs.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: on ? color : cs.outlineVariant.withValues(alpha: 0.5), width: on ? 1.6 : 1),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedScale(scale: on ? 1.18 : 1, duration: const Duration(milliseconds: 160), child: Icon(icon, size: 28, color: color)),
+              const SizedBox(height: 6),
+              Text(s.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final panel = Column(
+      key: const ValueKey('ws-dock-panel'),
+      children: [
+        Container(
+          height: 48,
+          color: cs.inverseSurface,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Row(children: [
+            Icon(NxI.moveRight, size: 18, color: cs.onInverseSurface),
+            const SizedBox(width: 8),
+            Expanded(child: Text(tr('ย้ายไปที่'), style: theme.textTheme.titleSmall?.copyWith(color: cs.onInverseSurface, fontWeight: FontWeight.w700))),
+            if (hoverIdx >= 0)
+              Text('${hoverIdx + 1}/${rows.length}', style: theme.textTheme.labelLarge?.copyWith(color: cs.onInverseSurface.withValues(alpha: 0.8))),
+          ]),
+        ),
+        Expanded(
+          child: ColoredBox(
+            color: cs.surfaceContainerHigh,
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              physics: const NeverScrollableScrollPhysics(),
+              children: [for (final s in rows) row(s)],
+            ),
+          ),
+        ),
+        if (ends.isNotEmpty)
+          Container(
+            height: 96,
+            color: cs.surfaceContainerHigh,
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Row(children: [for (final s in ends) end(s)]),
+          ),
+      ],
+    );
+
+    final pill = Row(
+      key: const ValueKey('ws-dock-pill'),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(NxI.moveRight, size: 18, color: cs.onInverseSurface),
+        const SizedBox(width: 8),
+        Text(tr('ย้ายไปที่'), style: theme.textTheme.titleSmall?.copyWith(color: cs.onInverseSurface, fontWeight: FontWeight.w700)),
+      ],
+    );
+
+    return Stack(
+      children: [
+        AnimatedPositioned(
+          duration: dur,
+          curve: Curves.easeOutBack,
+          left: _dockOpen ? 12 : 48,
+          right: _dockOpen ? 12 : 48,
+          bottom: dragging ? bottom : -90,
+          height: _dockOpen ? panelH : 52,
+          child: AnimatedContainer(
+            key: _dockKey,
+            duration: dur,
+            curve: Curves.easeOutCubic,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: _overDock && !_dockOpen ? Color.lerp(cs.inverseSurface, cs.primary, 0.35) : cs.inverseSurface,
+              borderRadius: BorderRadius.circular(_dockOpen ? 24 : 26),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 24, offset: const Offset(0, 8))],
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              // The panel is laid out at full height while the box grows into it.
+              child: _dockOpen
+                  ? OverflowBox(
+                      key: const ValueKey('ws-dock-panel-box'),
+                      alignment: Alignment.topCenter,
+                      minHeight: panelH,
+                      maxHeight: panelH,
+                      child: panel,
+                    )
+                  : pill,
             ),
           ),
         ),
@@ -363,39 +603,58 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
         key: _colKey(s.id),
         duration: const Duration(milliseconds: 180),
         width: WsKanban.columnWidth,
+        clipBehavior: Clip.antiAlias,
+        // A solid box per status (clear even on a light page), its colour as
+        // a bar across the top; the column under the finger lights up.
         decoration: BoxDecoration(
-          color: hovering ? s.color.withValues(alpha: 0.10) : cs.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: hovering ? s.color : Colors.transparent, width: 1.6),
+          color: hovering ? Color.alphaBlend(s.color.withValues(alpha: 0.10), cs.surfaceContainerHigh) : cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: hovering ? s.color : cs.outlineVariant.withValues(alpha: 0.35), width: hovering ? 2 : 1),
         ),
         child: Column(
           children: [
+            Container(height: 4, color: s.color),
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+              child: Column(
                 children: [
-                  Container(width: 10, height: 10, decoration: BoxDecoration(color: s.color, shape: BoxShape.circle)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(s.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    s.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: s.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(10)),
-                    child: Text('${rows.length}', style: theme.textTheme.labelMedium?.copyWith(color: s.color, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(
+                    _updating.contains(s.id)
+                        ? tr('กำลังอัปเดต…')
+                        : [tr('${rows.length} งาน'), if (estimate > 0) formatMinutes(estimate)].join(' · '),
+                    style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
                   ),
-                  if (estimate > 0) ...[
-                    const SizedBox(width: 6),
-                    Text(formatMinutes(estimate), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                  ],
                 ],
               ),
+            ),
+            SizedBox(
+              height: 2,
+              child: _updating.contains(s.id)
+                  ? LinearProgressIndicator(minHeight: 2, color: s.color, backgroundColor: Colors.transparent)
+                  : null,
             ),
             Expanded(
               child: ListView(
                 controller: _vc(s.id),
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
                 children: [
+                  if (visible.isEmpty && gapAt < 0)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 28),
+                      child: Column(children: [
+                        Icon(NxI.kanban, size: 28, color: cs.outline),
+                        const SizedBox(height: 6),
+                        Text(tr('ไม่มีงาน'), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                      ]),
+                    ),
                   for (var i = 0; i <= visible.length; i++) ...[
                     if (i == gapAt)
                       AnimatedContainer(
@@ -450,7 +709,19 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
         childWhenDragging: const SizedBox.shrink(),
         child: Listener(
           onPointerDown: (e) => _pointer = e.position,
-          child: card,
+          // The card that just landed glows in its new status colour.
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 400),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                _flashId == id
+                    ? BoxShadow(color: s.color.withValues(alpha: 0.55), blurRadius: 16, spreadRadius: 1)
+                    : BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, 2)),
+              ],
+            ),
+            child: card,
+          ),
         ),
       ),
     );

@@ -16,6 +16,17 @@ class WsStatus {
   bool get isInitial => '${raw['is_initial']}' == '1' || raw['is_initial'] == true;
   bool get isDone => '${raw['is_done']}' == '1' || raw['is_done'] == true;
 
+  /// Closed without finishing (ยกเลิก / cancelled / closed lost).
+  bool get isCancelled {
+    final n = name.toLowerCase();
+    final l = '${raw['label_th'] ?? ''} ${raw['label_en'] ?? ''}'.toLowerCase();
+    return !isDone &&
+        (n.startsWith('cancel') || n.contains('closed_lost') || n.contains('closed lost') || n == 'lost' || l.contains('ยกเลิก') || l.contains('cancel'));
+  }
+
+  /// End states get the big buttons at the bottom of the "ย้ายไปที่" panel.
+  bool get isTerminal => isDone || isCancelled;
+
   Color get color {
     final hex = '${raw['color'] ?? ''}'.replaceAll('#', '');
     final v = int.tryParse(hex, radix: 16);

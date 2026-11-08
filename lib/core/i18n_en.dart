@@ -1287,6 +1287,9 @@ const Map<String, String> enStrings = {
   'คัดลอกงานย่อยและ Smart Checklist ด้วย': 'Also copy subtasks and Smart Checklist',
   'แสดงงานย่อย': 'Show subtasks',
   'รายการเช็ค': 'Checklist item',
+  'ย้ายไปที่': 'Move to',
+  'ไม่มีงาน': 'No items',
+  'กำลังอัปเดต…': 'Updating…',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1459,4 +1462,5 @@ const Map<String, String> enPatterns = {
   'กู้คืน {} แล้ว': 'Restored {}',
   '"{}" จะถูกลบถาวรและกู้คืนไม่ได้': '"{}" will be deleted for good and can\'t be restored',
   'ลบโดย {}': 'Deleted by {}',
+  'ย้ายไปยัง {} แล้ว': 'Moved to {}',
 };
