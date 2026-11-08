@@ -69,13 +69,63 @@ String wsKind(Map<String, dynamic> item) => item['_kind'] == 'epic' || item['typ
 /// Type of an item row (epics have no `type` column).
 String wsType(Map<String, dynamic> item) => item['_kind'] == 'epic' ? 'epic' : '${item['type'] ?? 'task'}';
 
-/// `CODE-12` — board code + item number.
+/// Quick add, same defaults as the web (`workspaceQuickAddBody` + quick create):
+/// assignee / reporter = me, start / end / due = today (Thai), medium priority.
+Map<String, dynamic> wsQuickAddBody({required String title, required String statusId, String? me, String type = 'task', DateTime? now}) {
+  final t = now ?? DateTime.now().toUtc().add(const Duration(hours: 7));
+  final today = '${t.year}-${'${t.month}'.padLeft(2, '0')}-${'${t.day}'.padLeft(2, '0')}';
+  final uid = me == null ? null : int.tryParse(me);
+  return {
+    'title': title.trim(),
+    'type': type,
+    'status_id': int.tryParse(statusId) ?? statusId,
+    'priority': 'medium',
+    'start_date': today,
+    'end_date': today,
+    'due_date': today,
+    if (uid != null) 'assignee_id': uid,
+    if (uid != null) 'reporter_id': uid,
+  };
+}
+
+/// Board names seen so far by code (boards list / board page), so item keys
+/// can use the short name of a deal board instead of its deal number.
+final Map<String, String> wsBoardNames = {};
+
+void wsRememberBoard(Map<String, dynamic> board) {
+  final code = '${board['code'] ?? ''}'.trim();
+  final name = '${board['name'] ?? ''}'.trim();
+  if (code.isNotEmpty && name.isNotEmpty) wsBoardNames[code] = name;
+}
+
+/// Short code shown to people: deal boards get an automatic code from the
+/// deal number (`D26110500003`); when the board is named like a code
+/// (`KFDN`) that name is shown instead. Links keep the real code ([wsLinkKey]).
+String wsDisplayCode(String code, {String? name}) {
+  if (!RegExp(r'^D\d{8,}$').hasMatch(code)) return code;
+  final n = (name ?? wsBoardNames[code] ?? '').trim().toUpperCase();
+  return RegExp(r'^[A-Z][A-Z0-9]{1,11}$').hasMatch(n) ? n : code;
+}
+
+/// `KFDN-12` — short board code + item number (what people read).
 String wsKey(Map<String, dynamic> item, {String? boardCode}) {
+  final code = '${item['board_code'] ?? boardCode ?? ''}';
+  final no = '${item['item_no'] ?? ''}';
+  if (code.isEmpty || no.isEmpty) return no.isEmpty ? '#${item['id']}' : '#$no';
+  return '${wsDisplayCode(code, name: item['board_name']?.toString())}-$no';
+}
+
+/// `CODE-12` with the board's real code — for web links and copying.
+String wsLinkKey(Map<String, dynamic> item, {String? boardCode}) {
   final code = '${item['board_code'] ?? boardCode ?? ''}';
   final no = '${item['item_no'] ?? ''}';
   if (code.isEmpty || no.isEmpty) return no.isEmpty ? '#${item['id']}' : '#$no';
   return '$code-$no';
 }
+
+/// Share text like the web: key, full title, link.
+String wsShareText(Map<String, dynamic> item, String webUrl, {String? boardCode}) =>
+    '${wsLinkKey(item, boardCode: boardCode)}\n${'${item['title'] ?? ''}'.trim()}\n$webUrl';
 
 /// Title without the board automation prefix (`[CODE]: `).
 String wsTitle(Map<String, dynamic> item) {

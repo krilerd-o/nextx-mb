@@ -1690,4 +1690,6 @@ const Map<String, String> enPatterns = {
   '{} นาทีก่อน': '{} min before',
   'เพิ่ม {} คน': 'Add {}',
   'ผู้ใช้ #{}': 'User #{}',
+  'วันนี้ {} · ค้าง {}': 'Today {} · open {}',
+  'เกิน {}': 'Over {}',
 };

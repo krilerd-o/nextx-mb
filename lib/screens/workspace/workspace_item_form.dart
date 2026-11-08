@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/thai_time.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/workspace_models.dart';
@@ -120,6 +121,14 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
         if (widget.parent!['epic_id'] != null) _values['epic_id'] = '${widget.parent!['epic_id']}';
       }
       _values['recurrence_type'] ??= 'none';
+      // Dates like the web's quick create: start / end / due = today (Thai).
+      final t = thaiNow();
+      final today = '${t.year}-${'${t.month}'.padLeft(2, '0')}-${'${t.day}'.padLeft(2, '0')}';
+      if (widget.kind != 'epic') {
+        _values['start_date'] ??= today;
+        _values['end_date'] ??= today;
+        _values['due_date'] ??= today;
+      }
     }
     _labelOptions = <String>{
       for (final t in widget.tasks)

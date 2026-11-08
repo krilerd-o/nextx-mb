@@ -4,7 +4,11 @@ import 'package:flutter/scheduler.dart';
 /// Icon a collapsed toolbar leaves in the header (search, filter, view…).
 @immutable
 class NxChromeAction {
-  const NxChromeAction({required this.id, required this.icon, required this.tooltip, required this.onTap, this.badge = 0});
+  const NxChromeAction({required this.id, required this.icon, required this.tooltip, required this.onTap, this.badge = 0, this.pinned = false});
+
+  /// Shown in the header all the time, not only while the toolbar is folded
+  /// (search / filter live as header icons by default).
+  final bool pinned;
 
   final String id;
   final IconData icon;
@@ -12,7 +16,7 @@ class NxChromeAction {
   final VoidCallback onTap;
   final int badge;
 
-  bool same(NxChromeAction o) => o.id == id && o.icon == icon && o.badge == badge && o.tooltip == tooltip;
+  bool same(NxChromeAction o) => o.id == id && o.icon == icon && o.badge == badge && o.tooltip == tooltip && o.pinned == pinned;
 }
 
 /// App-wide signals for chrome outside a page (the shell's tab bar).

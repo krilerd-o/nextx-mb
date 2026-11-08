@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
@@ -18,7 +19,7 @@ import 'workspace_trash_screen.dart';
 import '../../widgets/nx_refresh.dart';
 
 /// Which of my open items to show at the top.
-enum WsMyScope { overdue, today, week, all }
+enum WsMyScope { today, overdue, week, all }
 
 /// Filters my open items by due date (Thai calendar days).
 List<Map<String, dynamic>> wsMyWork(List<Map<String, dynamic>> items, WsMyScope scope) {
@@ -53,15 +54,55 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
   List<Map<String, dynamic>>? _boards = _boardsCache;
   List<Map<String, dynamic>>? _mine = _mineCache;
   String? _error;
-  WsMyScope _scope = WsMyScope.week;
+  WsMyScope _scope = WsMyScope.today;
   bool _expanded = false;
   String _q = '';
+
+  /// My-work box starts folded (remembered per device).
+  bool _myOpen = false;
+  bool _searching = false;
+  final _search = TextEditingController();
+  final _searchFocus = FocusNode();
+  static const _kMyOpen = 'ws_home_mywork_open';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPrefs() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final v = p.getBool(_kMyOpen);
+      if (v != null && mounted) setState(() => _myOpen = v);
+    } catch (_) {}
+  }
+
+  void _toggleMy() {
+    HapticFeedback.selectionClick();
+    setState(() => _myOpen = !_myOpen);
+    SharedPreferences.getInstance().then((p) => p.setBool(_kMyOpen, _myOpen)).catchError((_) => false);
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _searching = !_searching;
+      if (!_searching) {
+        _search.clear();
+        _q = '';
+      }
+    });
+    if (_searching) WidgetsBinding.instance.addPostFrameCallback((_) => _searchFocus.requestFocus());
+  }
 
   ApiClient get _api => context.read<AppConfig>().apiClient;
 
   @override
   void initState() {
     super.initState();
+    _loadPrefs();
     _load();
   }
 
@@ -76,10 +117,11 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
       if (!mounted) return;
       setState(() {
         _boards = _boardsCache = r[0];
+        for (final b in r[0]) {
+          wsRememberBoard(b);
+        }
         _mine = _mineCache = r.length > 1 ? r[1] : const [];
         _error = null;
-        // Nothing this week? Show everything open instead of an empty box.
-        if (_scope == WsMyScope.week && wsMyWork(_mine!, WsMyScope.week).isEmpty) _scope = WsMyScope.all;
       });
     } catch (e) {
       if (mounted) setState(() => _error = formatApiError(e));
@@ -171,6 +213,12 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
         title: 'Workspace',
         actions: [
           IconButton(
+            key: const ValueKey('ws-board-search'),
+            tooltip: tr(_searching ? 'ปิดค้นหา' : 'ค้นหาบอร์ด'),
+            icon: Icon(_searching ? NxI.x : NxI.magnifyingGlass),
+            onPressed: _toggleSearch,
+          ),
+          IconButton(
             tooltip: tr('ถังขยะ'),
             icon: const Icon(NxI.trash),
             onPressed: () async {
@@ -195,10 +243,14 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
                     Expanded(child: Text(tr('บอร์ด'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
                     Text('${boards?.length ?? 0}', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                   ]),
-                  if ((boards?.length ?? 0) > 6)
+                  if (_searching)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: TextField(
+                        key: const ValueKey('ws-board-q'),
+                        controller: _search,
+                        focusNode: _searchFocus,
+                        textInputAction: TextInputAction.search,
                         decoration: InputDecoration(
                           hintText: tr('ค้นหาบอร์ด'),
                           prefixIcon: const Icon(NxI.magnifyingGlass, size: 18),
@@ -239,12 +291,35 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(children: [
-            Icon(NxI.user, size: 18, color: cs.primary),
-            const SizedBox(width: 6),
-            Expanded(child: Text(tr('งานของฉัน'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-            Text(tr('${all.length} งานค้าง'), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-          ]),
+          InkWell(
+            key: const ValueKey('ws-my-toggle'),
+            borderRadius: BorderRadius.circular(12),
+            onTap: _toggleMy,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(children: [
+                Icon(NxI.user, size: 18, color: cs.primary),
+                const SizedBox(width: 6),
+                Expanded(child: Text(tr('งานของฉัน'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+                Text(tr('วันนี้ ${counts[WsMyScope.today]} · ค้าง ${all.length}'), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(width: 4),
+                AnimatedRotation(
+                  turns: _myOpen ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Icon(NxI.caretDown, size: 18, color: cs.onSurfaceVariant),
+                ),
+              ]),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: !_myOpen
+                ? const SizedBox(width: double.infinity)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
           const SizedBox(height: 8),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -273,6 +348,9 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
           for (final it in shown) _myRow(context, it),
           if (list.length > shown.length)
             TextButton(onPressed: () => setState(() => _expanded = true), child: Text(tr('ดูทั้งหมด ${list.length} งาน'))),
+                    ],
+                  ),
+          ),
         ],
       ),
     );
@@ -377,7 +455,9 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
                         Text('${b['name'] ?? tr('บอร์ด')}', maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                         Text(
                           [
-                            if ('${b['code'] ?? ''}'.isNotEmpty) '${b['code']}',
+                            // Automatic deal codes (D26…) say nothing to people — hide them.
+                            if ('${b['code'] ?? ''}'.isNotEmpty && !RegExp(r'^D\d{8,}$').hasMatch('${b['code']}') && '${b['code']}'.toUpperCase() != '${b['name'] ?? ''}'.toUpperCase())
+                              '${b['code']}',
                             tr('$total งาน'),
                             if (members > 0) tr('$members สมาชิก'),
                           ].join(' · '),

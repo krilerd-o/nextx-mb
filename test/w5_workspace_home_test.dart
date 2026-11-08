@@ -66,10 +66,21 @@ void main() {
     final q = adapter.calls.firstWhere((c) => c.path == '/api/workspace/items').queryParameters;
     expect(q['assignee_id'], '5');
     expect(q['exclude_done'], '1');
-    expect(find.text('[QA] เลยกำหนด'), findsOneWidget);
+    // Folded by default; opens on today's work.
+    expect(find.text('[QA] วันนี้'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('ws-my-toggle')));
+    await tester.pumpAndSettle();
     expect(find.text('[QA] วันนี้'), findsOneWidget);
-    expect(find.text('[QA] ไม่มีกำหนด'), findsNothing, reason: 'default scope is this week');
+    expect(find.text('[QA] เลยกำหนด'), findsNothing, reason: 'default scope is today');
+    await tester.tap(find.textContaining('เลยกำหนด'));
+    await tester.pumpAndSettle();
+    expect(find.text('[QA] เลยกำหนด'), findsOneWidget);
     expect(find.text('เลย 2 วัน'), findsOneWidget);
+    // Board search lives in the header.
+    expect(find.byKey(const ValueKey('ws-board-q')), findsNothing);
+    await tester.tap(find.byTooltip('ค้นหาบอร์ด'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ws-board-q')), findsOneWidget);
     expect(find.text('[QA] Mobile board'), findsWidgets);
     expect(find.text('เสร็จ 1/4'), findsOneWidget);
   });

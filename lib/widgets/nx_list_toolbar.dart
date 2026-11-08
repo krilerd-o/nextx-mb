@@ -231,7 +231,13 @@ class NxListToolbar extends StatefulWidget {
     this.padding = const EdgeInsets.fromLTRB(16, 4, 16, 8),
     this.collapsible = true,
     this.extraActions = const [],
+    this.iconMode = true,
   });
+
+  /// Search and filter / sort live as header icons (search box opens on tap,
+  /// ready to type); only the quick (status) chips stay under the header.
+  /// Off: the classic search box + chip row.
+  final bool iconMode;
 
   /// Fold away while the page reads down (inside [NxScrollScaffold]); search /
   /// filter then live as header icons.
@@ -275,6 +281,24 @@ class _NxListToolbarState extends State<NxListToolbar> {
   final _focus = FocusNode();
   List<String> _recents = const [];
   bool _showRecents = false;
+
+  /// Icon mode: search box shown after tapping the header icon.
+  bool _searchOpen = false;
+  bool get _iconMode => widget.iconMode && _chrome != null;
+
+  void _openSearch() {
+    setState(() => _searchOpen = true);
+    _chrome?.expand();
+    _focusSearchSoon();
+  }
+
+  void _closeSearch() {
+    _focus.unfocus();
+    final had = _c.text.isNotEmpty;
+    _c.clear();
+    setState(() => _searchOpen = false);
+    if (had || widget.query.q.isNotEmpty) widget.onChanged(widget.query.copyWith(q: ''));
+  }
 
   @override
   void initState() {
@@ -334,10 +358,11 @@ class _NxListToolbarState extends State<NxListToolbar> {
   void _registerChrome({required int filterBadge, required bool hasFilters}) {
     final chrome = _chrome;
     if (chrome == null) return;
-    if (!widget.collapsible) {
+    if (!widget.collapsible && !widget.iconMode) {
       chrome.removeActions(this);
       return;
     }
+    final pin = widget.iconMode;
     chrome.setActions(this, [
       ...widget.extraActions,
       if (widget.showSearch)
@@ -346,7 +371,12 @@ class _NxListToolbarState extends State<NxListToolbar> {
           icon: NxI.magnifyingGlass,
           tooltip: 'ค้นหา',
           badge: widget.query.q.isEmpty ? 0 : 1,
+          pinned: pin,
           onTap: () {
+            if (pin) {
+              _searchOpen && widget.query.q.isEmpty && _c.text.isEmpty ? _closeSearch() : _openSearch();
+              return;
+            }
             chrome.expand();
             _focusSearchSoon();
           },
@@ -357,6 +387,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
           icon: NxI.funnel,
           tooltip: 'ตัวกรอง',
           badge: filterBadge,
+          pinned: pin,
           onTap: () {
             HapticFeedback.selectionClick();
             _openFilters();
@@ -471,8 +502,9 @@ class _NxListToolbarState extends State<NxListToolbar> {
       );
     }
 
-    final hasChips =
-        quick != null || sheetGroups.isNotEmpty || widget.sorts.isNotEmpty || widget.leading.isNotEmpty;
+    final hasChips = quick != null ||
+        widget.leading.isNotEmpty ||
+        (!_iconMode && (sheetGroups.isNotEmpty || widget.sorts.isNotEmpty));
     final sortOn = q.sort != null && widget.sorts.isNotEmpty && q.sort != widget.sorts.first.key;
     _registerChrome(
       hasFilters: widget.groups.isNotEmpty || widget.sorts.isNotEmpty,
@@ -502,8 +534,9 @@ class _NxListToolbarState extends State<NxListToolbar> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.showSearch)
+          if (widget.showSearch && (!_iconMode || _searchOpen || q.q.isNotEmpty))
             TextField(
+              key: const ValueKey('nx-list-search'),
               controller: _c,
               focusNode: _focus,
               textInputAction: TextInputAction.search,
@@ -517,12 +550,16 @@ class _NxListToolbarState extends State<NxListToolbar> {
                 hintText: tr(widget.searchHint),
                 prefixIcon: const Icon(NxI.magnifyingGlass, size: 20),
                 isDense: true,
-                suffixIcon: _c.text.isEmpty
+                suffixIcon: _c.text.isEmpty && !_iconMode
                     ? null
                     : IconButton(
-                        tooltip: tr('ล้าง'),
+                        tooltip: tr(_iconMode ? 'ปิดค้นหา' : 'ล้าง'),
                         icon: const Icon(NxI.x, size: 18),
                         onPressed: () {
+                          if (_iconMode) {
+                            _closeSearch();
+                            return;
+                          }
                           _c.clear();
                           setState(() {});
                           widget.onChanged(q.copyWith(q: ''));
@@ -569,7 +606,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
                   : Row(
                       children: [
                         ...widget.leading,
-                        if (sheetGroups.isNotEmpty)
+                        if (sheetGroups.isNotEmpty && !_iconMode)
                           chip(
                             label: 'ตัวกรอง',
                             icon: NxI.funnel,
@@ -577,7 +614,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
                             badge: sheetCount,
                             onTap: _openFilters,
                           ),
-                        if (widget.sorts.isNotEmpty)
+                        if (widget.sorts.isNotEmpty && !_iconMode)
                           chip(
                             label: _sortLabel ?? 'เรียง',
                             icon: NxI.sortAscending,

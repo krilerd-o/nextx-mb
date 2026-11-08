@@ -129,83 +129,76 @@ class WsTimeCard extends StatelessWidget {
     final over = est > 0 && spent > est;
     final color = over ? cs.error : const Color(0xFF10B981);
     final left = remaining ?? (est > 0 ? math.max(0, est - spent) : null);
+    // Compact, modern card: numbers on one line, a slim progress bar, then
+    // the two actions side by side.
     return Container(
-      padding: const EdgeInsets.all(14),
+      key: const ValueKey('ws-time-card'),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(22),
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.45)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: 68,
-            height: 68,
-            child: TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: ratio.clamp(0, 1).toDouble()),
-              duration: const Duration(milliseconds: 700),
-              curve: Curves.easeOutCubic,
-              builder: (context, v, _) => Stack(
-                fit: StackFit.expand,
-                children: [
-                  CircularProgressIndicator(
-                    value: v,
-                    strokeWidth: 7,
-                    strokeCap: StrokeCap.round,
-                    backgroundColor: cs.outlineVariant.withValues(alpha: 0.5),
-                    color: color,
-                  ),
-                  Center(
-                    child: Text(
-                      est > 0 ? '${(ratio * 100).round()}%' : formatMinutes(spent),
-                      style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800, color: over ? cs.error : null),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(tr('เวลาที่ใช้'), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-                Text.rich(
-                  TextSpan(children: [
-                    TextSpan(text: formatMinutes(spent), style: const TextStyle(fontWeight: FontWeight.w800)),
-                    if (est > 0) TextSpan(text: ' / ${formatMinutes(est)}', style: TextStyle(color: cs.onSurfaceVariant)),
-                  ]),
-                  style: theme.textTheme.titleMedium,
-                ),
-                if (left != null)
-                  Text(
-                    over ? tr('เกินเวลาประมาณ ${formatMinutes(spent - est)}') : tr('คงเหลือ ${formatMinutes(left)}'),
-                    style: theme.textTheme.bodySmall?.copyWith(color: over ? cs.error : cs.onSurfaceVariant),
-                  ),
-              ],
-            ),
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
+          Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (onLog != null)
-                FilledButton.tonalIcon(
-                  key: const ValueKey('ws-log-time'),
-                  onPressed: onLog,
-                  icon: const Icon(NxI.clock, size: 18),
-                  label: Text(tr('ลงเวลา')),
-                ),
-              ?timer,
+              Icon(NxI.timer, size: 18, color: cs.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Text.rich(
+                TextSpan(children: [
+                  TextSpan(text: formatMinutes(spent), style: const TextStyle(fontWeight: FontWeight.w800)),
+                  if (est > 0) TextSpan(text: ' / ${formatMinutes(est)}', style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
+                ]),
+                style: theme.textTheme.titleMedium,
+              ),
+              const Spacer(),
+              if (left != null)
+                Text(
+                  over ? tr('เกิน ${formatMinutes(spent - est)}') : tr('คงเหลือ ${formatMinutes(left)}'),
+                  style: theme.textTheme.labelMedium?.copyWith(color: over ? cs.error : cs.onSurfaceVariant, fontWeight: FontWeight.w600),
+                )
+              else
+                Text(tr('เวลาที่ใช้'), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
             ],
           ),
+          const SizedBox(height: 10),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: ratio.clamp(0, 1).toDouble()),
+            duration: const Duration(milliseconds: 700),
+            curve: Curves.easeOutCubic,
+            builder: (context, v, _) => ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(value: est > 0 || spent > 0 ? v : 0, minHeight: 6, color: color, backgroundColor: cs.outlineVariant.withValues(alpha: 0.4)),
+            ),
+          ),
+          if (onLog != null || timer != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (onLog != null)
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      key: const ValueKey('ws-log-time'),
+                      onPressed: onLog,
+                      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(42)),
+                      icon: const Icon(NxI.clock, size: 18),
+                      label: Text(tr('ลงเวลา')),
+                    ),
+                  ),
+                if (onLog != null && timer != null) const SizedBox(width: 8),
+                if (timer != null) Expanded(child: Center(child: timer!)),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-/// Local stopwatch per task: survives leaving the screen (start time in prefs).
 class WsTaskTimer extends StatefulWidget {
   const WsTaskTimer({super.key, required this.prefsKey, required this.onStop});
 
@@ -519,11 +512,12 @@ class WsSection extends StatelessWidget {
     final cs = theme.colorScheme;
     final c = color ?? cs.primary;
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+      // Standard 16 px inside the box; the header sits clear of the fields.
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
       decoration: BoxDecoration(
         color: cs.surface,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
       ),
       child: Column(
@@ -536,12 +530,12 @@ class WsSection extends StatelessWidget {
                 decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
                 child: Icon(icon, size: 16, color: c),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(child: Text(tr(title), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
               ?trailing,
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 12),
           child,
         ],
       ),

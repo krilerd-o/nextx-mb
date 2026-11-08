@@ -355,7 +355,7 @@ class _PageBar extends StatelessWidget {
     final chrome = NxChrome.of(context);
     final folded = chrome != null && chrome.collapsed;
     // Collapsed toolbars leave their search / filter / view icons here.
-    final chromeActions = folded ? chrome.actions : const <NxChromeAction>[];
+    final chromeActions = chrome == null ? const <NxChromeAction>[] : [for (final a in chrome.actions) if (folded || a.pinned) a];
     final leading = header.leading ??
         (canPop
             ? _CircleBtn(
@@ -437,7 +437,7 @@ class _PageBar extends StatelessWidget {
               ),
             // While folded, the page's own icons step aside if the row would
             // crowd the title (pull-to-refresh / ⋯ still reach them).
-            if (chromeActions.isEmpty || chromeActions.length + (header.actions?.length ?? 0) + (items.isEmpty ? 0 : 1) <= 3)
+            if (!folded || chromeActions.isEmpty || chromeActions.length + (header.actions?.length ?? 0) + (items.isEmpty ? 0 : 1) <= 3)
               ..._circleActions(header.actions),
             if (items.isNotEmpty)
               Padding(
