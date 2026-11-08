@@ -9,6 +9,9 @@ import '../../core/app_config.dart';
 import '../../core/auth_errors.dart';
 import '../../core/i18n.dart';
 import '../../core/qr_login.dart';
+import '../../core/server_profile.dart';
+import '../../core/spaces.dart';
+import '../spaces/space_switcher.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/nx_icons.dart';
 
@@ -19,16 +22,25 @@ enum _Stage { scanning, redeeming, success, error }
 /// animation, then open the session. With [initial] (QR opened from the phone's
 /// camera app) the camera is skipped.
 class QrLoginScanScreen extends StatefulWidget {
-  const QrLoginScanScreen({super.key, this.initial});
+  const QrLoginScanScreen({super.key, this.initial, this.addSpace = false});
   final QrLoginLink? initial;
+
+  /// From "เพิ่ม Space" (already signed in): the QR's account becomes a new
+  /// Space (or the existing Space of that account opens), with the Space
+  /// colour hand-off. The current Space is untouched until the code works.
+  final bool addSpace;
 
   @override
   State<QrLoginScanScreen> createState() => _QrLoginScanScreenState();
 }
 
-class _QrLoginScanScreenState extends State<QrLoginScanScreen> with SingleTickerProviderStateMixin {
+class _QrLoginScanScreenState extends State<QrLoginScanScreen>
+    with SingleTickerProviderStateMixin {
   MobileScannerController? _camera;
-  late final AnimationController _check = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
+  late final AnimationController _check = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 650),
+  );
   _Stage _stage = _Stage.scanning;
   String? _hint;
   String? _error;
@@ -69,9 +81,13 @@ class _QrLoginScanScreenState extends State<QrLoginScanScreen> with SingleTicker
   }
 
   static String _errorText(Object e) {
-    final status = e is ApiEnvelopeException ? e.statusCode : (e is ApiException ? e.statusCode : -1);
-    if (status == 401 || status == 404 || status == 410) return 'QR หมดอายุหรือถูกใช้แล้ว — สร้าง QR ใหม่บนเว็บแล้วสแกนอีกครั้ง';
-    if (status == 0) return 'เชื่อมต่อเซิร์ฟเวอร์ของ QR ไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
+    final status = e is ApiEnvelopeException
+        ? e.statusCode
+        : (e is ApiException ? e.statusCode : -1);
+    if (status == 401 || status == 404 || status == 410)
+      return 'QR หมดอายุหรือถูกใช้แล้ว — สร้าง QR ใหม่บนเว็บแล้วสแกนอีกครั้ง';
+    if (status == 0)
+      return 'เชื่อมต่อเซิร์ฟเวอร์ของ QR ไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
     return authErrorMessage(e);
   }
 
@@ -88,17 +104,30 @@ class _QrLoginScanScreenState extends State<QrLoginScanScreen> with SingleTicker
     try {
       final data = await config.redeemQr(link);
       if (!mounted) return;
-      final user = data['user'] is Map ? Map<String, dynamic>.from(data['user'] as Map) : const <String, dynamic>{};
-      final biz = data['business'] is Map ? Map<String, dynamic>.from(data['business'] as Map) : const <String, dynamic>{};
-      final full = [user['first_name'], user['last_name']].where((e) => e != null && '$e'.trim().isNotEmpty).join(' ');
+      final user = data['user'] is Map
+          ? Map<String, dynamic>.from(data['user'] as Map)
+          : const <String, dynamic>{};
+      final biz = data['business'] is Map
+          ? Map<String, dynamic>.from(data['business'] as Map)
+          : const <String, dynamic>{};
+      final full = [
+        user['first_name'],
+        user['last_name'],
+      ].where((e) => e != null && '$e'.trim().isNotEmpty).join(' ');
       setState(() {
-        _name = '${user['name'] ?? ''}'.trim().isNotEmpty ? '${user['name']}' : (full.isNotEmpty ? full : '${user['email'] ?? ''}');
+        _name = '${user['name'] ?? ''}'.trim().isNotEmpty
+            ? '${user['name']}'
+            : (full.isNotEmpty ? full : '${user['email'] ?? ''}');
         _business = '${biz['name'] ?? biz['business_name'] ?? ''}';
         _stage = _Stage.success;
       });
       unawaited(HapticFeedback.mediumImpact());
       await _check.forward();
       await Future<void>.delayed(const Duration(milliseconds: 650));
+      if (widget.addSpace && config.session.isLoggedIn && mounted) {
+        await _openAsSpace(config, link, data);
+        return;
+      }
       await config.finishQrLogin(link, data);
       if (mounted) Navigator.of(context).maybePop(true);
     } catch (e) {
@@ -110,6 +139,44 @@ class _QrLoginScanScreenState extends State<QrLoginScanScreen> with SingleTicker
     } finally {
       _busy = false;
     }
+  }
+
+  /// "เพิ่ม Space" by QR: same hand-off as adding with a password. An account
+  /// that already has a Space on this server just opens that Space.
+  Future<void> _openAsSpace(
+    AppConfig config,
+    QrLoginLink link,
+    Map<String, dynamic> data,
+  ) async {
+    final url = normalizeServerUrl(link.server);
+    final user = data['user'] is Map
+        ? Map<String, dynamic>.from(data['user'] as Map)
+        : const <String, dynamic>{};
+    final email = '${user['email1'] ?? user['email'] ?? ''}'.trim();
+    final existing = config.spaces
+        .where(
+          (sp) =>
+              normalizeServerUrl(sp.baseUrl) == url &&
+              email.isNotEmpty &&
+              (sp.email ?? '').toLowerCase() == email.toLowerCase(),
+        )
+        .firstOrNull;
+    final preview =
+        existing ??
+        Space(
+          id: '',
+          baseUrl: url,
+          email: email,
+          businessName: _business.isEmpty ? null : _business,
+        );
+    await runSpaceTransition(
+      context,
+      preview,
+      null,
+      () => existing != null
+          ? config.switchSpace(existing.id)
+          : config.addSpaceWithLogin(baseUrl: url, data: data, email: email),
+    );
   }
 
   void _retry() {
@@ -135,13 +202,16 @@ class _QrLoginScanScreenState extends State<QrLoginScanScreen> with SingleTicker
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: Text(tr('สแกน QR เข้าสู่ระบบ')),
+        title: Text(
+          tr(widget.addSpace ? 'สแกน QR เพิ่ม Space' : 'สแกน QR เข้าสู่ระบบ'),
+        ),
       ),
       extendBodyBehindAppBar: true,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          if (camera != null && _stage == _Stage.scanning) MobileScanner(controller: camera, onDetect: _onDetect),
+          if (camera != null && _stage == _Stage.scanning)
+            MobileScanner(controller: camera, onDetect: _onDetect),
           if (_stage == _Stage.scanning) ...[
             const _ScanFrame(),
             Positioned(
@@ -154,14 +224,28 @@ class _QrLoginScanScreenState extends State<QrLoginScanScreen> with SingleTicker
                   if (_hint != null)
                     Container(
                       margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(12)),
-                      child: Text(tr(_hint!), style: TextStyle(color: cs.onErrorContainer)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.errorContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        tr(_hint!),
+                        style: TextStyle(color: cs.onErrorContainer),
+                      ),
                     ),
                   Text(
-                    tr('เปิดเว็บ MOAI NEXT → ตั้งค่า → ความปลอดภัย → เข้าใช้งานแอปมือถือด้วย QR แล้วส่องกล้องไปที่ QR'),
+                    tr(
+                      'เปิดเว็บ MOAI NEXT → กดรูปโปรไฟล์ → คิวอาร์โค้ดเข้าสู่ระบบ แล้วส่องกล้องไปที่ QR',
+                    ),
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white, height: 1.4),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white,
+                      height: 1.4,
+                    ),
                   ),
                 ],
               ),
@@ -176,27 +260,55 @@ class _QrLoginScanScreenState extends State<QrLoginScanScreen> with SingleTicker
                     padding: const EdgeInsets.all(28),
                     child: switch (_stage) {
                       _Stage.redeeming => Column(
-                          key: const ValueKey('qr-redeeming'),
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(width: 44, height: 44, child: CircularProgressIndicator(strokeWidth: 3)),
-                            const SizedBox(height: 18),
-                            Text(tr('กำลังเข้าสู่ระบบ…'), style: theme.textTheme.titleMedium),
-                          ],
-                        ),
-                      _Stage.success => _SuccessView(key: const ValueKey('qr-success'), progress: _check, name: _name, business: _business),
+                        key: const ValueKey('qr-redeeming'),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: CircularProgressIndicator(strokeWidth: 3),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            tr(
+                              widget.addSpace
+                                  ? 'กำลังเพิ่ม Space…'
+                                  : 'กำลังเข้าสู่ระบบ…',
+                            ),
+                            style: theme.textTheme.titleMedium,
+                          ),
+                        ],
+                      ),
+                      _Stage.success => _SuccessView(
+                        key: const ValueKey('qr-success'),
+                        progress: _check,
+                        name: _name,
+                        business: _business,
+                      ),
                       _ => Column(
-                          key: const ValueKey('qr-error'),
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(NxI.warningCircle, size: 56, color: cs.error),
-                            const SizedBox(height: 14),
-                            Text(tr(_error ?? 'เข้าสู่ระบบไม่สำเร็จ'), textAlign: TextAlign.center, style: theme.textTheme.titleMedium),
-                            const SizedBox(height: 20),
-                            FilledButton.icon(onPressed: _retry, icon: const Icon(NxI.qrCode, size: 18), label: Text(tr('สแกนอีกครั้ง'))),
-                            TextButton(onPressed: () => Navigator.of(context).maybePop(false), child: Text(tr('ยกเลิก'))),
-                          ],
-                        ),
+                        key: const ValueKey('qr-error'),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(NxI.warningCircle, size: 56, color: cs.error),
+                          const SizedBox(height: 14),
+                          Text(
+                            tr(_error ?? 'เข้าสู่ระบบไม่สำเร็จ'),
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 20),
+                          FilledButton.icon(
+                            onPressed: _retry,
+                            icon: const Icon(NxI.qrCode, size: 18),
+                            label: Text(tr('สแกนอีกครั้ง')),
+                          ),
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.of(context).maybePop(false),
+                            child: Text(tr('ยกเลิก')),
+                          ),
+                        ],
+                      ),
                     },
                   ),
                 ),
@@ -214,26 +326,38 @@ class _ScanFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, box) {
-      final side = (box.biggest.shortestSide * 0.68).clamp(180.0, 320.0);
-      return Center(
-        child: Container(
-          width: side,
-          height: side,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white, width: 3),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.55), spreadRadius: 2000)],
+    return LayoutBuilder(
+      builder: (context, box) {
+        final side = (box.biggest.shortestSide * 0.68).clamp(180.0, 320.0);
+        return Center(
+          child: Container(
+            width: side,
+            height: side,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  spreadRadius: 2000,
+                ),
+              ],
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }
 
 /// Green circle that pops in, a check that draws itself, then name + business.
 class _SuccessView extends StatelessWidget {
-  const _SuccessView({super.key, required this.progress, required this.name, required this.business});
+  const _SuccessView({
+    super.key,
+    required this.progress,
+    required this.name,
+    required this.business,
+  });
   final Animation<double> progress;
   final String name;
   final String business;
@@ -247,7 +371,9 @@ class _SuccessView extends StatelessWidget {
       builder: (context, _) {
         final t = progress.value;
         final pop = Curves.elasticOut.transform((t / 0.7).clamp(0.0, 1.0));
-        final draw = Curves.easeOut.transform(((t - 0.3) / 0.7).clamp(0.0, 1.0));
+        final draw = Curves.easeOut.transform(
+          ((t - 0.3) / 0.7).clamp(0.0, 1.0),
+        );
         final text = ((t - 0.5) / 0.5).clamp(0.0, 1.0);
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -260,7 +386,13 @@ class _SuccessView extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: green,
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: green.withValues(alpha: 0.35), blurRadius: 28, offset: const Offset(0, 10))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: green.withValues(alpha: 0.35),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
                 ),
                 child: CustomPaint(painter: _CheckPainter(draw)),
               ),
@@ -270,14 +402,24 @@ class _SuccessView extends StatelessWidget {
               opacity: text,
               child: Column(
                 children: [
-                  Text(tr('เข้าสู่ระบบสำเร็จ'), style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(
+                    tr('เข้าสู่ระบบสำเร็จ'),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                   if (name.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Text(name, style: theme.textTheme.titleMedium),
                   ],
                   if (business.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    Text(business, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                    Text(
+                      business,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ],
               ),

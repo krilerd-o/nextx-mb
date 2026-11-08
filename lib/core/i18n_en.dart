@@ -1726,6 +1726,13 @@ const Map<String, String> enStrings = {
   'ค้นหาเมนู': 'Search menus',
   'ไม่พบเมนู': 'No menus found',
   'ไม่มีเมนูในกลุ่มนี้': 'No menus in this group',
+  'อีเมลและรหัสผ่าน': 'Email & password',
+  'สแกน QR': 'Scan QR',
+  'เพิ่มด้วย QR จากเว็บ': 'Add with a QR from the web',
+  'บนเว็บ MOAI NEXT ของบัญชีที่ต้องการ กดรูปโปรไฟล์ → คิวอาร์โค้ดเข้าสู่ระบบ แล้วสแกน ไม่ต้องพิมพ์เซิร์ฟเวอร์ อีเมล หรือรหัสผ่าน': 'On the MOAI NEXT web of that account, tap your profile picture → Sign-in QR code, then scan it. No server, email or password to type.',
+  'สแกน QR เพิ่ม Space': 'Scan QR to add a Space',
+  'กำลังเพิ่ม Space…': 'Adding Space…',
+  'เปิดเว็บ MOAI NEXT → กดรูปโปรไฟล์ → คิวอาร์โค้ดเข้าสู่ระบบ แล้วส่องกล้องไปที่ QR': 'Open the MOAI NEXT web → tap your profile picture → Sign-in QR code, then point the camera at the QR',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

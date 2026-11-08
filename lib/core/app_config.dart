@@ -286,6 +286,10 @@ class AppConfig extends ChangeNotifier {
     });
   }
 
+  /// Tests: HTTP adapter for the temporary client used while signed in.
+  @visibleForTesting
+  HttpClientAdapter? debugTempClientAdapter;
+
   /// QR login step 1: use the one-time code on the QR's server.
   /// Signed out → the app switches to that server; signed in → a temporary
   /// client, so the current Space is untouched until step 2.
@@ -297,6 +301,9 @@ class AppConfig extends ChangeNotifier {
       return _api.qrRedeem(link.code);
     }
     final temp = ApiClient()..attachSession(baseUrl: url);
+    final fake = debugTempClientAdapter;
+    // ignore: invalid_use_of_visible_for_testing_member
+    if (fake != null) temp.debugSetHttpAdapter(fake);
     return temp.qrRedeem(link.code);
   }
 
