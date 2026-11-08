@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_config.dart';
 import '../core/hub_selection.dart';
 import '../services/api_client.dart';
 import 'nx_icons.dart';
+import '../screens/spaces/space_switcher.dart' show runColorHandOff;
 import '../core/i18n.dart';
 
 /// "ธุรกิจ · Package" chip; tap to switch package (or business) in place.
@@ -21,12 +23,16 @@ class NxWorkspaceSwitcher extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () => showModalBottomSheet<void>(
-          context: context,
-          showDragHandle: true,
-          isScrollControlled: true,
-          builder: (_) => const _SwitcherSheet(),
-        ),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.85),
+            builder: (_) => _SwitcherSheet(host: context),
+          );
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
@@ -57,21 +63,37 @@ class NxWorkspaceSwitcher extends StatelessWidget {
 }
 
 class _SwitcherSheet extends StatefulWidget {
-  const _SwitcherSheet();
+  const _SwitcherSheet({required this.host});
+
+  /// The page under the sheet: the colour hand-off plays over it.
+  final BuildContext host;
 
   @override
   State<_SwitcherSheet> createState() => _SwitcherSheetState();
 }
 
+/// `#6366f1` → Color (package colour from NEXTX), or null.
+Color? _hex(Object? v) {
+  final s = v?.toString().replaceAll('#', '').trim() ?? '';
+  if (s.length != 6) return null;
+  final n = int.tryParse(s, radix: 16);
+  return n == null ? null : Color(0xFF000000 | n);
+}
+
 class _SwitcherSheetState extends State<_SwitcherSheet> {
   List<Map<String, dynamic>>? _packages;
   Object? _error;
-  bool _busy = false;
+  String? _switching; // package code being switched to
 
   @override
   void initState() {
     super.initState();
+    _load();
+  }
+
+  void _load() {
     final config = context.read<AppConfig>();
+    setState(() => _error = null);
     config.apiClient.getPackagesFor(config.session.businessId ?? '').then((all) {
       if (mounted) setState(() => _packages = visiblePackages(all));
     }).catchError((Object e) {
@@ -79,48 +101,198 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
     });
   }
 
+  Future<void> _switch(Map<String, dynamic> p, Rect? from, Color color) async {
+    final config = context.read<AppConfig>();
+    final code = p['code']?.toString() ?? '';
+    final name = p['name']?.toString() ?? code;
+    HapticFeedback.mediumImpact();
+    setState(() => _switching = code);
+    // Let the chosen card show it is picked before the hand-off starts.
+    await Future<void>.delayed(const Duration(milliseconds: 260));
+    if (!mounted) return;
+    final host = widget.host;
+    Navigator.pop(context);
+    if (!host.mounted) return;
+    await runColorHandOff(
+      host,
+      color: color,
+      badge: name.characters.take(2).toString().toUpperCase(),
+      title: tr('กำลังเปลี่ยนเป็น $name'),
+      subtitle: config.session.businessName ?? '',
+      origin: from,
+      action: () => config.selectPackage(code: code, packageId: p['id']?.toString()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final config = context.watch<AppConfig>();
-    final current = config.session.packageCode;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    final s = config.session;
+    final current = s.packageCode;
+    final biz = s.businessName ?? 'ธุรกิจ';
+    final pkgs = _packages ?? const <Map<String, dynamic>>[];
+    final currentName = pkgs.where((p) => p['code']?.toString() == current).map((p) => p['name']?.toString()).firstOrNull ??
+        (current ?? '').toUpperCase().replaceAll('_', ' ');
+
+    Widget card(Map<String, dynamic> p, int index) {
+      final code = p['code']?.toString() ?? '';
+      final sel = code == current;
+      final busy = _switching == code;
+      final color = _hex(p['color']) ?? cs.primary;
+      final name = tr(p['name']?.toString() ?? code);
+      final desc = p['description']?.toString() ?? '';
+      final menus = (p['menu_keys'] is List) ? (p['menu_keys'] as List).length : 0;
+      return TweenAnimationBuilder<double>(
+        key: ValueKey('pkg-$code'),
+        tween: Tween(begin: 0, end: 1),
+        duration: Duration(milliseconds: 260 + 60 * index),
+        curve: Curves.easeOutCubic,
+        builder: (context, t, child) => Opacity(opacity: t, child: Transform.translate(offset: Offset(0, 12 * (1 - t)), child: child)),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Builder(
+            builder: (c) => AnimatedScale(
+              duration: const Duration(milliseconds: 200),
+              scale: busy ? 0.97 : 1,
+              child: Material(
+                color: sel || busy ? Color.alphaBlend(color.withValues(alpha: 0.10), cs.surface) : cs.surfaceContainerHighest.withValues(alpha: 0.55),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(color: sel || busy ? color : Colors.transparent, width: 1.6),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: _switching != null
+                      ? null
+                      : sel
+                          ? () => Navigator.pop(context)
+                          : () {
+                              final box = c.findRenderObject() as RenderBox?;
+                              _switch(p, box == null ? null : box.localToGlobal(Offset.zero) & box.size, color);
+                            },
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          gradient: LinearGradient(colors: [color, Color.lerp(color, Colors.white, 0.25)!], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        ),
+                        child: Text(
+                          name.characters.take(2).toString().toUpperCase(),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(name, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                          if (desc.isNotEmpty)
+                            Text(tr(desc), maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                          if (menus > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(tr('$menus เมนู'), style: theme.textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
+                            ),
+                        ]),
+                      ),
+                      const SizedBox(width: 8),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        transitionBuilder: (w, a) => ScaleTransition(scale: a, child: w),
+                        child: busy
+                            ? SizedBox(key: const ValueKey('busy'), width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: color))
+                            : sel
+                                ? Container(
+                                    key: const ValueKey('sel'),
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                                    child: const Icon(NxI.check, size: 16, color: Colors.white),
+                                  )
+                                : Icon(NxI.caretRight, key: const ValueKey('go'), size: 18, color: cs.outline),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      key: const ValueKey('pkg-sheet'),
+      margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      decoration: BoxDecoration(
+        color: theme.brightness == Brightness.dark ? cs.surfaceContainerHigh : cs.surface,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 30, offset: const Offset(0, 10))],
+      ),
+      child: SafeArea(
+        top: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(tr(config.session.businessName ?? 'ธุรกิจ'), style: theme.textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(tr('สลับ Package — เมนูจะเปลี่ยนตาม Package และสิทธิ์'), style: theme.textTheme.bodySmall),
-            const SizedBox(height: 8),
-            if (_error != null) Text(tr(formatApiError(_error!)), style: TextStyle(color: theme.colorScheme.error)),
-            if (_packages == null && _error == null) const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator())),
-            for (final p in _packages ?? const <Map<String, dynamic>>[])
-              ListTile(
-                leading: Icon(p['code']?.toString() == current ? NxI.radioOn : NxI.radioOff),
-                title: Text(tr(p['name']?.toString() ?? p['code']?.toString() ?? 'Package')),
-                subtitle: (p['description']?.toString() ?? '').isEmpty ? null : Text(tr(p['description'].toString()), maxLines: 1, overflow: TextOverflow.ellipsis),
-                enabled: !_busy,
-                onTap: p['code']?.toString() == current
-                    ? () => Navigator.pop(context)
-                    : () async {
-                        setState(() => _busy = true);
-                        final nav = Navigator.of(context);
-                        await config.selectPackage(code: p['code']?.toString() ?? '', packageId: p['id']?.toString());
-                        nav.pop();
-                      },
+            Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: cs.outlineVariant, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 14),
+            // Business: logo, name, current package, and "change business".
+            Row(children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
+                child: Icon(NxI.buildings, color: cs.primary),
               ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(NxI.buildings),
-              title: Text(tr('เปลี่ยนธุรกิจ')),
-              enabled: !_busy,
-              onTap: () {
-                Navigator.pop(context);
-                config.clearBusiness();
-              },
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(tr(biz), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  if (currentName.isNotEmpty)
+                    Text(tr('ใช้อยู่: $currentName'), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                ]),
+              ),
+              TextButton.icon(
+                key: const ValueKey('pkg-change-business'),
+                onPressed: _switching != null
+                    ? null
+                    : () {
+                        Navigator.pop(context);
+                        config.clearBusiness();
+                      },
+                style: TextButton.styleFrom(backgroundColor: cs.surfaceContainerHighest, shape: const StadiumBorder()),
+                icon: const Icon(NxI.arrowsLeftRight, size: 16),
+                label: Text(tr('เปลี่ยนธุรกิจ')),
+              ),
+            ]),
+            const SizedBox(height: 18),
+            Text(tr('เลือก Package'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 10),
+              child: Text(tr('เมนูจะเปลี่ยนตาม Package และสิทธิ์ของคุณ'), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(children: [
+                  Expanded(child: Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error))),
+                  TextButton(onPressed: _load, child: Text(tr('ลองใหม่'))),
+                ]),
+              ),
+            if (_packages == null && _error == null)
+              const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(children: [for (var i = 0; i < pkgs.length; i++) card(pkgs[i], i)]),
+              ),
             ),
           ],
         ),

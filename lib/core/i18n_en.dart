@@ -1374,6 +1374,7 @@ const Map<String, String> enStrings = {
   'วันเกิดลูกค้า': 'Customer birthdays',
   'เตือนล่วงหน้า 1 วันก่อนวันเกิดลูกค้า': 'Reminder one day before a customer\'s birthday',
   'SMS': 'SMS',
+  'เมนูจะเปลี่ยนตาม Package และสิทธิ์ของคุณ': 'Menus follow the Package and your permissions',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1558,4 +1559,7 @@ const Map<String, String> enPatterns = {
   'พรุ่งนี้วันเกิดลูกค้า {} คน': '{} customer birthdays tomorrow',
   'ส่งอีกครั้งใน {} วินาที': 'Resend in {}s',
   'ส่งรหัสไปที่ {} แล้ว': 'Code sent to {}',
+  'กำลังเปลี่ยนเป็น {}': 'Switching to {}',
+  '{} เมนู': '{} menus',
+  'ใช้อยู่: {}': 'Current: {}',
 };

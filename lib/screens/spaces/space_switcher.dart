@@ -400,7 +400,22 @@ Future<void> showSpaceEditor(BuildContext context, Space sp) async {
 
 /// Full-screen hand-off: the Space colour grows out of its logo, the new
 /// Space loads underneath, then the colour fades away to reveal it.
-Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Future<void> Function() action) async {
+Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Future<void> Function() action) =>
+    runColorHandOff(context, color: sp.color, badge: sp.initials, title: sp.title, subtitle: sp.host, origin: origin, action: action);
+
+/// The colour hand-off used for Spaces and Packages: [color] grows out of
+/// [origin] with [badge] / [title] / [subtitle], [action] runs underneath, then
+/// the colour fades to reveal the result. [goHome] returns to the main shell.
+Future<void> runColorHandOff(
+  BuildContext context, {
+  required Color color,
+  required String badge,
+  required String title,
+  required String subtitle,
+  Rect? origin,
+  required Future<void> Function() action,
+  bool goHome = true,
+}) async {
   final overlay = Overlay.of(context, rootOverlay: true);
   final size = MediaQuery.sizeOf(context);
   final from = origin ?? Rect.fromCenter(center: size.center(Offset.zero), width: 56, height: 56);
@@ -426,7 +441,7 @@ Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Fu
                     width: r * 2,
                     height: r * 2,
                     child: DecoratedBox(
-                      decoration: BoxDecoration(color: sp.color, shape: BoxShape.circle),
+                      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
                     ),
                   ),
                   Center(
@@ -441,18 +456,18 @@ Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Fu
                             alignment: Alignment.center,
                             decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(22)),
                             child: Text(
-                              tr(sp.initials),
+                              tr(badge),
                               style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
                             ),
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            tr(sp.title),
+                            tr(title),
                             style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, decoration: TextDecoration.none),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            tr(sp.host),
+                            tr(subtitle),
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.8),
                               fontSize: 14,
@@ -488,7 +503,7 @@ Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Fu
     await animate(grow, 1, 420);
     final router = GoRouter.maybeOf(context);
     await action();
-    router?.go(AppRoutes.mainShell);
+    if (goHome) router?.go(AppRoutes.mainShell);
     await Future<void>.delayed(const Duration(milliseconds: 220));
     await animate(fade, 0, 320);
   } finally {
