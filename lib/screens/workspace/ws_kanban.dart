@@ -586,6 +586,11 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
     );
   }
 
+  /// Grey box that white cards stand out on (light), a raised tone (dark).
+  static Color _columnFill(ThemeData theme) => theme.brightness == Brightness.dark
+      ? theme.colorScheme.surfaceContainerHighest
+      : Color.alphaBlend(theme.colorScheme.onSurface.withValues(alpha: 0.055), theme.scaffoldBackgroundColor);
+
   Widget _column(BuildContext context, WsStatus s) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -607,7 +612,7 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
         // A solid box per status (clear even on a light page), its colour as
         // a bar across the top; the column under the finger lights up.
         decoration: BoxDecoration(
-          color: hovering ? Color.alphaBlend(s.color.withValues(alpha: 0.10), cs.surfaceContainerHigh) : cs.surfaceContainerHigh,
+          color: hovering ? Color.alphaBlend(s.color.withValues(alpha: 0.10), _columnFill(theme)) : _columnFill(theme),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: hovering ? s.color : cs.outlineVariant.withValues(alpha: 0.35), width: hovering ? 2 : 1),
         ),
