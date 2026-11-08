@@ -330,6 +330,39 @@ class _EntityListScreenState extends State<EntityListScreen> {
     _load(reset: true);
   }
 
+  /// `ทั้งหมด ▾` under the menu name: the current Custom View, tap to switch.
+  Widget _cvTitleRow() {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final cv = _cvs?.views.where((v) => v.id == _cvId).firstOrNull;
+    final custom = cv != null && !cv.isSystem;
+    return InkWell(
+      key: const ValueKey('crm-cv-row'),
+      onTap: _pickView,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                cv?.displayName ?? tr('ทั้งหมด'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: custom ? cs.primary : cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Icon(NxI.caretDown, size: 16, color: custom ? cs.primary : cs.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _cvChip() {
     final cs = Theme.of(context).colorScheme;
     final cv = _cvs?.views.where((v) => v.id == _cvId).firstOrNull;
@@ -398,6 +431,24 @@ class _EntityListScreenState extends State<EntityListScreen> {
     _init();
   }
 
+  /// Menu name as configured on NEXTX (aicrm_tab), e.g. "ลีด" instead of the
+  /// built-in "ผู้มุ่งหวัง"; falls back to [EntityListScreen.title].
+  (String, String?)? _menuName;
+
+  String get _title {
+    final m = _menuName;
+    if (m == null) return widget.title;
+    return L10n.isEn && m.$2 != null ? m.$2! : m.$1;
+  }
+
+  Future<void> _loadMenuName() async {
+    try {
+      final labels = await context.read<AppConfig>().apiClient.getModuleLabels();
+      final m = labels[widget.module.toLowerCase()];
+      if (m != null && mounted) setState(() => _menuName = m);
+    } catch (_) {}
+  }
+
   Future<void> _init() async {
     final saved = await _prefs.loadQuery();
     String? cv;
@@ -413,6 +464,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     }
     // Schema first (cached) so even page 1 asks for slim rows; views in parallel.
     _loadViews();
+    _loadMenuName();
     await _loadSchema(beforeList: true);
     if (mounted) _load(reset: true);
   }
@@ -586,7 +638,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     }
     final created = await nxPush<bool>(
       context,
-      EntityCreateScreen(module: widget.module, title: 'สร้าง${widget.title}'),
+      EntityCreateScreen(module: widget.module, title: 'สร้าง$_title'),
       root: true,
     );
     if (created == true) _load(reset: true);
@@ -596,7 +648,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     if (_creating) {
       return EntityCreateScreen(
         module: widget.module,
-        title: 'สร้าง${widget.title}',
+        title: 'สร้าง$_title',
         embedded: true,
         onFinished: (ok) {
           setState(() => _creating = false);
@@ -623,9 +675,9 @@ class _EntityListScreenState extends State<EntityListScreen> {
       groups: _groups,
       sorts: _sorts,
       quickGroup: _statusKey == null ? 'scope' : 'pl:$_statusKey',
-      leading: [if (_cvs != null) _cvChip()],
+      leading: [if (_cvs != null && twoPane) _cvChip()],
       allowSavedViews: false,
-      searchHint: 'ค้นหา${widget.title}',
+      searchHint: 'ค้นหา$_title',
       resultCount: _loading ? null : (_total ?? _visible.length),
       onChanged: _onQuery,
     );
@@ -676,7 +728,9 @@ class _EntityListScreenState extends State<EntityListScreen> {
             ],
           )
         : NxAppHeader(
-            title: widget.title,
+            title: _title,
+            largeTitle: true,
+            subtitleWidget: _cvs == null || twoPane ? null : _cvTitleRow(),
             menu: [
               if (_cardCtx != null)
                 NxHeaderMenuItem(label: 'ปรับแต่งการ์ด', icon: NxI.squaresFour, onTap: _openCardEditor),
@@ -771,7 +825,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        tr('ยังไม่มี${widget.title}'),
+                        tr('ยังไม่มี$_title'),
                         style: theme.textTheme.titleLarge,
                       ),
                       const SizedBox(height: 6),

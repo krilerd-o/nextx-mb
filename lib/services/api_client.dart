@@ -495,6 +495,28 @@ class ApiClient {
     return [];
   }
 
+  ({DateTime at, String biz, Map<String, (String, String?)> labels})? _moduleLabels;
+
+  /// Menu names as set up in NEXTX (`aicrm_tab`): module → (tablabel, tablabel_en).
+  /// Cached 10 minutes per business.
+  Future<Map<String, (String, String?)>> getModuleLabels() async {
+    final c = _moduleLabels;
+    if (c != null && c.biz == (_businessId ?? '') && DateTime.now().difference(c.at) < const Duration(minutes: 10)) {
+      return c.labels;
+    }
+    final out = <String, (String, String?)>{};
+    for (final m in await getModules()) {
+      if (m is! Map) continue;
+      final name = '${m['name'] ?? m['module'] ?? ''}'.trim();
+      final th = '${m['tablabel'] ?? m['label_th'] ?? m['label'] ?? ''}'.trim();
+      if (name.isEmpty || th.isEmpty) continue;
+      final en = '${m['tablabel_en'] ?? m['label_en'] ?? ''}'.trim();
+      out[name.toLowerCase()] = (th, en.isEmpty ? null : en);
+    }
+    _moduleLabels = (at: DateTime.now(), biz: _businessId ?? '', labels: out);
+    return out;
+  }
+
   Future<List<dynamic>> getModules() async {
     final env = await _send('GET', '/api/modules');
     final data = env['data'];
