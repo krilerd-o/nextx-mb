@@ -144,12 +144,20 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
               const SizedBox(height: 12),
               Text(tr(g.def.title), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 2),
-              Text(
-                items.take(3).map((i) => tr(i.title)).join(' · '),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-              ),
+              // Always 2 lines tall, so every card in the grid has the same height.
+              Builder(builder: (context) {
+                final st = theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.4);
+                final line = MediaQuery.textScalerOf(context).scale(st?.fontSize ?? 12) * 1.4;
+                return SizedBox(
+                  height: line * 2 + 1,
+                  child: Text(
+                    items.take(3).map((i) => tr(i.title)).join(' · '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: st,
+                  ),
+                );
+              }),
             ],
           ),
         ),

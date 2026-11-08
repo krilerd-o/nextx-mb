@@ -93,4 +93,13 @@ void main() {
     expect(find.byKey(const ValueKey('menu-pane-service')), findsOneWidget);
     expect(find.byKey(const ValueKey('menu-item-case')), findsOneWidget);
   });
+
+  testWidgets('group cards in the grid all have the same height', (tester) async {
+    await pumpHub(tester, ['workspace', 'calendar', 'quotation', 'lead', 'account', 'contact', 'deal', 'case', 'job', 'mailbox', 'community-chat', 'product']);
+    final heights = {
+      for (final id in ['work', 'customers', 'sales', 'service', 'comms', 'apps'])
+        tester.getSize(find.byKey(ValueKey('menu-group-$id'))).height.round(),
+    };
+    expect(heights.length, 1, reason: '$heights');
+  });
 }
