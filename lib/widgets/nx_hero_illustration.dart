@@ -63,7 +63,8 @@ class _NxHeroIllustrationState extends State<NxHeroIllustration> with SingleTick
     final cs = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final top = Color.lerp(cs.primary, Colors.white, dark ? 0.55 : 0.82)!;
-    final bottom = dark ? cs.surface : Colors.white;
+    // End on the page colour itself so there is no visible edge under the art.
+    final bottom = Theme.of(context).scaffoldBackgroundColor;
     return SizedBox(
       height: widget.height,
       width: double.infinity,
@@ -74,9 +75,18 @@ class _NxHeroIllustrationState extends State<NxHeroIllustration> with SingleTick
         child: Stack(
           clipBehavior: Clip.none,
           children: [
+            // Arcs stay inside the art and fade out toward its bottom
+            // (they used to spill a faint grey ring over the text below).
             Positioned.fill(
-              child: CustomPaint(
-                painter: _ArcsPainter(color: cs.primary, dark: dark),
+              child: ClipRect(
+                child: ShaderMask(
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (r) =>
+                      const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.white, Colors.white, Colors.transparent], stops: [0, 0.6, 1]).createShader(r),
+                  child: CustomPaint(
+                    painter: _ArcsPainter(color: cs.primary, dark: dark),
+                  ),
+                ),
               ),
             ),
             Align(
