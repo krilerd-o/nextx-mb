@@ -10,6 +10,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_refresh.dart';
 
 String _ymd(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -75,6 +76,8 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   Future<void> _pickDay() async {
     final now = thaiNow();
     final d = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       initialDate: _day,
       firstDate: DateTime(now.year - 2),
@@ -109,7 +112,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         title: 'รายงานลงเวลา',
         actions: [IconButton(tooltip: tr('เลือกวัน'), icon: const Icon(NxI.calendarBlank), onPressed: _pickDay)],
       ),
-      body: RefreshIndicator(
+      body: NxRefresh(
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),

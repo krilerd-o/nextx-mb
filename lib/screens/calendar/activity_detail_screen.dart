@@ -22,6 +22,7 @@ import 'visit_check_sheet.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
 import '../../core/recent_records.dart';
+import '../../widgets/nx_refresh.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
   const ActivityDetailScreen({super.key, required this.row});
@@ -293,8 +294,8 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     'declined': 'ไม่เข้าร่วม',
   };
 
-  String _when(dynamic raw) {
-    final d = parseThai(raw);
+  String _when(dynamic raw, [String? field]) {
+    final d = parseThaiField(raw, field);
     if (d == null) return raw?.toString() ?? '—';
     return thaiDateTime(d).replaceFirst(RegExp(r':\d\d$'), '');
   }
@@ -337,7 +338,10 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         ],
       ),
       body: Builder(
-        builder: (context) => ListView(
+        builder: (context) => NxRefresh(
+          onRefresh: () => Future.wait([_loadRecord(), _loadVisit()]),
+          child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(
             16,
             8 + NxScrollScaffold.topInset(context),
@@ -361,7 +365,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   _line(
                     context,
                     NxI.calendarBlank,
-                    '${_when(row['date_start'])}  →  ${_when(row['date_end'])}',
+                    '${_when(row['date_start'], 'date_start')}  →  ${_when(row['date_end'], 'date_end')}',
                   ),
                   if ((row['location']?.toString() ?? '').isNotEmpty)
                     _line(context, NxI.mapPin, row['location'].toString()),
@@ -532,6 +536,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               ),
             ],
           ],
+        ),
         ),
       ),
     );

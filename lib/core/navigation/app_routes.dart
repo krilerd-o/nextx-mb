@@ -40,6 +40,7 @@ class AppRoutes {
   static const String chatHome = '/chat';
   static const String aiChat = '/ai';
   static const String profile = '/profile';
+  static const String profileSecurity = '/profile/security';
   static const String calendar = '/calendar';
   static const String jobs = '/jobs';
   static const String files = '/files';

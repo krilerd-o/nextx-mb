@@ -1,34 +1,40 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import '../../widgets/nx_scroll_scaffold.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
 import '../../core/html_display.dart';
-import '../../services/api_client.dart';
-import '../../widgets/nx_app_header.dart';
-import '../../widgets/nx_html_view.dart';
-import '../../widgets/nx_overlay_panel.dart';
-import '../../widgets/nx_skeleton.dart';
-import '../../widgets/nx_icons.dart';
-import '../mail/mail_compose_screen.dart' show plainTextToHtml;
-import 'smart_checklist_section.dart';
-import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../core/nx_page_route.dart';
+import '../../core/thai_time.dart';
+import '../../core/workspace_models.dart';
+import '../../services/api_client.dart';
+import '../../services/realtime_service.dart';
+import '../../widgets/fields/nx_pick_option.dart';
+import '../../widgets/fields/nx_picker_sheet.dart';
+import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_avatar.dart';
+import '../../widgets/nx_html_view.dart';
+import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_overlay_panel.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
+import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
+import 'smart_checklist_section.dart';
+import 'workspace_item_form.dart';
+import 'ws_activity_panel.dart';
+import 'ws_detail_parts.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// NEXTX board priorities (backend/src/routes/boards.js).
-const taskPriorities = <String, String>{
-  'highest': 'สูงสุด',
-  'high': 'สูง',
-  'medium': 'ปานกลาง',
-  'low': 'ต่ำ',
-  'lowest': 'ต่ำสุด',
-};
+const taskPriorities = <String, String>{'highest': 'สูงสุด', 'high': 'สูง', 'medium': 'ปานกลาง', 'low': 'ต่ำ', 'lowest': 'ต่ำสุด'};
 
 /// Task attachments arrive as a JSON array or a JSON string of one.
 List<Map<String, dynamic>> taskAttachments(dynamic raw) {
@@ -55,6 +61,11 @@ String? taskDateOnly(dynamic raw) {
   return m?.group(1);
 }
 
+const _linkTypes = {'blocks': 'บล็อก', 'is_blocked_by': 'ถูกบล็อกโดย', 'relates_to': 'เกี่ยวข้องกับ'};
+
+/// Task / epic detail like the NEXTX web panel: status stepper, time card
+/// with log + stopwatch, editable fields, subtasks / epic children, checklist,
+/// attachments, watchers, links and comments / time logs / history.
 class TaskDetailScreen extends StatefulWidget {
   const TaskDetailScreen({super.key, required this.task});
   final Map<String, dynamic> task;
@@ -64,119 +75,411 @@ class TaskDetailScreen extends StatefulWidget {
 }
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
-  late Map<String, dynamic> _task = Map<String, dynamic>.from(widget.task);
-  List<Map<String, dynamic>> _logs = [];
-  List<Map<String, dynamic>> _comments = [];
-  List<Map<String, dynamic>>? _users;
-  final _minutesController = TextEditingController(text: '30');
-  final _noteController = TextEditingController();
-  final _commentController = TextEditingController();
-  bool _loading = true;
-  bool _loadingComments = true;
+  late Map<String, dynamic> _item = Map<String, dynamic>.from(widget.task);
+  List<WsStatus> _statuses = const [];
+  List<Map<String, dynamic>> _epics = const [];
+  List<Map<String, dynamic>> _tasks = const [];
+  Map<String, String> _users = const {};
+  List<Map<String, dynamic>> _watchers = const [];
+  List<Map<String, dynamic>> _links = const [];
   bool _saving = false;
+  bool _showAll = false;
+  bool _editingTitle = false;
+  final _titleCtrl = TextEditingController();
+  final _subtaskCtrl = TextEditingController();
+  final _activity = GlobalKey<WsActivityPanelState>();
+  static const _bleed = ValueKey('ws-full-bleed');
+  StreamSubscription<RealtimeEvent>? _live;
+  Timer? _debounce;
+  String? _businessId;
 
-  String get _boardId => strId(_task['board_id']);
-  String get _taskId => strId(_task['id']);
+  String get _boardId => strId(_item['board_id']);
+  String get _id => strId(_item['id']);
+  String get _kind => wsKind(_item);
+  bool get _isEpic => _kind == 'epic';
+  String get _type => wsType(_item);
+  bool get _isChild => _type == 'subtask' || _type == 'checklist';
+  String? get _code => _item['board_code']?.toString();
+  bool get _online => context.read<AppConfig>().isLoggedIn && _boardId.isNotEmpty && _id.isNotEmpty;
+  String? get _me => context.read<AppConfig>().session.userId;
 
   @override
   void initState() {
     super.initState();
-    _loadLogs();
-    _loadComments();
+    if (!_online) return;
+    _load();
+    _businessId = context.read<AppConfig>().session.businessId;
+    RealtimeService.instance.joinWorkspaceBoard(_boardId, businessId: _businessId);
+    _live = RealtimeService.instance.events.where((e) => e.type.startsWith('workspace:')).listen((e) {
+      final d = e.data;
+      if (d['id'] != null && '${d['id']}' != _id && '${d['task_id'] ?? d['item_id'] ?? ''}' != _id) return;
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(milliseconds: 800), () {
+        if (!mounted || _saving) return;
+        _reloadItem();
+        _activity.currentState?.reload();
+      });
+    });
   }
 
   @override
   void dispose() {
-    _minutesController.dispose();
-    _noteController.dispose();
-    _commentController.dispose();
+    _live?.cancel();
+    _debounce?.cancel();
+    if (_boardId.isNotEmpty && _live != null) RealtimeService.instance.leaveWorkspaceBoard(_boardId, businessId: _businessId);
+    _titleCtrl.dispose();
+    _subtaskCtrl.dispose();
     super.dispose();
   }
 
   void _snack(String text) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(text))));
+  }
+
+  ApiClient get _api => context.read<AppConfig>().apiClient;
+
+  Future<void> _load() async {
+    final api = _api;
+    final r = await Future.wait<Object?>([
+      api.getWorkspaceItem(_boardId, _kind, _id).catchError((_) => null),
+      api.getBoardStatuses(_boardId).catchError((_) => <Map<String, dynamic>>[]),
+      api.getBoardEpics(_boardId).catchError((_) => <Map<String, dynamic>>[]),
+      api.getBoardTasks(_boardId).catchError((_) => <Map<String, dynamic>>[]),
+      api.getUsersCached().catchError((_) => <Map<String, dynamic>>[]),
+      if ((_code ?? '').isEmpty) api.getBoard(_boardId).then<Object?>((b) => b).catchError((_) => null),
+    ]);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(text))));
+    setState(() {
+      final full = r[0] as Map<String, dynamic>?;
+      if (full != null) _item = {..._item, ...full};
+      _statuses = WsStatus.list(r[1] as List<Map<String, dynamic>>);
+      _epics = [
+        for (final e in r[2] as List<Map<String, dynamic>>) {...e, '_kind': 'epic'},
+      ];
+      _tasks = r[3] as List<Map<String, dynamic>>;
+      _users = {for (final u in r[4] as List<Map<String, dynamic>>) '${u['id']}': userDisplayName(u)};
+      if (r.length > 5 && r[5] is Map) {
+        final b = r[5] as Map;
+        _item['board_code'] ??= b['code'];
+        _item['board_name'] ??= b['name'];
+      }
+    });
+    _loadSide();
   }
 
-  Future<void> _loadLogs() async {
-    if (!context.read<AppConfig>().isLoggedIn) {
-      setState(() => _loading = false);
-      return;
-    }
+  Future<void> _loadSide() async {
     try {
-      final logs = await context.read<AppConfig>().apiClient.getTaskWorklogs(_boardId, _taskId);
+      final w = await _api.getItemWatchers(_boardId, _kind, _id);
+      if (mounted) setState(() => _watchers = w);
+    } catch (_) {}
+    try {
+      final l = await _api.getItemLinks(_boardId, _kind, _id);
+      if (mounted) setState(() => _links = l);
+    } catch (_) {}
+  }
+
+  Future<void> _reloadItem() async {
+    try {
+      final full = await _api.getWorkspaceItem(_boardId, _kind, _id);
+      if (full != null && mounted) setState(() => _item = {..._item, ...full});
+    } catch (_) {}
+  }
+
+  Future<void> _reloadTasks() async {
+    try {
+      final t = await _api.getBoardTasks(_boardId);
+      if (mounted) setState(() => _tasks = t);
+    } catch (_) {}
+  }
+
+  /// PUT the changed fields; [local] is shown at once and kept on success.
+  Future<bool> _update(Map<String, dynamic> body, {Map<String, dynamic> local = const {}}) async {
+    if (body.isEmpty || !_online) return false;
+    final before = _item;
+    setState(() {
+      _saving = true;
+      _item = {..._item, ...body, ...local};
+    });
+    try {
+      final updated = await _api.updateWorkspaceItem(_boardId, _kind, _id, body);
+      if (!mounted) return true;
+      setState(() {
+        _item = {..._item, ...updated, ...local};
+        _saving = false;
+      });
+      _activity.currentState?.reload();
+      return true;
+    } catch (e) {
       if (mounted) {
         setState(() {
-          _logs = logs;
-          _loading = false;
+          _item = before;
+          _saving = false;
         });
+        HapticFeedback.heavyImpact();
       }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      _snack(formatApiError(e));
+      return false;
     }
   }
 
-  Future<void> _loadComments() async {
-    if (!context.read<AppConfig>().isLoggedIn) {
-      setState(() => _loadingComments = false);
-      return;
-    }
-    try {
-      final list = await context.read<AppConfig>().apiClient.getTaskComments(_boardId, _taskId);
-      if (mounted) {
-        setState(() {
-          _comments = list;
-          _loadingComments = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loadingComments = false);
+  // ── status / title
+  Future<void> _setStatus(WsStatus s) async {
+    final ok = await _update({'status_id': int.tryParse(s.id) ?? s.id});
+    if (ok) {
+      HapticFeedback.mediumImpact();
+      if (s.isDone) _snack('ย้ายไป ${s.label} แล้ว');
     }
   }
 
-  Future<void> _addLog() async {
-    final minutes = int.tryParse(_minutesController.text.trim()) ?? 0;
-    if (minutes <= 0) {
-      _snack('กรุณาระบุจำนวนนาทีมากกว่า 0');
-      return;
-    }
+  Future<void> _saveTitle() async {
+    final t = _titleCtrl.text.trim();
+    setState(() => _editingTitle = false);
+    if (t.isEmpty || t == wsTitle(_item)) return;
+    await _update({'title': t});
+  }
+
+  // ── time
+  Future<void> _logTime({int? minutes}) async {
+    final r = await showWsLogTimeSheet(context, minutes: minutes, remaining: wsInt(_item['time_remaining_minutes']));
+    if (r == null || !mounted) return;
     try {
-      await context.read<AppConfig>().apiClient.postTaskWorklog(
-            _boardId,
-            _taskId,
-            minutes: minutes,
-            description: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
-          );
-      _noteController.clear();
-      await _loadLogs();
+      await _api.addWorklog(_boardId, _id, minutes: r.minutes, description: r.description, remainingMinutes: r.remaining, startedAt: r.startedAt);
+      HapticFeedback.mediumImpact();
+      _snack('ลงเวลาแล้ว ${formatMinutes(r.minutes)}');
+      _activity.currentState?.showTab(1);
+      await Future.wait([_reloadItem(), _activity.currentState?.reload() ?? Future.value()]);
     } catch (e) {
       _snack(formatApiError(e));
     }
   }
 
-  Future<void> _addComment() async {
-    final text = _commentController.text.trim();
-    if (text.isEmpty) return;
+  // ── field editors
+  Future<void> _pickUser(String field) async {
+    final v = await showNxPickerSheet(
+      context: context,
+      title: tr(wsFieldLabel(field)),
+      value: '${_item[field] ?? ''}',
+      radio: true,
+      options: [
+        NxPickOption(value: '', label: tr('ไม่มอบหมาย')),
+        if (_me != null) NxPickOption(value: _me!, label: '${_users[_me] ?? tr('ฉัน')} (${tr('ฉัน')})'),
+        for (final e in _users.entries)
+          if (e.key != _me) NxPickOption(value: e.key, label: e.value),
+      ],
+    );
+    if (v == null || v == '${_item[field] ?? ''}') return;
+    await _update({field: v.isEmpty ? null : int.tryParse(v) ?? v});
+  }
+
+  Future<void> _pickEnum(String field, List<NxPickOption> options, {bool nullable = false}) async {
+    final v = await showNxPickerSheet(
+      context: context,
+      title: tr(wsFieldLabel(field)),
+      value: '${_item[field] ?? ''}',
+      radio: true,
+      options: [
+        if (nullable) NxPickOption(value: '', label: tr('ไม่มี')),
+        ...options,
+      ],
+    );
+    if (v == null || v == '${_item[field] ?? ''}') return;
+    final numeric = field.endsWith('_id');
+    await _update({field: v.isEmpty ? null : (numeric ? int.tryParse(v) ?? v : v)});
+  }
+
+  Future<void> _pickDate(String field) async {
+    final cur = DateTime.tryParse(taskDateOnly(_item[field]) ?? '');
+    final now = thaiNow();
+    final d = await showDatePicker(
+      context: context,
+      switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+      switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
+      initialDate: cur ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (d == null) return;
+    String two(int n) => n.toString().padLeft(2, '0');
+    await _update({field: '${d.year}-${two(d.month)}-${two(d.day)}'});
+  }
+
+  Future<String?> _askText(String title, {String initial = '', String? hint, TextInputType? keyboard, String? Function(String)? validate}) {
+    final ctrl = TextEditingController(text: initial);
+    String? error;
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => AlertDialog(
+          title: Text(tr(title)),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: keyboard,
+            maxLines: keyboard == TextInputType.multiline ? 8 : 1,
+            minLines: 1,
+            decoration: InputDecoration(hintText: hint, errorText: error, border: const OutlineInputBorder()),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
+            FilledButton(
+              onPressed: () {
+                final e = validate?.call(ctrl.text.trim());
+                if (e != null) {
+                  set(() => error = tr(e));
+                  return;
+                }
+                Navigator.pop(ctx, ctrl.text.trim());
+              },
+              child: Text(tr('บันทึก')),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(ctrl.dispose);
+  }
+
+  Future<void> _editEstimate(String field) async {
+    final cur = wsInt(_item[field]);
+    final v = await _askText(
+      wsFieldLabel(field),
+      initial: cur == null || cur == 0 ? '' : formatMinutes(cur),
+      hint: '2h 30m',
+      validate: (s) => s.isEmpty || parseDuration(s) != null ? null : 'รูปแบบเวลา เช่น 2h 30m, 90m, 1d',
+    );
+    if (v == null) return;
+    final m = v.isEmpty ? null : parseDuration(v);
+    await _update(field == 'original_estimate_minutes' ? {'original_estimate': m} : {field: m});
+  }
+
+  Future<void> _editStoryPoints() async {
+    final v = await _askText(
+      'Story points',
+      initial: '${_item['story_points'] ?? ''}',
+      keyboard: const TextInputType.numberWithOptions(decimal: true),
+      validate: (s) => s.isEmpty || num.tryParse(s) != null ? null : 'ต้องเป็นตัวเลข',
+    );
+    if (v == null) return;
+    await _update({'story_points': v.isEmpty ? null : num.parse(v)});
+  }
+
+  List<String> get _labels => _item['labels'] is List ? [for (final l in _item['labels'] as List) '$l'] : const [];
+
+  Future<void> _editLabels() async {
+    final known = <String>{
+      for (final t in _tasks)
+        for (final l in (t['labels'] is List ? t['labels'] as List : const [])) '$l',
+      ..._labels,
+    }.toList()..sort();
+    final picked = await showNxMultiPickerSheet(
+      context: context,
+      title: tr('ป้ายกำกับ'),
+      values: _labels.toSet(),
+      options: [for (final l in known) NxPickOption(value: l, label: l)],
+    );
+    if (picked == null) return;
+    await _update({'labels': picked.toList()});
+  }
+
+  Future<void> _addLabel() async {
+    final v = await _askText('เพิ่มป้ายกำกับ');
+    if (v == null || v.isEmpty || _labels.contains(v)) return;
+    await _update({
+      'labels': [..._labels, v],
+    });
+  }
+
+  Future<void> _editDescription() async {
+    final d = '${_item['description'] ?? ''}';
+    final v = await _askText('คำอธิบาย', initial: d, keyboard: TextInputType.multiline);
+    if (v == null || v == d) return;
+    await _update({'description': v});
+  }
+
+  // ── children
+  List<Map<String, dynamic>> get _children => _isEpic
+      ? [
+          for (final t in _tasks)
+            if ('${t['epic_id']}' == _id && t['parent_id'] == null) t,
+        ]
+      : [
+          for (final t in _tasks)
+            if ('${t['parent_id']}' == _id) t,
+        ];
+
+  bool _done(Map<String, dynamic> t) {
+    final s = _statuses.where((s) => s.id == '${t['status_id']}').firstOrNull;
+    return s?.isDone == true || '${t['is_completed']}' == '1' || t['is_completed'] == true;
+  }
+
+  Future<void> _toggleChild(Map<String, dynamic> t) async {
+    final done = _done(t);
+    final target = done
+        ? (_statuses.where((s) => s.isInitial).firstOrNull ?? _statuses.firstOrNull)
+        : _statuses.where((s) => s.isDone).firstOrNull ?? _statuses.lastOrNull;
+    if (target == null) return;
+    HapticFeedback.selectionClick();
+    final i = _tasks.indexOf(t);
+    setState(() => _tasks = [..._tasks]..[i] = {...t, 'status_id': int.tryParse(target.id) ?? target.id, 'is_completed': done ? 0 : 1});
     try {
-      await context.read<AppConfig>().apiClient.postTaskComment(_boardId, _taskId, plainTextToHtml(text));
-      _commentController.clear();
-      await _loadComments();
+      await _api.updateWorkspaceItem(_boardId, 'task', '${t['id']}', {'status_id': int.tryParse(target.id) ?? target.id});
     } catch (e) {
+      if (mounted) setState(() => _tasks = [..._tasks]..[i] = t);
       _snack(formatApiError(e));
     }
   }
 
-  /// PUT only the changed fields and merge the server's row back in.
-  /// [local] is merged for display only (e.g. the picked assignee's name).
-  Future<void> _update(Map<String, dynamic> body, {Map<String, dynamic> local = const {}}) async {
-    if (body.isEmpty) return;
+  Future<void> _quickSubtask() async {
+    final title = _subtaskCtrl.text.trim();
+    if (title.isEmpty) return;
+    _subtaskCtrl.clear();
+    try {
+      await _api.createWorkspaceItem(_boardId, 'task', {
+        'title': title,
+        'type': 'subtask',
+        'parent_id': int.tryParse(_id) ?? _id,
+        if (_item['epic_id'] != null) 'epic_id': _item['epic_id'],
+        if (_me != null) 'assignee_id': int.tryParse(_me!) ?? _me,
+      });
+      HapticFeedback.lightImpact();
+      await _reloadTasks();
+    } catch (e) {
+      _subtaskCtrl.text = title;
+      _snack(formatApiError(e));
+    }
+  }
+
+  Map<String, dynamic> _withBoard(Map<String, dynamic> row) => {
+    ...row,
+    'board_id': _boardId,
+    'board_code': _item['board_code'],
+    'board_name': _item['board_name'],
+  };
+
+  Future<void> _open(Map<String, dynamic> row) async {
+    await nxPush<void>(context, TaskDetailScreen(task: _withBoard(row)));
+    if (mounted) {
+      _reloadTasks();
+      _reloadItem();
+    }
+  }
+
+  // ── attachments
+  List<Map<String, dynamic>> get _attachments => taskAttachments(_item['attachments']);
+
+  Future<void> _addAttachment() async {
+    final picked = await FilePicker.platform.pickFiles(withData: true, allowMultiple: true);
+    final files = [
+      for (final f in picked?.files ?? const <PlatformFile>[])
+        if (f.bytes != null) MultipartFile.fromBytes(f.bytes!, filename: f.name),
+    ];
+    if (files.isEmpty || !mounted) return;
     setState(() => _saving = true);
     try {
-      final updated = await context.read<AppConfig>().apiClient.putBoardTask(_boardId, _taskId, body);
+      final uploaded = await _api.uploadBoardAttachments(_boardId, files);
       if (!mounted) return;
-      setState(() {
-        _task = {..._task, ...body, ...local, ...updated};
-        _saving = false;
+      setState(() => _saving = false);
+      await _update({
+        'attachments': [..._attachments, ...uploaded],
       });
     } catch (e) {
       if (mounted) setState(() => _saving = false);
@@ -184,117 +487,194 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  Future<void> _edit() async {
-    final desc = _task['description']?.toString() ?? '';
-    final richDesc = looksLikeHtmlString(desc);
-    final title = TextEditingController(text: _task['title']?.toString() ?? '');
-    final description = TextEditingController(text: richDesc ? '' : desc);
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('แก้ไขงาน')),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: title,
-                decoration: InputDecoration(labelText: tr('ชื่องาน')),
-              ),
-              const SizedBox(height: 12),
-              if (richDesc)
-                Text(
-                  tr('คำอธิบายมีรูปแบบ (rich text) — แก้ไขบนเว็บเพื่อไม่ให้รูปแบบหาย'),
-                  style: Theme.of(ctx).textTheme.bodySmall,
-                )
-              else
-                TextField(
-                  controller: description,
-                  minLines: 3,
-                  maxLines: 8,
-                  decoration: InputDecoration(labelText: tr('คำอธิบาย'), border: OutlineInputBorder()),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('บันทึก'))),
-        ],
-      ),
-    );
-    final newTitle = title.text.trim();
-    final newDesc = description.text.trim();
-    title.dispose();
-    description.dispose();
-    if (result != true) return;
-    if (newTitle.isEmpty) {
-      _snack('ชื่องานต้องไม่ว่าง');
-      return;
+  // ── watchers / links
+  bool get _watching => _me != null && _watchers.any((w) => '${w['user_id']}' == _me);
+
+  Future<void> _toggleWatch([String? userId]) async {
+    final uid = userId ?? _me;
+    if (uid == null) return;
+    final on = _watchers.any((w) => '${w['user_id']}' == uid);
+    try {
+      on ? await _api.removeItemWatcher(_boardId, _kind, _id, uid) : await _api.addItemWatcher(_boardId, _kind, _id, uid);
+      HapticFeedback.selectionClick();
+      final w = await _api.getItemWatchers(_boardId, _kind, _id);
+      if (mounted) setState(() => _watchers = w);
+    } catch (e) {
+      _snack(formatApiError(e));
     }
-    await _update({
-      if (newTitle != (_task['title']?.toString() ?? '')) 'title': newTitle,
-      if (!richDesc && newDesc != desc) 'description': newDesc,
-    });
   }
 
-  Future<void> _pickAssignee() async {
-    final api = context.read<AppConfig>().apiClient;
+  Future<void> _addWatcher() async {
+    final v = await showNxPickerSheet(
+      context: context,
+      title: tr('เพิ่มผู้ติดตาม'),
+      options: [
+        for (final e in _users.entries)
+          if (!_watchers.any((w) => '${w['user_id']}' == e.key)) NxPickOption(value: e.key, label: e.value),
+      ],
+    );
+    if (v != null && v.isNotEmpty) await _toggleWatch(v);
+  }
+
+  String _watcherName(Map<String, dynamic> w) {
+    final n = [w['first_name'], w['last_name']].where((e) => e != null && '$e'.isNotEmpty).join(' ').trim();
+    if (n.isNotEmpty) return n;
+    return '${w['jira_display_name'] ?? w['user_name'] ?? _users['${w['user_id']}'] ?? '#${w['user_id']}'}';
+  }
+
+  Map<String, dynamic>? _linkTarget(Map<String, dynamic> l) {
+    final outgoing = '${l['from_type']}' == _kind && '${l['from_id']}' == _id;
+    final kind = outgoing ? '${l['to_type']}' : '${l['from_type']}';
+    final id = outgoing ? '${l['to_id']}' : '${l['from_id']}';
+    final pool = kind == 'epic' ? _epics : _tasks;
+    return pool.where((t) => '${t['id']}' == id).firstOrNull ?? {'id': id, if (kind == 'epic') '_kind': 'epic', 'title': '#$id'};
+  }
+
+  String _linkLabel(Map<String, dynamic> l) {
+    final outgoing = '${l['from_type']}' == _kind && '${l['from_id']}' == _id;
+    final t = '${l['link_type']}';
+    if (!outgoing && t == 'blocks') return 'ถูกบล็อกโดย';
+    if (!outgoing && t == 'is_blocked_by') return 'บล็อก';
+    return _linkTypes[t] ?? t;
+  }
+
+  Future<void> _addLink() async {
+    final type = await showNxPickerSheet(
+      context: context,
+      title: tr('ประเภทลิงก์'),
+      options: [for (final e in _linkTypes.entries) NxPickOption(value: e.key, label: tr(e.value))],
+    );
+    if (type == null || !mounted) return;
+    final target = await showNxPickerSheet(
+      context: context,
+      title: tr('เลือกงาน'),
+      options: [
+        for (final t in _tasks)
+          if ('${t['id']}' != _id || _isEpic)
+            NxPickOption(
+              value: 'task:${t['id']}',
+              label: '${wsKey(t, boardCode: _code)} ${wsTitle(t)}',
+            ),
+        for (final e in _epics)
+          if ('${e['id']}' != _id || !_isEpic)
+            NxPickOption(
+              value: 'epic:${e['id']}',
+              label: '${wsKey(e, boardCode: _code)} ${wsTitle(e)}',
+              subtitle: 'Epic',
+            ),
+      ],
+    );
+    if (target == null) return;
+    final [k, id] = target.split(':');
     try {
-      _users ??= await api.getUsers(limit: 200);
+      await _api.addItemLink(_boardId, _kind, _id, toKind: k, toId: id, linkType: type);
+      final l = await _api.getItemLinks(_boardId, _kind, _id);
+      if (mounted) setState(() => _links = l);
+    } catch (e) {
+      _snack(formatApiError(e));
+    }
+  }
+
+  Future<void> _removeLink(Map<String, dynamic> l) async {
+    try {
+      await _api.deleteItemLink(_boardId, '${l['id']}');
+      setState(() => _links = [..._links]..remove(l));
+    } catch (e) {
+      _snack(formatApiError(e));
+    }
+  }
+
+  // ── menu actions
+  Future<void> _editAll() async {
+    final saved = await nxPush<Map<String, dynamic>>(
+      context,
+      WorkspaceItemFormScreen(
+        board: {'id': _boardId, 'code': _code, 'name': _item['board_name']},
+        statuses: _statuses,
+        epics: _epics,
+        tasks: _tasks,
+        edit: _item,
+        users: _users,
+      ),
+    );
+    if (saved != null && mounted) {
+      await _reloadItem();
+      _activity.currentState?.reload();
+    }
+  }
+
+  Future<void> _duplicate() async {
+    final saved = await nxPush<Map<String, dynamic>>(
+      context,
+      WorkspaceItemFormScreen(
+        board: {'id': _boardId, 'code': _code, 'name': _item['board_name']},
+        statuses: _statuses,
+        epics: _epics,
+        tasks: _tasks,
+        kind: _kind,
+        duplicateFrom: _item,
+        users: _users,
+      ),
+    );
+    if (saved != null && mounted) {
+      await nxPush<void>(context, TaskDetailScreen(task: _withBoard(saved)));
+    }
+  }
+
+  Future<void> _addSubtaskForm() async {
+    final saved = await nxPush<Map<String, dynamic>>(
+      context,
+      WorkspaceItemFormScreen(
+        board: {'id': _boardId, 'code': _code, 'name': _item['board_name']},
+        statuses: _statuses,
+        epics: _epics,
+        tasks: _tasks,
+        parent: _item,
+        users: _users,
+      ),
+    );
+    if (saved != null) _reloadTasks();
+  }
+
+  Future<void> _moveBoard() async {
+    List<Map<String, dynamic>> boards;
+    try {
+      boards = await _api.getBoards();
     } catch (e) {
       _snack(formatApiError(e));
       return;
     }
     if (!mounted) return;
-    final users = _users!;
-    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+    final v = await showNxPickerSheet(
       context: context,
-      isScrollControlled: true,
-      builder: (ctx) => _UserPickerSheet(users: users),
+      title: tr('ย้ายไปบอร์ด'),
+      options: [
+        for (final b in boards)
+          if ('${b['id']}' != _boardId) NxPickOption(value: '${b['id']}', label: '${b['name'] ?? b['id']}', subtitle: b['code']?.toString()),
+      ],
     );
-    if (picked == null) return;
-    final id = picked['id'];
-    await _update(
-      {'assignee_id': id == null ? null : int.tryParse(id.toString()) ?? id},
-      local: {'assignee_name': id == null ? null : userDisplayName(picked)},
-    );
+    if (v == null || !mounted) return;
+    try {
+      await _api.moveWorkspaceItem(_boardId, _kind, _id, v);
+      if (!mounted) return;
+      _snack('ย้ายงานแล้ว');
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      _snack(formatApiError(e));
+    }
   }
 
-  Future<void> _pickDueDate() async {
-    final current = DateTime.tryParse(taskDateOnly(_task['due_date']) ?? '');
-    final now = thaiNow();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? now,
-      firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 5),
-    );
-    if (picked == null) return;
-    final ymd = '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-    await _update({'due_date': ymd});
+  String get _webUrl {
+    final base = Uri.tryParse(context.read<AppConfig>().apiBaseUrl);
+    final key = wsKey(_item, boardCode: _code);
+    if (base == null) return key;
+    return base.replace(path: key.contains('-') ? '/workspace/$key' : '/workspace/$_boardId', query: null).toString();
   }
 
-  Future<void> _pickPriority() async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final e in taskPriorities.entries)
-              ListTile(
-                leading: Icon(
-                  e.key == _task['priority'] ? NxI.radioOn : NxI.radioOff,
-                ),
-                title: Text(tr(e.value)),
-                onTap: () => Navigator.pop(ctx, e.key),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (picked != null && picked != _task['priority']) await _update({'priority': picked});
+  void _copyKey() {
+    Clipboard.setData(ClipboardData(text: wsKey(_item, boardCode: _code)));
+    HapticFeedback.selectionClick();
+    _snack('คัดลอกรหัสแล้ว');
   }
 
   Future<void> _delete() async {
@@ -310,378 +690,644 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    try {
-      await context.read<AppConfig>().apiClient.deleteBoardTask(_boardId, _taskId);
-      if (!mounted) return;
-      _snack('ลบงานแล้ว');
-      Navigator.of(context).pop(true);
-    } catch (e) {
-      _snack(formatApiError(e));
-    }
+    final api = _api;
+    final board = _boardId, kind = _kind, id = _id;
+    PendingEntityDeletes.instance.schedule(
+      messenger: ScaffoldMessenger.of(context),
+      module: 'ws_$kind',
+      ids: [id],
+      label: wsKey(_item, boardCode: _code),
+      commit: () => api.deleteWorkspaceItem(board, kind, id),
+    );
+    Navigator.of(context).pop(true);
   }
 
-  List<Map<String, dynamic>> get _attachments => taskAttachments(_task['attachments']);
-
-  Future<void> _addAttachment() async {
-    final picked = await FilePicker.platform.pickFiles(withData: true, allowMultiple: true);
-    final files = [
-      for (final f in picked?.files ?? const <PlatformFile>[])
-        if (f.bytes != null) MultipartFile.fromBytes(f.bytes!, filename: f.name),
-    ];
-    if (files.isEmpty || !mounted) return;
-    setState(() => _saving = true);
-    try {
-      final uploaded = await context.read<AppConfig>().apiClient.uploadBoardAttachments(_boardId, files);
-      if (!mounted) return;
-      setState(() => _saving = false);
-      await _update({'attachments': [..._attachments, ...uploaded]});
-    } catch (e) {
-      if (mounted) setState(() => _saving = false);
-      _snack(formatApiError(e));
-    }
+  void _menu() {
+    final cs = Theme.of(context).colorScheme;
+    showNxBlurPanel<void>(
+      context: context,
+      builder: (ctx) {
+        Widget item(IconData i, String t, VoidCallback f, {Color? color}) => ListTile(
+          leading: Icon(i, color: color),
+          title: Text(tr(t), style: color == null ? null : TextStyle(color: color)),
+          onTap: () {
+            Navigator.pop(ctx);
+            f();
+          },
+        );
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              item(NxI.pencilSimple, 'แก้ไขทั้งหมด', _editAll),
+              item(NxI.copySimple, 'ทำซ้ำ', _duplicate),
+              if (!_isEpic && !_isChild) item(NxI.subtask, 'เพิ่มงานย่อย', _addSubtaskForm),
+              if (!_isEpic) item(NxI.clock, 'ลงเวลา', _logTime),
+              item(NxI.arrowsLeftRight, 'ย้ายไปบอร์ดอื่น', _moveBoard),
+              item(NxI.hash, 'คัดลอกรหัส', _copyKey),
+              item(NxI.shareNetwork, 'แชร์ลิงก์', () => Share.share('${wsKey(_item, boardCode: _code)} ${wsTitle(_item)}\n$_webUrl')),
+              item(NxI.trash, _isEpic ? 'ลบ Epic' : 'ลบงาน', _delete, color: cs.error),
+            ],
+          ),
+        );
+      },
+    );
   }
 
-  Future<void> _removeAttachment(Map<String, dynamic> a) async {
-    await _update({'attachments': _attachments.where((x) => x['url'] != a['url']).toList()});
-  }
-
-  String _assigneeLabel() {
-    final name = _task['assignee_name']?.toString().trim() ?? '';
-    if (name.isNotEmpty) return name;
-    final id = _task['assignee_id'];
-    if (id == null || id.toString().isEmpty) return 'ยังไม่มอบหมาย';
-    final match = _users?.where((u) => u['id']?.toString() == id.toString());
-    if (match != null && match.isNotEmpty) return userDisplayName(match.first);
-    return 'User #$id';
-  }
-
-  bool get _completed {
-    final v = _task['is_completed'];
-    return v == true || v == 1 || v?.toString() == '1' || v?.toString() == 'true';
-  }
-
+  // ── build
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = entityTitle(_task, module: 'task');
-    final desc = _task['description']?.toString();
-    final due = taskDateOnly(_task['due_date']);
-    final priority = taskPriorities[_task['priority']?.toString()] ?? '—';
+    final cs = theme.colorScheme;
+    final type = wsTypeStyle(_type);
+    final key = wsKey(_item, boardCode: _code);
+    final epic = _epics.where((e) => '${e['id']}' == '${_item['epic_id']}').firstOrNull;
+    final parent = _tasks.where((t) => '${t['id']}' == '${_item['parent_id']}').firstOrNull;
+    final title = wsTitle(_item).isEmpty ? entityTitle(_item, module: 'task') : wsTitle(_item);
+    final desc = _item['description']?.toString() ?? '';
+    final children = _children;
 
-    return DefaultTabController(
-        length: 3,
-        child: NxScrollScaffold(
-          header: NxAppHeader(
-            title: title,
-            actions: [
-              if (_saving)
-                const Padding(
-                  padding: EdgeInsets.all(14),
-                  child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                ),
-              IconButton(
-                tooltip: tr('แก้ไข'),
-                icon: const Icon(NxI.pencilSimple),
-                onPressed: _saving ? null : _edit,
-              ),
-              IconButton(
-                icon: const Icon(NxI.dotsThree),
-                onPressed: () {
-                  showNxBlurPanel<void>(
-                    context: context,
-                    builder: (ctx) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ListTile(
-                            leading: const Icon(NxI.timer),
-                            title: Text(tr('ลง worklog')),
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              DefaultTabController.of(context).animateTo(2);
-                            },
-                          ),
-                          ListTile(
-                            leading: Icon(NxI.trash, color: theme.colorScheme.error),
-                            title: Text(tr('ลบงาน'), style: TextStyle(color: theme.colorScheme.error)),
-                            onTap: () {
-                              Navigator.pop(ctx);
-                              _delete();
-                            },
-                          ),
-                          ListTile(
-                            leading: const Icon(NxI.x),
-                            title: Text(tr('ปิด')),
-                            onTap: () => Navigator.pop(ctx),
-                          ),
-                        ],
-                      ),
+    return NxScrollScaffold(
+      header: NxAppHeader(
+        title: key,
+        subtitle: _item['board_name']?.toString(),
+        actions: [
+          if (_saving)
+            const Padding(
+              padding: EdgeInsets.all(14),
+              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+          if (_online) ...[
+            IconButton(tooltip: _watching ? tr('เลิกติดตาม') : tr('ติดตาม'), icon: Icon(_watching ? NxI.eyeSlash : NxI.eye), onPressed: () => _toggleWatch()),
+            IconButton(tooltip: tr('เพิ่มเติม'), icon: const Icon(NxI.dotsThree), onPressed: _menu),
+          ],
+        ],
+      ),
+      body: NxRefresh(
+        onRefresh: () async {
+          await _load();
+          await _activity.currentState?.reload();
+        },
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 40),
+          // Everything gets the page gutter except the full-width status stepper.
+          children: [
+            for (final c in <Widget>[
+              // Type · key · priority
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: type.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(type.icon, size: 14, color: type.color),
+                        const SizedBox(width: 4),
+                        Text(
+                          tr(type.label),
+                          style: theme.textTheme.labelMedium?.copyWith(color: type.color, fontWeight: FontWeight.w700),
+                        ),
+                      ],
                     ),
-                  );
-                },
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              const TabBar(
-                tabs: [
-                  Tab(text: 'รายละเอียด'),
-                  Tab(text: 'ความคิดเห็น'),
-                  Tab(text: 'Worklog'),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onLongPress: _copyKey,
+                    child: Text(
+                      key,
+                      style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (_item['priority'] != null)
+                    Builder(
+                      builder: (_) {
+                        final p = wsPriorityStyle('${_item['priority']}');
+                        return Row(
+                          children: [
+                            Icon(p.icon, size: 16, color: p.color),
+                            const SizedBox(width: 2),
+                            Text(
+                              tr(p.label),
+                              style: theme.textTheme.labelMedium?.copyWith(color: p.color, fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                 ],
               ),
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        if (desc != null && desc.isNotEmpty)
-                          NxHtmlView(html: desc, style: theme.textTheme.bodyLarge)
-                        else
-                          Text(
-                            tr('ไม่มีคำอธิบาย'),
-                            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                        const SizedBox(height: 16),
-                        Card(
-                          margin: EdgeInsets.zero,
-                          child: Column(
-                            children: [
-                              ListTile(
-                                leading: const Icon(NxI.user),
-                                title: Text(tr('ผู้รับผิดชอบ')),
-                                subtitle: Text(tr(_assigneeLabel())),
-                                trailing: const Icon(NxI.caretRight),
-                                onTap: _saving ? null : _pickAssignee,
-                              ),
-                              ListTile(
-                                leading: const Icon(NxI.calendarBlank),
-                                title: Text(tr('กำหนดส่ง')),
-                                subtitle: Text(tr(due ?? 'ไม่กำหนด')),
-                                trailing: const Icon(NxI.caretRight),
-                                onTap: _saving ? null : _pickDueDate,
-                              ),
-                              ListTile(
-                                leading: const Icon(NxI.flag),
-                                title: Text(tr('ความสำคัญ')),
-                                subtitle: Text(tr(priority)),
-                                trailing: const Icon(NxI.caretRight),
-                                onTap: _saving ? null : _pickPriority,
-                              ),
-                              SwitchListTile(
-                                secondary: const Icon(NxI.checkCircle),
-                                title: Text(tr('เสร็จแล้ว')),
-                                value: _completed,
-                                onChanged: _saving ? null : (v) => _update({'is_completed': v}),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (_boardId.isNotEmpty && _taskId.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          SmartChecklistSection(boardId: _boardId, taskId: _taskId),
-                        ],
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(child: Text(tr('ไฟล์แนบ (${_attachments.length})'), style: theme.textTheme.titleSmall)),
-                            TextButton.icon(
-                              onPressed: _saving ? null : _addAttachment,
-                              icon: const Icon(NxI.paperclip, size: 18),
-                              label: Text(tr('แนบไฟล์')),
-                            ),
-                          ],
-                        ),
-                        for (final a in _attachments)
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon((a['mime']?.toString() ?? '').startsWith('image/') ? NxI.image : NxI.file),
-                            title: Text(tr(a['name']?.toString() ?? 'ไฟล์'), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            onTap: () {
-                              final uri = Uri.tryParse(context.read<AppConfig>().apiClient.absoluteUrl(a['url'].toString()));
-                              if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
-                            },
-                            trailing: IconButton(
-                              tooltip: tr('นำออก'),
-                              icon: const Icon(NxI.x, size: 18),
-                              onPressed: _saving ? null : () => _removeAttachment(a),
-                            ),
-                          ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            Chip(label: Text(tr('สถานะ: ${_task['status'] ?? _task['status_name'] ?? '—'}'))),
-                            if (_task['id'] != null) Chip(label: Text(tr('id: ${_task['id']}'))),
-                          ],
+              // Breadcrumb board › epic › parent
+              if (epic != null || parent != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 4,
+                    children: [
+                      for (final (i, row) in [?epic, ?parent].indexed) ...[
+                        if (i > 0) Icon(NxI.caretRight, size: 12, color: cs.outline),
+                        ActionChip(
+                          visualDensity: VisualDensity.compact,
+                          avatar: Icon(wsTypeStyle(wsType(row)).icon, size: 14, color: wsTypeStyle(wsType(row)).color),
+                          label: Text('${wsKey(row, boardCode: _code)} ${wsTitle(row)}', overflow: TextOverflow.ellipsis),
+                          onPressed: () => _open(row),
                         ),
                       ],
-                    ),
-                    Column(
-                      children: [
-                        Expanded(
-                          child: RefreshIndicator(
-                            onRefresh: _loadComments,
-                            child: ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.all(16),
-                              children: [
-                                if (_loadingComments && _comments.isEmpty) const NxSkeletonList(rows: 3),
-                                if (!_loadingComments && _comments.isEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 24),
-                                    child: Center(
-                                      child: Text(tr('ยังไม่มีความคิดเห็น'), style: theme.textTheme.bodyMedium),
-                                    ),
-                                  ),
-                                for (final c in _comments)
-                                  ListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    leading: const Icon(NxI.chatCircle),
-                                    title: Text(tr(c['user_name']?.toString() ?? 'ผู้ใช้')),
-                                    subtitle: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        NxHtmlView(html: c['body']?.toString() ?? ''),
-                                        if (c['created_at'] != null)
-                                          Text(tr('${c['created_at']}'), style: theme.textTheme.bodySmall),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        SafeArea(
-                          top: false,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _commentController,
-                                    minLines: 1,
-                                    maxLines: 4,
-                                    decoration: InputDecoration(
-                                      hintText: tr('เขียนความคิดเห็น…'),
-                                      border: OutlineInputBorder(),
-                                      isDense: true,
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  tooltip: tr('ส่ง'),
-                                  onPressed: _addComment,
-                                  icon: const Icon(NxI.paperPlaneTilt),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        if (_loading && _logs.isEmpty) const NxSkeletonList(rows: 3),
-                        for (final log in _logs)
-                          ListTile(
-                            title: Text(tr('${log['time_spent_minutes'] ?? 0} นาที')),
-                            subtitle: NxHtmlView(
-                              html: log['work_description']?.toString() ?? log['created_at']?.toString() ?? '',
-                            ),
-                          ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _minutesController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: tr('นาทีที่ลง'),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _noteController,
-                          decoration: InputDecoration(
-                            labelText: tr('รายละเอียดงาน'),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        FilledButton(onPressed: _addLog, child: Text(tr('บันทึก worklog'))),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-    );
-  }
-}
-
-class _UserPickerSheet extends StatefulWidget {
-  const _UserPickerSheet({required this.users});
-  final List<Map<String, dynamic>> users;
-
-  @override
-  State<_UserPickerSheet> createState() => _UserPickerSheetState();
-}
-
-class _UserPickerSheetState extends State<_UserPickerSheet> {
-  var _needle = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final filtered = widget.users.where((u) {
-      if (_needle.isEmpty) return true;
-      return userDisplayName(u).toLowerCase().contains(_needle) ||
-          (userEmail(u) ?? '').toLowerCase().contains(_needle);
-    }).toList();
-    return SafeArea(
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: TextField(
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: tr('ค้นหาผู้ใช้'),
-                  prefixIcon: Icon(NxI.magnifyingGlass),
+              const SizedBox(height: 8),
+              // Title (tap to edit in place)
+              if (_editingTitle)
+                TextField(
+                  controller: _titleCtrl,
+                  autofocus: true,
+                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(isDense: true),
+                  onSubmitted: (_) => _saveTitle(),
+                  onTapOutside: (_) => _saveTitle(),
+                )
+              else
+                GestureDetector(
+                  onTap: _online
+                      ? () => setState(() {
+                          _titleCtrl.text = title;
+                          _editingTitle = true;
+                        })
+                      : null,
+                  child: Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
                 ),
-                onChanged: (v) => setState(() => _needle = v.trim().toLowerCase()),
+              const SizedBox(height: 14),
+              if (_statuses.isNotEmpty)
+                Padding(
+                  key: _bleed,
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: WsStatusStepper(statuses: _statuses, current: '${_item['status_id'] ?? ''}', busy: _saving, onPick: _online ? _setStatus : null),
+                ),
+              if (_online) Padding(padding: const EdgeInsets.only(bottom: 12), child: _isEpic ? _epicTime(children) : _timeCard()),
+              _descriptionSection(context, desc),
+              _fieldsSection(context, epic, parent),
+              if (_online && (_isEpic || !_isChild)) _childrenSection(context, children),
+              if (_online && !_isEpic) SmartChecklistSection(boardId: _boardId, taskId: _id),
+              if (_online) ...[
+                const SizedBox(height: 12),
+                _attachmentsSection(context),
+                _peopleSection(context),
+                _linksSection(context),
+                const SizedBox(height: 4),
+              ],
+              WsActivityPanel(
+                key: _activity,
+                boardId: _boardId,
+                kind: _kind,
+                itemId: _id,
+                meId: _me,
+                lookups: WsLookups(
+                  users: _users,
+                  statuses: _statuses,
+                  items: {
+                    for (final t in _tasks) 'task:${t['id']}': {...t, 'board_code': _code},
+                    for (final e in _epics) 'epic:${e['id']}': {...e, 'board_code': _code},
+                  },
+                ),
+                onWorklogChanged: _reloadItem,
               ),
-            ),
-            ListTile(
-              leading: const Icon(NxI.x),
-              title: Text(tr('ไม่มอบหมาย')),
-              onTap: () => Navigator.pop(context, <String, dynamic>{'id': null}),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView.builder(
-                itemCount: filtered.length,
-                itemBuilder: (_, i) {
-                  final u = filtered[i];
-                  return ListTile(
-                    leading: const Icon(NxI.user),
-                    title: Text(tr(userDisplayName(u))),
-                    subtitle: userEmail(u) == null ? null : Text(tr(userEmail(u)!)),
-                    onTap: () => Navigator.pop(context, u),
-                  );
-                },
-              ),
-            ),
+            ])
+              c.key == _bleed ? c : Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: c),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _timeCard() => WsTimeCard(
+    spent: wsInt(_item['time_spent_minutes']) ?? 0,
+    estimate: wsInt(_item['original_estimate_minutes']),
+    remaining: wsInt(_item['time_remaining_minutes']),
+    onLog: _logTime,
+    timer: WsTaskTimer(
+      prefsKey: '${_boardId}_$_id',
+      onStop: (m) => _logTime(minutes: m),
+    ),
+  );
+
+  Widget _epicTime(List<Map<String, dynamic>> children) {
+    var spent = 0, est = 0;
+    for (final c in children) {
+      spent += wsInt(c['time_spent_minutes']) ?? 0;
+      est += wsInt(c['original_estimate_minutes']) ?? 0;
+    }
+    return WsTimeCard(
+      spent: spent + (wsInt(_item['time_spent_minutes']) ?? 0),
+      estimate: est > 0 ? est : wsInt(_item['original_estimate_minutes']),
+      remaining: null,
+    );
+  }
+
+  Widget _descriptionSection(BuildContext context, String desc) {
+    final theme = Theme.of(context);
+    final rich = looksLikeHtmlString(desc);
+    return WsSection(
+      title: 'คำอธิบาย',
+      icon: NxI.textT,
+      trailing: _online && !rich ? IconButton(tooltip: tr('แก้ไข'), icon: const Icon(NxI.pencilSimple, size: 18), onPressed: _editDescription) : null,
+      child: desc.trim().isEmpty
+          ? Text(tr('ไม่มีคำอธิบาย'), style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant))
+          : NxHtmlView(html: desc, style: theme.textTheme.bodyLarge),
+    );
+  }
+
+  Widget _fieldsSection(BuildContext context, Map<String, dynamic>? epic, Map<String, dynamic>? parent) {
+    final cs = Theme.of(context).colorScheme;
+    String date(String f) {
+      final d = taskDateOnly(_item[f]);
+      if (d == null) return '';
+      final p = parseThai(d);
+      return p == null ? d : '${p.day}/${p.month}/${uiYear(p.year)}';
+    }
+
+    final due = wsDueIn(_item['due_date']);
+    final blocked = _tasks.where((t) => '${t['id']}' == '${_item['blocked_by_id']}').firstOrNull;
+    final recur = {'none': 'ไม่ทำซ้ำ', 'weekly': 'ทุกสัปดาห์', 'biweekly': 'ทุก 2 สัปดาห์', 'monthly': 'ทุกเดือน'};
+    final rows = <(bool, Widget)>[
+      (
+        _item['assignee_id'] != null,
+        WsFieldRow(
+          icon: NxI.user,
+          label: 'ผู้รับผิดชอบ',
+          value: _item['assignee_id'] == null ? '' : _users['${_item['assignee_id']}'] ?? '${_item['assignee_name'] ?? '#${_item['assignee_id']}'}',
+          onTap: _online ? () => _pickUser('assignee_id') : null,
+        ),
+      ),
+      (
+        _item['reporter_id'] != null,
+        WsFieldRow(
+          icon: NxI.user,
+          label: 'ผู้รายงาน',
+          value: _item['reporter_id'] == null ? '' : _users['${_item['reporter_id']}'] ?? '#${_item['reporter_id']}',
+          onTap: _online ? () => _pickUser('reporter_id') : null,
+        ),
+      ),
+      (
+        _item['priority'] != null,
+        WsFieldRow(
+          icon: NxI.flag,
+          label: 'ความสำคัญ',
+          value: _item['priority'] == null ? '' : tr(wsPriorityStyle('${_item['priority']}').label),
+          onTap: _online
+              ? () => _pickEnum('priority', [
+                  for (final p in kWsPriorities) NxPickOption(value: p, label: tr(wsPriorityStyle(p).label), color: wsPriorityStyle(p).color),
+                ])
+              : null,
+        ),
+      ),
+      if (!_isEpic)
+        (
+          true,
+          WsFieldRow(
+            icon: wsTypeStyle(_type).icon,
+            label: 'ประเภท',
+            value: tr(wsTypeStyle(_type).label),
+            onTap: _online
+                ? () => _pickEnum('type', [
+                    for (final t in ['task', 'bug', 'story', 'subtask', if (_type == 'checklist') 'checklist'])
+                      NxPickOption(value: t, label: tr(wsTypeStyle(t).label), color: wsTypeStyle(t).color),
+                  ])
+                : null,
+          ),
+        ),
+      (
+        date('start_date').isNotEmpty,
+        WsFieldRow(icon: NxI.calendarBlank, label: 'วันเริ่ม', value: date('start_date'), onTap: _online ? () => _pickDate('start_date') : null),
+      ),
+      (
+        date('end_date').isNotEmpty,
+        WsFieldRow(icon: NxI.calendarBlank, label: 'วันสิ้นสุด', value: date('end_date'), onTap: _online ? () => _pickDate('end_date') : null),
+      ),
+      if (!_isEpic)
+        (
+          date('due_date').isNotEmpty,
+          WsFieldRow(
+            icon: NxI.calendarBlank,
+            label: 'ครบกำหนด',
+            value: date('due_date'),
+            valueWidget: date('due_date').isEmpty
+                ? null
+                : Text(
+                    '${date('due_date')}${due == null
+                        ? ''
+                        : due < 0
+                        ? ' · ${tr('เลย ${-due} วัน')}'
+                        : due == 0
+                        ? ' · ${tr('วันนี้')}'
+                        : ''}',
+                    style: TextStyle(fontWeight: FontWeight.w600, color: due != null && due < 0 && !_done(_item) ? cs.error : null),
+                  ),
+            onTap: _online ? () => _pickDate('due_date') : null,
+          ),
+        ),
+      (
+        (wsInt(_item['original_estimate_minutes']) ?? 0) > 0,
+        WsFieldRow(
+          icon: NxI.timer,
+          label: 'เวลาประมาณ',
+          value: (wsInt(_item['original_estimate_minutes']) ?? 0) > 0 ? formatMinutes(wsInt(_item['original_estimate_minutes'])) : '',
+          onTap: _online ? () => _editEstimate('original_estimate_minutes') : null,
+        ),
+      ),
+      (
+        (wsInt(_item['time_remaining_minutes']) ?? 0) > 0,
+        WsFieldRow(
+          icon: NxI.timer,
+          label: 'เวลาคงเหลือ',
+          value: (wsInt(_item['time_remaining_minutes']) ?? 0) > 0 ? formatMinutes(wsInt(_item['time_remaining_minutes'])) : '',
+          onTap: _online ? () => _editEstimate('time_remaining_minutes') : null,
+        ),
+      ),
+      (
+        '${_item['story_points'] ?? ''}'.isNotEmpty,
+        WsFieldRow(icon: NxI.hash, label: 'Story points', value: '${_item['story_points'] ?? ''}', onTap: _online ? _editStoryPoints : null),
+      ),
+      if (!_isEpic)
+        (
+          epic != null,
+          WsFieldRow(
+            icon: NxI.lightning,
+            label: 'Epic',
+            value: epic == null ? '' : '${wsKey(epic, boardCode: _code)} ${wsTitle(epic)}',
+            onTap: _online
+                ? () => _pickEnum('epic_id', [
+                    for (final e in _epics)
+                      NxPickOption(
+                        value: '${e['id']}',
+                        label: '${wsKey(e, boardCode: _code)} ${wsTitle(e)}',
+                      ),
+                  ], nullable: true)
+                : null,
+          ),
+        ),
+      if (_isChild)
+        (
+          parent != null,
+          WsFieldRow(
+            icon: NxI.treeStructure,
+            label: 'งานแม่',
+            value: parent == null ? '' : '${wsKey(parent, boardCode: _code)} ${wsTitle(parent)}',
+            onTap: parent == null ? null : () => _open(parent),
+          ),
+        ),
+      if (!_isEpic)
+        (
+          _labels.isNotEmpty,
+          WsFieldRow(
+            icon: NxI.tag,
+            label: 'ป้ายกำกับ',
+            value: _labels.join(', '),
+            valueWidget: Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (final l in _labels) Chip(label: Text(l), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                if (_online)
+                  ActionChip(avatar: const Icon(NxI.plus, size: 14), label: Text(tr('เพิ่ม')), visualDensity: VisualDensity.compact, onPressed: _addLabel),
+              ],
+            ),
+            onTap: _online ? _editLabels : null,
+          ),
+        ),
+      if (!_isEpic)
+        (
+          blocked != null,
+          WsFieldRow(
+            icon: NxI.prohibit,
+            label: 'ถูกบล็อกโดย',
+            value: blocked == null ? '' : '${wsKey(blocked, boardCode: _code)} ${wsTitle(blocked)}',
+            onTap: _online
+                ? () => _pickEnum('blocked_by_id', [
+                    for (final t in _tasks)
+                      if ('${t['id']}' != _id)
+                        NxPickOption(
+                          value: '${t['id']}',
+                          label: '${wsKey(t, boardCode: _code)} ${wsTitle(t)}',
+                        ),
+                  ], nullable: true)
+                : null,
+          ),
+        ),
+      if (!_isEpic)
+        (
+          (_item['recurrence_type'] ?? 'none') != 'none',
+          WsFieldRow(
+            icon: NxI.repeat,
+            label: 'ทำซ้ำอัตโนมัติ',
+            value: tr(recur['${_item['recurrence_type'] ?? 'none'}'] ?? '${_item['recurrence_type']}'),
+            onTap: _online ? () => _pickEnum('recurrence_type', [for (final e in recur.entries) NxPickOption(value: e.key, label: tr(e.value))]) : null,
+          ),
+        ),
+    ];
+    final shown = [
+      for (final (filled, w) in rows)
+        if (_showAll || filled) w,
+    ];
+    return WsSection(
+      title: 'ข้อมูล',
+      icon: NxI.listChecks,
+      color: const Color(0xFFF97316),
+      trailing: SegmentedButton<bool>(
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+        segments: [
+          ButtonSegment(value: false, label: Text(tr('มีข้อมูล'))),
+          ButtonSegment(value: true, label: Text(tr('ทั้งหมด'))),
+        ],
+        selected: {_showAll},
+        onSelectionChanged: (s) => setState(() => _showAll = s.first),
+      ),
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 220),
+        alignment: Alignment.topCenter,
+        child: Column(
+          children: shown.isEmpty ? [Padding(padding: const EdgeInsets.all(8), child: Text(tr('ยังไม่มีข้อมูล — แตะ "ทั้งหมด" เพื่อกรอก')))] : shown,
+        ),
+      ),
+    );
+  }
+
+  Widget _childrenSection(BuildContext context, List<Map<String, dynamic>> children) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final done = children.where(_done).length;
+    return WsSection(
+      title: _isEpic ? 'งานใน Epic' : 'งานย่อย',
+      icon: _isEpic ? NxI.lightning : NxI.subtask,
+      color: _isEpic ? const Color(0xFF8B5CF6) : const Color(0xFF0EA5E9),
+      trailing: children.isEmpty ? null : Text('$done/${children.length}', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (children.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6, right: 4),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: done / children.length),
+                  duration: const Duration(milliseconds: 500),
+                  builder: (_, v, _) => LinearProgressIndicator(value: v, minHeight: 6, color: const Color(0xFF10B981)),
+                ),
+              ),
+            ),
+          for (final c in children)
+            Row(
+              children: [
+                if (!_isEpic)
+                  Checkbox(value: _done(c), onChanged: (_) => _toggleChild(c), visualDensity: VisualDensity.compact)
+                else
+                  Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Icon(wsTypeStyle(wsType(c)).icon, size: 16, color: wsTypeStyle(wsType(c)).color),
+                  ),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _open(c),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${wsKey(c, boardCode: _code)}  ',
+                              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+                            ),
+                            TextSpan(text: wsTitle(c)),
+                          ],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          decoration: _done(c) ? TextDecoration.lineThrough : null,
+                          color: _done(c) ? cs.onSurfaceVariant : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Builder(
+                  builder: (_) {
+                    final s = _statuses.where((s) => s.id == '${c['status_id']}').firstOrNull;
+                    if (s == null) return const SizedBox.shrink();
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: s.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
+                      child: Text(
+                        s.label,
+                        style: theme.textTheme.labelSmall?.copyWith(color: s.color, fontWeight: FontWeight.w700),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          if (!_isEpic)
+            TextField(
+              key: const ValueKey('ws-subtask-add'),
+              controller: _subtaskCtrl,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _quickSubtask(),
+              decoration: InputDecoration(
+                hintText: tr('เพิ่มงานย่อย แล้วกด Enter'),
+                prefixIcon: const Icon(NxI.plus, size: 18),
+                border: InputBorder.none,
+                isDense: true,
+              ),
+            ),
+          if (_isEpic && children.isEmpty) Text(tr('ยังไม่มีงานใน Epic นี้'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+
+  Widget _attachmentsSection(BuildContext context) {
+    final files = _attachments;
+    return WsSection(
+      title: files.isEmpty ? 'ไฟล์แนบ' : 'ไฟล์แนบ (${files.length})',
+      icon: NxI.paperclip,
+      color: const Color(0xFF64748B),
+      trailing: TextButton.icon(onPressed: _saving ? null : _addAttachment, icon: const Icon(NxI.plus, size: 16), label: Text(tr('แนบไฟล์'))),
+      child: Column(
+        children: [
+          for (final a in files)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon((a['mime']?.toString() ?? '').startsWith('image/') ? NxI.image : NxI.file),
+              title: Text(a['name']?.toString() ?? tr('ไฟล์'), maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () {
+                final uri = Uri.tryParse(_api.absoluteUrl(a['url'].toString()));
+                if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              trailing: IconButton(
+                tooltip: tr('นำออก'),
+                icon: const Icon(NxI.x, size: 18),
+                onPressed: _saving ? null : () => _update({'attachments': files.where((x) => x['url'] != a['url']).toList()}),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _peopleSection(BuildContext context) {
+    return WsSection(
+      title: _watchers.isEmpty ? 'ผู้ติดตาม' : 'ผู้ติดตาม (${_watchers.length})',
+      icon: NxI.eye,
+      color: const Color(0xFF14B8A6),
+      trailing: TextButton.icon(onPressed: _addWatcher, icon: const Icon(NxI.plus, size: 16), label: Text(tr('เพิ่ม'))),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final w in _watchers)
+            InputChip(
+              avatar: NxAvatar(label: _watcherName(w), size: 22),
+              label: Text(_watcherName(w)),
+              onDeleted: () => _toggleWatch('${w['user_id']}'),
+            ),
+          if (!_watching) ActionChip(avatar: const Icon(NxI.eye, size: 16), label: Text(tr('ติดตามงานนี้')), onPressed: () => _toggleWatch()),
+        ],
+      ),
+    );
+  }
+
+  Widget _linksSection(BuildContext context) {
+    final theme = Theme.of(context);
+    return WsSection(
+      title: _links.isEmpty ? 'ลิงก์งาน' : 'ลิงก์งาน (${_links.length})',
+      icon: NxI.link,
+      color: const Color(0xFF6366F1),
+      trailing: TextButton.icon(onPressed: _addLink, icon: const Icon(NxI.plus, size: 16), label: Text(tr('เพิ่ม'))),
+      child: Column(
+        children: [
+          for (final l in _links)
+            Builder(
+              builder: (_) {
+                final t = _linkTarget(l)!;
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(wsTypeStyle(wsType(t)).icon, color: wsTypeStyle(wsType(t)).color, size: 18),
+                  title: Text('${wsKey(t, boardCode: _code)} ${wsTitle(t)}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(tr(_linkLabel(l)), style: theme.textTheme.labelSmall),
+                  onTap: () => _open(t),
+                  trailing: IconButton(tooltip: tr('นำออก'), icon: const Icon(NxI.unlink, size: 18), onPressed: () => _removeLink(l)),
+                );
+              },
+            ),
+        ],
       ),
     );
   }

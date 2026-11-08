@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/thai_time.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -14,6 +15,7 @@ import '../../widgets/nx_icons.dart';
 import '../crm/order_summary_screen.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// NEXTX order queues (backend/src/services/commercialOrderQueueService.js).
 const orderQueues = <String, String>{
@@ -223,7 +225,7 @@ class _OrdersTabState extends State<_OrdersTab> {
                     orderId: _selected!['id'].toString(),
                     preview: _selected!,
                   ),
-            list: RefreshIndicator(
+            list: NxRefresh(
             onRefresh: _load,
             child: _loading
                 ? const NxSkeletonList()
@@ -247,7 +249,7 @@ class _OrdersTabState extends State<_OrdersTab> {
                               tr([
                                 o['customer_name']?.toString() ?? '',
                                 paymentStatusLabel(o['payment_status']?.toString()),
-                                (o['order_date']?.toString() ?? '').split('T').first,
+                                thaiDate(o['order_date'], year: uiYear),
                               ].where((e) => e.isNotEmpty).join(' · ')),
                             ),
                             trailing: Column(
@@ -400,7 +402,7 @@ class _StockTabState extends State<_StockTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return RefreshIndicator(
+    return NxRefresh(
       onRefresh: _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),

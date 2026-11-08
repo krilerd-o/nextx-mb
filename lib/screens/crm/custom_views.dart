@@ -390,6 +390,7 @@ class _CustomViewEditorScreenState extends State<CustomViewEditorScreen> {
   }) {
     final has = items.any((e) => e.$1 == value);
     return DropdownButtonFormField<T>(
+        icon: const Icon(NxI.caretDown, size: 18),
       initialValue: has ? value : null,
       isExpanded: true,
       decoration: InputDecoration(labelText: tr(label), isDense: true),
@@ -445,6 +446,8 @@ class _CustomViewEditorScreenState extends State<CustomViewEditorScreen> {
       onTap: isDate
           ? () async {
               final d = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
                 context: context,
                 firstDate: DateTime(2000),
                 lastDate: DateTime(2100),

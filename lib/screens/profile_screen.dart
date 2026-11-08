@@ -13,13 +13,13 @@ import '../widgets/nx_app_header.dart';
 import '../widgets/nx_hero_cta.dart';
 import '../widgets/nx_surface_card.dart';
 import '../widgets/nx_icons.dart';
+import 'profile/change_password_screen.dart';
 import 'profile/my_signatures_screen.dart';
 import 'profile/phone_verify_screen.dart';
 import 'profile_edit_screen.dart';
 import 'settings_screen.dart';
 import '../core/nx_page_route.dart';
 import '../core/i18n.dart';
-import '../widgets/nx_shake.dart';
 
 /// Phase 7 — โปรไฟล์, ภาษา/รูปแบบวันที่, รหัสผ่าน/2FA placeholder, accent, avatar (C1)
 class ProfileScreen extends StatelessWidget {
@@ -57,7 +57,7 @@ class ProfileScreen extends StatelessWidget {
     }
 
     return NxScrollScaffold(
-      header: const NxAppHeader(title: 'โปรไฟล์'),
+      header: const NxAppHeader(title: 'ความปลอดภัยขั้นสูง'),
       body: ListView(
         padding: NxBreakpoint.of(context).scrollPadding(context),
         children: [
@@ -147,7 +147,7 @@ class ProfileScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(NxI.password),
                   title: Text(tr('เปลี่ยนรหัสผ่าน')),
-                  subtitle: Text(tr('รหัสปัจจุบัน + รหัสใหม่ (ยืนยัน)')),
+                  subtitle: Text(tr('ยืนยันด้วย OTP ทางอีเมลหรือ SMS')),
                   onTap: () => showChangePasswordDialog(context),
                 ),
                 ListTile(
@@ -232,85 +232,6 @@ class ProfileScreen extends StatelessWidget {
 }
 
 /// Change-password dialog (current + new + confirm), used by the profile hub.
-Future<void> showChangePasswordDialog(BuildContext context) async {
-  final config = context.read<AppConfig>();
-  final current = TextEditingController();
-  final next = TextEditingController();
-  final confirm = TextEditingController();
-  final formKey = GlobalKey<FormState>();
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(tr('เปลี่ยนรหัสผ่าน')),
-      content: Form(
-        key: formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            NxShake(child: TextFormField(
-              controller: current,
-              obscureText: true,
-              decoration: InputDecoration(label: nxRequiredLabel(ctx, tr('รหัสผ่านปัจจุบัน'))),
-              validator: (v) =>
-                  (v == null || v.isEmpty) ? tr('กรุณากรอก') : null,
-            )),
-            NxShake(child: TextFormField(
-              controller: next,
-              obscureText: true,
-              decoration: InputDecoration(label: nxRequiredLabel(ctx, tr('รหัสผ่านใหม่'))),
-              validator: (v) => (v == null || v.length < 6)
-                  ? tr('อย่างน้อย 6 ตัวอักษร')
-                  : null,
-            )),
-            NxShake(child: TextFormField(
-              controller: confirm,
-              obscureText: true,
-              decoration: InputDecoration(label: nxRequiredLabel(ctx, tr('ยืนยันรหัสใหม่'))),
-              validator: (v) => v != next.text ? tr('รหัสไม่ตรงกัน') : null,
-            )),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: Text(tr('ยกเลิก')),
-        ),
-        FilledButton(
-          onPressed: () {
-            if (formKey.currentState?.validate() != true) {
-              nxRevealFormError(ctx);
-            } else {
-              Navigator.pop(ctx, true);
-            }
-          },
-          child: Text(tr('บันทึก')),
-        ),
-      ],
-    ),
-  );
-  final value = next.text;
-  final currentValue = current.text;
-  current.dispose();
-  next.dispose();
-  confirm.dispose();
-  if (ok == true) {
-    try {
-      await config.apiClient.changePassword(
-        value,
-        currentPassword: currentValue,
-      );
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(tr('เปลี่ยนรหัสแล้ว'))));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-      }
-    }
-  }
-}
+/// Opens "เปลี่ยนรหัสผ่าน" (OTP by email / SMS instead of the old password).
+Future<void> showChangePasswordDialog(BuildContext context) =>
+    nxPush<bool>(context, const ChangePasswordScreen());

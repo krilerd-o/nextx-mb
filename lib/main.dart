@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'core/detail_fields_pref.dart';
 import 'package:provider/provider.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'core/app_alice.dart';
@@ -12,15 +13,19 @@ import 'core/error_reporting.dart';
 import 'services/api_client.dart';
 import 'services/device_push_service.dart';
 import 'app.dart';
+import 'widgets/nx_overlay_panel.dart' show NxTapTracker;
 
 void main() {
   ErrorReporting.runGuarded(() async {
     await AppVersion.load();
     if (!kIsWeb) Effects.setCoreCounter(() => Platform.numberOfProcessors);
     await Effects.init();
+    await DetailFieldsPref.load();
     await _initDeviceHeaders();
     await initFirebasePush();
     initAppAlice();
+    // Menus grow out of the button that opened them (see showNxBlurPanel).
+    NxTapTracker.ensure();
     runApp(
       ChangeNotifierProvider(
         create: (_) => AppConfig(),

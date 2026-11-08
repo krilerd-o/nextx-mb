@@ -32,10 +32,10 @@ Future<AppConfig> _pump(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('hub shows profile, grouped settings and filters by search', (tester) async {
+  testWidgets('settings page: grouped settings, filtered by search (profile lives on its own page)', (tester) async {
     await _pump(tester);
-    expect(find.text('QA User'), findsOneWidget);
-    expect(find.text('qa@example.com'), findsOneWidget);
+    expect(find.text('การตั้งค่า'), findsWidgets);
+    expect(find.text('QA User'), findsNothing);
     for (final g in ['รูปลักษณ์', 'เมนูและการใช้งาน', 'บัญชีและความปลอดภัย']) {
       expect(find.text(g), findsOneWidget);
     }
@@ -56,6 +56,6 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('กุหลาบ'));
     await tester.pumpAndSettle();
-    expect(config.accentIndex, 4);
+    expect(AppConfig.accentKeys[config.accentIndex], 'rose');
   });
 }

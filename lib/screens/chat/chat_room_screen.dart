@@ -23,6 +23,7 @@ import '../../widgets/nx_icons.dart';
 import '../../core/error_reporting.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_overlay_panel.dart';
 
 const _quickReactions = ['👍', '❤️', '😂', '🎉', '🙏', '👀'];
 
@@ -344,10 +345,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   Future<void> _attach() async {
-    final choice = await showModalBottomSheet<String>(
+    final choice = await showNxBlurPanel<String>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -381,10 +382,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   Future<void> _messageActions(Map<String, dynamic> m) async {
     final mine = isOwnChatMessage(m, _me);
     final text = stripHtmlPreview(m['body']?.toString() ?? '', maxLen: 1 << 20);
-    final action = await showModalBottomSheet<String>(
+    final action = await showNxBlurPanel<String>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

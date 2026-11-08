@@ -256,7 +256,7 @@ String? entityWhen(Map<String, dynamic> row) {
   ]) {
     final v = row[k]?.toString();
     if (v == null || v.isEmpty) continue;
-    final local = parseThai(v);
+    final local = parseThaiField(v, k);
     if (local == null) return v.length > 16 ? v.substring(0, 16) : v;
     final hh = local.hour.toString().padLeft(2, '0');
     final mm = local.minute.toString().padLeft(2, '0');

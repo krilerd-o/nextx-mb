@@ -99,6 +99,22 @@ void main() {
     }
     expect(find.text('NEXT H'), findsOneWidget);
     expect(find.text('เปลี่ยนธุรกิจ'), findsOneWidget);
+    expect(find.text('ใช้อยู่: NEXT S'), findsOneWidget);
+    // Pick another package: card shows it is picked, the sheet closes and the
+    // colour hand-off switches the package underneath.
+    await tester.tap(find.text('NEXT H'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    // The hand-off animates against a real stopwatch: let real time pass too.
+    for (var i = 0; i < 80 && config.session.packageCode != 'next_h'; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+      await tester.pump(const Duration(milliseconds: 30));
+    }
+    for (var i = 0; i < 40; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+      await tester.pump(const Duration(milliseconds: 30));
+    }
+    expect(config.session.packageCode, 'next_h');
   });
 
   // ---- Round 5 C ----

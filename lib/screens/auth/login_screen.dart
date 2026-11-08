@@ -12,7 +12,7 @@ import '../../core/nx_page_route.dart';
 import '../../core/server_profile.dart';
 import '../../services/google_auth.dart';
 import '../../widgets/nx_hero_cta.dart';
-import '../../widgets/nx_hero_illustration.dart';
+import '../../widgets/nx_app_logo.dart';
 import '../../widgets/nx_icons.dart';
 import '../crm/field_gallery_screen.dart';
 import 'line_login_screen.dart';
@@ -53,9 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     final config = context.read<AppConfig>();
     if (config.sessionExpiredNotice) {
-      _error = config.sessionRevokedNotice
-          ? 'ถูกออกจากระบบจากอุปกรณ์อื่น กรุณาเข้าสู่ระบบใหม่'
-          : 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
+      _error = config.sessionRevokedNotice ? 'ถูกออกจากระบบจากอุปกรณ์อื่น กรุณาเข้าสู่ระบบใหม่' : 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
       WidgetsBinding.instance.addPostFrameCallback((_) => config.clearSessionExpiredNotice());
     }
     final recent = config.recentAccounts;
@@ -201,18 +199,18 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _setMode(_Mode m) => setState(() {
-        _mode = m;
-        _otpSent = false;
-        _error = null;
-        _code.clear();
-      });
+    _mode = m;
+    _otpSent = false;
+    _error = null;
+    _code.clear();
+  });
 
   InputDecoration _dec(String label, IconData icon) => InputDecoration(
-        labelText: trn(label),
-        prefixIcon: Icon(icon),
-        filled: true,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-      );
+    labelText: trn(label),
+    prefixIcon: Icon(icon),
+    filled: true,
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -226,261 +224,398 @@ class _LoginScreenState extends State<LoginScreen> {
       _ => _otpSent ? 'ยืนยันรหัส OTP' : 'ส่งรหัส OTP',
     };
 
+    final err = _error ?? config.authLinkError;
+    InputDecoration field(String label, IconData icon) =>
+        _dec(label, icon).copyWith(fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.6), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16));
+
     return Scaffold(
-      body: ListView(
-        padding: EdgeInsets.zero,
+      body: Stack(
         children: [
-          Stack(
-            children: [
-              const NxHeroIllustration(height: 230),
-              SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-                  child: Align(
-                    alignment: Alignment.topRight,
-                    child: ActionChip(
-                      avatar: const Icon(NxI.globe, size: 16),
-                      label: Text(tr(serverLabel(config.apiBaseUrl)), overflow: TextOverflow.ellipsis),
-                      tooltip: tr('เปลี่ยนเซิร์ฟเวอร์'),
-                      onPressed: _loading
-                          ? null
-                          : () async {
-                              await config.resetServerChoice();
-                              if (context.mounted) context.go(AppRoutes.server);
-                            },
+          // Soft colour wash behind the logo (no busy illustration).
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 340,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [cs.primary.withValues(alpha: 0.14), cs.surface.withValues(alpha: 0)]),
+              ),
+            ),
+          ),
+          // Content sits in the middle of the screen; with the keyboard open the
+          // page shrinks and it scrolls up so the field stays visible.
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, box) => SingleChildScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(24, 52, 24, 24),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: (box.maxHeight - 76).clamp(0.0, double.infinity)),
+                  child: Column(
+                    key: const ValueKey('login-body'),
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(22),
+                            boxShadow: [BoxShadow(color: const Color(0xFF0B0A5C).withValues(alpha: 0.28), blurRadius: 26, offset: const Offset(0, 12))],
+                          ),
+                          child: const NxAppLogo(size: 76),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        tr('ยินดีต้อนรับกลับ'),
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        tr('เข้าสู่ระบบ MOAI NEXT ของธุรกิจคุณ'),
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 24),
+                      _ModeSwitch(value: _mode.index, labels: [tr('รหัสผ่าน'), tr('OTP อีเมล'), tr('OTP SMS')], onChanged: _loading ? null : (i) => _setMode(_Mode.values[i])),
+                      if (config.pendingInvite != null) ...[
+                        const SizedBox(height: 14),
+                        Material(
+                          color: cs.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(16),
+                          child: ListTile(
+                            leading: Icon(NxI.envelope, color: cs.primary),
+                            title: Text(tr('คุณได้รับลิงก์เชิญเข้าธุรกิจ')),
+                            subtitle: Text(tr('ยังไม่มีบัญชี แตะเพื่อสมัคร · มีบัญชีแล้ว เข้าสู่ระบบเพื่อเข้าร่วม')),
+                            onTap: _loading ? null : _openRegister,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      TextField(
+                        key: const ValueKey('login-id'),
+                        controller: _id,
+                        enabled: !_loading && !(otp && _otpSent),
+                        keyboardType: sms ? TextInputType.phone : TextInputType.emailAddress,
+                        autocorrect: false,
+                        autofillHints: sms ? const [AutofillHints.telephoneNumber] : const [AutofillHints.username, AutofillHints.email],
+                        decoration:
+                            field(switch (_mode) {
+                              _Mode.password => 'อีเมลหรือชื่อผู้ใช้',
+                              _Mode.otpEmail => 'อีเมล',
+                              _Mode.otpSms => 'เบอร์มือถือ',
+                            }, sms ? NxI.phone : NxI.envelope).copyWith(
+                              // Saved accounts live behind one small button instead of a row of chips.
+                              suffixIcon: config.recentAccounts.isEmpty || sms || (otp && _otpSent)
+                                  ? null
+                                  : IconButton(
+                                      key: const ValueKey('login-recent'),
+                                      tooltip: tr('บัญชีที่เคยใช้'),
+                                      icon: const Icon(NxI.users, size: 20),
+                                      onPressed: _loading ? null : () => _pickRecent(config),
+                                    ),
+                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        child: !otp
+                            ? TextField(
+                                key: const ValueKey('login-password'),
+                                controller: _password,
+                                enabled: !_loading,
+                                obscureText: _obscure,
+                                autofillHints: const [AutofillHints.password],
+                                onSubmitted: (_) => _loading ? null : _primary(),
+                                decoration: field('รหัสผ่าน', NxI.password).copyWith(
+                                  suffixIcon: IconButton(
+                                    tooltip: trn(_obscure ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน'),
+                                    icon: Icon(_obscure ? NxI.eye : NxI.eyeOff, size: 20),
+                                    onPressed: () => setState(() => _obscure = !_obscure),
+                                  ),
+                                ),
+                              )
+                            : _otpSent
+                            ? TextField(
+                                controller: _code,
+                                enabled: !_loading,
+                                autofocus: true,
+                                keyboardType: TextInputType.number,
+                                maxLength: 6,
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 10, fontWeight: FontWeight.w700),
+                                autofillHints: const [AutofillHints.oneTimeCode],
+                                onSubmitted: (_) => _loading ? null : _primary(),
+                                decoration: field('รหัส OTP 6 หลัก', NxI.shieldCheck).copyWith(counterText: ''),
+                              )
+                            : const SizedBox(width: double.infinity),
+                      ),
+                      if (!otp)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(onPressed: _loading ? null : _forgot, child: Text(tr('ลืมรหัสผ่าน?'))),
+                        ),
+                      if (otp && _otpSent)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            TextButton(onPressed: _loading ? null : () => setState(() => _otpSent = false), child: Text(tr(sms ? 'เปลี่ยนเบอร์' : 'เปลี่ยนอีเมล'))),
+                            TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () {
+                                      setState(() => _otpSent = false);
+                                      _primary();
+                                    },
+                              child: Text(tr('ส่งรหัสอีกครั้ง')),
+                            ),
+                          ],
+                        ),
+                      if (config.authLinkBusy)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                              const SizedBox(width: 10),
+                              Text(tr('กำลังเข้าสู่ระบบด้วย LINE…')),
+                            ],
+                          ),
+                        ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        child: err == null
+                            ? const SizedBox(width: double.infinity)
+                            : Container(
+                                key: const ValueKey('login-error'),
+                                margin: const EdgeInsets.only(top: 8, bottom: 4),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(14)),
+                                child: Row(
+                                  children: [
+                                    Icon(NxI.warningCircle, color: cs.onErrorContainer, size: 20),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(tr(err), style: TextStyle(color: cs.onErrorContainer)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                      ),
+                      SizedBox(height: otp && !_otpSent ? 4 : 12),
+                      NxHeroCta(label: primaryLabel, busy: _loading, onPressed: _loading ? null : _primary),
+                      if (_social.line || _social.google) ...[
+                        const SizedBox(height: 22),
+                        Row(
+                          children: [
+                            Expanded(child: Divider(color: cs.outlineVariant.withValues(alpha: 0.6))),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text(tr('หรือ'), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                            ),
+                            Expanded(child: Divider(color: cs.outlineVariant.withValues(alpha: 0.6))),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            if (_social.google)
+                              Expanded(
+                                child: _SocialButton(
+                                  label: 'Google',
+                                  background: cs.surface,
+                                  foreground: cs.onSurface,
+                                  border: cs.outlineVariant,
+                                  leading: const Icon(NxI.brandGoogle, size: 18, color: Color(0xFF4285F4)),
+                                  onPressed: _loading ? null : _google,
+                                ),
+                              ),
+                            if (_social.line && _social.google) const SizedBox(width: 12),
+                            if (_social.line)
+                              Expanded(
+                                child: _SocialButton(
+                                  label: 'LINE',
+                                  background: const Color(0xFF06C755),
+                                  foreground: Colors.white,
+                                  leading: const Icon(NxI.brandLine, size: 18, color: Colors.white),
+                                  onPressed: _loading ? null : _line,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(tr('ยังไม่มีบัญชี?'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                          TextButton(onPressed: _loading ? null : _openRegister, child: Text(tr('สมัครสมาชิก'))),
+                        ],
+                      ),
+                      if (kDebugMode) TextButton(onPressed: () => nxPush<void>(context, const FieldGalleryScreen()), child: Text(tr('พรีวิว UI Type'))),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Server: small pill pinned top-right, tap to change.
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Material(
+                  color: cs.surface.withValues(alpha: 0.7),
+                  shape: StadiumBorder(side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6))),
+                  child: InkWell(
+                    key: const ValueKey('login-server'),
+                    customBorder: const StadiumBorder(),
+                    onTap: _loading
+                        ? null
+                        : () async {
+                            await config.resetServerChoice();
+                            if (context.mounted) context.go(AppRoutes.server);
+                          },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(NxI.globe, size: 15, color: cs.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 200),
+                            child: Text(serverLabel(config.apiBaseUrl), overflow: TextOverflow.ellipsis, style: theme.textTheme.labelMedium),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(NxI.caretDown, size: 14, color: cs.onSurfaceVariant),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 4, 22, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(tr('ยินดีต้อนรับกลับ'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                Text(tr('เข้าสู่ระบบ MOAI NEXT ของธุรกิจคุณ'),
-                    textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-                const SizedBox(height: 20),
-                SegmentedButton<_Mode>(
-                  segments: [
-                    ButtonSegment(value: _Mode.password, label: Text(tr('รหัสผ่าน'))),
-                    ButtonSegment(value: _Mode.otpEmail, label: Text(tr('OTP อีเมล'))),
-                    ButtonSegment(value: _Mode.otpSms, label: Text(tr('OTP SMS'))),
-                  ],
-                  selected: {_mode},
-                  showSelectedIcon: false,
-                  onSelectionChanged: _loading ? null : (v) => _setMode(v.first),
-                ),
-                if (config.pendingInvite != null) ...[
-                  const SizedBox(height: 14),
-                  Material(
-                    color: cs.primary.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(14),
-                    child: ListTile(
-                      leading: Icon(NxI.envelope, color: cs.primary),
-                      title: Text(tr('คุณได้รับลิงก์เชิญเข้าธุรกิจ')),
-                      subtitle: Text(tr('ยังไม่มีบัญชี แตะเพื่อสมัคร · มีบัญชีแล้ว เข้าสู่ระบบเพื่อเข้าร่วม')),
-                      onTap: _loading ? null : _openRegister,
-                    ),
-                  ),
-                ],
-                if (config.recentAccounts.isNotEmpty && _mode != _Mode.otpSms) ...[
-                  const SizedBox(height: 14),
-                  Text(tr('บัญชีที่เคยใช้'), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      for (final a in config.recentAccounts)
-                        InputChip(
-                          avatar: CircleAvatar(
-                            child: Text(tr((a.name.isNotEmpty ? a.name : a.loginId).characters.first.toUpperCase())),
-                          ),
-                          label: Text(tr(a.name.isNotEmpty ? a.name : a.loginId), overflow: TextOverflow.ellipsis),
-                          tooltip: trn(a.loginId),
-                          selected: _id.text.trim().toLowerCase() == a.loginId.toLowerCase(),
-                          showCheckmark: false,
-                          onPressed: _loading || (otp && _otpSent) ? null : () => setState(() => _id.text = a.loginId),
-                          onDeleted: _loading ? null : () => config.forgetRecentAccount(a),
-                          deleteButtonTooltipMessage: 'ลบออกจากเครื่องนี้',
-                        ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _id,
-                  enabled: !_loading && !(otp && _otpSent),
-                  keyboardType: sms ? TextInputType.phone : TextInputType.emailAddress,
-                  autocorrect: false,
-                  autofillHints: sms ? const [AutofillHints.telephoneNumber] : const [AutofillHints.username, AutofillHints.email],
-                  decoration: _dec(
-                    switch (_mode) { _Mode.password => 'อีเมลหรือชื่อผู้ใช้', _Mode.otpEmail => 'อีเมล', _Mode.otpSms => 'เบอร์มือถือ' },
-                    sms ? NxI.phone : NxI.envelope,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (!otp)
-                  TextField(
-                    controller: _password,
-                    enabled: !_loading,
-                    obscureText: _obscure,
-                    autofillHints: const [AutofillHints.password],
-                    onSubmitted: (_) => _loading ? null : _primary(),
-                    decoration: _dec('รหัสผ่าน', NxI.password).copyWith(
-                      suffixIcon: IconButton(
-                        tooltip: trn(_obscure ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน'),
-                        icon: Icon(_obscure ? NxI.eye : NxI.eyeOff),
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                      ),
-                    ),
-                  )
-                else if (_otpSent)
-                  TextField(
-                    controller: _code,
-                    enabled: !_loading,
-                    autofocus: true,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 10, fontWeight: FontWeight.w700),
-                    autofillHints: const [AutofillHints.oneTimeCode],
-                    onSubmitted: (_) => _loading ? null : _primary(),
-                    decoration: _dec('รหัส OTP 6 หลัก', NxI.shieldCheck).copyWith(counterText: ''),
-                  ),
-                if (!otp)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(onPressed: _loading ? null : _forgot, child: Text(tr('ลืมรหัสผ่าน?'))),
-                  ),
-                if (otp && _otpSent)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      TextButton(
-                        onPressed: _loading ? null : () => setState(() => _otpSent = false),
-                        child: Text(tr(sms ? 'เปลี่ยนเบอร์' : 'เปลี่ยนอีเมล')),
-                      ),
-                      TextButton(
-                        onPressed: _loading
-                            ? null
-                            : () {
-                                setState(() => _otpSent = false);
-                                _primary();
-                              },
-                        child: Text(tr('ส่งรหัสอีกครั้ง')),
-                      ),
-                    ],
-                  ),
-                if (config.authLinkBusy)
-                  Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-                      SizedBox(width: 10),
-                      Text(tr('กำลังเข้าสู่ระบบด้วย LINE…')),
-                    ]),
-                  ),
-                if ((_error ?? config.authLinkError) != null)
-                  Container(
-                    margin: const EdgeInsets.only(top: 8, bottom: 4),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(14)),
-                    child: Row(
-                      children: [
-                        Icon(NxI.warningCircle, color: cs.onErrorContainer, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(tr((_error ?? config.authLinkError)!), style: TextStyle(color: cs.onErrorContainer))),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 12),
-                NxHeroCta(label: primaryLabel, busy: _loading, onPressed: _loading ? null : _primary),
-                if (_social.line || _social.google) ...[
-                  const SizedBox(height: 22),
-                  Row(
-                    children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(tr('หรือเข้าสู่ระบบด้วย'), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                      ),
-                      const Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      if (_social.line)
-                        Expanded(
-                          child: _SocialButton(
-                            label: 'LINE',
-                            background: const Color(0xFF06C755),
-                            foreground: Colors.white,
-                            icon: NxI.chatCircle,
-                            onPressed: _loading ? null : _line,
-                          ),
-                        ),
-                      if (_social.line && _social.google) const SizedBox(width: 12),
-                      if (_social.google)
-                        Expanded(
-                          child: _SocialButton(
-                            label: 'Google',
-                            background: cs.surface,
-                            foreground: cs.onSurface,
-                            border: cs.outlineVariant,
-                            leading: Text(tr('G'), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: Color(0xFF4285F4))),
-                            onPressed: _loading ? null : _google,
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(tr('ยังไม่มีบัญชี?'), style: theme.textTheme.bodyMedium),
-                    TextButton(
-                      onPressed: _loading ? null : _openRegister,
-                      child: Text(tr('สมัครสมาชิก')),
-                    ),
-                  ],
-                ),
-                if (kDebugMode)
-                  TextButton(
-                    onPressed: () => nxPush<void>(context, const FieldGalleryScreen()),
-                    child: Text(tr('พรีวิว UI Type')),
-                  ),
-              ],
             ),
           ),
         ],
       ),
     );
   }
+
+  /// Saved accounts on this device: pick one, or remove it.
+  Future<void> _pickRecent(AppConfig config) async {
+    final theme = Theme.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListenableBuilder(
+          listenable: config,
+          builder: (ctx, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(tr('บัญชีที่เคยใช้'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              ),
+              for (final a in config.recentAccounts)
+                ListTile(
+                  leading: CircleAvatar(child: Text((a.name.isNotEmpty ? a.name : a.loginId).characters.first.toUpperCase())),
+                  title: Text(a.name.isNotEmpty ? a.name : a.loginId),
+                  subtitle: a.name.isNotEmpty ? Text(a.loginId) : null,
+                  trailing: IconButton(tooltip: tr('ลบออกจากเครื่องนี้'), icon: const Icon(NxI.x, size: 18), onPressed: () => config.forgetRecentAccount(a)),
+                  onTap: () {
+                    setState(() => _id.text = a.loginId);
+                    Navigator.pop(ctx);
+                  },
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pill switch with a sliding highlight (password / email OTP / SMS OTP).
+class _ModeSwitch extends StatelessWidget {
+  const _ModeSwitch({required this.value, required this.labels, required this.onChanged});
+  final int value;
+  final List<String> labels;
+  final ValueChanged<int>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(22)),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final w = box.maxWidth / labels.length;
+          return Stack(
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                left: w * value,
+                top: 0,
+                bottom: 0,
+                width: w,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))],
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  for (var i = 0; i < labels.length; i++)
+                    Expanded(
+                      child: InkWell(
+                        key: ValueKey('login-mode-$i'),
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: onChanged == null || i == value ? null : () => onChanged!(i),
+                        child: Center(
+                          child: AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 200),
+                            style: (theme.textTheme.labelLarge ?? const TextStyle()).copyWith(
+                              fontWeight: i == value ? FontWeight.w800 : FontWeight.w500,
+                              color: i == value ? cs.primary : cs.onSurfaceVariant,
+                            ),
+                            child: Text(labels[i]),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _SocialButton extends StatelessWidget {
-  const _SocialButton({
-    required this.label,
-    required this.background,
-    required this.foreground,
-    this.border,
-    this.icon,
-    this.leading,
-    this.onPressed,
-  });
+  const _SocialButton({required this.label, required this.background, required this.foreground, this.border, this.leading, this.onPressed});
 
   final String label;
   final Color background;
   final Color foreground;
   final Color? border;
-  final IconData? icon;
   final Widget? leading;
   final VoidCallback? onPressed;
 
@@ -499,7 +634,7 @@ class _SocialButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            leading ?? Icon(icon, size: 20),
+            ?leading,
             const SizedBox(width: 8),
             Text(tr(label), style: const TextStyle(fontWeight: FontWeight.w700)),
           ],

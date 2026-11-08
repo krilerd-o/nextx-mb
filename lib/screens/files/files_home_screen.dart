@@ -15,6 +15,8 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_overlay_panel.dart';
+import '../../widgets/nx_refresh.dart';
 
 String formatBytes(dynamic raw) {
   final n = num.tryParse(raw?.toString() ?? '');
@@ -133,10 +135,10 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
   }
 
   Future<void> _addMenu() async {
-    final choice = await showModalBottomSheet<String>(
+    final choice = await showNxBlurPanel<String>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -214,14 +216,18 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
 
   Future<void> _itemMenu(Map<String, dynamic> item, {required bool folder}) async {
     final name = (folder ? item['name'] : item['file_name'])?.toString() ?? '';
-    final action = await showModalBottomSheet<String>(
+    // Grows out of the ⋯ button (see showNxBlurPanel), not a sheet.
+    final action = await showNxBlurPanel<String>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(title: Text(tr(name), style: Theme.of(ctx).textTheme.titleMedium)),
+            ListTile(
+              dense: true,
+              title: Text(tr(name), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(ctx).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            ),
             if (!folder) ...[
               ListTile(leading: const Icon(NxI.arrowSquareOut), title: Text(tr('เปิด')), onTap: () => Navigator.pop(ctx, 'open')),
               ListTile(leading: const Icon(NxI.shareNetwork), title: Text(tr('แชร์')), onTap: () => Navigator.pop(ctx, 'share')),
@@ -376,7 +382,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
               child: ListTile(
                 leading: CircleAvatar(backgroundColor: cs.primaryContainer, child: Icon(NxI.folder, color: cs.onPrimaryContainer)),
                 title: Text(tr(f['name']?.toString() ?? '')),
-                trailing: IconButton(icon: const Icon(NxI.dotsThreeVertical), onPressed: () => _itemMenu(f, folder: true)),
+                trailing: Builder(builder: (bc) => IconButton(icon: const Icon(NxI.dotsThreeVertical), onPressed: NxTapTracker.from(bc, () => _itemMenu(f, folder: true)))),
                 onTap: () => _goTo(f['id']?.toString()),
                 onLongPress: () => _itemMenu(f, folder: true),
               ),
@@ -397,7 +403,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
                       .where((e) => e.isNotEmpty)
                       .join(' · ')),
                 ),
-                trailing: IconButton(icon: const Icon(NxI.dotsThreeVertical), onPressed: () => _itemMenu(f, folder: false)),
+                trailing: Builder(builder: (bc) => IconButton(icon: const Icon(NxI.dotsThreeVertical), onPressed: NxTapTracker.from(bc, () => _itemMenu(f, folder: false)))),
                 onTap: () => _openFile(f),
                 onLongPress: () => _itemMenu(f, folder: false),
               ),
@@ -418,7 +424,6 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         header: NxAppHeader(
           title: _breadcrumb.isEmpty ? 'ไฟล์' : (_breadcrumb.last['name']?.toString() ?? 'ไฟล์'),
           actions: [
-            IconButton(onPressed: _load, icon: const Icon(NxI.arrowCounterClockwise)),
             if (NxBreakpoint.of(context).twoPane) NxAddButton(tooltip: tr('เพิ่ม'), onPressed: _busy ? () {} : _addMenu),
           ],
         ),
@@ -426,7 +431,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         body: Column(
           children: [
             if (_busy) const LinearProgressIndicator(minHeight: 2),
-            Expanded(child: RefreshIndicator(onRefresh: _load, child: body)),
+            Expanded(child: NxRefresh(onRefresh: _load, child: body)),
           ],
         ),
       ),

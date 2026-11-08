@@ -21,7 +21,13 @@ import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_streaming_text.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../core/nx_page_route.dart';
+import 'home_layout_editor.dart';
+import '../../core/home_layout.dart';
 import '../../core/recent_records.dart';
+import '../../widgets/nx_refresh.dart';
+import 'home_birthday_box.dart';
+import '../hr/attendance_punch_sheet.dart';
 
 /// Thai greeting for the hour of day.
 String greetingFor(DateTime now) {
@@ -99,9 +105,94 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
     super.initState();
     _load();
     RecentRecords.instance.load(context.read<AppConfig>().prefsScope);
+    HomeLayout.instance.load(context.read<AppConfig>().prefsScope);
+    HomeLayout.instance.addListener(_onLayout);
   }
 
+  void _onLayout() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    HomeLayout.instance.removeListener(_onLayout);
+    super.dispose();
+  }
+
+  Future<void> _openHomeEditor() async {
+    await nxPush<bool>(context, const HomeLayoutEditorScreen(), root: true);
+  }
+
+  /// Overdue appointments (same query as Calendar → ค้าง), newest-due first.
+  List<Map<String, dynamic>> _overdue = const [];
+  bool _pendingLoaded = false;
+  int _overdueTotal = 0;
+
+  Future<void> _loadOverdue() async {
+    final config = context.read<AppConfig>();
+    if (!MenuAccess.any(config.session, const [MenuAccess.calendar, MenuAccess.pending])) {
+      // Workspace-only users still get the (empty or task-only) box.
+      if (MenuAccess.allow(config.session, MenuAccess.workspace) && mounted) setState(() => _pendingLoaded = true);
+      return;
+    }
+    try {
+      final page = await config.apiClient.getEntityList('activity', limit: 10, extra: const {
+        'overdue': '1',
+        'sort': 'date_start',
+        'order': 'asc',
+        'cols': 'id,subject,date_start,date_end,status,activitytype,location,account_name,contact_name,smownerid',
+        'with_total': '1',
+      });
+      if (!mounted) return;
+      setState(() {
+        _overdue = page.items;
+        _overdueTotal = page.total ?? page.items.length;
+        _pendingLoaded = true;
+      });
+    } catch (_) {}
+  }
+
+  /// Pending work in one list: overdue activities + open Workspace tasks,
+  /// most overdue first.
+  List<_PendingItem> _pendingItems() {
+    final now = thaiNow();
+    final out = <_PendingItem>[
+      for (final a in _overdue)
+        _PendingItem(
+          kind: 'activity',
+          title: '${a['subject'] ?? entityTitle(a, module: 'activity')}',
+          detail: [a['account_name'], a['contact_name'], a['location']]
+              .where((e) => e != null && '$e'.isNotEmpty)
+              .join(' · '),
+          due: parseWall(a['date_start']),
+          route: a['id'] == null ? null : AppRoutes.activity('${a['id']}'),
+        ),
+      for (final t in _workItems())
+        _PendingItem(
+          kind: 'task',
+          title: '${t['title'] ?? '—'}',
+          detail: [
+            if ('${t['board_code'] ?? ''}'.isNotEmpty) '${t['board_code']}-${t['item_no'] ?? ''}',
+            '${t['status_label_th'] ?? t['status_name'] ?? ''}',
+          ].where((e) => e.isNotEmpty).join(' · '),
+          due: parseThai(t['due_at']),
+          route: t['board_id'] == null || t['id'] == null ? null : AppRoutes.task('${t['board_id']}', '${t['id']}'),
+        ),
+    ];
+    out.sort((a, b) {
+      final ad = a.due ?? now.add(const Duration(days: 3650));
+      final bd = b.due ?? now.add(const Duration(days: 3650));
+      return ad.compareTo(bd);
+    });
+    return out;
+  }
+
+  int _pendingTotal() => _overdueTotal + _workItems().length;
+
+  int _revision = 0; // bumps on pull-to-refresh → boxes with their own data reload
+
   Future<void> _load() async {
+    _revision++;
     final had = _summary != null || _attendance != null || _work != null;
     setState(() {
       _loading = !had;
@@ -152,6 +243,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       _loading = false;
       _refreshing = false;
     });
+    _loadOverdue();
     _loadSparks();
   }
 
@@ -168,19 +260,24 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       if (!MenuAccess.allow(session, EntityModules.menuKeyOf(module))) continue;
       try {
         // One tiny COUNT per day (limit 1 + with_total) — cheap even on huge tables.
-        String ymd(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+        String ymd(DateTime d) =>
+            '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
         final days = await Future.wait([
           for (var i = 6; i >= 0; i--)
             () async {
               final d = ymd(t0.subtract(Duration(days: i)));
-              final page = await api.getEntityList(module, limit: 1, extra: {
-                'period_field': 'createdtime',
-                'period_preset': 'custom',
-                'period_start': d,
-                'period_end': d,
-                'with_total': '1',
-                'cols': 'id',
-              });
+              final page = await api.getEntityList(
+                module,
+                limit: 1,
+                extra: {
+                  'period_field': 'createdtime',
+                  'period_preset': 'custom',
+                  'period_start': d,
+                  'period_end': d,
+                  'with_total': '1',
+                  'cols': 'id',
+                },
+              );
               return page.total ?? page.items.length;
             }(),
         ]);
@@ -205,7 +302,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
     final all = extractMapList(_summary?['activities']);
     return all
         .where((a) {
-          final d = DateTime.tryParse(a['date_start']?.toString() ?? '');
+          final d = parseWall(a['date_start']);
           return d == null || d.isAfter(now);
         })
         .take(4)
@@ -288,10 +385,12 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       insetBody: false,
       header: NxAppHeader.hub(
         actions: [
+          // Search everything (customers, documents, tasks, chat, mail, menus).
           IconButton(
-            icon: const Icon(NxI.arrowCounterClockwise),
-            tooltip: tr('รีเฟรช'),
-            onPressed: _load,
+            key: const ValueKey('home-search'),
+            tooltip: tr('ค้นหาทุกอย่าง'),
+            icon: const Icon(NxI.magnifyingGlass),
+            onPressed: () => context.push(AppRoutes.globalSearch),
           ),
         ],
       ),
@@ -301,6 +400,161 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
             // +12: greeting starts clear of the header's blur tail.
             top: pad.top + 12 + NxScrollScaffold.topInset(context),
           );
+          final sections = <String, List<Widget>>{
+            'today': [
+              const SizedBox(height: 12),
+              _TodayCard(
+                showAttendance: MenuAccess.allow(
+                  session,
+                  MenuAccess.attendance,
+                ),
+                clockIn: clockIn,
+                clockOut: clockOut,
+                onPunch: (inn) async {
+                  final r = await showAttendancePunchSheet(context, clockIn: inn, clockedInAt: parseThai(clockIn));
+                  if (r != null && mounted) _load();
+                },
+                next: _upcoming().isEmpty ? null : _upcoming().first,
+                overdue: _count(counts, 'overdue'),
+                today: _count(counts, 'today'),
+                upcoming: _count(counts, 'upcoming'),
+                hasWork: counts != null,
+              ),
+            ],
+            'pending': [
+              if (_pendingItems().isNotEmpty) ...[
+                const SizedBox(height: 20),
+                _PendingBox(items: _pendingItems(), total: _pendingTotal()),
+              ] else if (_pendingLoaded) ...[
+                const SizedBox(height: 20),
+                const _NoPending(),
+              ],
+            ],
+            'birthdays': [HomeBirthdayBox(revision: _revision)],
+            'ai': [
+              if (MenuAccess.allow(session, MenuAccess.ai)) ...[
+                const SizedBox(height: 12),
+                _AiBriefCard(text: _brief(counts, clockIn)),
+              ],
+            ],
+            'quick': [
+              if (quick.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                _QuickGrid(actions: quick),
+              ],
+            ],
+            'work': [
+              if (counts != null && _workItems().isNotEmpty) ...[
+                const SizedBox(height: 24),
+                _SectionTitle(
+                  'งานของฉัน',
+                  action: 'ทั้งหมด',
+                  onAction: () => context.push(AppRoutes.workspaceHome),
+                ),
+                for (final it in _workItems()) _WorkRow(item: it),
+              ],
+            ],
+            'upcoming': [
+              if (_upcoming().length > 1) ...[
+                const SizedBox(height: 24),
+                _SectionTitle(
+                  'กิจกรรมถัดไป',
+                  action: 'ปฏิทิน',
+                  onAction: () => context.push(AppRoutes.calendar),
+                ),
+                for (final a in _upcoming().skip(1))
+                  _ListRow(
+                    icon: NxI.calendarBlank,
+                    title:
+                        a['subject']?.toString() ??
+                        entityTitle(a, module: 'activity'),
+                    subtitle: [
+                      _hhmm(a['date_start']),
+                      a['location']?.toString() ?? '',
+                    ].where((e) => e.isNotEmpty).join(' · '),
+                    onTap: a['id'] == null
+                        ? null
+                        : () => context.push(
+                            AppRoutes.activity(a['id'].toString()),
+                          ),
+                  ),
+              ],
+            ],
+            'recent': [
+              // Records opened lately on this device (per user).
+              ValueListenableBuilder<List<Map<String, String>>>(
+                valueListenable: RecentRecords.instance.items,
+                builder: (context, recent, _) {
+                  final allowed = [
+                    for (final r in recent)
+                      if (MenuAccess.allow(
+                        session,
+                        EntityModules.menuKeyOf(r['module'] ?? ''),
+                      ))
+                        r,
+                  ].take(5).toList();
+                  if (allowed.isEmpty) return const SizedBox.shrink();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 24),
+                      const _SectionTitle('เปิดล่าสุด'),
+                      for (final r in allowed)
+                        _ListRow(
+                          icon: NxI.clockCounterClockwise,
+                          title: r['title'] ?? '',
+                          subtitle: EntityModules.titleOf(r['module'] ?? ''),
+                          onTap: () => context.push(
+                            r['module'] == 'activity'
+                                ? AppRoutes.activity(r['id'] ?? '')
+                                : AppRoutes.crmRecord(
+                                    r['module'] ?? '',
+                                    r['id'] ?? '',
+                                  ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ],
+            'stats': [
+              if (statTiles.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const _SectionTitle('ภาพรวม'),
+                _StatGrid(
+                  children: [
+                    for (final (module, icon, n) in statTiles)
+                      _StatCard(
+                        label: EntityModules.titleOf(module),
+                        value: n,
+                        icon: icon,
+                        spark: _sparks[module],
+                        onTap: () => context.push(
+                          EntityModules.isFsm(module)
+                              ? AppRoutes.fsmModule(module)
+                              : AppRoutes.crmModule(module),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+            'sales': [
+              if (salesFigures(_sales).isNotEmpty ||
+                  caseFigures(_cases).isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const _SectionTitle('ยอดขายและเคส'),
+                TeamOverviewCard(
+                  sales: _sales,
+                  cases: _cases,
+                  onOpenSales: () => context.push(AppRoutes.crmModule('deal')),
+                  onOpenCases: () => context.push(AppRoutes.crmModule('case')),
+                ),
+              ],
+              const SizedBox(height: 24),
+            ],
+          };
           return Stack(
             children: [
               const Positioned(
@@ -321,7 +575,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                             padding: listPad,
                             children: const [NxSkeletonKpiGrid()],
                           )
-                        : RefreshIndicator(
+                        : NxRefresh(
                             edgeOffset: NxScrollScaffold.topInset(context),
                             color: cs.primary,
                             onRefresh: _load,
@@ -386,137 +640,19 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                                     ),
                                   ),
                                 ],
-                                const SizedBox(height: 16),
-                                _TodayCard(
-                                  showAttendance: MenuAccess.allow(
-                                    session,
-                                    MenuAccess.attendance,
+                                const SizedBox(height: 4),
+                                // Sections in the user's order (Home → ปรับแต่งหน้าหลัก).
+                                for (final key
+                                    in HomeLayout.instance.visibleOrder)
+                                  ...?sections[key],
+                                const SizedBox(height: 20),
+                                Center(
+                                  child: TextButton.icon(
+                                    onPressed: _openHomeEditor,
+                                    icon: const Icon(NxI.squaresFour, size: 18),
+                                    label: Text(tr('ปรับแต่งหน้าหลัก')),
                                   ),
-                                  clockIn: clockIn,
-                                  clockOut: clockOut,
-                                  next: _upcoming().isEmpty
-                                      ? null
-                                      : _upcoming().first,
-                                  overdue: _count(counts, 'overdue'),
-                                  today: _count(counts, 'today'),
-                                  upcoming: _count(counts, 'upcoming'),
-                                  hasWork: counts != null,
                                 ),
-                                if (MenuAccess.allow(
-                                  session,
-                                  MenuAccess.ai,
-                                )) ...[
-                                  const SizedBox(height: 12),
-                                  _AiBriefCard(text: _brief(counts, clockIn)),
-                                ],
-                                if (quick.isNotEmpty) ...[
-                                  const SizedBox(height: 20),
-                                  _QuickGrid(actions: quick),
-                                ],
-                                if (counts != null &&
-                                    _workItems().isNotEmpty) ...[
-                                  const SizedBox(height: 24),
-                                  _SectionTitle(
-                                    'งานของฉัน',
-                                    action: 'ทั้งหมด',
-                                    onAction: () =>
-                                        context.push(AppRoutes.workspaceHome),
-                                  ),
-                                  for (final it in _workItems())
-                                    _WorkRow(item: it),
-                                ],
-                                if (_upcoming().length > 1) ...[
-                                  const SizedBox(height: 24),
-                                  _SectionTitle(
-                                    'กิจกรรมถัดไป',
-                                    action: 'ปฏิทิน',
-                                    onAction: () =>
-                                        context.push(AppRoutes.calendar),
-                                  ),
-                                  for (final a in _upcoming().skip(1))
-                                    _ListRow(
-                                      icon: NxI.calendarBlank,
-                                      title:
-                                          a['subject']?.toString() ??
-                                          entityTitle(a, module: 'activity'),
-                                      subtitle: [
-                                        _hhmm(a['date_start']),
-                                        a['location']?.toString() ?? '',
-                                      ].where((e) => e.isNotEmpty).join(' · '),
-                                      onTap: a['id'] == null
-                                          ? null
-                                          : () => context.push(
-                                              AppRoutes.activity(
-                                                a['id'].toString(),
-                                              ),
-                                            ),
-                                    ),
-                                ],
-                                // Records opened lately on this device (per user).
-                                ValueListenableBuilder<List<Map<String, String>>>(
-                                  valueListenable: RecentRecords.instance.items,
-                                  builder: (context, recent, _) {
-                                    final allowed = [
-                                      for (final r in recent)
-                                        if (MenuAccess.allow(session, EntityModules.menuKeyOf(r['module'] ?? ''))) r,
-                                    ].take(5).toList();
-                                    if (allowed.isEmpty) return const SizedBox.shrink();
-                                    return Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        const SizedBox(height: 24),
-                                        const _SectionTitle('เปิดล่าสุด'),
-                                        for (final r in allowed)
-                                          _ListRow(
-                                            icon: NxI.clockCounterClockwise,
-                                            title: r['title'] ?? '',
-                                            subtitle: EntityModules.titleOf(r['module'] ?? ''),
-                                            onTap: () => context.push(
-                                              r['module'] == 'activity'
-                                                  ? AppRoutes.activity(r['id'] ?? '')
-                                                  : AppRoutes.crmRecord(r['module'] ?? '', r['id'] ?? ''),
-                                            ),
-                                          ),
-                                      ],
-                                    );
-                                  },
-                                ),
-                                if (statTiles.isNotEmpty) ...[
-                                  const SizedBox(height: 24),
-                                  const _SectionTitle('ภาพรวม'),
-                                  _StatGrid(
-                                    children: [
-                                      for (final (module, icon, n) in statTiles)
-                                        _StatCard(
-                                          label: EntityModules.titleOf(module),
-                                          value: n,
-                                          icon: icon,
-                                          spark: _sparks[module],
-                                          onTap: () => context.push(
-                                            EntityModules.isFsm(module)
-                                                ? AppRoutes.fsmModule(module)
-                                                : AppRoutes.crmModule(module),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ],
-                                if (salesFigures(_sales).isNotEmpty ||
-                                    caseFigures(_cases).isNotEmpty) ...[
-                                  const SizedBox(height: 24),
-                                  const _SectionTitle('ยอดขายและเคส'),
-                                  TeamOverviewCard(
-                                    sales: _sales,
-                                    cases: _cases,
-                                    onOpenSales: () => context.push(
-                                      AppRoutes.crmModule('deal'),
-                                    ),
-                                    onOpenCases: () => context.push(
-                                      AppRoutes.crmModule('case'),
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 24),
                               ],
                             ),
                           ),
@@ -599,7 +735,11 @@ class _TodayCard extends StatelessWidget {
     required this.today,
     required this.upcoming,
     required this.hasWork,
+    this.onPunch,
   });
+
+  /// Opens the clock in / out window (true = clock in).
+  final void Function(bool clockIn)? onPunch;
 
   final bool showAttendance;
   final dynamic clockIn;
@@ -633,7 +773,7 @@ class _TodayCard extends StatelessWidget {
       rows.add(
         Row(
           children: [
-            _dot(cs.primary, NxI.clock, cs),
+            clockIn == null ? _dot(cs.primary, NxI.clock, cs) : _dot(const Color(0xFF16A34A), NxI.checkCircle, cs),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -662,7 +802,8 @@ class _TodayCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 18),
                 minimumSize: const Size(0, 40),
               ),
-              onPressed: () => context.push(AppRoutes.attendance),
+              key: const ValueKey('home-punch'),
+              onPressed: () => clockOut != null || onPunch == null ? context.push(AppRoutes.attendance) : onPunch!(clockIn == null),
               child: Text(tr(cta)),
             ),
           ],
@@ -693,8 +834,10 @@ class _TodayCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      tr(n['subject']?.toString() ??
-                          entityTitle(n, module: 'activity')),
+                      tr(
+                        n['subject']?.toString() ??
+                            entityTitle(n, module: 'activity'),
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall?.copyWith(
@@ -863,16 +1006,31 @@ class _QuickGrid extends StatelessWidget {
                           width: 54,
                           height: 54,
                           decoration: BoxDecoration(
-                            color: a.colorIn(cs).withValues(alpha: theme.brightness == Brightness.dark ? 0.22 : 0.12),
+                            color: a
+                                .colorIn(cs)
+                                .withValues(
+                                  alpha: theme.brightness == Brightness.dark
+                                      ? 0.22
+                                      : 0.12,
+                                ),
                             borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: a.colorIn(cs).withValues(alpha: 0.18)),
+                            border: Border.all(
+                              color: a.colorIn(cs).withValues(alpha: 0.18),
+                            ),
                           ),
-                          child: Icon(a.boldIcon, size: 24, color: a.colorIn(cs)),
+                          child: Icon(
+                            a.boldIcon,
+                            size: 24,
+                            color: a.colorIn(cs),
+                          ),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           tr(a.label),
-                          style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w500),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: cs.onSurface,
+                            fontWeight: FontWeight.w500,
+                          ),
                           textAlign: TextAlign.center,
                           maxLines: 1,
                         ),
@@ -967,7 +1125,7 @@ class _WorkRow extends StatelessWidget {
         item['status_label_th']?.toString() ??
             item['status_name']?.toString() ??
             '',
-        if (item['due_at'] != null) 'ส่ง ${item['due_at']}',
+        if (item['due_at'] != null) 'ส่ง ${formatThaiField(item['due_at'], 'due_at', dateOnly: true, year: uiYear)}',
       ].where((e) => e.isNotEmpty).join(' · '),
       onTap: board == null || id == null
           ? null
@@ -1112,15 +1270,22 @@ class _StatCard extends StatelessWidget {
                         SizedBox(
                           width: 54,
                           height: 18,
-                          child: CustomPaint(painter: _SparkPainter(spark!, theme.colorScheme.primary)),
+                          child: CustomPaint(
+                            painter: _SparkPainter(
+                              spark!,
+                              theme.colorScheme.primary,
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            tr('+${spark!.fold(0, (a, b) => a + b)} ใน 7 วัน'),
+                            '+${spark!.fold(0, (a, b) => a + b)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
                           ),
                         ),
                       ],
@@ -1135,7 +1300,6 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-
 /// Tiny line chart for a stat tile.
 class _SparkPainter extends CustomPainter {
   _SparkPainter(this.values, this.color);
@@ -1149,7 +1313,10 @@ class _SparkPainter extends CustomPainter {
     final dx = size.width / (values.length - 1);
     final path = Path();
     for (var i = 0; i < values.length; i++) {
-      final p = Offset(i * dx, size.height - 2 - (values[i] / maxV) * (size.height - 4));
+      final p = Offset(
+        i * dx,
+        size.height - 2 - (values[i] / maxV) * (size.height - 4),
+      );
       i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
     }
     final fill = Path.from(path)
@@ -1169,5 +1336,190 @@ class _SparkPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SparkPainter old) => old.values != values || old.color != color;
+  bool shouldRepaint(covariant _SparkPainter old) =>
+      old.values != values || old.color != color;
+}
+
+
+class _PendingItem {
+  const _PendingItem({required this.kind, required this.title, this.detail = '', this.due, this.route});
+  final String kind; // activity | task
+  final String title;
+  final String detail;
+  final DateTime? due;
+  final String? route;
+}
+
+/// "งานค้าง": overdue activities + open Workspace tasks in one card, with a
+/// red/amber rail per item and how late it is.
+class _PendingBox extends StatefulWidget {
+  const _PendingBox({required this.items, required this.total});
+  final List<_PendingItem> items;
+  final int total;
+
+  @override
+  State<_PendingBox> createState() => _PendingBoxState();
+}
+
+class _PendingBoxState extends State<_PendingBox> {
+  String _kind = 'all';
+
+  String _late(DateTime? due) {
+    if (due == null) return tr('ไม่กำหนดส่ง');
+    final now = thaiNow();
+    final d0 = DateTime(now.year, now.month, now.day);
+    final dd = DateTime(due.year, due.month, due.day);
+    final days = d0.difference(dd).inDays;
+    if (days > 0) return tr('เลยกำหนด $days วัน');
+    if (days == 0) return tr('ครบกำหนดวันนี้');
+    return tr('อีก ${-days} วัน');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final acts = widget.items.where((e) => e.kind == 'activity').length;
+    final tasks = widget.items.where((e) => e.kind == 'task').length;
+    final shown = widget.items.where((e) => _kind == 'all' || e.kind == _kind).take(5).toList();
+    final now = thaiNow();
+    Widget chip(String k, String label, int n) => Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: ChoiceChip(
+            label: Text('${tr(label)} $n'),
+            selected: _kind == k,
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => setState(() => _kind = k),
+          ),
+        );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color.alphaBlend(cs.error.withValues(alpha: 0.08), cs.surface), cs.surface],
+        ),
+        border: Border.all(color: cs.error.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(color: cs.error.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+                child: Icon(NxI.warningCircle, size: 19, color: cs.error),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(tr('งานค้าง'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(12)),
+                child: Text('${widget.total}', style: theme.textTheme.labelLarge?.copyWith(color: cs.onError)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              chip('all', 'ทั้งหมด', widget.items.length),
+              if (acts > 0) chip('activity', 'กิจกรรม', acts),
+              if (tasks > 0) chip('task', 'Workspace', tasks),
+            ]),
+          ),
+          const SizedBox(height: 6),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            alignment: Alignment.topCenter,
+            child: Column(
+              children: [
+                for (final it in shown)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: it.route == null ? null : () => context.push(it.route!),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 4,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: it.due != null && it.due!.isBefore(DateTime(now.year, now.month, now.day))
+                                  ? cs.error
+                                  : const Color(0xFFF59E0B),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Icon(it.kind == 'activity' ? NxI.calendarBlank : NxI.kanban, size: 18, color: cs.onSurfaceVariant),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(it.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+                                Text(
+                                  [_late(it.due), if (it.detail.isNotEmpty) it.detail].join(' · '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(NxI.caretRight, size: 16, color: cs.onSurfaceVariant),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (acts > 0)
+                TextButton(onPressed: () => context.push(AppRoutes.calendar), child: Text(tr('กิจกรรมค้างทั้งหมด'))),
+              if (tasks > 0)
+                TextButton(onPressed: () => context.push(AppRoutes.workspaceHome), child: Text(tr('งาน Workspace'))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Empty state of the pending box: nothing overdue.
+class _NoPending extends StatelessWidget {
+  const _NoPending();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const green = Color(0xFF10B981);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: green.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: green.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(NxI.checkCircle, color: green),
+          const SizedBox(width: 10),
+          Expanded(child: Text(tr('ไม่มีงานค้าง — เคลียร์ครบแล้ว'), style: theme.textTheme.titleSmall)),
+        ],
+      ),
+    );
+  }
 }

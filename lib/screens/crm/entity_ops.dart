@@ -1185,6 +1185,7 @@ class _InspectionLinesPanelState extends State<InspectionLinesPanel> {
                     onChanged: (v) => _lines[i]['item_label'] = v,
                   ),
                   DropdownButtonFormField<String>(
+        icon: const Icon(NxI.caretDown, size: 18),
                     value: _inspectionResult(_lines[i]),
                     decoration: InputDecoration(labelText: tr('ผลตรวจ')),
                     items: [
@@ -1480,6 +1481,8 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
 
   Future<void> _schedule(BuildContext context) async {
     final date = await showDatePicker(
+        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       initialDate: thaiNow(),
       firstDate: thaiNow().subtract(const Duration(days: 1)),
@@ -1756,6 +1759,7 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
+        icon: const Icon(NxI.caretDown, size: 18),
                   value: direction,
                   items: [
                     DropdownMenuItem(value: 'debit', child: Text(tr('หัก'))),

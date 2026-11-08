@@ -137,7 +137,7 @@ void main() {
     );
     expect(find.text('ประชุม'), findsOneWidget);
     expect(find.text('อ่านแล้ว'), findsOneWidget);
-    expect(find.byIcon(Icons.circle), findsOneWidget);
+    expect(find.byKey(const ValueKey('mail-unread-dot')), findsOneWidget);
     // Wide test surface → header compose button instead of the FAB.
     expect(find.byTooltip('เขียนเมล'), findsOneWidget);
     expect(adapter.calls.firstWhere((c) => c.path == '/api/mail').queryParameters['box'], 'inbox');

@@ -178,6 +178,7 @@ class CardFieldContext {
     required List<Map<String, dynamic>> fields,
     this.picklists = const {},
     this.users = const {},
+    this.module,
   }) : fields = {
           // Same rule as the record view: hidden / disabled fields never show.
           for (final f in fields)
@@ -189,6 +190,9 @@ class CardFieldContext {
 
   /// user id → display name.
   final Map<String, String> users;
+
+  /// Module, for its wall-clock date fields (see [isWallClockField]).
+  final String? module;
 
   static const metaLabels = {
     'smownerid': ('เจ้าของ', 'Owner'),
@@ -258,7 +262,7 @@ class CardFieldContext {
       return s.split(',').map((id) => users[id.trim()] ?? row['${name}_name']?.toString() ?? id.trim()).join(', ');
     }
     if (isDate(name)) {
-      final d = parseThai(s);
+      final d = parseThaiField(s, name, module: module);
       if (d == null) return s;
       final dd = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${uiYear(d.year)}';
       return type(name) == 'DateTime' && name != 'createdtime' && name != 'modifiedtime'

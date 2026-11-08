@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import 'nx_skeleton.dart';
 import '../core/i18n.dart';
+import 'nx_refresh.dart';
 
 /// Stale-while-revalidate loader — keeps last data while refreshing.
 class NxCachedFuture<T> extends StatefulWidget {
@@ -96,7 +97,7 @@ class NxCachedFutureState<T> extends State<NxCachedFuture<T>> {
         ? (widget.empty ?? Center(child: Text(tr('ไม่มีข้อมูล'))))
         : widget.builder(context, data);
     final refreshable = widget.refresh
-        ? RefreshIndicator(
+        ? NxRefresh(
             color: Theme.of(context).colorScheme.primary,
             notificationPredicate: (n) => n.depth <= 2,
             onRefresh: _fetch,

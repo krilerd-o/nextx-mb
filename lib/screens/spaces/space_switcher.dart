@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,8 @@ import '../../services/unread_service.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_overlay_panel.dart';
+import 'add_space_sheet.dart';
 
 /// Rounded-square Space logo (initials on the Space colour).
 class SpaceAvatar extends StatelessWidget {
@@ -36,11 +39,7 @@ class SpaceAvatar extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(size * 0.24),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [space.color, Color.lerp(space.color, Colors.black, 0.18)!],
-          ),
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [space.color, Color.lerp(space.color, Colors.black, 0.18)!]),
         ),
         child: Text(
           tr(space.initials),
@@ -130,35 +129,45 @@ class _SpaceSheetState extends State<_SpaceSheet> {
     await runSpaceTransition(host, sp, origin, () => config.switchSpace(sp.id));
   }
 
+  /// Opens the "เพิ่ม Space" window over the current screen (no full login page).
   Future<void> _add({String? baseUrl}) async {
-    final config = context.read<AppConfig>();
-    final router = GoRouter.of(widget.hostContext);
+    final host = widget.hostContext;
     Navigator.pop(context);
-    await config.beginAddSpace(baseUrl: baseUrl);
-    router.go(baseUrl == null ? AppRoutes.server : AppRoutes.login);
+    await showAddSpaceSheet(host, baseUrl: baseUrl);
   }
 
   Future<void> _menu(Space sp) async {
-    final pick = await showAppBottomSheet<String>(
+    final pick = await showNxBlurPanel<String>(
       context: context,
-      title: sp.title,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(leading: const Icon(NxI.pencilSimple), title: Text(tr('แก้ไขชื่อ / สี')), onTap: () => Navigator.pop(context, 'edit')),
-          ListTile(
-            leading: const Icon(NxI.copySimple),
-            title: Text(tr('ทำซ้ำ')),
-            subtitle: Text(tr('เพิ่มอีกบัญชีใน ${sp.host}')),
-            onTap: () => Navigator.pop(context, 'dup'),
-          ),
-          ListTile(
-            leading: Icon(NxI.signOut, color: Theme.of(context).colorScheme.error),
-            title: Text(tr('ออกจากระบบ'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            subtitle: Text(tr('ลบ Space นี้ออกจากเครื่อง (Space อื่นยังใช้งานได้)')),
-            onTap: () => Navigator.pop(context, 'out'),
-          ),
-        ],
+      builder: (context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              dense: true,
+              title: Text(
+                sp.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            ListTile(leading: const Icon(NxI.pencilSimple), title: Text(tr('แก้ไขชื่อ / สี')), onTap: () => Navigator.pop(context, 'edit')),
+            ListTile(
+              leading: const Icon(NxI.copySimple),
+              title: Text(tr('ทำซ้ำ')),
+              subtitle: Text(tr('เพิ่มอีกบัญชีใน ${sp.host}')),
+              onTap: () => Navigator.pop(context, 'dup'),
+            ),
+            ListTile(
+              leading: Icon(NxI.signOut, color: Theme.of(context).colorScheme.error),
+              title: Text(tr('ออกจากระบบ'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              subtitle: Text(tr('ลบ Space นี้ออกจากเครื่อง (Space อื่นยังใช้งานได้)')),
+              onTap: () => Navigator.pop(context, 'out'),
+            ),
+          ],
+        ),
       ),
     );
     if (!mounted || pick == null) return;
@@ -214,29 +223,41 @@ class _SpaceSheetState extends State<_SpaceSheet> {
             padding: const EdgeInsets.fromLTRB(8, 8, 0, 8),
             child: Row(
               children: [
-                SpaceAvatar(
-                  key: key,
-                  space: sp,
-                  size: 54,
-                  selected: selected,
-                  badge: selected ? UnreadNotifications.instance.count : (_unread[sp.id] ?? 0),
-                ),
+                SpaceAvatar(key: key, space: sp, size: 54, selected: selected, badge: selected ? UnreadNotifications.instance.count : (_unread[sp.id] ?? 0)),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(tr(sp.title), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                      Text(tr(sp.host), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                      Text(
+                        tr(sp.title),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        tr(sp.host),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      ),
                       if ((sp.email ?? '').isNotEmpty)
-                        Text(tr(sp.email!), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(
+                          tr(sp.email!),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                        ),
                     ],
                   ),
                 ),
                 if (_editing)
-                  ReorderableDragStartListener(index: i, child: const Padding(padding: EdgeInsets.all(12), child: Icon(NxI.grip)))
+                  ReorderableDragStartListener(
+                    index: i,
+                    child: const Padding(padding: EdgeInsets.all(12), child: Icon(NxI.grip)),
+                  )
                 else
-                  IconButton(tooltip: tr('ตัวเลือก'), icon: const Icon(NxI.dotsThreeVertical), onPressed: () => _menu(sp)),
+                  Builder(builder: (bc) => IconButton(tooltip: tr('ตัวเลือก'), icon: const Icon(NxI.dotsThreeVertical), onPressed: NxTapTracker.from(bc, () => _menu(sp)))),
               ],
             ),
           ),
@@ -250,11 +271,10 @@ class _SpaceSheetState extends State<_SpaceSheet> {
           padding: const EdgeInsets.fromLTRB(20, 4, 8, 4),
           child: Row(
             children: [
-              Expanded(child: Text(tr('Space ของฉัน'), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700))),
-              TextButton(
-                onPressed: spaces.length < 2 ? null : () => setState(() => _editing = !_editing),
-                child: Text(tr(_editing ? 'เสร็จ' : 'แก้ไข')),
+              Expanded(
+                child: Text(tr('Space ของฉัน'), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               ),
+              TextButton(onPressed: spaces.length < 2 ? null : () => setState(() => _editing = !_editing), child: Text(tr(_editing ? 'เสร็จ' : 'แก้ไข'))),
             ],
           ),
         ),
@@ -277,7 +297,10 @@ class _SpaceSheetState extends State<_SpaceSheet> {
                         tween: Tween(begin: 0, end: 1),
                         duration: Duration(milliseconds: 220 + 40 * i),
                         curve: Curves.easeOutCubic,
-                        builder: (context, t, child) => Opacity(opacity: t, child: Transform.translate(offset: Offset(0, 10 * (1 - t)), child: child)),
+                        builder: (context, t, child) => Opacity(
+                          opacity: t,
+                          child: Transform.translate(offset: Offset(0, 10 * (1 - t)), child: child),
+                        ),
                         child: tile(spaces[i], i),
                       ),
                   ],
@@ -327,7 +350,12 @@ Future<void> showSpaceEditor(BuildContext context, Space sp) async {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Center(child: SpaceAvatar(space: sp.copyWith(label: name.text.isEmpty ? null : name.text, colorValue: color), size: 72)),
+          Center(
+            child: SpaceAvatar(
+              space: sp.copyWith(label: name.text.isEmpty ? null : name.text, colorValue: color),
+              size: 72,
+            ),
+          ),
           const SizedBox(height: 16),
           TextField(
             controller: name,
@@ -372,7 +400,22 @@ Future<void> showSpaceEditor(BuildContext context, Space sp) async {
 
 /// Full-screen hand-off: the Space colour grows out of its logo, the new
 /// Space loads underneath, then the colour fades away to reveal it.
-Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Future<void> Function() action) async {
+Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Future<void> Function() action) =>
+    runColorHandOff(context, color: sp.color, badge: sp.initials, title: sp.title, subtitle: sp.host, origin: origin, action: action);
+
+/// The colour hand-off used for Spaces and Packages: [color] grows out of
+/// [origin] with [badge] / [title] / [subtitle], [action] runs underneath, then
+/// the colour fades to reveal the result. [goHome] returns to the main shell.
+Future<void> runColorHandOff(
+  BuildContext context, {
+  required Color color,
+  required String badge,
+  required String title,
+  required String subtitle,
+  Rect? origin,
+  required Future<void> Function() action,
+  bool goHome = true,
+}) async {
   final overlay = Overlay.of(context, rootOverlay: true);
   final size = MediaQuery.sizeOf(context);
   final from = origin ?? Rect.fromCenter(center: size.center(Offset.zero), width: 56, height: 56);
@@ -397,7 +440,9 @@ Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Fu
                     top: c.dy - r,
                     width: r * 2,
                     height: r * 2,
-                    child: DecoratedBox(decoration: BoxDecoration(color: sp.color, shape: BoxShape.circle)),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                    ),
                   ),
                   Center(
                     child: Opacity(
@@ -410,12 +455,26 @@ Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Fu
                             height: 76,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(22)),
-                            child: Text(tr(sp.initials), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)),
+                            child: Text(
+                              tr(badge),
+                              style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
+                            ),
                           ),
                           const SizedBox(height: 14),
-                          Text(tr(sp.title), style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, decoration: TextDecoration.none)),
+                          Text(
+                            tr(title),
+                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, decoration: TextDecoration.none),
+                          ),
                           const SizedBox(height: 4),
-                          Text(tr(sp.host), style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14, fontWeight: FontWeight.w400, decoration: TextDecoration.none)),
+                          Text(
+                            tr(subtitle),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -444,7 +503,7 @@ Future<void> runSpaceTransition(BuildContext context, Space sp, Rect? origin, Fu
     await animate(grow, 1, 420);
     final router = GoRouter.maybeOf(context);
     await action();
-    router?.go(AppRoutes.mainShell);
+    if (goHome) router?.go(AppRoutes.mainShell);
     await Future<void>.delayed(const Duration(milliseconds: 220));
     await animate(fade, 0, 320);
   } finally {

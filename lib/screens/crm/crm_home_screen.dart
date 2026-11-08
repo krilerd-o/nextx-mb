@@ -18,6 +18,7 @@ import 'call_log_screen.dart';
 import 'entity_list_screen.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_refresh.dart';
 
 class CrmHomeScreen extends StatefulWidget {
   const CrmHomeScreen({super.key});
@@ -140,7 +141,10 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
         title: 'CRM',
         subtitle: 'ลูกค้าและงานขาย',
       ),
-      body: ListView(
+      body: NxRefresh(
+          onRefresh: _loadCounts,
+          child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
         padding: bp.scrollPadding(context),
         children: [
           _moduleGrid(bp, customers),
@@ -169,6 +173,7 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
           ),
         ],
       ),
+        ),
     );
   }
 

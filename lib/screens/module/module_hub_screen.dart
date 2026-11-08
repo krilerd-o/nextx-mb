@@ -14,6 +14,7 @@ import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/error_reporting.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_refresh.dart';
 
 class ModuleHubScreen extends StatefulWidget {
   const ModuleHubScreen({super.key});
@@ -101,7 +102,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
       children: [
         const NxAppHeader.hub(),
         Expanded(
-          child: RefreshIndicator(
+          child: NxRefresh(
             color: theme.colorScheme.primary,
             onRefresh: _loadRecent,
             child: ListView(

@@ -295,21 +295,21 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
         else
           NxMapView(me: LatLng(fix.latitude, fix.longitude), accuracy: fix.accuracy, dest: dest, rangeMeters: range),
         const SizedBox(height: 14),
-        _InfoRow(
+        CheckInfoRow(
           icon: NxI.clock,
           label: 'วันและเวลาที่จะบันทึก',
           value: thaiDateTime(_now),
           strong: true,
         ),
         if (fix != null)
-          _InfoRow(
+          CheckInfoRow(
             icon: NxI.crosshair,
             label: 'พิกัด',
             value: '${fix.latitude.toStringAsFixed(6)}, ${fix.longitude.toStringAsFixed(6)}'
                 '${fix.accuracy != null ? '  (±${fix.accuracy!.round()} ม.)' : ''}',
           ),
         if (widget.checkIn && v != null)
-          _InfoRow(
+          CheckInfoRow(
             icon: NxI.navigationArrow,
             label: 'ระยะจากสถานที่นัด',
             value: hasDest && distance != null
@@ -318,7 +318,7 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
             color: _blocked ? cs.error : (hasDest ? const Color(0xFF16A34A) : null),
           ),
         if (!widget.checkIn && widget.checkedInAt != null)
-          _InfoRow(icon: NxI.timer, label: 'อยู่ในสถานที่', value: stayDuration(widget.checkedInAt!, _now)),
+          CheckInfoRow(icon: NxI.timer, label: 'อยู่ในสถานที่', value: stayDuration(widget.checkedInAt!, _now)),
         const SizedBox(height: 10),
         Text(tr('รูปถ่าย$_verb'), style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
@@ -327,9 +327,9 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              _PhotoButton(icon: NxI.camera, label: 'ถ่ายรูป', onTap: sending ? null : () => _addPhoto(camera: true)),
+              CheckPhotoButton(icon: NxI.camera, label: 'ถ่ายรูป', onTap: sending ? null : () => _addPhoto(camera: true)),
               const SizedBox(width: 8),
-              _PhotoButton(icon: NxI.images, label: 'แนบรูป', onTap: sending ? null : () => _addPhoto(camera: false)),
+              CheckPhotoButton(icon: NxI.images, label: 'แนบรูป', onTap: sending ? null : () => _addPhoto(camera: false)),
               for (final p in _photos) ...[
                 const SizedBox(width: 8),
                 Stack(
@@ -420,11 +420,11 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
             child: Text(tr('ไม่มีสัญญาณ — จะส่งอัตโนมัติเมื่อกลับมาออนไลน์ (ใช้เวลาจริงที่บันทึก)'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
           ),
         const SizedBox(height: 18),
-        _InfoRow(icon: NxI.clock, label: 'เวลา', value: thaiDateTime(toThai(r.at)), strong: true),
-        _InfoRow(icon: NxI.crosshair, label: 'พิกัด', value: '${r.lat.toStringAsFixed(6)}, ${r.lng.toStringAsFixed(6)}'),
-        if (_photos.isNotEmpty) _InfoRow(icon: NxI.image, label: 'รูปถ่าย', value: '${_photos.length} รูป'),
+        CheckInfoRow(icon: NxI.clock, label: 'เวลา', value: thaiDateTime(toThai(r.at)), strong: true),
+        CheckInfoRow(icon: NxI.crosshair, label: 'พิกัด', value: '${r.lat.toStringAsFixed(6)}, ${r.lng.toStringAsFixed(6)}'),
+        if (_photos.isNotEmpty) CheckInfoRow(icon: NxI.image, label: 'รูปถ่าย', value: '${_photos.length} รูป'),
         if (!r.checkIn && widget.checkedInAt != null)
-          _InfoRow(icon: NxI.timer, label: 'อยู่ในสถานที่', value: stayDuration(widget.checkedInAt!, toThai(r.at))),
+          CheckInfoRow(icon: NxI.timer, label: 'อยู่ในสถานที่', value: stayDuration(widget.checkedInAt!, toThai(r.at))),
         const SizedBox(height: 22),
         FilledButton(
           style: FilledButton.styleFrom(shape: const StadiumBorder(), minimumSize: const Size.fromHeight(52)),
@@ -436,8 +436,8 @@ class _VisitCheckBodyState extends State<_VisitCheckBody> {
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.label, required this.value, this.strong = false, this.color});
+class CheckInfoRow extends StatelessWidget {
+  const CheckInfoRow({required this.icon, required this.label, required this.value, this.strong = false, this.color});
   final IconData icon;
   final String label;
   final String value;
@@ -481,8 +481,8 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _PhotoButton extends StatelessWidget {
-  const _PhotoButton({required this.icon, required this.label, required this.onTap});
+class CheckPhotoButton extends StatelessWidget {
+  const CheckPhotoButton({required this.icon, required this.label, required this.onTap});
   final IconData icon;
   final String label;
   final VoidCallback? onTap;

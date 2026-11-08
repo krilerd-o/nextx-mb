@@ -12,6 +12,13 @@ if (keystorePropertiesFile.exists()) {
 }
 
 // Google Maps key: env MAPS_API_KEY (CI secret) or `MAPS_API_KEY=` in android/local.properties.
+// Tester key (internal APKs): android/tester.properties + android/app/tester.keystore, both git-ignored.
+def testerProps = new Properties()
+def testerPropsFile = rootProject.file("tester.properties")
+if (testerPropsFile.exists()) testerProps.load(new FileInputStream(testerPropsFile))
+def testerKeyFile = file("tester.keystore")
+if (!testerPropsFile.exists()) testerKeyFile = file("__missing_tester.keystore")
+
 def localProps = new Properties()
 def localPropsFile = rootProject.file("local.properties")
 if (localPropsFile.exists()) {
@@ -44,6 +51,17 @@ android {
     }
 
     signingConfigs {
+        // Fixed key for debug + internal tester APKs, so the SHA-1 does not change
+        // between builds (Google Sign-In matches package + SHA-1). Not for stores.
+        // Kept out of git: CI writes it from a secret (see docs/GOOGLE_SIGNIN.md).
+        if (testerKeyFile.exists()) {
+            tester {
+                storeFile = testerKeyFile
+                storePassword = testerProps["storePassword"]
+                keyAlias = testerProps["keyAlias"]
+                keyPassword = testerProps["keyPassword"]
+            }
+        }
         release {
             if (keystorePropertiesFile.exists()) {
                 keyAlias = keystoreProperties["keyAlias"]
@@ -55,13 +73,16 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (testerKeyFile.exists()) signingConfig = signingConfigs.tester
+        }
         release {
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.release
             } else if (System.getenv("NX_ALLOW_DEBUG_SIGNING") == "1") {
-                // Internal side-load builds only — never upload a debug-signed bundle to a store.
-                logger.warn("WARNING: android/key.properties missing — release build is signed with the DEBUG key (NX_ALLOW_DEBUG_SIGNING=1).")
-                signingConfig = signingConfigs.debug
+                // Internal side-load builds only — never upload a tester-signed bundle to a store.
+                logger.warn("WARNING: android/key.properties missing — internal release build is signed with the tester/debug key (NX_ALLOW_DEBUG_SIGNING=1).")
+                signingConfig = testerKeyFile.exists() ? signingConfigs.tester : signingConfigs.debug
             } else {
                 signingConfig = null
             }

@@ -4,6 +4,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../core/effects.dart';
+import 'nx_chrome.dart';
+
+export 'nx_chrome.dart' show NxChrome, NxChromeAction, NxChromeBus, NxChromeCollapse;
 
 /// Marks a header as floating: [NxAppHeader] then paints no background so the
 /// page shows through the progressive blur behind it.
@@ -23,7 +26,7 @@ class NxFloatingHeaderScope extends InheritedWidget {
 ///
 /// Scrollables in [body] must add [topInset] to their top padding so their
 /// first item starts below the header (and can then scroll up beneath it).
-class NxScrollScaffold extends StatelessWidget {
+class NxScrollScaffold extends StatefulWidget {
   const NxScrollScaffold({
     super.key,
     required this.header,
@@ -64,8 +67,32 @@ class NxScrollScaffold extends StatelessWidget {
   static double topInset(BuildContext context) => MediaQuery.paddingOf(context).top;
 
   @override
+  State<NxScrollScaffold> createState() => _NxScrollScaffoldState();
+}
+
+class _NxScrollScaffoldState extends State<NxScrollScaffold> {
+  /// Toolbars fold into header icons and the tab bar slides away while the
+  /// user reads down the page (see [NxChrome]).
+  final _chrome = NxChrome();
+
+  @override
+  void dispose() {
+    // Leaving a collapsed page must not strand the tab bar off-screen.
+    if (_chrome.collapsed) NxChromeBus.hidden.value = false;
+    _chrome.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    Widget content = motionBlur ? NxMotionBlur(child: body) : body;
+    final w = widget;
+    final body = w.body;
+    final motionBlur = w.motionBlur;
+    final insetBody = w.insetBody;
+    final bottomBlur = w.bottomBlur;
+    final floatingActionButton = w.floatingActionButton;
+    Widget content = NxChromeScrollListener(chrome: _chrome, child: motionBlur ? NxMotionBlur(child: body) : body);
+    final topInset = NxScrollScaffold.topInset;
     if (insetBody) {
       final inner = content; // capture before reassigning (else the Builder nests itself)
       content = Builder(
@@ -94,21 +121,43 @@ class NxScrollScaffold extends StatelessWidget {
         ],
       );
     }
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      resizeToAvoidBottomInset: resizeToAvoidBottomInset,
-      appBar: _FloatingHeader(header: header, extend: !insetBody, bottom: headerBottom, bottomHeight: headerBottomHeight),
-      // Lift the FAB above the floating tab bar (its height is in padding.bottom).
-      floatingActionButton: floatingActionButton == null || !underFloatingBar
-          ? floatingActionButton
-          : Padding(
-              padding: EdgeInsets.only(
-                bottom: (MediaQuery.paddingOf(context).bottom - MediaQuery.viewPaddingOf(context).bottom).clamp(0, 200),
-              ),
-              child: floatingActionButton,
-            ),
-      bottomNavigationBar: bottomNavigationBar,
-      body: content,
+    // Lift the FAB above the floating tab bar (its height is in padding.bottom);
+    // when the bar slides away the FAB drops and shrinks a little, and while a
+    // card is dragged it steps aside for the drop dock.
+    final barLift = underFloatingBar
+        ? (MediaQuery.paddingOf(context).bottom - MediaQuery.viewPaddingOf(context).bottom).clamp(0.0, 200.0)
+        : 0.0;
+    final fab = floatingActionButton == null
+        ? null
+        : ListenableBuilder(
+            listenable: Listenable.merge([NxChromeBus.hidden, NxChromeBus.dragging]),
+            child: floatingActionButton,
+            builder: (context, child) {
+              final hidden = underFloatingBar && NxChromeBus.hidden.value;
+              final dragging = NxChromeBus.dragging.value;
+              return AnimatedPadding(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                padding: EdgeInsets.only(bottom: hidden ? 0 : barLift),
+                child: AnimatedScale(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutBack,
+                  scale: dragging ? 0 : (_chrome.collapsed ? 0.86 : 1),
+                  child: child,
+                ),
+              );
+            },
+          );
+    return NxChromeScope(
+      chrome: _chrome,
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        resizeToAvoidBottomInset: w.resizeToAvoidBottomInset,
+        appBar: _FloatingHeader(header: w.header, extend: !insetBody, bottom: w.headerBottom, bottomHeight: w.headerBottomHeight),
+        floatingActionButton: fab,
+        bottomNavigationBar: w.bottomNavigationBar,
+        body: content,
+      ),
     );
   }
 }
@@ -128,20 +177,30 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
+    final chrome = NxChrome.of(context);
+    // The toolbar row folds away while reading; the blur follows its height.
+    final folded = bottom != null && (chrome?.collapsed ?? false);
     return Stack(
       clipBehavior: Clip.none,
       children: [
         // The blur reaches below the header so content dissolves into it.
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          // A short tail below the header so the blur ends softly but takes little room.
-          height: top + preferredSize.height + (extend ? 6 : 0),
-          child: NxEdgeBlur(
-            fromTop: true,
-            // Full blur over the status bar + most of the header, fade below.
-            solidFraction: extend ? (top + preferredSize.height * 0.25) / (top + preferredSize.height + 6) : 0.6,
+        TweenAnimationBuilder<double>(
+          tween: Tween(end: folded ? header.preferredSize.height : preferredSize.height),
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+          builder: (context, h, _) => Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            // A short tail below the header so the blur ends softly but takes little room.
+            height: top + h + (extend ? 6 : 0),
+            child: IgnorePointer(
+              child: NxEdgeBlur(
+                fromTop: true,
+                // Full blur over the status bar + most of the header, fade below.
+                solidFraction: extend ? (top + h * 0.25) / (top + h + 6) : 0.6,
+              ),
+            ),
           ),
         ),
         NxFloatingHeaderScope(

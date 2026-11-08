@@ -10,6 +10,7 @@ import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../notifications/notification_center_screen.dart' show relativeTime;
 import '../../core/i18n.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// Platform icon + Thai label for a session row.
 (IconData, String) deviceKind(Map<String, dynamic> s) {
@@ -118,7 +119,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final others = list?.where((s) => s['sid']?.toString() != _current).toList() ?? const [];
     return NxScrollScaffold(
       header: const NxAppHeader(title: 'อุปกรณ์ที่เข้าใช้งาน'),
-      body: RefreshIndicator(
+      body: NxRefresh(
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),

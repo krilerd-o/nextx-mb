@@ -11,7 +11,7 @@ class _Slide {
   const _Slide(this.title, this.body, this.icon, this.chips);
   final String title;
   final String body;
-  final IconData icon;
+  final IconData? icon; // null = app logo
   final List<NxHeroChip> chips;
 }
 
@@ -19,7 +19,7 @@ const _slides = [
   _Slide(
     'ทำงานได้ทุกที่\nครบในแอปเดียว',
     'ลูกค้า งานขาย งานบริการ ทีม และ HR\nเชื่อมกับระบบ MOAI NEXT ของธุรกิจคุณ',
-    NxI.squaresFourFill,
+    null,
     kDefaultHeroChips,
   ),
   _Slide(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/thai_time.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -96,7 +97,7 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
                 subtitle: Text(
                   tr([
                     _roomFor(m['room_id'])['name']?.toString() ?? '',
-                    (m['created_at']?.toString() ?? '').split('T').first,
+                    thaiDate(m['created_at'], year: uiYear),
                   ].where((e) => e.isNotEmpty).join(' · ')),
                 ),
                 onTap: () => nxPush<void>(context, ChatRoomScreen(room: _roomFor(m['room_id']))),

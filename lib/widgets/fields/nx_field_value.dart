@@ -11,6 +11,7 @@ import 'field_ui_type.dart';
 import 'nx_field_chrome.dart';
 import 'nx_pick_option.dart';
 import '../../core/i18n.dart';
+import '../../core/thai_time.dart';
 
 class NxFieldValueView extends StatelessWidget {
   const NxFieldValueView({
@@ -21,7 +22,13 @@ class NxFieldValueView extends StatelessWidget {
     this.options = const [],
     this.onOpen,
     this.relatedModule,
+    this.fieldName,
+    this.module,
   });
+
+  /// Field / module of the value — decides wall-clock vs UTC dates.
+  final String? fieldName;
+  final String? module;
 
   final FieldUiType uiType;
   final String label;
@@ -186,8 +193,18 @@ class NxFieldValueView extends StatelessWidget {
           return NxHtmlView(html: raw, style: theme.textTheme.bodyMedium);
         }
         return SelectableText(tr(_labelFor(raw)), style: theme.textTheme.bodyMedium);
+      case FieldUiType.date:
+      case FieldUiType.dateTime:
+        return SelectableText(
+          formatThaiField(_displayRaw(), fieldName, module: module, dateOnly: uiType == FieldUiType.date, year: uiYear),
+          style: theme.textTheme.bodyMedium,
+        );
       default:
         final raw = _displayRaw();
+        // ISO date-times (e.g. createdtime) never show raw / in UTC.
+        if (_isoDateTime.hasMatch(raw)) {
+          return SelectableText(formatThaiField(raw, fieldName, module: module, year: uiYear), style: theme.textTheme.bodyMedium);
+        }
         if (looksLikeHtmlString(raw)) {
           return NxHtmlView(html: raw, style: theme.textTheme.bodyMedium);
         }
@@ -209,6 +226,8 @@ class NxFieldValueView extends StatelessWidget {
     );
   }
 }
+
+final _isoDateTime = RegExp(r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}');
 
 bool lookLikeId(String s) => RegExp(r'^\d+$').hasMatch(s.trim());
 

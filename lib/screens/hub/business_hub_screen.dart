@@ -9,6 +9,7 @@ import '../../widgets/nx_invite_prompt.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_step_header.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// Step: choose the business (skipped automatically when there is only one).
 class BusinessHubScreen extends StatefulWidget {
@@ -72,7 +73,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
           children: [
             NxStepHeader(step: 1, total: 4, onBack: () => config.logout()),
             Expanded(
-              child: RefreshIndicator(
+              child: NxRefresh(
                 onRefresh: _load,
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),

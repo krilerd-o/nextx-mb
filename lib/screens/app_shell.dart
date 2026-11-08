@@ -153,6 +153,8 @@ class _AppShellState extends State<AppShell> {
           destinations: destinations,
           selectedIndex: selected,
           onSelect: (i) {
+            // A new tab starts with its tools and the bar showing.
+            NxChromeBus.reset();
             setState(() => _current = ids[i]);
             config.setLastTab(ids[i]);
           },
@@ -213,7 +215,29 @@ class _AppShellState extends State<AppShell> {
             ),
         ],
       ),
-      bottomNavigationBar: nav,
+      // Slides away while reading down a page (or while dragging a card, so
+      // the drop dock has the bottom edge); a small scroll back brings it in.
+      // Its layout height stays, so pages don't jump.
+      bottomNavigationBar: ListenableBuilder(
+        listenable: Listenable.merge([NxChromeBus.hidden, NxChromeBus.dragging]),
+        child: nav,
+        builder: (context, child) {
+          final away = NxChromeBus.hidden.value || NxChromeBus.dragging.value;
+          return IgnorePointer(
+            ignoring: away,
+            child: AnimatedSlide(
+              offset: away ? const Offset(0, 1.5) : Offset.zero,
+              duration: const Duration(milliseconds: 280),
+              curve: away ? Curves.easeInCubic : Curves.easeOutCubic,
+              child: AnimatedOpacity(
+                opacity: away ? 0 : 1,
+                duration: const Duration(milliseconds: 220),
+                child: child,
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

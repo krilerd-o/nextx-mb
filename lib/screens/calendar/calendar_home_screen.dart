@@ -1,30 +1,49 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../widgets/nx_scroll_scaffold.dart';
-import '../../services/api_exceptions.dart';
-import '../../widgets/app_bottom_sheet.dart';
-import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_config.dart';
-import '../../services/realtime_service.dart';
 import '../../core/entity_display.dart';
-import '../../core/menu_access.dart';
-import '../../core/nx_breakpoint.dart';
-import '../../core/nx_page_route.dart';
-import '../../widgets/nx_app_header.dart';
-import '../../widgets/nx_cached_future.dart';
-import '../../widgets/nx_create_fab.dart';
-import '../../widgets/nx_skeleton.dart';
-import '../../widgets/nx_surface_card.dart';
-import '../crm/entity_create_screen.dart';
-import 'activity_detail_screen.dart';
-import '../../widgets/nx_icons.dart';
-import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../core/menu_access.dart';
+import '../../core/nx_page_route.dart';
+import '../../core/thai_time.dart';
+import '../../services/api_exceptions.dart';
+import '../../services/realtime_service.dart';
+import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_create_fab.dart';
+import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_overlay_panel.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
+import '../crm/entity_create_screen.dart';
+import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
+import 'activity_detail_screen.dart';
+import 'cal/cal_agenda_view.dart';
+import 'cal/cal_birthday_actions.dart';
+import 'cal/cal_birthdays.dart';
+import 'cal/cal_model.dart';
+import 'cal/cal_month_view.dart';
+import 'cal/cal_store.dart';
+import 'cal/cal_time_grid.dart';
+import 'cal/cal_widgets.dart';
+import 'cal/cal_year_view.dart';
+import '../../widgets/nx_refresh.dart';
 
+export 'cal/cal_model.dart' show groupActivitiesByDay, activityTimeLabel, weekStart, CalView;
+
+/// Activities calendar: year / month / week / 3 days / day / list.
+///
+/// - The header shows the period ("พ.ย. 2569 ▾"); tap it to jump between
+///   year and month.
+/// - Switching views zooms (coarser ⇄ finer); a month tapped in the year view
+///   grows out of its tile.
+/// - Month: scroll the list up and the month folds into the selected week.
+/// - Week / 3 days / day: tap a slot to add, long-press to drag, drag the
+///   bottom edge to lengthen, "+N" opens the day's card.
 class CalendarHomeScreen extends StatefulWidget {
   const CalendarHomeScreen({super.key});
 
@@ -32,120 +51,278 @@ class CalendarHomeScreen extends StatefulWidget {
   State<CalendarHomeScreen> createState() => _CalendarHomeScreenState();
 }
 
-enum _CalMode { agenda, incoming, pending }
+enum _CalMode { calendar, incoming, pending }
 
-class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
-  var _revision = 0;
-  _CalMode _mode = _CalMode.agenda;
-  DateTime _selectedDay = thaiNow();
-  bool _weekView = false;
+class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTickerProviderStateMixin {
+  late final CalStore _store = CalStore(context.read<AppConfig>().apiClient, scope: context.read<AppConfig>().prefsScope);
+  late final TabController _tabs = TabController(length: CalView.values.length, vsync: this, initialIndex: CalView.month.index);
+  CalView _view = CalView.month;
+  CalView _prev = CalView.month;
+  DateTime _date = calDay(thaiNow());
+  _CalMode _mode = _CalMode.calendar;
+  Future<List<CalEvent>>? _special;
+  NxListQuery _lq = const NxListQuery();
+  Alignment _zoomAt = Alignment.center;
+  bool _fromTile = false;
+  int _jump = 0; // bumps page-based views back to [_date]
+  final _bodyKey = GlobalKey();
+  final _search = TextEditingController();
   StreamSubscription<RealtimeEvent>? _live;
   Timer? _debounce;
+
+  String get _prefKey => 'nx_cal_view_${context.read<AppConfig>().prefsScope}';
+  String get _bdayKey => 'nx_cal_birthdays_${context.read<AppConfig>().prefsScope}';
 
   @override
   void initState() {
     super.initState();
-    // Activity created/changed anywhere in the business → refresh.
+    _store.filter = _passes;
+    _store.onBirthday = _openBirthday;
+    PendingEntityDeletes.instance.addListener(_store.refreshFilter);
+    final key = _prefKey;
+    final bdayKey = _bdayKey;
+    SharedPreferences.getInstance().then((p) {
+      if (p.getBool(bdayKey) == false) _store.birthdays.setEnabled(false);
+      final saved = CalView.values.where((v) => v.name == p.getString(key)).firstOrNull;
+      if (saved != null && mounted && saved != _view) {
+        setState(() {
+          _view = _prev = saved;
+          _tabs.index = saved.index;
+        });
+      }
+    }).catchError((_) {});
+    // Changed anywhere in the business (web, other phones) → reload.
     _live = RealtimeService.instance.on('calendar:activity_upsert').listen((_) {
       _debounce?.cancel();
-      _debounce = Timer(const Duration(milliseconds: 800), () {
-        if (mounted) setState(() => _revision++);
-      });
+      _debounce = Timer(const Duration(milliseconds: 800), _reload);
     });
   }
 
   @override
   void dispose() {
+    PendingEntityDeletes.instance.removeListener(_store.refreshFilter);
     _live?.cancel();
     _debounce?.cancel();
+    _tabs.dispose();
+    _search.dispose();
+    _store.dispose();
     super.dispose();
   }
 
-  String _ymd(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  // ── filtering
+  bool _passes(CalEvent e) {
+    if (PendingEntityDeletes.instance.isPending('activity', e.id)) return false;
+    final q = _lq.q.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      final r = e.raw;
+      final hay = '${e.title} ${e.location} ${r['account_name'] ?? ''} ${r['contact_name'] ?? ''}'.toLowerCase();
+      if (!hay.contains(q)) return false;
+    }
+    if (_lq.has('scope', 'mine') && '${e.raw['smownerid'] ?? ''}' != (context.read<AppConfig>().session.userId ?? '')) return false;
+    final types = _lq.values('type');
+    if (types.isNotEmpty && !types.contains(e.type)) return false;
+    final statuses = _lq.values('status');
+    if (statuses.isNotEmpty && !statuses.contains(e.status)) return false;
+    final ci = _lq.values('checkin');
+    if (ci.isNotEmpty && !((ci.contains('done') && e.checkedIn) || (ci.contains('not') && !e.checkedIn))) return false;
+    return true;
+  }
 
-  String get _title {
-    switch (_mode) {
-      case _CalMode.incoming:
-        return 'งานใกล้ถึง';
-      case _CalMode.pending:
-        return 'งานค้าง';
-      case _CalMode.agenda:
-        return 'ปฏิทิน';
+  Future<void> _openFilter() async {
+    final all = _store.between(DateTime(1900), DateTime(2200));
+    final types = {for (final e in all) if (e.type.isNotEmpty) e.type}.toList()..sort();
+    final statuses = {for (final e in all) if (e.status.isNotEmpty) e.status}.toList()..sort();
+    final next = await showNxFilterSheet(context, query: _lq, groups: [
+      const NxFilterGroup(key: 'scope', label: 'ขอบเขต', multi: false, options: [NxFilterOption('mine', 'ของฉัน')]),
+      if (types.isNotEmpty) NxFilterGroup(key: 'type', label: 'ประเภท', options: [for (final t in types) NxFilterOption(t, t)]),
+      if (statuses.isNotEmpty) NxFilterGroup(key: 'status', label: 'สถานะ', options: [for (final t in statuses) NxFilterOption(t, t)]),
+      const NxFilterGroup(key: 'checkin', label: 'เช็คอิน', multi: false, options: [
+        NxFilterOption('done', 'เช็คอินแล้ว'),
+        NxFilterOption('not', 'ยังไม่เช็คอิน'),
+      ]),
+    ]);
+    if (next == null || !mounted) return;
+    setState(() => _lq = next.copyWith(q: _lq.q));
+    _store.refreshFilter();
+  }
+
+  // ── navigation between views
+  void _setView(CalView v, {Rect? from}) {
+    if (v == _view && _mode == _CalMode.calendar) return;
+    HapticFeedback.selectionClick();
+    var at = Alignment.center;
+    final box = _bodyKey.currentContext?.findRenderObject() as RenderBox?;
+    if (from != null && box != null && box.hasSize) {
+      final c = box.globalToLocal(from.center);
+      at = Alignment((c.dx / box.size.width) * 2 - 1, (c.dy / box.size.height) * 2 - 1);
+    }
+    setState(() {
+      _prev = _view;
+      _view = v;
+      _zoomAt = at;
+      _fromTile = from != null;
+      _mode = _CalMode.calendar;
+    });
+    if (_tabs.index != v.index) _tabs.animateTo(v.index);
+    final key = _prefKey;
+    SharedPreferences.getInstance().then((p) => p.setString(key, v.name)).catchError((_) => false);
+  }
+
+  void _goToday() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _date = calDay(thaiNow());
+      _jump++;
+    });
+  }
+
+  bool get _showsToday {
+    final t = calDay(thaiNow());
+    switch (_view) {
+      case CalView.year:
+        return _date.year == t.year;
+      case CalView.week:
+        return sameDay(weekStart(_date), weekStart(t));
+      case CalView.threeDay:
+        return !t.isBefore(_date) && t.isBefore(_date.add(const Duration(days: 3)));
+      case CalView.month:
+      case CalView.day:
+      case CalView.list:
+        return sameDay(_date, t);
     }
   }
 
-  Color _tint(String? status) {
-    switch (status?.toLowerCase()) {
-      case 'held':
-      case 'completed':
-        return const Color(0xFF10B981);
-      case 'planned':
-      case 'not started':
-        return const Color(0xFF0EA5E9);
-      case 'cancelled':
-        return const Color(0xFFF97316);
-      default:
-        return const Color(0xFFEC4899);
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _fetch() {
-    final extra = <String, String>{
-      // Only what the agenda draws (servers without `cols` return everything).
-      'cols': 'id,subject,date_start,date_end,status,activitytype,location,checkindate,checkoutdate,'
-          'smownerid,account_name,contact_name,related_module,related_id,all_day,due_date',
-      'sort': 'date_start',
-      'order': _mode == _CalMode.pending ? 'desc' : 'asc',
+  (DateTime, DateTime) get _range {
+    final d = _date;
+    return switch (_view) {
+      CalView.year => (DateTime(d.year, 1, 1), DateTime(d.year, 12, 31)),
+      _ => (DateTime(d.year, d.month - 1, 20), DateTime(d.year, d.month + 2, 10)),
     };
-    switch (_mode) {
-      case _CalMode.incoming:
-        extra['involved'] = '1';
-        break;
-      case _CalMode.pending:
-        extra['overdue'] = '1';
-        break;
-      case _CalMode.agenda:
-        // Month range; in week view widen it when the week crosses a month edge.
-        final ws = weekStart(_selectedDay);
-        var start = DateTime(_selectedDay.year, _selectedDay.month, 1);
-        var end = DateTime(_selectedDay.year, _selectedDay.month + 1, 0);
-        if (_weekView) {
-          if (ws.isBefore(start)) start = ws;
-          final we = ws.add(const Duration(days: 6));
-          if (we.isAfter(end)) end = we;
-        }
-        extra['calendar_from'] = _ymd(start);
-        extra['calendar_to'] = _ymd(end);
-        break;
-    }
-    return context.read<AppConfig>().apiClient.getEntityList(
-          'activity',
-          limit: 200,
-          extra: extra,
-        ).then((p) => p.items);
   }
 
-  Future<void> _openCreate() async {
+  Future<void> _reload() async {
+    if (!mounted) return;
+    final (a, b) = _range;
+    await _store.reload(a, b);
+    if (mounted && _mode != _CalMode.calendar) setState(() => _special = _fetchSpecial(_mode));
+  }
+
+  // ── upcoming / overdue (same API flags as before)
+  Future<List<CalEvent>> _fetchSpecial(_CalMode m) async {
+    final page = await context.read<AppConfig>().apiClient.getEntityList('activity', limit: 200, extra: {
+      'cols': CalStore.cols,
+      'sort': 'date_start',
+      'order': m == _CalMode.pending ? 'desc' : 'asc',
+      if (m == _CalMode.incoming) 'involved': '1',
+      if (m == _CalMode.pending) 'overdue': '1',
+    });
+    return [for (final r in page.items) ?CalEvent.from(r)];
+  }
+
+  void _setMode(_CalMode m) {
+    setState(() {
+      _mode = m;
+      _special = m == _CalMode.calendar ? null : _fetchSpecial(m);
+      if (m != _CalMode.calendar) {
+        _prev = _view;
+        _view = CalView.list;
+        _tabs.animateTo(CalView.list.index);
+      }
+    });
+  }
+
+  // ── actions on appointments
+  DateTime _defaultStart(DateTime day) {
+    final now = thaiNow();
+    if (sameDay(day, now)) return DateTime(now.year, now.month, now.day, (now.hour + 1).clamp(0, 23));
+    return DateTime(day.year, day.month, day.day, 9);
+  }
+
+  /// Birthday card → call / email / open the customer / plan a greeting.
+  void _openBirthday(CalBirthday b, DateTime day, Rect? anchor) {
+    openCalBirthday(context, b, day, anchor: anchor, onChanged: () {
+      if (mounted) _reload();
+    });
+  }
+
+  Future<void> _toggleBirthdays() async {
+    final on = !_store.birthdays.enabled;
+    _store.birthdays.setEnabled(on);
+    if (on) _store.birthdays.load();
+    final key = _bdayKey;
+    try {
+      (await SharedPreferences.getInstance()).setBool(key, on);
+    } catch (_) {}
+  }
+
+  Future<void> _create(DateTime at) async {
     await nxPush<void>(
       context,
-      const EntityCreateScreen(module: 'activity', title: 'นัดหมายใหม่'),
+      EntityCreateScreen(
+        module: 'activity',
+        title: 'นัดหมายใหม่',
+        // Thai wall time, the way the web saves activity times.
+        initialValues: {'date_start': ymdhm(at), 'date_end': ymdhm(at.add(const Duration(hours: 1)))},
+      ),
     );
-    if (mounted) setState(() => _revision++);
+    if (mounted) _reload();
   }
 
-  /// Long-press an appointment: duplicate or delete (with undo).
-  Future<void> _rowActions(Map<String, dynamic> row) async {
-    final id = row['id']?.toString() ?? '';
+  Future<void> _open(CalEvent e) async {
+    await nxPush<void>(context, ActivityDetailScreen(row: e.raw));
+    if (mounted) _reload();
+  }
+
+  /// Drag / resize in the time grid: shown at once, saved, undo for 5 s.
+  Future<void> _reschedule(CalEvent e, DateTime start, DateTime end) async {
+    final api = context.read<AppConfig>().apiClient;
+    final messenger = ScaffoldMessenger.of(context);
+    _store.replace(e.copyWith(start: start, end: end));
+    try {
+      await api.putEntity('activity', e.id, {'date_start': ymdhm(start), 'date_end': ymdhm(end)});
+      HapticFeedback.lightImpact();
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(
+        key: const ValueKey('cal-moved-snack'),
+        behavior: SnackBarBehavior.floating,
+        content: Text(tr('${e.title}: ${start.day} ${monthShort(start.month)} ${hm(start)}–${hm(end)}')),
+        action: SnackBarAction(
+          label: tr('เลิกทำ'),
+          onPressed: () async {
+            _store.replace(e);
+            try {
+              await api.putEntity('activity', e.id, {'date_start': ymdhm(e.start), 'date_end': ymdhm(e.end)});
+            } catch (err) {
+              messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(err)))));
+            }
+          },
+        ),
+      ));
+    } catch (err) {
+      _store.replace(e);
+      HapticFeedback.heavyImpact();
+      messenger.showSnackBar(SnackBar(content: Text(tr('ย้ายไม่สำเร็จ: ${formatApiError(err)}'))));
+    }
+  }
+
+  /// Long-press: duplicate or delete (with undo).
+  Future<void> _eventMenu(CalEvent e) async {
+    final row = e.raw;
+    final id = e.id;
     if (id.isEmpty) return;
     final api = context.read<AppConfig>().apiClient;
     final messenger = ScaffoldMessenger.of(context);
-    final pick = await showAppBottomSheet<String>(
+    final title = entityTitle(row, module: 'activity');
+    final pick = await showNxBlurPanel<String>(
       context: context,
-      title: entityTitle(row, module: 'activity'),
-      child: Column(
+      builder: (context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          ListTile(
+            dense: true,
+            title: Text(tr(title), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            subtitle: Text(e.allDay ? tr('ทั้งวัน') : '${hm(e.start)}–${hm(e.end)}'),
+          ),
           ListTile(leading: const Icon(NxI.copySimple), title: Text(tr('ทำซ้ำ')), onTap: () => Navigator.pop(context, 'dup')),
           ListTile(leading: const Icon(NxI.trash), title: Text(tr('ลบ')), onTap: () => Navigator.pop(context, 'del')),
         ],
@@ -156,435 +333,235 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
       try {
         final newId = await api.duplicateEntity('activity', id);
         if (!mounted) return;
-        setState(() => _revision++);
+        _reload();
         if (newId.isNotEmpty) nxPush<void>(context, ActivityDetailScreen(row: {'id': newId}));
-      } catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      } catch (err) {
+        messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(err)))));
       }
     } else if (pick == 'del') {
       PendingEntityDeletes.instance.schedule(
         messenger: messenger,
         module: 'activity',
         ids: [id],
-        label: entityTitle(row, module: 'activity'),
+        label: title,
         commit: () async {
           await api.deleteEntity('activity', id);
-          if (mounted) setState(() => _revision++);
+          if (mounted) _reload();
         },
       );
-      setState(() {});
     }
   }
 
-  NxListQuery _lq = const NxListQuery();
-
+  // ── build
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final twoPane = NxBreakpoint.of(context).twoPane;
+    final cs = theme.colorScheme;
     final session = context.select((AppConfig c) => c.session);
     final showIncoming = MenuAccess.allow(session, MenuAccess.incoming);
     final showPending = MenuAccess.allow(session, MenuAccess.pending);
+    final filterCount = _lq.activeFilterCount;
+    final title = switch (_mode) {
+      _CalMode.incoming => 'งานใกล้ถึง',
+      _CalMode.pending => 'งานค้าง',
+      _CalMode.calendar => periodLabel(_view, _date),
+    };
     return NxScrollScaffold(
       header: NxAppHeader(
-        title: _title,
+        title: title,
+        largeTitle: true,
+        onTitleTap: _mode != _CalMode.calendar ? null : () => _setView(_view == CalView.year ? CalView.month : CalView.year),
         actions: [
           IconButton(
-            tooltip: tr('รีเฟรช'),
-            icon: const Icon(NxI.arrowCounterClockwise),
-            onPressed: () => setState(() => _revision++),
+            tooltip: tr('ค้นหา'),
+            icon: const Icon(NxI.magnifyingGlass),
+            onPressed: () => _setView(CalView.list),
           ),
-          if (twoPane) NxAddButton(tooltip: tr('นัดหมาย'), onPressed: _openCreate),
+          IconButton(
+            tooltip: filterCount > 0 ? tr('ตัวกรอง ($filterCount)') : tr('ตัวกรอง'),
+            icon: const Icon(NxI.funnel),
+            onPressed: _openFilter,
+          ),
+        ],
+        menu: [
+          if (_mode != _CalMode.calendar) NxHeaderMenuItem(label: 'ปฏิทิน', icon: NxI.calendarBlank, onTap: () => _setMode(_CalMode.calendar)),
+          if (showIncoming && _mode != _CalMode.incoming) NxHeaderMenuItem(label: 'งานใกล้ถึง', icon: NxI.clockCountdown, onTap: () => _setMode(_CalMode.incoming)),
+          if (showPending && _mode != _CalMode.pending) NxHeaderMenuItem(label: 'งานค้าง', icon: NxI.warningCircle, onTap: () => _setMode(_CalMode.pending)),
+          NxHeaderMenuItem(
+            label: _store.birthdays.enabled ? 'ซ่อนวันเกิดลูกค้า' : 'แสดงวันเกิดลูกค้า',
+            icon: NxI.cake,
+            onTap: () {
+              _toggleBirthdays();
+              setState(() {});
+            },
+          ),
         ],
       ),
-      body: NxCachedFuture<List<Map<String, dynamic>>>(
-        revision: _revision,
-        load: _fetch,
-        skeleton: const NxSkeletonList(),
-        builder: (context, all) {
-          Set<String> valuesOf(String k) => {
-                for (final r in all)
-                  if ('${r[k] ?? ''}'.isNotEmpty) '${r[k]}',
-              };
-          final types = valuesOf('activitytype').toList()..sort();
-          final statuses = valuesOf('status').toList()..sort();
-          final me = session.userId ?? '';
-          final list = nxApplyLocalQuery<Map<String, dynamic>>(
-            all,
-            _lq.copyWith(sort: null),
-            text: (r) => '${r['subject'] ?? ''} ${r['location'] ?? ''} ${r['account_name'] ?? ''} ${r['contact_name'] ?? ''}',
-            filters: {
-              'type': (r, v) => v.contains('${r['activitytype'] ?? ''}'),
-              'status': (r, v) => v.contains('${r['status'] ?? ''}'),
-              'checkin': (r, v) {
-                final done = '${r['checkindate'] ?? ''}'.isNotEmpty;
-                return (v.contains('done') && done) || (v.contains('not') && !done);
-              },
-              'scope': (r, v) => !v.contains('mine') || '${r['smownerid'] ?? ''}' == me,
-            },
-          );
-          final dayKey = _ymd(_selectedDay);
-          final byDay = groupActivitiesByDay(list);
-          final visible = nxApplyLocalQuery<Map<String, dynamic>>(
-            _mode == _CalMode.agenda ? (byDay[dayKey] ?? const <Map<String, dynamic>>[]) : list,
-            NxListQuery(sort: _lq.sort),
-            text: (_) => '',
-            sorts: {
-              'late': (a, b) => '${b['date_start'] ?? ''}'.compareTo('${a['date_start'] ?? ''}'),
-              'early': (a, b) => '${a['date_start'] ?? ''}'.compareTo('${b['date_start'] ?? ''}'),
-            },
-          );
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              SegmentedButton<_CalMode>(
-                segments: [
-                  ButtonSegment(value: _CalMode.agenda, label: Text(tr('ปฏิทิน')), icon: Icon(NxI.calendarBlank)),
-                  if (showIncoming)
-                    ButtonSegment(value: _CalMode.incoming, label: Text(tr('ใกล้ถึง')), icon: Icon(NxI.clockCountdown)),
-                  if (showPending)
-                    ButtonSegment(value: _CalMode.pending, label: Text(tr('ค้าง')), icon: Icon(NxI.warningCircle)),
-                ],
-                selected: {_mode},
-                showSelectedIcon: false,
-                onSelectionChanged: (v) => setState(() {
-                  _mode = v.first;
-                  _revision++;
-                }),
-              ),
-              const SizedBox(height: 8),
-              NxListToolbar(
-                query: _lq,
-                liveSearch: true,
-                padding: const EdgeInsets.only(bottom: 4),
-                searchHint: 'ค้นหาชื่อนัด / สถานที่ / ลูกค้า',
-                quickGroup: 'scope',
-                groups: [
-                  const NxFilterGroup(key: 'scope', label: 'ขอบเขต', multi: false, options: [NxFilterOption('mine', 'ของฉัน')]),
-                  if (types.isNotEmpty)
-                    NxFilterGroup(key: 'type', label: 'ประเภท', options: [for (final t in types) NxFilterOption(t, t)]),
-                  if (statuses.isNotEmpty)
-                    NxFilterGroup(key: 'status', label: 'สถานะ', options: [for (final t in statuses) NxFilterOption(t, t)]),
-                  const NxFilterGroup(key: 'checkin', label: 'เช็คอิน', multi: false, options: [
-                    NxFilterOption('done', 'เช็คอินแล้ว'),
-                    NxFilterOption('not', 'ยังไม่เช็คอิน'),
-                  ]),
-                ],
-                sorts: const [NxSortOption('early', 'เวลาเช้า → ค่ำ'), NxSortOption('late', 'เวลาค่ำ → เช้า')],
-                onChanged: (q) => setState(() => _lq = q),
-              ),
-              if (_mode == _CalMode.agenda) ...[
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () => setState(() {
-                      _weekView = !_weekView;
-                      _revision++;
-                    }),
-                    icon: Icon(_weekView ? NxI.calendarBlank : NxI.listBullets, size: 18),
-                    label: Text(tr(_weekView ? 'ดูรายเดือน' : 'ดูรายสัปดาห์')),
-                  ),
-                ),
-                if (_weekView)
-                  NxWeekStrip(
-                    selected: _selectedDay,
-                    counts: {for (final e in byDay.entries) e.key: e.value.length},
-                    onSelect: (d) {
-                      final monthChanged = d.month != _selectedDay.month || d.year != _selectedDay.year;
-                      setState(() {
-                        _selectedDay = d;
-                        if (monthChanged) _revision++;
-                      });
-                    },
-                  )
-                else
-                NxMonthGrid(
-                  month: DateTime(_selectedDay.year, _selectedDay.month),
-                  selected: _selectedDay,
-                  counts: {for (final e in byDay.entries) e.key: e.value.length},
-                  onSelect: (d) => setState(() => _selectedDay = d),
-                  onMonthChange: (m) => setState(() {
-                    final now = thaiNow();
-                    _selectedDay = (m.year == now.year && m.month == now.month) ? now : m;
-                    _revision++;
-                  }),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  tr('${_selectedDay.day}/${_selectedDay.month}/${uiYear(_selectedDay.year)} · ${visible.length} กิจกรรม'),
-                  style: theme.textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
-              ],
-              if (visible.isEmpty)
-                Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(child: Text(tr('ไม่มีกิจกรรม'))),
-                ),
-              for (final row in visible)
-                if (!PendingEntityDeletes.instance.isPending('activity', row['id']?.toString() ?? ''))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: NxSurfaceCard(
-                    color: _tint(row['status']?.toString()).withValues(alpha: 0.14),
-                    onTap: () {
-                      nxPush<void>(context, ActivityDetailScreen(row: row))
-                          .then((_) => setState(() => _revision++));
-                    },
-                    onLongPress: () => _rowActions(row),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: _tint(row['status']?.toString()),
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                tr(entityTitle(row, module: 'activity')),
-                                style: theme.textTheme.titleMedium,
-                              ),
-                              Text(
-                                tr([
-                                  activityTimeLabel(row),
-                                  row['status'],
-                                  row['location'],
-                                ].where((e) => e != null && e.toString().isNotEmpty).join(' · ')),
-                                style: theme.textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+            child: _showsToday || _mode != _CalMode.calendar
+                ? const SizedBox.shrink()
+                : Padding(padding: const EdgeInsets.only(bottom: 12, right: 6), child: CalTodayButton(onTap: _goToday)),
+          ),
+          NxCreateFab(onPressed: () => _create(_defaultStart(_date))),
+        ],
       ),
-      floatingActionButton: NxCreateFab(
-        label: 'นัดหมาย',
-        onPressed: _openCreate,
-      ),
-    );
-  }
-}
-
-/// Local `yyyy-MM-dd` → activities starting that day (server sends UTC ISO).
-Map<String, List<Map<String, dynamic>>> groupActivitiesByDay(List<Map<String, dynamic>> rows) {
-  final out = <String, List<Map<String, dynamic>>>{};
-  for (final r in rows) {
-    final raw = r['date_start']?.toString() ?? '';
-    final d = DateTime.tryParse(raw);
-    final key = d == null
-        ? (raw.length >= 10 ? raw.substring(0, 10) : raw)
-        : _ymdOf(raw.length <= 10 ? d : (parseThai(raw) ?? d));
-    if (key.isEmpty) continue;
-    (out[key] ??= []).add(r);
-  }
-  return out;
-}
-
-String _ymdOf(DateTime d) =>
-    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-/// "09:30–10:30" (local) or the raw value when it cannot be parsed.
-String activityTimeLabel(Map<String, dynamic> row) {
-  String hm(dynamic v) {
-    final raw = v?.toString() ?? '';
-    final d = DateTime.tryParse(raw);
-    if (d == null || raw.length <= 10) return '';
-    final l = toThai(d);
-    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
-  }
-
-  final a = hm(row['date_start']);
-  final b = hm(row['due_date'] ?? row['date_end']);
-  if (a.isEmpty) return row['date_start']?.toString() ?? '';
-  return b.isEmpty ? a : '$a–$b';
-}
-
-const _thMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
-const _thWeek = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
-
-/// Month grid (Mon-first) with a dot per day that has activities.
-class NxMonthGrid extends StatelessWidget {
-  const NxMonthGrid({
-    super.key,
-    required this.month,
-    required this.selected,
-    required this.counts,
-    required this.onSelect,
-    required this.onMonthChange,
-  });
-
-  final DateTime month;
-  final DateTime selected;
-  final Map<String, int> counts;
-  final ValueChanged<DateTime> onSelect;
-  final ValueChanged<DateTime> onMonthChange;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final first = DateTime(month.year, month.month);
-    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-    final lead = first.weekday - 1;
-    final now = thaiNow();
-    final cells = <Widget>[
-      for (final w in _thWeek)
-        Center(child: Text(tr(w), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
-      for (var i = 0; i < lead; i++) const SizedBox.shrink(),
-      for (var day = 1; day <= daysInMonth; day++)
-        Builder(builder: (context) {
-          final d = DateTime(month.year, month.month, day);
-          final isSel = d.year == selected.year && d.month == selected.month && d.day == selected.day;
-          final isToday = d.year == now.year && d.month == now.month && d.day == now.day;
-          final n = counts[_ymdOf(d)] ?? 0;
-          return InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () => onSelect(d),
-            child: Container(
-              margin: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                color: isSel ? cs.primary : (isToday ? cs.primaryContainer : null),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    tr('$day'),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: isSel ? cs.onPrimary : null,
-                      fontWeight: isToday || isSel ? FontWeight.w700 : null,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: n == 0 ? Colors.transparent : (isSel ? cs.onPrimary : cs.primary),
-                    ),
-                  ),
-                ],
-              ),
+      body: Column(
+        children: [
+          // View tabs with a sliding underline (ปี เดือน สัปดาห์ 3 วัน วัน รายการ).
+          SizedBox(
+            height: 42,
+            // All seven fit the width (no sideways scrolling to reach "วัน" / "รายการ").
+            child: TabBar(
+              controller: _tabs,
+              isScrollable: false,
+              labelPadding: EdgeInsets.zero,
+              dividerColor: Colors.transparent,
+              indicatorSize: TabBarIndicatorSize.label,
+              labelStyle: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+              unselectedLabelStyle: theme.textTheme.labelLarge,
+              labelColor: cs.primary,
+              unselectedLabelColor: cs.onSurfaceVariant,
+              onTap: (i) => _setView(CalView.values[i]),
+              tabs: [for (final v in CalView.values) Tab(key: ValueKey('cal-tab-${v.name}'), text: tr(v.label))],
             ),
-          );
-        }),
-    ];
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(NxI.caretLeft),
-                  onPressed: () => onMonthChange(DateTime(month.year, month.month - 1)),
-                ),
-                Expanded(
-                  child: Center(
-                    child: Text(tr('${tr(_thMonths[month.month - 1])} ${uiYear(month.year)}'), style: theme.textTheme.titleMedium),
-                  ),
-                ),
-                TextButton(onPressed: () => onMonthChange(DateTime(now.year, now.month)), child: Text(tr('วันนี้'))),
-                IconButton(
-                  icon: const Icon(NxI.caretRight),
-                  onPressed: () => onMonthChange(DateTime(month.year, month.month + 1)),
-                ),
-              ],
-            ),
-            GridView.count(
-              crossAxisCount: 7,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 1.05,
-              children: cells,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Monday of the week containing [d].
-DateTime weekStart(DateTime d) {
-  final day = DateTime(d.year, d.month, d.day);
-  return day.subtract(Duration(days: day.weekday - 1));
-}
-
-/// 7-day strip (Mon–Sun) with prev/next week and a dot per busy day.
-class NxWeekStrip extends StatelessWidget {
-  const NxWeekStrip({super.key, required this.selected, required this.counts, required this.onSelect});
-
-  final DateTime selected;
-  final Map<String, int> counts;
-  final ValueChanged<DateTime> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final start = weekStart(selected);
-    final now = thaiNow();
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        child: Row(
-          children: [
-            IconButton(icon: const Icon(NxI.caretLeft), onPressed: () => onSelect(selected.subtract(const Duration(days: 7)))),
-            for (var i = 0; i < 7; i++)
-              Expanded(
-                child: Builder(builder: (context) {
-                  final d = start.add(Duration(days: i));
-                  final isSel = d.year == selected.year && d.month == selected.month && d.day == selected.day;
-                  final isToday = d.year == now.year && d.month == now.month && d.day == now.day;
-                  final n = counts[_ymdOf(d)] ?? 0;
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => onSelect(d),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSel ? cs.primary : (isToday ? cs.primaryContainer : null),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(tr(_thWeek[i]), style: theme.textTheme.labelSmall?.copyWith(color: isSel ? cs.onPrimary : cs.onSurfaceVariant)),
-                          Text(tr('${d.day}'), style: theme.textTheme.titleMedium?.copyWith(color: isSel ? cs.onPrimary : null)),
-                          Text(
-                            tr(n == 0 ? ' ' : '$n'),
-                            style: theme.textTheme.labelSmall?.copyWith(color: isSel ? cs.onPrimary : cs.primary, fontWeight: FontWeight.w700),
-                          ),
-                        ],
-                      ),
+          ),
+          Expanded(
+            key: _bodyKey,
+            child: ClipRect(
+              // Pull down at the top of any view to reload (no refresh button).
+              child: NxRefresh(
+                notificationPredicate: (n) => n.depth <= 2,
+                onRefresh: _reload,
+                child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 340),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                layoutBuilder: (current, previous) => Stack(children: [...previous, ?current]),
+                transitionBuilder: (child, anim) {
+                  final incoming = child.key == ValueKey(_viewKey);
+                  final finer = _view.index > _prev.index;
+                  final begin = incoming ? (_fromTile ? 0.35 : (finer ? 0.92 : 1.08)) : (finer ? 1.08 : 0.92);
+                  return FadeTransition(
+                    opacity: anim,
+                    child: ScaleTransition(
+                      alignment: incoming ? _zoomAt : Alignment.center,
+                      scale: Tween<double>(begin: begin, end: 1).animate(anim),
+                      child: child,
                     ),
                   );
-                }),
+                },
+                child: KeyedSubtree(key: ValueKey(_viewKey), child: _buildView()),
               ),
-            IconButton(icon: const Icon(NxI.caretRight), onPressed: () => onSelect(selected.add(const Duration(days: 7)))),
-          ],
-        ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
-}
 
+  String get _viewKey => '${_view.name}-${_mode.name}-$_jump';
+
+  Widget _buildView() {
+    switch (_view) {
+      case CalView.year:
+        return CalYearView(
+          store: _store,
+          anchor: _date,
+          onAnchor: (d) => setState(() => _date = d),
+          onOpenMonth: (m, r) {
+            final t = thaiNow();
+            _date = m.year == t.year && m.month == t.month ? calDay(t) : m;
+            _setView(CalView.month, from: r);
+          },
+        );
+      case CalView.month:
+        return CalMonthView(
+          store: _store,
+          selected: _date,
+          onSelect: (d) => setState(() => _date = calDay(d)),
+          onOpen: _open,
+          onEventMenu: _eventMenu,
+          onCreate: (d) => _create(_defaultStart(d)),
+        );
+      case CalView.week:
+      case CalView.threeDay:
+      case CalView.day:
+        return CalTimeGrid(
+          store: _store,
+          view: _view,
+          anchor: _date,
+          onAnchor: (d) => setState(() => _date = calDay(d)),
+          onOpen: _open,
+          onCreateAt: (at, {bool allDay = false}) => _create(at),
+          onReschedule: _reschedule,
+          onOpenDay: (d) {
+            _date = d;
+            _setView(CalView.day);
+          },
+        );
+      case CalView.list:
+        final searchBox = Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: TextField(
+            key: const ValueKey('cal-search'),
+            controller: _search,
+            textInputAction: TextInputAction.search,
+            onChanged: (v) {
+              setState(() => _lq = _lq.copyWith(q: v.trim()));
+              _store.refreshFilter();
+            },
+            decoration: InputDecoration(
+              hintText: tr('ค้นหาชื่อนัด / สถานที่ / ลูกค้า'),
+              prefixIcon: const Icon(NxI.magnifyingGlass, size: 20),
+              isDense: true,
+              suffixIcon: _search.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(NxI.x, size: 18),
+                      onPressed: () {
+                        _search.clear();
+                        setState(() => _lq = _lq.copyWith(q: ''));
+                        _store.refreshFilter();
+                      },
+                    ),
+            ),
+          ),
+        );
+        if (_mode == _CalMode.calendar) {
+          return CalAgendaView(store: _store, anchor: _date, onOpen: _open, onEventMenu: _eventMenu, header: searchBox);
+        }
+        return FutureBuilder<List<CalEvent>>(
+          future: _special,
+          builder: (context, snap) {
+            if (snap.hasError) return Center(child: Text(tr(formatApiError(snap.error!))));
+            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+            return CalAgendaView(
+              store: _store,
+              anchor: _date,
+              events: [for (final e in snap.data!) if (_passes(e)) e],
+              onOpen: _open,
+              onEventMenu: _eventMenu,
+              header: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: InputChip(
+                    avatar: Icon(_mode == _CalMode.incoming ? NxI.clockCountdown : NxI.warningCircle, size: 16),
+                    label: Text(tr(_mode == _CalMode.incoming ? 'งานใกล้ถึง' : 'งานค้าง')),
+                    onDeleted: () => _setMode(_CalMode.calendar),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+    }
+  }
+}
