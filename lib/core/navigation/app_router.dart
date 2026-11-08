@@ -22,6 +22,8 @@ import '../../screens/hr/attendance_report_screen.dart';
 import '../../screens/hr/leave_screen.dart';
 import '../../screens/jobs/my_jobs_screen.dart';
 import '../../screens/module/module_hub_screen.dart';
+import '../../screens/module/menu_group_screen.dart';
+import '../../screens/crm/call_log_screen.dart';
 import '../../screens/notifications/notification_center_screen.dart';
 import '../../screens/whats_new/whats_new_screen.dart';
 import '../../screens/settings/devices_screen.dart';
@@ -219,6 +221,14 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.moduleHub,
         builder: (_, _) => const ModuleHubScreen(),
+      ),
+      GoRoute(
+        path: '/menu/:group',
+        builder: (_, state) => MenuGroupScreen(groupId: state.pathParameters['group'] ?? ''),
+      ),
+      GoRoute(
+        path: AppRoutes.callLog,
+        builder: (_, _) => const CallLogScreen(),
       ),
       GoRoute(
         path: AppRoutes.crmHome,

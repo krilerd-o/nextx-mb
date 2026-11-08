@@ -56,6 +56,10 @@ class AppRoutes {
   static const String mail = '/mail';
   static const String approvals = '/approvals';
   static const String commerce = '/commerce';
+  static const String callLog = '/call-log';
+
+  /// One group of the menu page (web nav rail group), e.g. `/menu/service`.
+  static String menuGroup(String id) => '/menu/$id';
 
   static String crmModule(String module) => '/crm/$module';
   static String crmRecord(String module, String id) => '/crm/$module/$id';
