@@ -2,6 +2,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+
+import '../core/nx_breakpoint.dart';
 import 'package:flutter/services.dart';
 
 import '../core/app_theme.dart';
@@ -120,7 +122,17 @@ class _Popover extends StatelessWidget {
     // Open toward the roomier side of the button.
     final onRight = anchor.center.dx > size.width / 2;
     final below = anchor.center.dy < size.height * 0.55;
-    final left = (onRight ? anchor.right - width : anchor.left).clamp(_margin, size.width - width - _margin).toDouble();
+    // On an opened foldable keep the panel on the side of the fold it came from.
+    var minX = _margin, maxX = size.width - _margin;
+    final hinge = NxBreakpoint.verticalHinge(context);
+    if (hinge != null) {
+      if (anchor.center.dx < hinge.left) {
+        maxX = hinge.left - _margin;
+      } else {
+        minX = hinge.right + _margin;
+      }
+    }
+    final left = (onRight ? anchor.right - width : anchor.left).clamp(minX, (maxX - width).clamp(minX, maxX)).toDouble();
     final double maxH = below
         ? size.height - (anchor.bottom + _gap) - pad.bottom - _margin
         : anchor.top - _gap - pad.top - _margin;
