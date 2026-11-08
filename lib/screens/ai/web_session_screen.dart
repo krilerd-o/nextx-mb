@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -47,13 +49,19 @@ class _WebSessionScreenState extends State<WebSessionScreen> {
         onProgress: (p) {
           if (mounted) setState(() => _progress = p);
         },
-        onPageFinished: (url) {
+        onPageFinished: (url) async {
           final u = Uri.tryParse(url);
           if (u == null || _landed) return;
-          // The web signs in on /login then moves on; then open the wanted page.
+          // The web signs in on /login then moves on. The token carries the
+          // business of the original sign-in, so point the web at the app's
+          // current business / package first, then open the wanted page.
           if (!u.path.startsWith('/login')) {
             _landed = true;
-            if (u.path != widget.path) _web.loadRequest(Uri.parse('$_origin${widget.path}'));
+            final s = config.session;
+            try {
+              await _web.runJavaScript(webSessionContextJs(businessId: s.businessId, businessName: s.businessName, packageCode: s.packageCode));
+            } catch (_) {}
+            await _web.loadRequest(Uri.parse('$_origin${widget.path}'));
           }
         },
         onNavigationRequest: (req) {
@@ -104,4 +112,18 @@ class _WebSessionScreenState extends State<WebSessionScreen> {
       ),
     );
   }
+}
+
+/// Script that makes the web's saved session (`moai_next_auth`) use the
+/// app's current business and package; no-op when not signed in there.
+String webSessionContextJs({String? businessId, String? businessName, String? packageCode}) {
+  if (businessId == null || businessId.isEmpty) return '';
+  final bid = jsonEncode(int.tryParse(businessId) ?? businessId);
+  final name = jsonEncode(businessName ?? '');
+  final pkg = jsonEncode(packageCode);
+  return "(function(){try{var k='moai_next_auth';var d=JSON.parse(localStorage.getItem(k)||'null');"
+      "if(!d||!d.user)return;var bid=$bid,pkg=$pkg;"
+      "if(!d.business||String(d.business.id)!==String(bid)){d.business={id:bid,name:$name};d.package=pkg?{code:pkg}:null;}"
+      "else if(pkg&&(!d.package||d.package.code!==pkg)){d.package=Object.assign({},d.package||{},{code:pkg});}"
+      "localStorage.setItem(k,JSON.stringify(d));}catch(e){}})();";
 }
