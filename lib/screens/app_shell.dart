@@ -11,7 +11,7 @@ import '../widgets/nx_invite_prompt.dart';
 import '../widgets/nx_tab_nav.dart';
 import '../core/shell_tabs.dart';
 import '../core/nx_page_route.dart';
-import 'ai/ai_chat_screen.dart';
+import 'ai/assistant/ai_assistant_screen.dart';
 import 'auth/qr_login_scan_screen.dart';
 import 'approvals/approvals_screen.dart';
 import 'calendar/calendar_home_screen.dart';
@@ -69,7 +69,7 @@ Widget shellTabScreen(String id) {
     case 'files':
       return const FilesHomeScreen();
     case 'ai':
-      return const AiChatScreen();
+      return const AiAssistantScreen();
     case 'search':
       return const GlobalSearchScreen();
     case 'notifications':

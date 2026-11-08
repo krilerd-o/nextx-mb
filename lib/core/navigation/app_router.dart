@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../widgets/nx_icons.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../screens/ai/ai_chat_screen.dart';
+import '../../screens/ai/assistant/ai_assistant_screen.dart';
 import '../../screens/ai/isaac_coming_soon_screen.dart';
 import '../../screens/ai/isaac_embed_screen.dart';
 import '../../screens/approvals/approvals_screen.dart';
@@ -230,7 +230,7 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: AppRoutes.aiChat,
-        builder: (_, _) => const AiChatScreen(),
+        builder: (_, _) => const AiAssistantScreen(),
       ),
       // ISAAC AI (same routes as the web menu group).
       GoRoute(path: AppRoutes.isaacNotebook, builder: (_, _) => const IsaacEmbedScreen(menu: 'bot')),

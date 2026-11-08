@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
+
+import '../core/ai_assistant.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/app_alice.dart';
@@ -1482,6 +1486,106 @@ class ApiClient {
       if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
     }));
   }
+
+  // ── AI Assistant (same endpoints as the web `/ai` page)
+
+  /// Streams `POST /api/ai/chat` (server-sent events). Errors before the
+  /// stream starts come back as JSON and are thrown like other API errors.
+  Stream<AiStreamEvent> streamAiChat(Map<String, dynamic> body, {CancelToken? cancel}) async* {
+    final Response<ResponseBody> res;
+    try {
+      res = await _dio.post<ResponseBody>(
+        '/api/ai/chat',
+        data: {...body, 'stream': true},
+        cancelToken: cancel,
+        options: Options(
+          responseType: ResponseType.stream,
+          headers: {'Accept': 'text/event-stream'},
+          receiveTimeout: const Duration(minutes: 6),
+          validateStatus: (_) => true,
+        ),
+      );
+    } on DioException catch (e) {
+      throw _fromDio(e);
+    }
+    final Stream<String> stream = res.data!.stream.cast<List<int>>().transform(utf8.decoder);
+    if ((res.statusCode ?? 200) >= 400) {
+      final text = await stream.join();
+      dynamic raw;
+      try {
+        raw = jsonDecode(text);
+      } catch (_) {
+        raw = text;
+      }
+      throw _envelopeError(res.statusCode ?? 500, raw);
+    }
+    yield* parseAiSse(stream);
+  }
+
+  Future<List<Map<String, dynamic>>> getAiConversations({String? q}) async {
+    final env = await _send('GET', '/api/ai/conversations', query: {if (q != null && q.trim().isNotEmpty) 'q': q.trim()});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
+
+  Future<Map<String, dynamic>> createAiConversation(Map<String, dynamic> body) async =>
+      _dataMap(await _send('POST', '/api/ai/conversations', data: body));
+
+  /// Conversation with `messages` (up to 500).
+  Future<Map<String, dynamic>> getAiConversation(String id) async => _dataMap(await _send('GET', '/api/ai/conversations/$id'));
+
+  Future<Map<String, dynamic>> updateAiConversation(String id, Map<String, dynamic> body) async =>
+      _dataMap(await _send('PATCH', '/api/ai/conversations/$id', data: body));
+
+  Future<void> deleteAiConversation(String id) async => _send('DELETE', '/api/ai/conversations/$id');
+
+  Future<Map<String, dynamic>> appendAiMessage(String conversationId, Map<String, dynamic> message) async =>
+      _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/messages', data: {'message': message}));
+
+  /// Drops the last assistant reply; the client then streams again.
+  Future<Map<String, dynamic>> regenerateAi(String conversationId) async =>
+      _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/regenerate'));
+
+  Future<Map<String, dynamic>> createAiShare(String conversationId) async =>
+      _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/shares', data: const {}));
+
+  Future<List<Map<String, dynamic>>> getAiProjects() async {
+    final env = await _send('GET', '/api/ai/projects');
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
+
+  /// `{id, url, original_name, kind, extract_status?, extracted_text?, ...}`.
+  Future<Map<String, dynamic>> uploadAiAttachment(MultipartFile file, {String? conversationId}) async {
+    final form = FormData()..files.add(MapEntry('file', file));
+    if (conversationId != null) form.fields.add(MapEntry('conversation_id', conversationId));
+    return _dataMap(await _send('POST', '/api/ai/attachments', data: form));
+  }
+
+  Future<Map<String, dynamic>> confirmAiTool(String proposalId, {String? boardId}) async =>
+      _dataMap(await _send('POST', '/api/ai/tools/confirm', data: {'proposalId': proposalId, 'board_id': ?boardId}));
+
+  Future<Map<String, dynamic>> cancelAiTool(String proposalId) async =>
+      _dataMap(await _send('POST', '/api/ai/tools/cancel', data: {'proposalId': proposalId}));
+
+  Future<List<Map<String, dynamic>>> getAiSuggestedPrompts({String? module}) async {
+    final env = await _send('GET', '/api/ai/suggested-prompts', query: {'module': ?module});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
+
+  /// Follow-up chips after a reply: `{items:[{label, prompt, kind}]}`.
+  Future<List<Map<String, dynamic>>> postAiReplySuggestions({required String lastReply, required String lastUserMessage, String locale = 'th'}) async {
+    final env = await _send('POST', '/api/ai/reply-suggestions', data: {'last_reply': lastReply, 'last_user_message': lastUserMessage, 'locale': locale});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
+
+  /// Plan, quota, used, remaining, modelDaily, alternatives.
+  Future<Map<String, dynamic>> getAiUsage() async => _dataMap(await _send('GET', '/api/ai/usage'));
+
+  Future<Map<String, dynamic>> getAiModels({String? provider}) async =>
+      _dataMap(await _send('GET', '/api/ai/models', query: {'provider': ?provider}));
 
   // ── ISAAC AI (web menu group "ISAAC AI")
 
