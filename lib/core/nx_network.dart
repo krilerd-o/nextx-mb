@@ -22,7 +22,7 @@ class NxNetwork {
     _started = true;
     try {
       final c = Connectivity();
-      c.checkConnectivity().then((r) => metered.value = isMetered(r)).catchError((_) {});
+      c.checkConnectivity().then<void>((r) => metered.value = isMetered(r)).catchError((Object _) {});
       _sub = c.onConnectivityChanged.listen((r) => metered.value = isMetered(r), onError: (_) {});
     } catch (_) {
       // No plugin (tests / unsupported platform): treat as unmetered.

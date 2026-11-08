@@ -10,7 +10,6 @@ import '../../core/i18n.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../core/nx_page_route.dart';
-import '../../core/server_profile.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_app_header.dart';
