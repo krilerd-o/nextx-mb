@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
@@ -23,6 +22,7 @@ import '../../widgets/fields/nx_picker_sheet.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_html_view.dart';
+import '../../widgets/nx_attachments.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
@@ -1264,26 +1264,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       icon: NxI.paperclip,
       color: const Color(0xFF64748B),
       trailing: TextButton.icon(onPressed: _saving ? null : _addAttachment, icon: const Icon(NxI.plus, size: 16), label: Text(tr('แนบไฟล์'))),
-      child: Column(
-        children: [
-          for (final a in files)
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon((a['mime']?.toString() ?? '').startsWith('image/') ? NxI.image : NxI.file),
-              title: Text(a['name']?.toString() ?? tr('ไฟล์'), maxLines: 1, overflow: TextOverflow.ellipsis),
-              onTap: () {
-                final uri = Uri.tryParse(_api.absoluteUrl(a['url'].toString()));
-                if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
-              trailing: IconButton(
-                tooltip: tr('นำออก'),
-                icon: const Icon(NxI.x, size: 18),
-                onPressed: _saving ? null : () => _update({'attachments': files.where((x) => x['url'] != a['url']).toList()}),
-              ),
+      child: files.isEmpty
+          ? Text(tr('ยังไม่มีไฟล์แนบ'), style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant))
+          : NxAttachmentStrip(
+              key: const ValueKey('ws-attachments'),
+              items: [for (final a in files) Map<String, dynamic>.from(a)],
+              thumb: 92,
+              onRemove: _saving ? null : (a) => _update({'attachments': files.where((x) => x['url'] != a['url']).toList()}),
             ),
-        ],
-      ),
     );
   }
 

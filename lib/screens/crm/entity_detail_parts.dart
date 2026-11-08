@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart' show MultipartFile;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +10,7 @@ import '../../core/app_config.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_html_view.dart';
+import '../../widgets/nx_attachments.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../notifications/notification_center_screen.dart' show relativeTime;
@@ -183,12 +183,7 @@ class EntityQuickActions extends StatelessWidget {
   }
 }
 
-bool isImageAttachment(Map<String, dynamic> a) {
-  final mime = a['mime']?.toString() ?? '';
-  if (mime.startsWith('image/')) return true;
-  final n = (a['name'] ?? a['url'] ?? '').toString().toLowerCase();
-  return RegExp(r'\.(png|jpe?g|gif|webp|heic)$').hasMatch(n);
-}
+bool isImageAttachment(Map<String, dynamic> a) => nxIsImageAttachment(a);
 
 List<Map<String, dynamic>> commentAttachments(Map<String, dynamic> c) {
   final raw = c['attachments'];
@@ -440,7 +435,7 @@ class _CommentTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final name = c['user_name']?.toString().trim();
-    final atts = commentAttachments(c);
+    final atts = [...commentAttachments(c), ...nxInlineImages('${c['body'] ?? ''}')];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -452,7 +447,7 @@ class _CommentTile extends StatelessWidget {
             Text(tr(relativeTime(c['created_at'])), style: theme.textTheme.bodySmall),
           ],
         ),
-        if ((c['body']?.toString() ?? '').trim().isNotEmpty)
+        if (nxCommentHasText('${c['body'] ?? ''}'))
           Padding(padding: const EdgeInsets.only(top: 6), child: NxHtmlView(html: c['body'].toString())),
         if (atts.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: AttachmentStrip(items: atts)),
       ],
@@ -460,83 +455,17 @@ class _CommentTile extends StatelessWidget {
   }
 }
 
-/// Image thumbnails (tap = full screen) + file chips (tap = open).
+/// Image thumbnails (tap = full screen) + file cards (tap = preview) — shared
+/// [NxAttachmentStrip], same look in every menu.
 class AttachmentStrip extends StatelessWidget {
   const AttachmentStrip({super.key, required this.items});
   final List<Map<String, dynamic>> items;
 
   @override
-  Widget build(BuildContext context) {
-    final api = context.read<AppConfig>().apiClient;
-    final images = items.where(isImageAttachment).toList();
-    final files = items.where((a) => !isImageAttachment(a)).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (images.isNotEmpty)
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (var i = 0; i < images.length; i++)
-                GestureDetector(
-                  onTap: () => openImageViewer(context, [for (final a in images) api.absoluteUrl(a['url'].toString())], i),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image(
-                      image: ResizeImage(CachedNetworkImageProvider(api.absoluteUrl(images[i]['url'].toString())), width: 252),
-                      width: 84,
-                      height: 84,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(width: 84, height: 84, color: Colors.black12, child: const Icon(NxI.image)),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        for (final f in files)
-          ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(NxI.paperclip),
-            title: Text(tr(f['name']?.toString() ?? 'file'), maxLines: 1, overflow: TextOverflow.ellipsis),
-            onTap: () => launchUrl(Uri.parse(api.absoluteUrl(f['url'].toString())), mode: LaunchMode.externalApplication),
-          ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => NxAttachmentStrip(items: items);
 }
 
-Future<void> openImageViewer(BuildContext context, List<String> urls, int initial) {
-  return Navigator.of(context).push(PageRouteBuilder<void>(
-    opaque: false,
-    barrierColor: Colors.black,
-    pageBuilder: (context, _, __) => _ImageViewer(urls: urls, initial: initial),
-    transitionsBuilder: (context, a, _, child) => FadeTransition(opacity: a, child: child),
-  ));
-}
-
-class _ImageViewer extends StatelessWidget {
-  const _ImageViewer({required this.urls, required this.initial});
-  final List<String> urls;
-  final int initial;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, elevation: 0),
-      body: PageView.builder(
-        controller: PageController(initialPage: initial),
-        itemCount: urls.length,
-        itemBuilder: (context, i) => InteractiveViewer(
-          maxScale: 5,
-          child: Center(child: Image(image: CachedNetworkImageProvider(urls[i]), fit: BoxFit.contain)),
-        ),
-      ),
-    );
-  }
-}
+Future<void> openImageViewer(BuildContext context, List<String> urls, int initial) => openNxImageViewer(context, urls, initial);
 
 /// Every attachment from the record's comments, images first (like the web Files tab).
 class EntityFilesPanel extends StatelessWidget {

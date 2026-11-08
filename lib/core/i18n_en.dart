@@ -1513,6 +1513,8 @@ const Map<String, String> enStrings = {
   'ตั้งรหัสผ่านแล้ว เปิดอีกครั้ง': 'Password set — open again',
   'เปิดไม่สำเร็จ': 'Could not open',
   'เปิดใหม่': 'Reopen',
+  'เปิดในเบราว์เซอร์': 'Open in browser',
+  'ขยาย': 'Expand',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

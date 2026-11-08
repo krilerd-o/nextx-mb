@@ -3,7 +3,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_config.dart';
 import '../../core/html_display.dart';
@@ -13,6 +12,7 @@ import '../../core/workspace_models.dart';
 import '../../services/api_client.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_html_view.dart';
+import '../../widgets/nx_attachments.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../mail/mail_compose_screen.dart' show plainTextToHtml;
@@ -442,15 +442,17 @@ class WsActivityPanelState extends State<WsActivityPanel> {
                 }),
               ),
             ]),
+          // Files waiting to be sent: thumbnails / cards with remove (like the web).
           if (_pendingFiles.isNotEmpty)
-            Wrap(spacing: 6, children: [
-              for (final f in _pendingFiles)
-                InputChip(
-                  avatar: const Icon(NxI.paperclip, size: 14),
-                  label: Text('${f['name'] ?? tr('ไฟล์')}', overflow: TextOverflow.ellipsis),
-                  onDeleted: () => setState(() => _pendingFiles = [..._pendingFiles]..remove(f)),
-                ),
-            ]),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+              child: NxAttachmentStrip(
+                key: const ValueKey('ws-comment-pending'),
+                items: _pendingFiles,
+                thumb: 64,
+                onRemove: (f) => setState(() => _pendingFiles = [..._pendingFiles]..remove(f)),
+              ),
+            ),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -507,20 +509,14 @@ class WsActivityPanelState extends State<WsActivityPanel> {
                   Text(wsDateTime(c['created_at']), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
                 ]),
                 const SizedBox(height: 2),
-                NxHtmlView(html: '${c['body'] ?? ''}', style: theme.textTheme.bodyMedium),
-                for (final f in files)
-                  InkWell(
-                    onTap: () {
-                      final uri = Uri.tryParse(_api.absoluteUrl('${f['url']}'));
-                      if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(children: [
-                        Icon('${f['mime'] ?? ''}'.startsWith('image/') ? NxI.image : NxI.file, size: 14, color: cs.primary),
-                        const SizedBox(width: 4),
-                        Flexible(child: Text('${f['name'] ?? tr('ไฟล์')}', style: TextStyle(color: cs.primary), overflow: TextOverflow.ellipsis)),
-                      ]),
+                if (nxCommentHasText('${c['body'] ?? ''}')) NxHtmlView(html: '${c['body'] ?? ''}', style: theme.textTheme.bodyMedium),
+                if (files.isNotEmpty || nxInlineImages('${c['body'] ?? ''}').isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 2),
+                    child: NxAttachmentStrip(
+                      key: ValueKey('ws-comment-files-${c['id']}'),
+                      items: [for (final f in files) Map<String, dynamic>.from(f), ...nxInlineImages('${c['body'] ?? ''}')],
+                      thumb: 96,
                     ),
                   ),
                 Row(children: [
