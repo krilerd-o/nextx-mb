@@ -51,6 +51,7 @@ import '../../screens/settings/diagnostics_screen.dart';
 import 'notification_deep_link.dart';
 import 'route_access.dart';
 import '../i18n.dart';
+import '../../screens/profile/profile_hub_screen.dart';
 
 GoRouter createAppRouter(AppConfig config) {
   return GoRouter(
@@ -222,6 +223,10 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: AppRoutes.profile,
+        builder: (_, _) => const ProfileHubScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.profileSecurity,
         builder: (_, _) => const ProfileScreen(),
       ),
       GoRoute(

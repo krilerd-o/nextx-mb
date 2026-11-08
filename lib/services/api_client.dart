@@ -136,7 +136,8 @@ class ApiClient {
           options.headers['X-Nextx-Client'] = 'mobile';
           // Device list on the server (Settings → devices): name / platform / app version.
           options.headers.addAll(deviceHeaders);
-          final token = _accessToken;
+          // A one-off token for this request only (OTP-proven password change).
+          final token = options.extra['nx_token'] as String? ?? _accessToken;
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -1775,6 +1776,20 @@ class ApiClient {
       'new_password': newPassword,
       if (currentPassword != null && currentPassword.isNotEmpty) 'current_password': currentPassword,
     });
+  }
+
+  /// Password change proven by an OTP (no current password): [otpToken] is the
+  /// session the OTP check returned for this same user. Afterwards that extra
+  /// session is signed out so it does not linger in the device list.
+  Future<void> changePasswordWithOtpToken(String otpToken, String newPassword) async {
+    try {
+      await _send('PUT', '/api/me/password',
+          data: {'new_password': newPassword}, options: Options(extra: {'nx_token': otpToken}));
+    } finally {
+      try {
+        await _send('POST', '/api/auth/logout', options: Options(extra: {'nx_token': otpToken}));
+      } catch (_) {}
+    }
   }
 
   Future<Map<String, dynamic>> getMyProfile() async {

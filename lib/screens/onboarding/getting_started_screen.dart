@@ -199,6 +199,7 @@ class _ThemeStep extends StatelessWidget {
         const SizedBox(height: 12),
         Wrap(
           spacing: 12,
+          runSpacing: 12,
           children: [
             for (var i = 0; i < AppConfig.accentOptions.length; i++)
               GestureDetector(

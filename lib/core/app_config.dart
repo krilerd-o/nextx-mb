@@ -39,6 +39,7 @@ const String _keyMenuKeys = 'session_menu_keys';
 const String _keyGettingStartedDone = 'getting_started_done';
 const String _keySearchHistory = 'search_history_json';
 const String _keyAccentIndex = 'accent_index';
+const String _keyAccentKey = 'accent_key';
 const String _keyUiLocale = 'ui_locale';
 const String _keyDateFormat = 'date_format_pattern';
 const String _keyProfileAvatarB64 = 'profile_avatar_base64';
@@ -82,31 +83,37 @@ class AppConfig extends ChangeNotifier {
     _load();
   }
 
-  /// Theme colours (index is what's stored — append only, never reorder).
-  static const List<Color> accentOptions = [
-    Color(0xFF6366F1),
-    Color(0xFF0EA5E9),
-    Color(0xFF10B981),
-    Color(0xFFF59E0B),
-    Color(0xFFF43F5E),
-    Color(0xFF8B5CF6),
-    Color(0xFF14B8A6),
-    Color(0xFFF97316),
-    Color(0xFF475569),
+  /// Theme colours — the same palette, keys and order as the NEXTX web
+  /// (ThemeContext ACCENT_PALETTES): 15 standard tones, then 8 pastels.
+  static const List<String> accentKeys = [
+    'orange', 'blue', 'green', 'violet', 'rose', 'teal', 'amber', 'indigo',
+    'cyan', 'lime', 'sky', 'red', 'fuchsia', 'emerald', 'slate',
+    'pastel_rose', 'pastel_mint', 'pastel_lavender', 'pastel_peach',
+    'pastel_sky', 'pastel_lemon', 'pastel_coral', 'pastel_aqua',
   ];
 
-  /// Names shown under each theme colour (Thai; translated by tr()).
-  static const List<String> accentNames = [
-    'คราม',
-    'ฟ้า',
-    'มรกต',
-    'อำพัน',
-    'กุหลาบ',
-    'ม่วง',
-    'เขียวน้ำทะเล',
-    'ส้ม',
-    'กราไฟต์',
+  static const List<Color> accentOptions = [
+    Color(0xFFEA580C), Color(0xFF0253CD), Color(0xFF16A34A), Color(0xFF7C3AED),
+    Color(0xFFE11D48), Color(0xFF0D9488), Color(0xFFD97706), Color(0xFF4F46E5),
+    Color(0xFF0891B2), Color(0xFF65A30D), Color(0xFF0284C7), Color(0xFFDC2626),
+    Color(0xFFC026D3), Color(0xFF059669), Color(0xFF475569),
+    Color(0xFFF472B6), Color(0xFF34D399), Color(0xFFA78BFA), Color(0xFFFB923C),
+    Color(0xFF38BDF8), Color(0xFFFACC15), Color(0xFFFB7185), Color(0xFF2DD4BF),
   ];
+
+  /// Names as on the web (Thai; translated by tr()).
+  static const List<String> accentNames = [
+    'ส้ม', 'น้ำเงิน', 'เขียว', 'ม่วง', 'กุหลาบ', 'เขียวมะกอก', 'เหลืองอำพัน', 'คราม',
+    'ฟ้าคราม', 'มะนาว', 'ฟ้าอ่อน', 'แดง', 'บานเย็น', 'มรกต', 'เทา',
+    'พาสเทล โรส', 'พาสเทล มิ้นต์', 'พาสเทล ลาเวนเดอร์', 'พาสเทล พีช',
+    'พาสเทล สกาย', 'พาสเทล เลมอน', 'พาสเทล คอรัล', 'พาสเทล อะควา',
+  ];
+
+  /// First pastel in [accentOptions] (the palette shows two groups).
+  static const int accentPastelStart = 15;
+
+  /// The app's earlier 9-colour palette (saved by index) → web keys.
+  static const List<String> _legacyAccentKeys = ['indigo', 'sky', 'emerald', 'amber', 'rose', 'violet', 'teal', 'orange', 'slate'];
 
   final ApiClient _api = ApiClient();
   final FlutterSecureStorage _secure = const FlutterSecureStorage();
@@ -118,7 +125,7 @@ class AppConfig extends ChangeNotifier {
   bool _gettingStartedDone = false;
   List<String> _searchHistory = [];
   bool _ready = false;
-  int _accentIndex = 0;
+  int _accentIndex = 7; // indigo
   String _uiLocaleCode = 'th';
   String _dateFormatPattern = 'dd/MM/yyyy HH:mm';
   String? _profileAvatarBase64;
@@ -368,7 +375,10 @@ class AppConfig extends ChangeNotifier {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     final savedUrl = prefs.getString(_keyApiBaseUrl);
-    final loaded = (savedUrl == null || savedUrl.isEmpty || _isLegacyLocalUrl(savedUrl))
+    // Old builds stored a local dev URL by default; a server the user picked
+    // (confirmed) is kept as it is, local or not.
+    final confirmedServer = prefs.getBool(_keyServerConfirmed) ?? false;
+    final loaded = (savedUrl == null || savedUrl.isEmpty || (!confirmedServer && _isLegacyLocalUrl(savedUrl)))
         ? kDefaultApiBaseUrl
         : savedUrl;
     _apiBaseUrl = resolveApiBaseUrl(loaded);
@@ -377,9 +387,14 @@ class AppConfig extends ChangeNotifier {
       _themeMode = ThemeMode.values[modeIndex];
     }
     _gettingStartedDone = prefs.getBool(_keyGettingStartedDone) ?? false;
-    final rawAccent = prefs.getInt(_keyAccentIndex) ?? 0;
-    final maxA = accentOptions.length - 1;
-    _accentIndex = rawAccent < 0 ? 0 : (rawAccent > maxA ? maxA : rawAccent);
+    // Saved by web key; older installs saved an index into the 9-colour palette.
+    var accentKey = prefs.getString(_keyAccentKey);
+    if (accentKey == null) {
+      final legacy = prefs.getInt(_keyAccentIndex);
+      accentKey = legacy != null && legacy >= 0 && legacy < _legacyAccentKeys.length ? _legacyAccentKeys[legacy] : 'indigo';
+    }
+    final ai = accentKeys.indexOf(accentKey);
+    _accentIndex = ai < 0 ? accentKeys.indexOf('indigo') : ai;
     _uiLocaleCode = prefs.getString(_keyUiLocale) == 'en' ? 'en' : 'th';
     L10n.set(_uiLocaleCode);
     _dateFormatPattern = prefs.getString(_keyDateFormat) ?? 'dd/MM/yyyy HH:mm';
@@ -569,7 +584,7 @@ class AppConfig extends ChangeNotifier {
     final maxI = accentOptions.length - 1;
     _accentIndex = index < 0 ? 0 : (index > maxI ? maxI : index);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyAccentIndex, _accentIndex);
+    await prefs.setString(_keyAccentKey, accentKeys[_accentIndex]);
     notifyListeners();
   }
 
@@ -1358,6 +1373,25 @@ class AppConfig extends ChangeNotifier {
     _shell = null;
     await _saveSpaces(prefs);
     await _load();
+  }
+
+  /// Adds a Space from a sign-in already made in the "add Space" window
+  /// ([data] = the server's `{token, user, business}`), then opens it. The
+  /// current Space stays signed in; on failure it is restored.
+  Future<void> addSpaceWithLogin({required String baseUrl, required Map<String, dynamic> data, String email = ''}) async {
+    final url = normalizeServerUrl(baseUrl);
+    await beginAddSpace(baseUrl: url);
+    try {
+      await setApiBaseUrl(url);
+      final prefs = await SharedPreferences.getInstance();
+      _recentServers = pushRecentServer(_recentServers, url);
+      await prefs.setStringList(_keyRecentServers, _recentServers);
+      _serverConfirmed = true;
+      await _completeLogin(data, fallbackEmail: email);
+    } catch (_) {
+      await cancelAddSpace();
+      rethrow;
+    }
   }
 
   /// Back to the Space the user was in before "add Space".

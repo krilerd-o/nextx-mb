@@ -18,7 +18,8 @@ class Effects {
 
   static const _prefKey = 'nx_effects_pref';
 
-  static final ValueNotifier<EffectsPreference> preference = ValueNotifier(EffectsPreference.auto);
+  /// Default is "เบา" (lite) until the user picks something else.
+  static final ValueNotifier<EffectsPreference> preference = ValueNotifier(EffectsPreference.lite);
 
   /// Set once at startup from the device (CPU cores / platform).
   static EffectsLevel deviceDefault = EffectsLevel.full;
@@ -28,7 +29,7 @@ class Effects {
     try {
       final p = await SharedPreferences.getInstance();
       final raw = p.getString(_prefKey);
-      preference.value = EffectsPreference.values.firstWhere((e) => e.name == raw, orElse: () => EffectsPreference.auto);
+      preference.value = EffectsPreference.values.firstWhere((e) => e.name == raw, orElse: () => EffectsPreference.lite);
     } catch (_) {}
   }
 

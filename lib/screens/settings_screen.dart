@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -24,7 +23,6 @@ import '../widgets/nx_scroll_scaffold.dart';
 import 'onboarding/tab_setup_screen.dart' show TabBarPreview;
 import 'profile/my_signatures_screen.dart';
 import 'profile/phone_verify_screen.dart';
-import 'profile_edit_screen.dart';
 import 'profile_screen.dart' show showChangePasswordDialog;
 import 'spaces/space_switcher.dart' show showSpaceSwitcher, SpaceAvatar;
 import 'update_required_screen.dart';
@@ -97,7 +95,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return [
       // ── Space & business
-      _Entry('Space และธุรกิจ', ['Space', 'สลับ', 'เพิ่ม'], _Tile(
+      _Entry('Space และธุรกิจ', ['Space', 'สลับ', 'เพิ่ม'], SettingsTile(
         icon: NxI.arrowsClockwise,
         tint: const Color(0xFF6366F1),
         title: config.spaces.length > 1 ? 'สลับ Space (${config.spaces.length})' : 'สลับ / เพิ่ม Space',
@@ -105,21 +103,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         trailing: sp == null ? null : SpaceAvatar(space: sp, size: 30),
         onTap: () => showSpaceSwitcher(context),
       )),
-      _Entry('Space และธุรกิจ', ['ธุรกิจ', 'บริษัท'], _Tile(
+      _Entry('Space และธุรกิจ', ['ธุรกิจ', 'บริษัท'], SettingsTile(
         icon: NxI.briefcase,
         tint: const Color(0xFF0EA5E9),
         title: 'สลับธุรกิจ',
         subtitle: session.businessName ?? '—',
         onTap: () => config.clearBusiness(),
       )),
-      _Entry('Space และธุรกิจ', ['Package', 'แพ็กเกจ'], _Tile(
+      _Entry('Space และธุรกิจ', ['Package', 'แพ็กเกจ'], SettingsTile(
         icon: NxI.package,
         tint: const Color(0xFF10B981),
         title: 'สลับ Package',
         subtitle: (session.packageCode ?? '').isEmpty ? '—' : session.packageCode,
         onTap: () => config.clearPackage(),
       )),
-      _Entry('Space และธุรกิจ', ['อุปกรณ์', 'เครื่อง', 'ออกจากระบบ'], _Tile(
+      _Entry('Space และธุรกิจ', ['อุปกรณ์', 'เครื่อง', 'ออกจากระบบ'], SettingsTile(
         icon: NxI.monitorSmartphone,
         tint: const Color(0xFF64748B),
         title: 'อุปกรณ์ที่เข้าใช้งาน',
@@ -128,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       )),
 
       // ── Appearance
-      _Entry('รูปลักษณ์', ['ธีม', 'โหมดมืด', 'สว่าง', 'มืด', 'dark', 'light'], _Tile(
+      _Entry('รูปลักษณ์', ['ธีม', 'โหมดมืด', 'สว่าง', 'มืด', 'dark', 'light'], SettingsTile(
         icon: dark ? NxI.moon : NxI.sun,
         tint: const Color(0xFF8B5CF6),
         title: 'ธีม',
@@ -142,7 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: config.setThemeMode,
         ),
       )),
-      _Entry('รูปลักษณ์', ['สีธีม', 'สีหลัก', 'สี', 'accent', 'color'], _Tile(
+      _Entry('รูปลักษณ์', ['สีธีม', 'สีหลัก', 'สี', 'accent', 'color'], SettingsTile(
         icon: NxI.palette,
         tint: config.accentColor,
         title: 'สีธีม',
@@ -155,7 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
         ),
       )),
-      _Entry('รูปลักษณ์', ['ภาษา', 'language', 'English', 'ไทย'], _Tile(
+      _Entry('รูปลักษณ์', ['ภาษา', 'language', 'English', 'ไทย'], SettingsTile(
         icon: NxI.languages,
         tint: const Color(0xFFF97316),
         title: 'ภาษา',
@@ -167,7 +165,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: config.setUiLocaleCode,
         ),
       )),
-      _Entry('รูปลักษณ์', ['วันที่', 'เวลา', 'รูปแบบ', 'date'], _Tile(
+      _Entry('รูปลักษณ์', ['วันที่', 'เวลา', 'รูปแบบ', 'date'], SettingsTile(
         icon: NxI.calendarClock,
         tint: const Color(0xFF14B8A6),
         title: 'รูปแบบวันที่/เวลา',
@@ -176,7 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       )),
       _Entry('รูปลักษณ์', ['เอฟเฟกต์', 'เบลอ', 'ลื่น', 'animation'], ValueListenableBuilder<EffectsPreference>(
         valueListenable: Effects.preference,
-        builder: (context, pref, _) => _Tile(
+        builder: (context, pref, _) => SettingsTile(
           icon: NxI.sparkle,
           tint: const Color(0xFFEC4899),
           title: 'เอฟเฟกต์และความลื่น',
@@ -186,7 +184,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       )),
 
       // ── Menu bar
-      _Entry('เมนูและการใช้งาน', ['เมนูล่าง', 'แถบเมนู', 'แท็บ', 'tab'], _Tile(
+      _Entry('เมนูและการใช้งาน', ['เมนูล่าง', 'แถบเมนู', 'แท็บ', 'tab'], SettingsTile(
         icon: NxI.panelBottom,
         tint: const Color(0xFF6366F1),
         title: 'แถบเมนูล่าง',
@@ -202,14 +200,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       )),
-      _Entry('เมนูและการใช้งาน', ['หน้าหลัก', 'วิดเจ็ท', 'home', 'widget'], _Tile(
+      _Entry('เมนูและการใช้งาน', ['หน้าหลัก', 'วิดเจ็ท', 'home', 'widget'], SettingsTile(
         icon: NxI.squaresFour,
         tint: const Color(0xFF10B981),
         title: 'ปรับแต่งหน้าหลัก',
         subtitle: 'เรียงและซ่อน/แสดงกล่องบนหน้าหลัก',
         onTap: () => nxPush<bool>(context, const HomeLayoutEditorScreen(), root: true),
       )),
-      _Entry('เมนูและการใช้งาน', ['บทบาท', 'role'], _Tile(
+      _Entry('เมนูและการใช้งาน', ['บทบาท', 'role'], SettingsTile(
         icon: NxI.users,
         tint: const Color(0xFF0EA5E9),
         title: 'บทบาทของฉัน',
@@ -218,14 +216,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       )),
 
       // ── Notifications
-      _Entry('การแจ้งเตือน', ['แจ้งเตือน', 'notification'], _Tile(
+      _Entry('การแจ้งเตือน', ['แจ้งเตือน', 'notification'], SettingsTile(
         icon: NxI.bell,
         tint: const Color(0xFFF43F5E),
         title: 'ศูนย์การแจ้งเตือน',
         onTap: () => context.push(AppRoutes.notifications),
       )),
       _Entry('การแจ้งเตือน', ['วันเกิด', 'birthday', 'ลูกค้า'], const _BirthdayReminderTile()),
-      _Entry('การแจ้งเตือน', ['มีอะไรใหม่', 'ประกาศ', 'เวอร์ชัน'], _Tile(
+      _Entry('การแจ้งเตือน', ['มีอะไรใหม่', 'ประกาศ', 'เวอร์ชัน'], SettingsTile(
         icon: NxI.megaphone,
         tint: const Color(0xFFF59E0B),
         title: 'มีอะไรใหม่',
@@ -235,50 +233,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // ── Account & security
       _Entry('บัญชีและความปลอดภัย', ['ล็อก', 'ลายนิ้วมือ', 'ใบหน้า', 'biometric'], const _AppLockTile()),
-      _Entry('บัญชีและความปลอดภัย', ['รหัสผ่าน', 'password'], _Tile(
+      _Entry('บัญชีและความปลอดภัย', ['รหัสผ่าน', 'password'], SettingsTile(
         icon: NxI.password,
         tint: const Color(0xFF475569),
         title: 'เปลี่ยนรหัสผ่าน',
         onTap: () => showChangePasswordDialog(context),
       )),
-      _Entry('บัญชีและความปลอดภัย', ['เบอร์', 'มือถือ', 'OTP'], _Tile(
+      _Entry('บัญชีและความปลอดภัย', ['เบอร์', 'มือถือ', 'OTP'], SettingsTile(
         icon: NxI.phone,
         tint: const Color(0xFF10B981),
         title: 'ยืนยันเบอร์มือถือ',
         subtitle: 'ใช้เข้าสู่ระบบด้วย OTP SMS',
         onTap: () => nxPush<void>(context, const PhoneVerifyScreen()),
       )),
-      _Entry('บัญชีและความปลอดภัย', ['ลายเซ็น', 'signature'], _Tile(
+      _Entry('บัญชีและความปลอดภัย', ['ลายเซ็น', 'signature'], SettingsTile(
         icon: NxI.penLine,
         tint: const Color(0xFF8B5CF6),
         title: 'ลายเซ็นของฉัน',
         subtitle: 'ใช้บนใบเสนอราคาและเอกสาร (TH / EN)',
         onTap: () => nxPush<void>(context, const MySignaturesScreen()),
       )),
-      _Entry('บัญชีและความปลอดภัย', ['ขั้นสูง', 'โทเคน', '2FA', 'push'], _Tile(
+      _Entry('บัญชีและความปลอดภัย', ['ขั้นสูง', 'โทเคน', '2FA', 'push'], SettingsTile(
         icon: NxI.shieldCheck,
         tint: const Color(0xFF64748B),
         title: 'ความปลอดภัยขั้นสูง',
         subtitle: 'โทเคนพุช, 2FA',
-        onTap: () => context.push(AppRoutes.profile),
+        onTap: () => context.push(AppRoutes.profileSecurity),
       )),
 
       // ── About
-      _Entry('เกี่ยวกับ', ['เวอร์ชัน', 'version'], _Tile(
+      _Entry('เกี่ยวกับ', ['เวอร์ชัน', 'version'], SettingsTile(
         icon: NxI.info,
         tint: cs.primary,
         title: 'MOAI NEXT Mobile',
         subtitle: 'เวอร์ชัน ${SettingsScreen.appVersion}',
       )),
       if (config.updateNeed == UpdateNeed.optional)
-        _Entry('เกี่ยวกับ', ['อัปเดต', 'update'], _Tile(
+        _Entry('เกี่ยวกับ', ['อัปเดต', 'update'], SettingsTile(
           icon: NxI.arrowSquareOut,
           tint: const Color(0xFF10B981),
           title: 'มีแอปเวอร์ชันใหม่ ${config.serverInfo?.latestVersion ?? ''}',
           subtitle: 'เวอร์ชันในเครื่อง ${AppVersion.value}',
           onTap: storeUrlFor(config.serverInfo) == null ? null : () => openStore(config.serverInfo),
         )),
-      _Entry('เกี่ยวกับ', ['บันทึกปัญหา', 'ปัญหา', 'log', 'diagnostics'], _Tile(
+      _Entry('เกี่ยวกับ', ['บันทึกปัญหา', 'ปัญหา', 'log', 'diagnostics'], SettingsTile(
         icon: NxI.bug,
         tint: const Color(0xFFF97316),
         title: 'บันทึกปัญหา',
@@ -332,22 +330,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _logout(BuildContext context, AppConfig config) async {
-    final sp = config.activeSpace;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('ออกจากระบบ?')),
-        content: Text(tr('ออกจาก ${sp?.title ?? serverLabel(config.apiBaseUrl)} บนเครื่องนี้')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ออก'))),
-        ],
-      ),
-    );
-    if (ok == true) await config.logout();
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -364,15 +346,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     var stagger = 0;
     return NxScrollScaffold(
       insetBody: false,
-      header: const NxAppHeader(title: 'โปรไฟล์และการตั้งค่า'),
+      header: const NxAppHeader(title: 'การตั้งค่า'),
       body: Builder(
         builder: (context) => ListView(
           padding: pad.copyWith(top: pad.top + NxScrollScaffold.topInset(context)),
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           children: [
-            _Appear(index: stagger++, child: const _HubHero()),
-            const SizedBox(height: 14),
-            _Appear(
+            SettingsAppear(
               index: stagger++,
               child: TextField(
                 controller: _search,
@@ -403,10 +383,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 children: [
                   for (final g in groups.entries)
-                    _Appear(
+                    SettingsAppear(
                       key: ValueKey(g.key),
                       index: stagger++,
-                      child: _Group(title: g.key, children: g.value),
+                      child: SettingsGroup(title: g.key, children: g.value),
                     ),
                   if (groups.isEmpty)
                     Padding(
@@ -419,43 +399,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            if (_q.isEmpty) ...[
-              const SizedBox(height: 20),
-              _Appear(
-                index: stagger++,
-                child: Material(
-                  color: cs.errorContainer.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(20),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: () => _logout(context, config),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(NxI.signOut, size: 20, color: cs.error),
-                          const SizedBox(width: 10),
-                          Text(
-                            tr('ออกจากระบบ Space นี้'),
-                            style: theme.textTheme.titleSmall?.copyWith(color: cs.error),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (config.spaces.length > 1)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    tr('Space อื่นยังใช้งานได้ตามเดิม'),
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                  ),
-                ),
-            ],
             const SizedBox(height: 24),
           ],
         ),
@@ -465,8 +408,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 /// Fades + slides a hub section in, one after another, the first time it shows.
-class _Appear extends StatelessWidget {
-  const _Appear({super.key, required this.index, required this.child});
+class SettingsAppear extends StatelessWidget {
+  const SettingsAppear({super.key, required this.index, required this.child});
   final int index;
   final Widget child;
 
@@ -491,190 +434,9 @@ class _Appear extends StatelessWidget {
   }
 }
 
-/// Big profile card: photo (or initials) ringed in the Space colour, name,
-/// email, role · business, and quick actions.
-class _HubHero extends StatelessWidget {
-  const _HubHero();
-
-  @override
-  Widget build(BuildContext context) {
-    final config = context.watch<AppConfig>();
-    final s = config.session;
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final ring = config.activeSpace?.color ?? cs.primary;
-    final name = s.displayName ?? s.email ?? 'ผู้ใช้';
-    final role = (s.businessRole ?? (s.isBusinessAdmin ? 'admin' : 'member')).toUpperCase();
-    ImageProvider? image;
-    final b64 = config.profileAvatarBase64;
-    if (b64 != null && b64.isNotEmpty) {
-      try {
-        image = MemoryImage(base64Decode(b64.contains(',') ? b64.split(',').last : b64));
-      } catch (_) {}
-    }
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 20, 18, 16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color.alphaBlend(cs.primary.withValues(alpha: 0.16), cs.surfaceContainerHighest),
-            cs.surfaceContainerHighest,
-          ],
-        ),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () => context.push(AppRoutes.profile),
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: SweepGradient(colors: [ring, cs.primary, Color.lerp(ring, Colors.white, 0.4)!, ring]),
-                  ),
-                  child: CircleAvatar(
-                    radius: 34,
-                    backgroundColor: cs.surface,
-                    backgroundImage: image,
-                    child: image == null
-                        ? Text(
-                            name.characters.take(2).toString().toUpperCase(),
-                            style: theme.textTheme.titleLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w700),
-                          )
-                        : null,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    if ((s.email ?? '').isNotEmpty && s.email != name)
-                      Text(
-                        s.email!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-                      ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        _Chip(label: role, color: ring),
-                        if ((s.businessName ?? '').isNotEmpty) _Chip(label: s.businessName!, color: cs.onSurfaceVariant),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _HeroAction(
-                  icon: NxI.pencilSimple,
-                  label: 'แก้ไขโปรไฟล์',
-                  onTap: () => nxPush<bool>(context, const ProfileEditScreen()),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _HeroAction(
-                  icon: NxI.user,
-                  label: 'รูปโปรไฟล์',
-                  onTap: () => context.push(AppRoutes.profile),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _HeroAction(
-                  icon: NxI.arrowsClockwise,
-                  label: 'สลับ Space',
-                  onTap: () => showSpaceSwitcher(context),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.color});
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(8)),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color, letterSpacing: 0.4),
-      ),
-    );
-  }
-}
-
-class _HeroAction extends StatelessWidget {
-  const _HeroAction({required this.icon, required this.label, required this.onTap});
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Material(
-      color: cs.surface.withValues(alpha: 0.8),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-          child: Column(
-            children: [
-              Icon(icon, size: 20, color: cs.primary),
-              const SizedBox(height: 4),
-              Text(
-                tr(label),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Grey section label + rounded card holding the rows, hairline-separated.
-class _Group extends StatelessWidget {
-  const _Group({required this.title, required this.children});
+class SettingsGroup extends StatelessWidget {
+  const SettingsGroup({required this.title, required this.children});
   final String title;
   final List<Widget> children;
 
@@ -714,8 +476,8 @@ class _Group extends StatelessWidget {
 
 /// Settings row: tinted icon tile, title/subtitle, trailing or chevron, and an
 /// optional control underneath (segmented picker, colour palette, preview).
-class _Tile extends StatelessWidget {
-  const _Tile({
+class SettingsTile extends StatelessWidget {
+  const SettingsTile({
     required this.icon,
     required this.tint,
     required this.title,
@@ -870,47 +632,61 @@ class _AccentPalette extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        for (var i = 0; i < AppConfig.accentOptions.length; i++)
-          Semantics(
-            button: true,
-            selected: i == selected,
-            label: tr(AppConfig.accentNames[i]),
-            child: GestureDetector(
-              onTap: () => onSelect(i),
-              child: AnimatedContainer(
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    Widget swatch(int i) => Semantics(
+          button: true,
+          selected: i == selected,
+          label: tr(AppConfig.accentNames[i]),
+          child: GestureDetector(
+            key: ValueKey('accent-${AppConfig.accentKeys[i]}'),
+            onTap: () => onSelect(i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 260),
+              // Not easeOutBack: an overshoot would make the padding negative.
+              curve: Curves.easeOutCubic,
+              width: 34,
+              height: 34,
+              padding: EdgeInsets.all(i == selected ? 3 : 0),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: i == selected ? AppConfig.accentOptions[i] : Colors.transparent, width: 2),
+              ),
+              child: AnimatedScale(
                 duration: const Duration(milliseconds: 260),
-                // Not easeOutBack: an overshoot would make the padding negative.
-                curve: Curves.easeOutCubic,
-                width: 34,
-                height: 34,
-                padding: EdgeInsets.all(i == selected ? 3 : 0),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: i == selected ? AppConfig.accentOptions[i] : Colors.transparent, width: 2),
-                ),
-                child: AnimatedScale(
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutBack,
-                  scale: i == selected ? 1 : 0.86,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: AppConfig.accentOptions[i]),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
-                      child: i == selected
-                          ? Icon(NxI.check, key: const ValueKey(true), size: 16, color: cs.surface)
-                          : const SizedBox.shrink(key: ValueKey(false)),
-                    ),
+                curve: Curves.easeOutBack,
+                scale: i == selected ? 1 : 0.86,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: AppConfig.accentOptions[i]),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                    child: i == selected
+                        ? Icon(NxI.check, key: const ValueKey(true), size: 16, color: cs.surface)
+                        : const SizedBox.shrink(key: ValueKey(false)),
                   ),
                 ),
               ),
             ),
           ),
+        );
+    Widget group(String title, int from, int to) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8, top: 4),
+              child: Text(tr(title), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+            ),
+            Wrap(spacing: 10, runSpacing: 10, children: [for (var i = from; i < to; i++) swatch(i)]),
+          ],
+        );
+    // Same two groups as the web: standard tones, then pastels.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        group('โทนมาตรฐาน', 0, AppConfig.accentPastelStart),
+        const SizedBox(height: 10),
+        group('โทนพาสเทล', AppConfig.accentPastelStart, AppConfig.accentOptions.length),
       ],
     );
   }
@@ -941,7 +717,7 @@ class _AppLockTileState extends State<_AppLockTile> {
     final lock = AppLock.instance;
     return ListenableBuilder(
       listenable: lock,
-      builder: (context, _) => _Tile(
+      builder: (context, _) => SettingsTile(
         icon: NxI.fingerprint,
         tint: const Color(0xFF0EA5E9),
         title: 'ล็อกแอปด้วยลายนิ้วมือ / ใบหน้า',
@@ -984,7 +760,7 @@ class _BirthdayReminderTileState extends State<_BirthdayReminderTile> {
 
   @override
   Widget build(BuildContext context) {
-    return _Tile(
+    return SettingsTile(
       icon: NxI.cake,
       tint: const Color(0xFFEC4899),
       title: 'เตือนวันเกิดลูกค้าล่วงหน้า 1 วัน',

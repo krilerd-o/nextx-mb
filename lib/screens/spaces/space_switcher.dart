@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,7 @@ import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_overlay_panel.dart';
+import 'add_space_sheet.dart';
 
 /// Rounded-square Space logo (initials on the Space colour).
 class SpaceAvatar extends StatelessWidget {
@@ -127,12 +129,11 @@ class _SpaceSheetState extends State<_SpaceSheet> {
     await runSpaceTransition(host, sp, origin, () => config.switchSpace(sp.id));
   }
 
+  /// Opens the "เพิ่ม Space" window over the current screen (no full login page).
   Future<void> _add({String? baseUrl}) async {
-    final config = context.read<AppConfig>();
-    final router = GoRouter.of(widget.hostContext);
+    final host = widget.hostContext;
     Navigator.pop(context);
-    await config.beginAddSpace(baseUrl: baseUrl);
-    router.go(baseUrl == null ? AppRoutes.server : AppRoutes.login);
+    await showAddSpaceSheet(host, baseUrl: baseUrl);
   }
 
   Future<void> _menu(Space sp) async {

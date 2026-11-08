@@ -261,7 +261,7 @@ class _HubAvatar extends StatelessWidget {
     }
     return GestureDetector(
       // Tap = profile hub (profile + all settings); long-press = Space switcher.
-      onTap: () => GoRouter.maybeOf(context)?.push(AppRoutes.settings),
+      onTap: () => GoRouter.maybeOf(context)?.push(AppRoutes.profile),
       onLongPress: () {
         HapticFeedback.mediumImpact();
         showSpaceSwitcher(context);
