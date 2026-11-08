@@ -21,6 +21,7 @@ import '../widgets/nx_app_header.dart';
 import '../widgets/nx_icons.dart';
 import '../widgets/nx_scroll_scaffold.dart';
 import 'onboarding/tab_setup_screen.dart' show TabBarPreview;
+import 'profile/delete_account_screen.dart';
 import 'profile/my_signatures_screen.dart';
 import 'profile/phone_verify_screen.dart';
 import 'profile_screen.dart' show showChangePasswordDialog;
@@ -85,8 +86,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final cs = Theme.of(context).colorScheme;
     final session = config.session;
     final sp = config.activeSpace;
-    final dark = config.themeMode == ThemeMode.dark ||
-        (config.themeMode == ThemeMode.system && MediaQuery.platformBrightnessOf(context) == Brightness.dark);
     final tabs = resolveShellTabs(
       roles: config.shellConfig?.roles ?? const ['general'],
       custom: config.shellConfig?.tabs,
@@ -113,20 +112,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       )),
 
       // ── Appearance
-      _Entry('รูปลักษณ์', ['ธีม', 'โหมดมืด', 'สว่าง', 'มืด', 'dark', 'light'], SettingsTile(
-        icon: dark ? NxI.moon : NxI.sun,
-        tint: const Color(0xFF8B5CF6),
-        title: 'ธีม',
-        below: _Segmented<ThemeMode>(
-          value: config.themeMode,
-          options: const [
-            (ThemeMode.light, 'สว่าง', NxI.sun),
-            (ThemeMode.dark, 'มืด', NxI.moon),
-            (ThemeMode.system, 'ตามเครื่อง', NxI.deviceMobile),
-          ],
-          onChanged: config.setThemeMode,
-        ),
-      )),
       _Entry('รูปลักษณ์', ['สีธีม', 'สีหลัก', 'สี', 'accent', 'color'], SettingsTile(
         icon: NxI.palette,
         tint: config.accentColor,
@@ -138,18 +123,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             HapticFeedback.selectionClick();
             config.setAccentIndex(i);
           },
-        ),
-      )),
-      _Entry('รูปลักษณ์', ['ภาษา', 'language', 'English', 'ไทย'], SettingsTile(
-        icon: NxI.languages,
-        tint: const Color(0xFFF97316),
-        title: 'ภาษา',
-        subtitle: 'มีผลทั้งแอปทันที',
-        below: _Segmented<String>(
-          value: config.uiLocaleCode,
-          options: const [('th', 'ไทย', null), ('en', 'English', null)],
-          translate: false,
-          onChanged: config.setUiLocaleCode,
         ),
       )),
       _Entry('รูปลักษณ์', ['วันที่', 'เวลา', 'รูปแบบ', 'date'], SettingsTile(
@@ -246,6 +219,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: 'ความปลอดภัยขั้นสูง',
         subtitle: 'โทเคนพุช, 2FA',
         onTap: () => context.push(AppRoutes.profileSecurity),
+      )),
+      _Entry('บัญชีและความปลอดภัย', ['ลบบัญชี', 'ปิดบัญชี', 'delete'], SettingsTile(
+        key: const ValueKey('settings-delete-account'),
+        icon: NxI.trash,
+        tint: const Color(0xFFDC2626),
+        title: 'ลบบัญชี',
+        subtitle: 'ปิดบัญชีถาวร ยืนยันด้วย OTP',
+        onTap: () => nxPush<void>(context, const DeleteAccountScreen()),
       )),
 
       // ── About
@@ -533,86 +514,6 @@ class SettingsTile extends StatelessWidget {
 }
 
 /// Pill segmented control with a sliding thumb.
-class _Segmented<T> extends StatelessWidget {
-  const _Segmented({required this.value, required this.options, required this.onChanged, this.translate = true});
-  final T value;
-  /// Off for language names, which always show in their own language.
-  final bool translate;
-  final List<(T, String, IconData?)> options;
-  final ValueChanged<T> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final index = options.indexWhere((o) => o.$1 == value).clamp(0, options.length - 1);
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: cs.surface.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(14)),
-      child: LayoutBuilder(
-        builder: (context, c) {
-          final w = c.maxWidth / options.length;
-          return Stack(
-            children: [
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 320),
-                curve: Curves.easeOutBack,
-                left: w * index,
-                top: 0,
-                bottom: 0,
-                width: w,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 320),
-                  decoration: BoxDecoration(
-                    color: cs.primary,
-                    borderRadius: BorderRadius.circular(11),
-                    boxShadow: [BoxShadow(color: cs.primary.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 3))],
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  for (var i = 0; i < options.length; i++)
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          if (i == index) return;
-                          HapticFeedback.selectionClick();
-                          onChanged(options[i].$1);
-                        },
-                        child: Center(
-                          child: AnimatedDefaultTextStyle(
-                            duration: const Duration(milliseconds: 200),
-                            style: (theme.textTheme.labelLarge ?? const TextStyle()).copyWith(
-                              color: i == index ? cs.onPrimary : cs.onSurfaceVariant,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (options[i].$3 != null) ...[
-                                  Icon(options[i].$3, size: 16, color: i == index ? cs.onPrimary : cs.onSurfaceVariant),
-                                  const SizedBox(width: 6),
-                                ],
-                                Flexible(child: Text(translate ? tr(options[i].$2) : options[i].$2, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Theme colour swatches; the chosen one grows and shows a check.
 class _AccentPalette extends StatelessWidget {
   const _AccentPalette({required this.selected, required this.onSelect});
   final int selected;

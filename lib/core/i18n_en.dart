@@ -1493,6 +1493,7 @@ const Map<String, String> enStrings = {
   'ยังไม่ได้ปักหมุด': 'No pin yet',
   'ใช้ตำแหน่งปัจจุบัน': 'Use current location',
   'ดูเพิ่มเติม': 'Show more',
+  'ปิดบัญชี': 'Close account',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
