@@ -33,6 +33,8 @@ Future<bool> confirmNxLogout(BuildContext context, AppConfig config) async {
           );
       return AlertDialog(
         key: const ValueKey('nx-logout-dialog'),
+        // Small phones / large text: the message scrolls, the buttons stay.
+        scrollable: true,
         icon: Container(
           width: 56,
           height: 56,
@@ -59,17 +61,23 @@ Future<bool> confirmNxLogout(BuildContext context, AppConfig config) async {
             Expanded(
               child: OutlinedButton(
                 key: const ValueKey('nx-logout-cancel'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48), padding: const EdgeInsets.symmetric(horizontal: 12)),
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(tr('อยู่ต่อ')),
+                child: _oneLine(tr('อยู่ต่อ')),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: FilledButton(
                 key: const ValueKey('nx-logout-confirm'),
-                style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
+                style: FilledButton.styleFrom(
+                  backgroundColor: cs.error,
+                  foregroundColor: cs.onError,
+                  minimumSize: const Size.fromHeight(48),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
                 onPressed: () => Navigator.pop(ctx, true),
-                child: Text(tr('ออกจากระบบ')),
+                child: _oneLine(tr('ออกจากระบบ')),
               ),
             ),
           ]),
@@ -124,3 +132,10 @@ class NxLogoutButton extends StatelessWidget {
     );
   }
 }
+
+/// Button label on one line: shrinks a little on narrow dialogs / large fonts
+/// instead of wrapping to two lines.
+Widget _oneLine(String text) => FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(text, maxLines: 1, softWrap: false),
+    );
