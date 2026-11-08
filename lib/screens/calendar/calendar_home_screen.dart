@@ -33,7 +33,7 @@ import '../../widgets/nx_refresh.dart';
 
 export 'cal/cal_model.dart' show groupActivitiesByDay, activityTimeLabel, weekStart, CalView;
 
-/// Activities calendar: year / quarter / month / week / 3 days / day / list.
+/// Activities calendar: year / month / week / 3 days / day / list.
 ///
 /// - The header shows the period ("พ.ย. 2569 ▾"); tap it to jump between
 ///   year and month.
@@ -175,8 +175,6 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
     switch (_view) {
       case CalView.year:
         return _date.year == t.year;
-      case CalView.quarter:
-        return sameDay(quarterStart(_date), quarterStart(t));
       case CalView.week:
         return sameDay(weekStart(_date), weekStart(t));
       case CalView.threeDay:
@@ -192,7 +190,6 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
     final d = _date;
     return switch (_view) {
       CalView.year => (DateTime(d.year, 1, 1), DateTime(d.year, 12, 31)),
-      CalView.quarter => (quarterStart(d), DateTime(d.year, quarterStart(d).month + 3, 0)),
       _ => (DateTime(d.year, d.month - 1, 20), DateTime(d.year, d.month + 2, 10)),
     };
   }
@@ -385,7 +382,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
       ),
       body: Column(
         children: [
-          // View tabs with a sliding underline (ปี ไตรมาส เดือน สัปดาห์ 3 วัน วัน รายการ).
+          // View tabs with a sliding underline (ปี เดือน สัปดาห์ 3 วัน วัน รายการ).
           SizedBox(
             height: 42,
             // All seven fit the width (no sideways scrolling to reach "วัน" / "รายการ").
@@ -450,20 +447,6 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
           onOpenMonth: (m, r) {
             final t = thaiNow();
             _date = m.year == t.year && m.month == t.month ? calDay(t) : m;
-            _setView(CalView.month, from: r);
-          },
-        );
-      case CalView.quarter:
-        return CalQuarterView(
-          store: _store,
-          anchor: _date,
-          onAnchor: (d) => setState(() => _date = d),
-          onOpenDay: (d) {
-            _date = d;
-            _setView(CalView.day);
-          },
-          onOpenMonth: (m, r) {
-            _date = m;
             _setView(CalView.month, from: r);
           },
         );

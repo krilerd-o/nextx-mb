@@ -4,12 +4,11 @@ import '../../../core/i18n.dart';
 import '../../../core/thai_time.dart';
 
 /// Calendar views, coarse → fine (the order drives the zoom direction).
-enum CalView { year, quarter, month, week, threeDay, day, list }
+enum CalView { year, month, week, threeDay, day, list }
 
 extension CalViewX on CalView {
   String get label => switch (this) {
         CalView.year => 'ปี',
-        CalView.quarter => 'ไตรมาส',
         CalView.month => 'เดือน',
         CalView.week => 'สัปดาห์',
         CalView.threeDay => '3 วัน',
@@ -52,8 +51,6 @@ bool sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month &
 /// First day (Sunday) of [d]'s week.
 DateTime weekStart(DateTime d) => calDay(d).subtract(Duration(days: d.weekday % 7));
 
-/// First month of [d]'s quarter.
-DateTime quarterStart(DateTime d) => DateTime(d.year, ((d.month - 1) ~/ 3) * 3 + 1, 1);
 
 String calKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -70,8 +67,6 @@ String periodLabel(CalView v, DateTime d) {
   switch (v) {
     case CalView.year:
       return '$y';
-    case CalView.quarter:
-      return L10n.isEn ? 'Q${(d.month - 1) ~/ 3 + 1} $y' : 'ไตรมาส ${(d.month - 1) ~/ 3 + 1} · $y';
     case CalView.week:
     case CalView.threeDay:
       final s = v == CalView.week ? weekStart(d) : calDay(d);

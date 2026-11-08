@@ -1296,7 +1296,6 @@ const Map<String, String> enStrings = {
   'ชั่วโมง': 'hours',
   'ดูก่อนหน้า': 'Show earlier',
   'ปี': 'Year',
-  'ไตรมาส': 'Quarter',
   'เดือน': 'Month',
   '3 วัน': '3 days',
   'วันอาทิตย์': 'Sunday',
@@ -1484,7 +1483,6 @@ const Map<String, String> enPatterns = {
   '"{}" จะถูกลบถาวรและกู้คืนไม่ได้': '"{}" will be deleted for good and can\'t be restored',
   'ลบโดย {}': 'Deleted by {}',
   'ย้ายไปยัง {} แล้ว': 'Moved to {}',
-  'ไตรมาส {} · {}': 'Q{} · {}',
   '{} กิจกรรม': '{} activities',
   'ตัวกรอง ({})': 'Filters ({})',
 };

@@ -68,9 +68,8 @@ void main() {
       expect(l[c], (0, 1));
     });
 
-    test('Sunday-first weeks, quarters, Thai labels', () {
+    test('Sunday-first weeks, Thai labels', () {
       expect(weekStart(DateTime(2026, 11, 11)), DateTime(2026, 11, 8));
-      expect(quarterStart(DateTime(2026, 11, 11)), DateTime(2026, 10, 1));
       expect(ymdhm(DateTime(2026, 11, 20, 9, 5)), '2026-11-20 09:05:00');
     });
   });
