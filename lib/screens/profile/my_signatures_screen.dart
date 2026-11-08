@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import '../../widgets/nx_skeleton.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image_picker/image_picker.dart';
@@ -141,11 +142,9 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
     return Scaffold(
       appBar: const NxAppHeader(title: 'ลายเซ็นของฉัน'),
       body: _data == null
-          ? Center(
-              child: _error == null
-                  ? const CircularProgressIndicator()
-                  : Padding(padding: const EdgeInsets.all(24), child: Text(tr(formatApiError(_error!)), textAlign: TextAlign.center)),
-            )
+          ? (_error == null
+              ? const NxSkeletonList(rows: 3)
+              : Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(tr(formatApiError(_error!)), textAlign: TextAlign.center))))
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [

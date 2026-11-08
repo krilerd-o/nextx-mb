@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/nx_skeleton.dart';
 import '../../../core/i18n.dart';
 import '../../../core/thai_time.dart';
 import '../../../widgets/nx_icons.dart';
@@ -139,7 +140,7 @@ class _CalAgendaViewState extends State<CalAgendaView> {
                 ]),
               ],
               if (widget.store.loading && widget.events == null)
-                const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+                const NxSkeletonCalendar(),
             ],
           ),
         );

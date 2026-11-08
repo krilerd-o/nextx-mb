@@ -553,7 +553,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
               ),
               if (_loading) ...[
                 const SizedBox(height: 16),
-                const SizedBox(height: 180, child: NxSkeletonForm(fields: 4)),
+                const NxSkeletonDetail(),
               ],
               if (_error != null)
                 Padding(

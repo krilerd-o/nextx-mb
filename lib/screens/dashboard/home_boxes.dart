@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_skeleton.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -326,10 +327,7 @@ class _MyWorkBoxState extends State<MyWorkBox> {
                       ),
                       const SizedBox(height: 4),
                       if (items == null)
-                        const Padding(
-                          padding: EdgeInsets.all(14),
-                          child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-                        )
+                        const Padding(padding: EdgeInsets.fromLTRB(14, 6, 14, 0), child: NxSkeletonBox())
                       else if (items.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -678,10 +676,7 @@ class _PeriodBoxState extends State<_PeriodBox> {
             duration: const Duration(milliseconds: 200),
             alignment: Alignment.topCenter,
             child: figs == null
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-                  )
+                ? const Padding(padding: EdgeInsets.fromLTRB(12, 4, 12, 0), child: NxSkeletonBox(rows: 2))
                 : figs.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),

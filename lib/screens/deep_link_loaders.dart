@@ -49,7 +49,7 @@ class _EntityByIdLoaderState extends State<EntityByIdLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: NxSkeletonList());
+          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
         }
         if (snap.hasError) {
           return Scaffold(body: Center(child: Text(tr(formatApiError(snap.error!)))));
@@ -87,7 +87,7 @@ class _ActivityByIdLoaderState extends State<ActivityByIdLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: NxSkeletonList());
+          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
         }
         final row = {...?snap.data, 'id': widget.id};
         return ActivityDetailScreen(row: row);
@@ -148,7 +148,7 @@ class _BoardByCodeLoaderState extends State<BoardByCodeLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: NxSkeletonList());
+          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
         }
         if (snap.hasError) {
           return Scaffold(body: NxErrorRetry(error: snap.error!, onRetry: () => setState(() => _future = _resolve())));
@@ -225,7 +225,7 @@ class _WorkspaceItemBySlugLoaderState extends State<WorkspaceItemBySlugLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: NxSkeletonList());
+          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
         }
         if (snap.hasError) {
           return Scaffold(
@@ -312,7 +312,7 @@ class _TaskRecordLoaderState extends State<_TaskRecordLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: NxSkeletonList());
+          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
         }
         return TaskDetailScreen(
           task: snap.data ?? {'id': widget.taskId, 'board_id': widget.boardId},
@@ -358,7 +358,7 @@ class _ChatByIdLoaderState extends State<ChatByIdLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: NxSkeletonList());
+          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
         }
         return ChatRoomScreen(room: snap.data ?? {'id': widget.roomId, 'name': 'แชท'});
       },

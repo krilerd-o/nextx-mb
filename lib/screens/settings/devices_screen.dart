@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_skeleton.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -132,7 +133,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
             if (_error != null)
               Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error))
             else if (list == null)
-              const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+              const NxSkeletonList(rows: 3)
             else if (!_supported)
               Text(
                 tr('ระบบ MOAI NEXT ของ Space นี้ยังไม่รองรับการดูอุปกรณ์อื่น (ต้องอัปเดตระบบ) — ออกจากระบบเครื่องนี้ได้ตามปกติ'),
