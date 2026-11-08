@@ -1375,6 +1375,7 @@ const Map<String, String> enStrings = {
   'เตือนล่วงหน้า 1 วันก่อนวันเกิดลูกค้า': 'Reminder one day before a customer\'s birthday',
   'SMS': 'SMS',
   'เมนูจะเปลี่ยนตาม Package และสิทธิ์ของคุณ': 'Menus follow the Package and your permissions',
+  'หรือ': 'or',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1562,4 +1563,6 @@ const Map<String, String> enPatterns = {
   'กำลังเปลี่ยนเป็น {}': 'Switching to {}',
   '{} เมนู': '{} menus',
   'ใช้อยู่: {}': 'Current: {}',
+  'เข้าสู่ระบบด้วย Google ไม่สำเร็จ ({}) ลองอีกครั้ง หรือใช้อีเมล/OTP': 'Google sign-in failed ({}). Try again or use email/OTP',
+  'เข้าสู่ระบบด้วย Google ไม่ได้ เพราะแอปเวอร์ชันนี้ยังไม่ได้ลงทะเบียนกับ Google ของเซิร์ฟเวอร์ — แจ้งผู้ดูแลระบบ (รหัส: {})': 'Google sign-in is not available: this app build is not registered with the server\'s Google project — contact your admin (code: {})',
 };

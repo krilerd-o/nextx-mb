@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'nx_app_logo.dart';
 import 'nx_icons.dart';
 import '../core/i18n.dart';
 
@@ -24,17 +25,13 @@ const kDefaultHeroChips = [
 /// Code-drawn hero art for the welcome / login screens: soft gradient,
 /// concentric arcs and floating UI cards that bob gently. No image assets.
 class NxHeroIllustration extends StatefulWidget {
-  const NxHeroIllustration({
-    super.key,
-    this.height = 320,
-    this.chips = kDefaultHeroChips,
-    this.centerIcon = NxI.squaresFourFill,
-    this.animate = true,
-  });
+  const NxHeroIllustration({super.key, this.height = 320, this.chips = kDefaultHeroChips, this.centerIcon, this.animate = true});
 
   final double height;
   final List<NxHeroChip> chips;
-  final IconData centerIcon;
+
+  /// Icon in the centre tile; null shows the app logo.
+  final IconData? centerIcon;
   final bool animate;
 
   @override
@@ -72,34 +69,36 @@ class _NxHeroIllustrationState extends State<NxHeroIllustration> with SingleTick
       width: double.infinity,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [dark ? Color.lerp(cs.primary, Colors.black, 0.55)! : top, bottom],
-          ),
+          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [dark ? Color.lerp(cs.primary, Colors.black, 0.55)! : top, bottom]),
         ),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            Positioned.fill(child: CustomPaint(painter: _ArcsPainter(color: cs.primary, dark: dark))),
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _ArcsPainter(color: cs.primary, dark: dark),
+              ),
+            ),
             Align(
               alignment: const Alignment(0, 0.05),
-              child: Container(
-                width: 92,
-                height: 92,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [cs.primary, Color.lerp(cs.primary, cs.tertiary, 0.6)!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(color: cs.primary.withValues(alpha: 0.35), blurRadius: 30, offset: const Offset(0, 14)),
-                  ],
-                ),
-                child: Icon(widget.centerIcon, color: Colors.white, size: 44),
-              ),
+              child: widget.centerIcon == null
+                  ? DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(26),
+                        boxShadow: [BoxShadow(color: const Color(0xFF0B0A5C).withValues(alpha: 0.35), blurRadius: 30, offset: const Offset(0, 14))],
+                      ),
+                      child: const NxAppLogo(size: 96),
+                    )
+                  : Container(
+                      width: 92,
+                      height: 92,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [cs.primary, Color.lerp(cs.primary, cs.tertiary, 0.6)!], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        borderRadius: BorderRadius.circular(28),
+                        boxShadow: [BoxShadow(color: cs.primary.withValues(alpha: 0.35), blurRadius: 30, offset: const Offset(0, 14))],
+                      ),
+                      child: Icon(widget.centerIcon, color: Colors.white, size: 44),
+                    ),
             ),
             for (var i = 0; i < widget.chips.length; i++)
               AnimatedBuilder(
@@ -134,9 +133,7 @@ class _HeroChipCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 18, offset: const Offset(0, 8)),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 18, offset: const Offset(0, 8))],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -153,14 +150,18 @@ class _HeroChipCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(tr(chip.title),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
-                Text(tr(chip.subtitle),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                Text(
+                  tr(chip.title),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  tr(chip.subtitle),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
               ],
             ),
           ),

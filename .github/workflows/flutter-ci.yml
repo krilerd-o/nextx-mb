@@ -49,6 +49,33 @@ jobs:
           channel: stable
           cache: true
 
+      # Signing keys come from repository secrets (Settings → Secrets → Actions):
+      # - ANDROID_TESTER_KEYSTORE_BASE64 / ANDROID_TESTER_KEYSTORE_PASSWORD: fixed key for
+      #   debug + tester APKs, so the SHA-1 stays the same (needed for Google Sign-In).
+      # - ANDROID_KEYSTORE_BASE64 / _PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD: release key.
+      # The SHA-1 to register in Google Cloud is printed below.
+      - name: Signing keys (optional)
+        env:
+          TESTER_B64: ${{ secrets.ANDROID_TESTER_KEYSTORE_BASE64 }}
+          TESTER_PASSWORD: ${{ secrets.ANDROID_TESTER_KEYSTORE_PASSWORD }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TESTER_B64" ]; then
+            echo "$TESTER_B64" | base64 -d > android/app/tester.keystore
+            printf 'storePassword=%s\nkeyAlias=tester\nkeyPassword=%s\n' "$TESTER_PASSWORD" "$TESTER_PASSWORD" > android/tester.properties
+            echo "Tester key SHA-1:"; keytool -list -v -keystore android/app/tester.keystore -storepass "$TESTER_PASSWORD" -alias tester | grep -E 'SHA1'
+          else
+            echo "::warning::No ANDROID_TESTER_KEYSTORE_BASE64 secret — APKs use a random debug key, Google Sign-In will not work on them."
+          fi
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > android/app/release.jks
+            printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/key.properties
+            echo "Release key SHA-1:"; keytool -list -v -keystore android/app/release.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | grep -E 'SHA1'
+          fi
+
       - name: Debug APK (no signing keys needed)
         run: |
           flutter pub get
