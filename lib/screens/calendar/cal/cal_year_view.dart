@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/thai_time.dart';
+import 'cal_birthdays.dart';
 import 'cal_model.dart';
 import 'cal_store.dart';
 
@@ -66,7 +67,7 @@ class _CalYearViewState extends State<CalYearView> {
                       HapticFeedback.selectionClick();
                       widget.onOpenMonth(m, r);
                     },
-                    child: CalMiniMonth(month: m, counts: widget.store.countsIn(m)),
+                    child: CalMiniMonth(month: m, counts: widget.store.countsIn(m), isBirthday: (d) => widget.store.birthdays.on(d).isNotEmpty),
                   ),
                 );
               },
@@ -81,11 +82,14 @@ class _CalYearViewState extends State<CalYearView> {
 /// A month at thumbnail size: name, weekday initials and days; today is a
 /// filled circle, days with appointments are bold in the accent colour.
 class CalMiniMonth extends StatelessWidget {
-  const CalMiniMonth({super.key, required this.month, this.counts = const {}, this.dense = true});
+  const CalMiniMonth({super.key, required this.month, this.counts = const {}, this.dense = true, this.isBirthday});
 
   final DateTime month;
   final Map<String, int> counts;
   final bool dense;
+
+  /// Days with a customer birthday are drawn in pink.
+  final bool Function(DateTime day)? isBirthday;
 
   @override
   Widget build(BuildContext context) {
@@ -122,13 +126,14 @@ class CalMiniMonth extends StatelessWidget {
                       final date = DateTime(month.year, month.month, d);
                       final isToday = sameDay(date, today);
                       final has = (counts[calKey(date)] ?? 0) > 0;
+                      final bday = isBirthday?.call(date) ?? false;
                       final t = Text(
                         '$d',
                         style: TextStyle(
                           fontSize: size,
                           height: 1,
-                          fontWeight: has || isToday ? FontWeight.w800 : FontWeight.w500,
-                          color: isToday ? cs.onPrimary : (has ? cs.primary : cs.onSurface),
+                          fontWeight: has || bday || isToday ? FontWeight.w800 : FontWeight.w500,
+                          color: isToday ? cs.onPrimary : (bday ? calBirthdayColor : (has ? cs.primary : cs.onSurface)),
                         ),
                       );
                       if (!isToday) return t;

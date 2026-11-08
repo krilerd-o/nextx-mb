@@ -1310,6 +1310,17 @@ const Map<String, String> enStrings = {
   'ทั้งวัน': 'All day',
   'ต่อ': 'cont.',
   'อัปเดตแล้ว': 'Updated',
+  'ลูกค้าเป้าหมาย': 'Lead',
+  'ผู้ติดต่อของบัญชี': 'Account contact',
+  'สุขสันต์วันเกิดวันนี้': 'Birthday today',
+  'วันเกิด': 'Birthday',
+  'บัญชี': 'Account',
+  'นัดอวยพร': 'Plan greeting',
+  'ดูข้อมูล': 'View record',
+  'สุขสันต์วันเกิด': 'Happy birthday',
+  'อวยพรวันเกิด': 'Birthday greeting for',
+  'ซ่อนวันเกิดลูกค้า': 'Hide customer birthdays',
+  'แสดงวันเกิดลูกค้า': 'Show customer birthdays',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1485,4 +1496,6 @@ const Map<String, String> enPatterns = {
   'ย้ายไปยัง {} แล้ว': 'Moved to {}',
   '{} กิจกรรม': '{} activities',
   'ตัวกรอง ({})': 'Filters ({})',
+  'ผ่านมา {} วัน': '{} days ago',
+  'ครบ {} ปี': 'Turns {}',
 };

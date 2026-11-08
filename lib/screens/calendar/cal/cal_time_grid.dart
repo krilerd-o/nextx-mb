@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/i18n.dart';
 import '../../../core/thai_time.dart';
+import 'cal_birthdays.dart';
 import 'cal_model.dart';
 import 'cal_store.dart';
 import 'cal_widgets.dart';
@@ -249,11 +250,12 @@ class _GridPageState extends State<_GridPage> {
       builder: (context, _) {
         final perDay = [for (final d in days) w.store.on(d)];
         final allDay = [for (final l in perDay) [for (final e in l) if (e.allDay || e.multiDay) e]];
-        final hasAllDay = allDay.any((l) => l.isNotEmpty);
+        final bdays = [for (final d in days) w.store.birthdays.on(d)];
+        final hasAllDay = allDay.any((l) => l.isNotEmpty) || bdays.any((l) => l.isNotEmpty);
         return Column(
           children: [
             if (w.view == CalView.day) _weekStrip(context, days.first, today) else _dayHeaders(context, days, today),
-            if (hasAllDay) _allDayRow(context, days, allDay),
+            if (hasAllDay) _allDayRow(context, days, allDay, bdays),
             Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
             Expanded(
               child: NotificationListener<ScrollUpdateNotification>(
@@ -479,7 +481,7 @@ class _GridPageState extends State<_GridPage> {
     );
   }
 
-  Widget _allDayRow(BuildContext context, List<DateTime> days, List<List<CalEvent>> allDay) {
+  Widget _allDayRow(BuildContext context, List<DateTime> days, List<List<CalEvent>> allDay, List<List<CalBirthday>> bdays) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     const maxShown = 2; // two chips, then "+N" (as in the reference)
@@ -500,28 +502,48 @@ class _GridPageState extends State<_GridPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final e in allDay[i].take(allDay[i].length > maxShown ? maxShown - 1 : maxShown))
-                    _chip(context, e.title, e.color, () => w.onOpen(e)),
-                  if (allDay[i].length > maxShown)
-                    Builder(
-                      builder: (chipCtx) => _chip(
-                        context,
-                        '+${allDay[i].length - (maxShown - 1)}',
-                        cs.primary,
-                        () {
-                          final box = chipCtx.findRenderObject() as RenderBox?;
-                          showCalDayPopover(
+                  // Birthdays (pink, first) then all-day activities; past two → "+N".
+                  ...() {
+                    final items = <Widget Function()>[
+                      for (final b in bdays[i])
+                        () => Builder(
+                              builder: (c) => _chip(
+                                context,
+                                '🎂 ${b.name}',
+                                calBirthdayColor,
+                                () => w.store.openBirthday(c, b, days[i]),
+                                key: ValueKey('cal-bday-chip-${b.module}-${b.id}'),
+                              ),
+                            ),
+                      for (final e in allDay[i]) () => _chip(context, e.title, e.color, () => w.onOpen(e)),
+                    ];
+                    final over = items.length > maxShown;
+                    return [
+                      for (final f in items.take(over ? maxShown - 1 : maxShown)) f(),
+                      if (over)
+                        Builder(
+                          builder: (chipCtx) => _chip(
                             context,
-                            day: days[i],
-                            events: w.store.on(days[i]),
-                            onOpen: w.onOpen,
-                            anchor: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
-                          );
-                        },
-                        key: ValueKey('cal-more-${calKey(days[i])}'),
-                        center: true,
-                      ),
-                    ),
+                            '+${items.length - (maxShown - 1)}',
+                            cs.primary,
+                            () {
+                              final box = chipCtx.findRenderObject() as RenderBox?;
+                              showCalDayPopover(
+                                context,
+                                day: days[i],
+                                events: w.store.on(days[i]),
+                                birthdays: bdays[i],
+                                onBirthday: (b) => w.store.onBirthday?.call(b, days[i], null),
+                                onOpen: w.onOpen,
+                                anchor: box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+                              );
+                            },
+                            key: ValueKey('cal-more-${calKey(days[i])}'),
+                            center: true,
+                          ),
+                        ),
+                    ];
+                  }(),
                 ],
               ),
             ),

@@ -4,6 +4,7 @@ import '../../../core/i18n.dart';
 import '../../../core/thai_time.dart';
 import '../../../widgets/nx_icons.dart';
 import '../../../widgets/nx_overlay_panel.dart';
+import 'cal_birthdays.dart';
 import 'cal_model.dart';
 
 /// One appointment row: time column (or "ทั้งวัน"), colour bar, title,
@@ -114,6 +115,8 @@ Future<void> showCalDayPopover(
   required DateTime day,
   required List<CalEvent> events,
   required void Function(CalEvent e) onOpen,
+  List<CalBirthday> birthdays = const [],
+  void Function(CalBirthday b)? onBirthday,
   Rect? anchor,
 }) {
   return showNxBlurPanel<void>(
@@ -132,7 +135,16 @@ Future<void> showCalDayPopover(
               style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
           ),
-          if (events.isEmpty)
+          for (final b in birthdays)
+            CalBirthdayTile(
+              b: b,
+              day: day,
+              onTap: () {
+                Navigator.pop(ctx);
+                onBirthday?.call(b);
+              },
+            ),
+          if (events.isEmpty && birthdays.isEmpty)
             Padding(padding: const EdgeInsets.all(16), child: Text(tr('ไม่มีกิจกรรม'))),
           for (final e in events)
             CalEventTile(

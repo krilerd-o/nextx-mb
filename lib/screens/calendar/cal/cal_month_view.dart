@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../core/i18n.dart';
 import '../../../core/thai_time.dart';
 import '../../../widgets/nx_icons.dart';
+import 'cal_birthdays.dart';
 import 'cal_model.dart';
 import 'cal_store.dart';
 import 'cal_widgets.dart';
@@ -116,6 +117,7 @@ class CalMonthViewState extends State<CalMonthView> {
       listenable: widget.store,
       builder: (context, _) {
         final events = widget.store.on(sel);
+        final bdays = widget.store.birthdays.on(sel);
         return LayoutBuilder(builder: (context, box) {
           return NotificationListener<ScrollEndNotification>(
             onNotification: _onEnd,
@@ -177,12 +179,28 @@ class CalMonthViewState extends State<CalMonthView> {
                               style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                             ),
                           ),
+                          if (bdays.isNotEmpty) ...[
+                            const Icon(NxI.cakeFill, size: 14, color: calBirthdayColor),
+                            const SizedBox(width: 3),
+                            Text('${bdays.length}', style: theme.textTheme.labelMedium?.copyWith(color: calBirthdayColor, fontWeight: FontWeight.w800)),
+                            const SizedBox(width: 10),
+                          ],
                           if (events.isNotEmpty) Text(tr('${events.length} กิจกรรม'), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
                         ]),
                       ),
                     ],
                   ),
                 ),
+                if (bdays.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: CalCard(children: [
+                        for (final b in bdays)
+                          Builder(builder: (c) => CalBirthdayTile(b: b, day: sel, onTap: () => widget.store.openBirthday(c, b, sel))),
+                      ]),
+                    ),
+                  ),
                 SliverToBoxAdapter(
                   child: events.isEmpty
                       ? Padding(
@@ -262,6 +280,7 @@ class CalMonthViewState extends State<CalMonthView> {
     final isSel = sameDay(d, sel);
     final isToday = sameDay(d, today);
     final dots = counts[calKey(d)] ?? const [];
+    final bday = widget.store.birthdays.on(d).isNotEmpty;
     return InkWell(
       key: ValueKey('cal-day-${calKey(d)}'),
       customBorder: const CircleBorder(),
@@ -282,14 +301,28 @@ class CalMonthViewState extends State<CalMonthView> {
               shape: BoxShape.circle,
               border: isToday && !isSel ? Border.all(color: cs.primary, width: 1.4) : null,
             ),
-            child: Text(
-              '${d.day}',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: isSel || isToday ? FontWeight.w800 : FontWeight.w500,
-                color: isSel ? cs.onPrimary : (isToday ? cs.primary : (inMonth ? cs.onSurface : cs.outline)),
+            child: Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
+              Text(
+                '${d.day}',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: isSel || isToday ? FontWeight.w800 : FontWeight.w500,
+                  color: isSel ? cs.onPrimary : (isToday ? cs.primary : (inMonth ? cs.onSurface : cs.outline)),
+                ),
               ),
-            ),
+              // Someone's birthday: a small pink cake on the corner of the day.
+              if (bday)
+                Positioned(
+                  key: ValueKey('cal-bday-mark-${calKey(d)}'),
+                  right: -9,
+                  top: -8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2.5),
+                    decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, shape: BoxShape.circle),
+                    child: Icon(NxI.cakeFill, size: 11, color: inMonth ? calBirthdayColor : calBirthdayColor.withValues(alpha: 0.45)),
+                  ),
+                ),
+            ]),
           ),
           const SizedBox(height: 2),
           SizedBox(

@@ -72,6 +72,11 @@ class NxI {
   static const receipt = LucideIcons300.receiptText;
   static const arrowRight = LucideIcons300.arrowRight;
   static const arrowDown = LucideIcons300.arrowDown;
+  static const cake = LucideIcons300.cake;
+  static const cakeFill = LucideIcons500.cake;
+  static const gift = LucideIcons300.gift;
+  static const partyPopper = LucideIcons300.partyPopper;
+  static const calendarPlus = LucideIcons300.calendarPlus;
   static const chatCircle = LucideIcons300.messageCircle;
   static const robot = LucideIcons300.bot;
   static const folder = LucideIcons300.folder;

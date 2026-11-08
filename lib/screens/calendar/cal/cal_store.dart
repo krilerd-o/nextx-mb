@@ -1,14 +1,35 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../../services/api_client.dart';
+import 'cal_birthdays.dart';
 import 'cal_model.dart';
 
 /// Activities for the calendar, loaded a month at a time and cached, so
 /// moving between views/periods only fetches what is missing.
 class CalStore extends ChangeNotifier {
-  CalStore(this._api);
+  CalStore(this._api) : birthdays = CalBirthdays(_api) {
+    birthdays.addListener(notifyListeners);
+  }
 
   final ApiClient _api;
+
+  /// Customer birthdays (Lead / Contact / Account) shown alongside activities.
+  final CalBirthdays birthdays;
+
+  /// Tapping a birthday anywhere in the calendar opens its card.
+  void Function(CalBirthday b, DateTime day, Rect? anchor)? onBirthday;
+
+  void openBirthday(BuildContext context, CalBirthday b, DateTime day) {
+    final box = context.findRenderObject() as RenderBox?;
+    onBirthday?.call(b, day, box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size);
+  }
+
+  @override
+  void dispose() {
+    birthdays.removeListener(notifyListeners);
+    birthdays.dispose();
+    super.dispose();
+  }
   final Map<String, List<CalEvent>> _months = {};
   final Set<String> _loading = {};
   Object? error;
@@ -31,6 +52,7 @@ class CalStore extends ChangeNotifier {
       final k = _mk(m);
       if (!_months.containsKey(k) && !_loading.contains(k)) want.add(m);
     }
+    if (birthdays.enabled && !birthdays.loaded) birthdays.load(); // once, in the background
     if (want.isEmpty) return;
     for (final m in want) {
       _loading.add(_mk(m));
@@ -62,7 +84,7 @@ class CalStore extends ChangeNotifier {
   /// Drops the cache (realtime change / pull to refresh) and reloads [from]…[to].
   Future<void> reload(DateTime from, DateTime to) async {
     _months.clear();
-    await ensure(from, to);
+    await Future.wait([ensure(from, to), if (birthdays.enabled) birthdays.load(force: true)]);
   }
 
   Iterable<CalEvent> get _all sync* {

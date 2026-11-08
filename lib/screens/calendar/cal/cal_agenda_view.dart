@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/i18n.dart';
 import '../../../core/thai_time.dart';
 import '../../../widgets/nx_icons.dart';
+import 'cal_birthdays.dart';
 import 'cal_model.dart';
 import 'cal_store.dart';
 import 'cal_widgets.dart';
@@ -82,6 +83,17 @@ class _CalAgendaViewState extends State<CalAgendaView> {
             d = d.add(const Duration(days: 1));
           }
         }
+        // Birthdays in the range (calendar mode only) — a day with only birthdays still shows.
+        final bdays = <DateTime, List<CalBirthday>>{};
+        if (widget.events == null && widget.store.birthdays.enabled) {
+          for (var d = _from; d.isBefore(_to); d = DateTime(d.year, d.month, d.day + 1)) {
+            final l = widget.store.birthdays.on(d);
+            if (l.isNotEmpty) {
+              bdays[d] = l;
+              days.putIfAbsent(d, () => []);
+            }
+          }
+        }
         final keys = days.keys.toList()..sort(widget.events != null && list.isNotEmpty && list.first.start.isAfter(list.last.start) ? (a, b) => b.compareTo(a) : (a, b) => a.compareTo(b));
         final today = thaiNow();
         return NotificationListener<ScrollNotification>(
@@ -120,6 +132,8 @@ class _CalAgendaViewState extends State<CalAgendaView> {
                   ),
                 ),
                 CalCard(children: [
+                  for (final b in bdays[d] ?? const <CalBirthday>[])
+                    Builder(builder: (c) => CalBirthdayTile(b: b, day: d, onTap: () => widget.store.openBirthday(c, b, d))),
                   for (final e in days[d]!..sort((a, b) => a.allDay != b.allDay ? (a.allDay ? -1 : 1) : a.start.compareTo(b.start)))
                     CalEventTile(event: e, day: d, onTap: () => widget.onOpen(e), onLongPress: () => widget.onEventMenu(e)),
                 ]),

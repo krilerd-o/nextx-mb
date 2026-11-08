@@ -20,9 +20,11 @@ import '../../widgets/nx_list_toolbar.dart';
 import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../crm/entity_create_screen.dart';
+import '../crm/entity_detail_screen.dart';
 import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
 import 'activity_detail_screen.dart';
 import 'cal/cal_agenda_view.dart';
+import 'cal/cal_birthdays.dart';
 import 'cal/cal_model.dart';
 import 'cal/cal_month_view.dart';
 import 'cal/cal_store.dart';
@@ -69,14 +71,18 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
   Timer? _debounce;
 
   String get _prefKey => 'nx_cal_view_${context.read<AppConfig>().prefsScope}';
+  String get _bdayKey => 'nx_cal_birthdays_${context.read<AppConfig>().prefsScope}';
 
   @override
   void initState() {
     super.initState();
     _store.filter = _passes;
+    _store.onBirthday = _openBirthday;
     PendingEntityDeletes.instance.addListener(_store.refreshFilter);
     final key = _prefKey;
+    final bdayKey = _bdayKey;
     SharedPreferences.getInstance().then((p) {
+      if (p.getBool(bdayKey) == false) _store.birthdays.setEnabled(false);
       final saved = CalView.values.where((v) => v.name == p.getString(key)).firstOrNull;
       if (saved != null && mounted && saved != _view) {
         setState(() {
@@ -232,6 +238,45 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
     return DateTime(day.year, day.month, day.day, 9);
   }
 
+  /// Birthday card → call / email / open the customer / plan a greeting.
+  void _openBirthday(CalBirthday b, DateTime day, Rect? anchor) {
+    showCalBirthdayCard(
+      context,
+      b: b,
+      day: day,
+      anchor: anchor,
+      onOpenRecord: () => nxPush<void>(context, EntityDetailScreen(module: b.module, row: b.row)),
+      onPlanGreeting: () async {
+        final at = DateTime(day.year, day.month, day.day, 9);
+        await nxPush<void>(
+          context,
+          EntityCreateScreen(
+            module: 'activity',
+            title: 'นัดหมายใหม่',
+            initialValues: {
+              'subject': '${tr('อวยพรวันเกิด')} ${b.name}',
+              'date_start': ymdhm(at),
+              'date_end': ymdhm(at.add(const Duration(minutes: 30))),
+              'related_module': b.module,
+              'related_id': b.id,
+            },
+          ),
+        );
+        if (mounted) _reload();
+      },
+    );
+  }
+
+  Future<void> _toggleBirthdays() async {
+    final on = !_store.birthdays.enabled;
+    _store.birthdays.setEnabled(on);
+    if (on) _store.birthdays.load();
+    final key = _bdayKey;
+    try {
+      (await SharedPreferences.getInstance()).setBool(key, on);
+    } catch (_) {}
+  }
+
   Future<void> _create(DateTime at) async {
     await nxPush<void>(
       context,
@@ -364,6 +409,14 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
           if (_mode != _CalMode.calendar) NxHeaderMenuItem(label: 'ปฏิทิน', icon: NxI.calendarBlank, onTap: () => _setMode(_CalMode.calendar)),
           if (showIncoming && _mode != _CalMode.incoming) NxHeaderMenuItem(label: 'งานใกล้ถึง', icon: NxI.clockCountdown, onTap: () => _setMode(_CalMode.incoming)),
           if (showPending && _mode != _CalMode.pending) NxHeaderMenuItem(label: 'งานค้าง', icon: NxI.warningCircle, onTap: () => _setMode(_CalMode.pending)),
+          NxHeaderMenuItem(
+            label: _store.birthdays.enabled ? 'ซ่อนวันเกิดลูกค้า' : 'แสดงวันเกิดลูกค้า',
+            icon: NxI.cake,
+            onTap: () {
+              _toggleBirthdays();
+              setState(() {});
+            },
+          ),
         ],
       ),
       floatingActionButton: Column(
