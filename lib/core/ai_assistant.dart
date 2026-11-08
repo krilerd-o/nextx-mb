@@ -390,3 +390,10 @@ bool aiIsWorkspaceTree(Map<String, dynamic> p) {
 }
 
 bool aiNeedsBoard(Map<String, dynamic> p) => '${p['tool'] ?? ''}' == 'execute_workspace_tree_plan';
+
+/// Link of a shared chat (web route `/share/ai/:token`).
+String aiShareUrl(String webOrigin, Map<String, dynamic> share) {
+  final token = '${share['token'] ?? share['share_token'] ?? ''}';
+  if (token.isEmpty) return '${share['url'] ?? ''}';
+  return '$webOrigin/share/ai/$token';
+}

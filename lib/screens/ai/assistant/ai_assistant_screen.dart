@@ -13,7 +13,10 @@ import '../../../core/ai_assistant.dart';
 import '../../../core/app_config.dart';
 import '../../../core/i18n.dart';
 import '../../../core/isaac_states.dart';
+import '../../../core/navigation/app_routes.dart';
 import '../../../core/nx_breakpoint.dart';
+import '../../../core/nx_network.dart';
+import '../../../services/nx_speech.dart';
 import '../../../core/navigation/notification_deep_link.dart';
 import '../../../widgets/isaac_sticker.dart';
 import '../../../widgets/nx_attachments.dart';
@@ -27,10 +30,15 @@ import 'ai_cards.dart';
 /// ISAAC AI Assistant (web `/ai`): chats kept on the server, streamed
 /// answers with Isaac's moods, action cards, files, follow-ups, model + quota.
 class AiAssistantScreen extends StatefulWidget {
-  const AiAssistantScreen({super.key, this.controller});
+  const AiAssistantScreen({super.key, this.controller, this.contextModule, this.contextId, this.contextTitle});
 
   /// For tests.
   final AiAssistantController? controller;
+
+  /// "ถาม Isaac" from a record: the chat is about this record.
+  final String? contextModule;
+  final String? contextId;
+  final String? contextTitle;
 
   @override
   State<AiAssistantScreen> createState() => _AiAssistantScreenState();
@@ -45,6 +53,10 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   Timer? _tick;
   DateTime? _finishedAt;
   bool _wasSending = false;
+
+  /// Voice input: listening, and the text typed before speaking started.
+  bool _listening = false;
+  String _speechBase = '';
 
   /// Boards for workspace tree proposals (loaded once) and the pick per proposal.
   List<Map<String, dynamic>>? _boards;
@@ -87,11 +99,22 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     _c.addListener(_onChange);
     _focus.addListener(() => setState(() {}));
     _input.addListener(() => setState(() {}));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _c.init());
+    NxNetwork.instance.ensureStarted();
+    if (widget.contextModule != null && widget.contextId != null) {
+      _c.contextModule = widget.contextModule;
+      _c.contextId = widget.contextId;
+      _c.contextTitle = widget.contextTitle;
+      _input.text = tr('สรุปรายการนี้ให้หน่อย และควรทำอะไรต่อ');
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _c.init();
+      if (mounted) IsaacSticker.preload(context);
+    });
   }
 
   @override
   void dispose() {
+    if (_listening) NxSpeech.instance.stop();
     _c.removeListener(_onChange);
     if (widget.controller == null) _c.dispose();
     _input.dispose();
@@ -281,10 +304,31 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   Future<void> _share() async {
     final id = _c.activeId;
     if (id == null) return;
+    final mode = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(NxI.users),
+            title: Text(tr('คนในธุรกิจนี้')),
+            subtitle: Text(tr('ต้องเข้าสู่ระบบจึงเปิดดูได้')),
+            onTap: () => Navigator.pop(ctx, 'business'),
+          ),
+          ListTile(
+            leading: const Icon(NxI.globe),
+            title: Text(tr('ทุกคนที่มีลิงก์')),
+            subtitle: Text(tr('เปิดดูได้โดยไม่ต้องเข้าสู่ระบบ')),
+            onTap: () => Navigator.pop(ctx, 'public'),
+          ),
+        ]),
+      ),
+    );
+    if (mode == null || !mounted) return;
     try {
-      final r = await _c.api.createAiShare(id);
-      final token = '${r['token'] ?? r['share_token'] ?? ''}';
-      final url = '${r['url'] ?? (token.isEmpty ? '' : '${WebSessionScreen.webOrigin(context.read<AppConfig>().apiBaseUrl)}/ai/shared/$token')}';
+      final r = await _c.api.createAiShare(id, accessMode: mode);
+      if (!mounted) return;
+      final url = aiShareUrl(WebSessionScreen.webOrigin(context.read<AppConfig>().apiBaseUrl), r);
       if (url.isNotEmpty) await Share.share('${_c.activeTitle}\n$url');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(aiErrorText(e)))));
@@ -437,6 +481,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             ),
           if (_c.followUps.isNotEmpty && !_c.sending) _followUps(context),
           _usageStrip(context),
+          if (_c.contextModule != null) _contextChip(context),
           _composer(context),
         ],
       ),
@@ -830,6 +875,51 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     );
   }
 
+  Future<void> _toggleMic() async {
+    if (_listening) {
+      await NxSpeech.instance.stop();
+      if (mounted) setState(() => _listening = false);
+      return;
+    }
+    HapticFeedback.selectionClick();
+    _speechBase = _input.text.trim().isEmpty ? '' : '${_input.text.trim()} ';
+    final ok = await NxSpeech.instance.start(
+      localeId: L10n.isEn ? 'en_US' : 'th_TH',
+      onText: (text, done) {
+        if (!mounted) return;
+        _input.text = '$_speechBase$text';
+        _input.selection = TextSelection.collapsed(offset: _input.text.length);
+        if (done) setState(() => _listening = false);
+      },
+      onStop: () {
+        if (mounted && _listening) setState(() => _listening = false);
+      },
+    );
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ใช้ไมค์ไม่ได้ — ตรวจสิทธิ์ไมโครโฟนในการตั้งค่าเครื่อง'))));
+      return;
+    }
+    setState(() => _listening = true);
+  }
+
+  Widget _contextChip(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      key: const ValueKey('ai-context'),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: InputChip(
+          avatar: Icon(NxI.link, size: 14, color: cs.primary),
+          label: Text(tr('เกี่ยวกับ: ${_c.contextTitle ?? '${_c.contextModule} #${_c.contextId}'}'), overflow: TextOverflow.ellipsis),
+          onDeleted: _c.clearContext,
+          deleteButtonTooltipMessage: tr('ไม่ใช้บริบทนี้'),
+        ),
+      ),
+    );
+  }
+
   Widget _composer(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -895,6 +985,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 ),
                 const SizedBox(width: 8),
                 const Spacer(),
+                if (!_c.sending && !locked)
+                  IconButton(
+                    key: const ValueKey('ai-mic'),
+                    tooltip: tr(_listening ? 'หยุดฟัง' : 'พูดแทนพิมพ์'),
+                    onPressed: _toggleMic,
+                    icon: Icon(_listening ? NxI.stop : NxI.microphone, color: _listening ? cs.error : null),
+                  ),
                 if (_c.sending)
                   IconButton.filled(key: const ValueKey('ai-stop'), tooltip: tr('หยุด'), onPressed: _c.stop, icon: const Icon(NxI.stop, size: 16))
                 else
@@ -1270,6 +1367,7 @@ String? aiInAppRoute(String href, {String? serverOrigin}) {
     if (serverOrigin == null || uri.origin != serverOrigin) return null;
   }
   final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+  if (segs.length >= 3 && segs[0] == 'share' && segs[1] == 'ai') return AppRoutes.aiShared(segs[2]);
   if (segs.isEmpty || !_inAppPrefixes.contains(segs.first)) return null;
   final path = '/${segs.join('/')}${uri.hasQuery ? '?${uri.query}' : ''}';
   return notificationDeepLink(path);

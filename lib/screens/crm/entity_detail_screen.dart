@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../core/navigation/app_routes.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -429,6 +431,11 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   label: 'แชร์ลิงก์',
                   icon: NxI.shareNetwork,
                   onTap: _shareLink,
+                ),
+                NxHeaderMenuItem(
+                  label: 'ถาม Isaac',
+                  icon: NxI.sparkle,
+                  onTap: () => context.push(AppRoutes.aiAsk(module: widget.module, id: _id, title: entityTitle(_row, module: widget.module))),
                 ),
                 if (widget.module == 'case' && _following != null)
                   NxHeaderMenuItem(

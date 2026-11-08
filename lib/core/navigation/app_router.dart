@@ -4,6 +4,7 @@ import '../../widgets/nx_icons.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../screens/ai/assistant/ai_assistant_screen.dart';
+import '../../screens/ai/assistant/ai_shared_chat_screen.dart';
 import '../../screens/ai/isaac_coming_soon_screen.dart';
 import '../../screens/ai/isaac_embed_screen.dart';
 import '../../screens/approvals/approvals_screen.dart';
@@ -230,7 +231,14 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: AppRoutes.aiChat,
-        builder: (_, _) => const AiAssistantScreen(),
+        builder: (_, state) {
+          final q = state.uri.queryParameters;
+          return AiAssistantScreen(contextModule: q['ctx_module'], contextId: q['ctx_id'], contextTitle: q['ctx_title']);
+        },
+      ),
+      GoRoute(
+        path: '/share/ai/:token',
+        builder: (_, state) => AiSharedChatScreen(token: state.pathParameters['token'] ?? ''),
       ),
       // ISAAC AI (same routes as the web menu group).
       GoRoute(path: AppRoutes.isaacNotebook, builder: (_, _) => const IsaacEmbedScreen(menu: 'bot')),

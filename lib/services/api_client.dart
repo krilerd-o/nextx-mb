@@ -1547,8 +1547,12 @@ class ApiClient {
   Future<Map<String, dynamic>> regenerateAi(String conversationId) async =>
       _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/regenerate'));
 
-  Future<Map<String, dynamic>> createAiShare(String conversationId) async =>
-      _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/shares', data: const {}));
+  /// [accessMode]: `business` (members, signed in) or `public` (anyone with the link).
+  Future<Map<String, dynamic>> createAiShare(String conversationId, {String accessMode = 'business'}) async =>
+      _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/shares', data: {'access_mode': accessMode}));
+
+  /// Shared chat snapshot `{share: {title, owner_display, ...}, snapshot: {messages}}` (signed in).
+  Future<Map<String, dynamic>> getAiSharedChat(String token) async => _dataMap(await _send('GET', '/api/ai/shared/${Uri.encodeComponent(token)}'));
 
   Future<List<Map<String, dynamic>>> getAiProjects() async {
     final env = await _send('GET', '/api/ai/projects');

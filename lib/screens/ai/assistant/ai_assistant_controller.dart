@@ -18,6 +18,16 @@ class AiAssistantController extends ChangeNotifier {
   bool listLoading = false;
   String query = '';
 
+  /// The record this chat is about ("ถาม Isaac" from a record page).
+  String? contextModule;
+  String? contextId;
+  String? contextTitle;
+
+  void clearContext() {
+    contextModule = contextId = contextTitle = null;
+    _notify();
+  }
+
   /// AI projects (folders for chats) and the one shown, null = all.
   List<Map<String, dynamic>> projects = const [];
   String? projectFilter;
@@ -146,7 +156,11 @@ class AiAssistantController extends ChangeNotifier {
 
   Future<String> _ensureConversation(String titleHint) async {
     if (activeId != null) return activeId!;
-    final c = await api.createAiConversation({'title': titleHint, 'mode': 'chat'});
+    final c = await api.createAiConversation({
+      'title': titleHint,
+      'mode': 'chat',
+      if (contextModule != null && contextId != null) ...{'context_module': contextModule, 'context_id': int.tryParse(contextId!) ?? contextId},
+    });
     activeId = '${c['id']}';
     activeTitle = '${c['title'] ?? titleHint}';
     conversations = [AiConversation.fromJson({...c, 'title': activeTitle}), ...conversations.where((x) => x.id != activeId)];
@@ -195,7 +209,17 @@ class AiAssistantController extends ChangeNotifier {
     Map<String, dynamic>? done;
     ApiEnvelopeException? streamError;
     try {
-      final body = aiChatBody(history: history, conversationId: convId, provider: provider, model: model, sticky: sticky, attachmentIds: imageIds);
+      final body = aiChatBody(
+        history: history,
+        conversationId: convId,
+        provider: provider,
+        model: model,
+        sticky: sticky,
+        attachmentIds: imageIds,
+        contextModule: contextModule,
+        contextId: contextId,
+        contextTitle: contextTitle,
+      );
       await for (final ev in api.streamAiChat(body, cancel: cancel)) {
         switch (ev.type) {
           case 'token':

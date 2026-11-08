@@ -4,10 +4,12 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/navigation/app_routes.dart';
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
 import '../../core/html_display.dart';
@@ -729,6 +731,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               item(NxI.arrowsLeftRight, 'ย้ายไปบอร์ดอื่น', _moveBoard),
               item(NxI.hash, 'คัดลอกรหัส', _copyKey),
               item(NxI.shareNetwork, 'แชร์ลิงก์', () => Share.share(wsShareText(_item, _webUrl, boardCode: _code))),
+              item(NxI.sparkle, 'ถาม Isaac', () => context.push(AppRoutes.aiAsk(module: 'workspace_item', id: _id, title: '${wsKey(_item, boardCode: _code)} ${_item['title'] ?? ''}'.trim()))),
               item(NxI.trash, _isEpic ? 'ลบ Epic' : 'ลบงาน', _delete, color: cs.error),
             ],
           ),

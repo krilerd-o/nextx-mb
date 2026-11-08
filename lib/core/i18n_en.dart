@@ -1671,6 +1671,18 @@ const Map<String, String> enStrings = {
   'กลับมาเข้าสู่ระบบได้อีกครั้งทุกเมื่อ ด้วยบัญชีเดิม': 'You can sign back in any time with the same account',
   'Space อื่นในแอปยังใช้งานได้ตามปกติ': 'Your other Spaces in the app keep working',
   'อยู่ต่อ': 'Stay signed in',
+  'ถาม Isaac': 'Ask Isaac',
+  'สรุปรายการนี้ให้หน่อย และควรทำอะไรต่อ': 'Summarise this record and what I should do next',
+  'ไม่ใช้บริบทนี้': 'Don\'t use this context',
+  'ใช้ไมค์ไม่ได้ — ตรวจสิทธิ์ไมโครโฟนในการตั้งค่าเครื่อง': 'Can\'t use the mic — check microphone permission in phone settings',
+  'หยุดฟัง': 'Stop listening',
+  'พูดแทนพิมพ์': 'Speak instead of typing',
+  'คนในธุรกิจนี้': 'People in this business',
+  'ต้องเข้าสู่ระบบจึงเปิดดูได้': 'They need to sign in to view',
+  'ทุกคนที่มีลิงก์': 'Anyone with the link',
+  'เปิดดูได้โดยไม่ต้องเข้าสู่ระบบ': 'Can view without signing in',
+  'แชทที่แชร์': 'Shared chat',
+  'แชร์จาก ISAAC AI · อ่านอย่างเดียว': 'Shared from ISAAC AI · read-only',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1879,4 +1891,6 @@ const Map<String, String> enPatterns = {
   'เหลือ {} / {}': '{} / {} left',
   'สลับไป {}': 'Switch to {}',
   'เฉพาะ {}': 'Only {}',
+  'เกี่ยวกับ: {}': 'About: {}',
+  'แชร์โดย {}': 'Shared by {}',
 };
