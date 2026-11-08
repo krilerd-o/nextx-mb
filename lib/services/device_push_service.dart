@@ -241,16 +241,19 @@ class DevicePushService {
   Future<void> _refreshFcmToken() async {
     if (kIsWeb || Firebase.apps.isEmpty) return;
     final messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission(alert: true, badge: true, sound: true);
+    // Every step is bounded: on phones with GBox / microG the Google push
+    // service can stall forever.
+    const limit = Duration(seconds: 8);
+    await messaging.requestPermission(alert: true, badge: true, sound: true).timeout(const Duration(seconds: 30));
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      await Permission.notification.request();
+      await Permission.notification.request().timeout(const Duration(seconds: 30));
     }
     await messaging.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
       sound: true,
-    );
-    final token = await messaging.getToken();
+    ).timeout(limit);
+    final token = await messaging.getToken().timeout(limit);
     if (token != null && token.isNotEmpty) {
       await saveToken(token);
       debugPrint('[push] FCM token $token');

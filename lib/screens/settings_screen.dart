@@ -15,9 +15,11 @@ import '../core/nx_breakpoint.dart';
 import '../core/nx_page_route.dart';
 import '../core/server_profile.dart';
 import '../core/shell_tabs.dart';
+import '../core/ui_font.dart';
 import '../services/app_lock.dart';
 import '../widgets/app_bottom_sheet.dart';
 import '../widgets/nx_app_header.dart';
+import '../widgets/nx_appearance_controls.dart';
 import '../widgets/nx_icons.dart';
 import '../widgets/nx_scroll_scaffold.dart';
 import 'onboarding/tab_setup_screen.dart' show TabBarPreview;
@@ -124,6 +126,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             config.setAccentIndex(i);
           },
         ),
+      )),
+      _Entry('รูปลักษณ์', ['ฟอนต์', 'แบบอักษร', 'font', 'ตัวอักษร'], SettingsTile(
+        key: const ValueKey('settings-font'),
+        icon: NxI.textT,
+        tint: const Color(0xFF0EA5E9),
+        title: 'ฟอนต์',
+        subtitle: uiFontById(config.uiFontId).label,
+        onTap: () => showUiFontPicker(context),
+      )),
+      _Entry('รูปลักษณ์', ['ขนาด', 'สเกล', 'scale', 'ตัวอักษร', 'ซูม'], SettingsTile(
+        key: const ValueKey('settings-ui-scale'),
+        icon: NxI.monitorSmartphone,
+        tint: const Color(0xFF22C55E),
+        title: 'ขนาดหน้าจอ',
+        subtitle: 'ตัวอักษร ปุ่ม และไอคอนทั้งแอป',
+        below: const NxUiScaleControl(),
       )),
       _Entry('รูปลักษณ์', ['วันที่', 'เวลา', 'รูปแบบ', 'date'], SettingsTile(
         icon: NxI.calendarClock,

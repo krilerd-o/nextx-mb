@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/nx_icons.dart';
+import 'ui_font.dart';
 
 /// Atmosphere tokens — Inbox lavender fill, floating cards, comfortable ink.
 class AppTheme {
@@ -22,8 +23,9 @@ class AppTheme {
   static const Color _darkMuted = Color(0xFFA1A1AA);
   static const Color _darkOutline = Color(0xFF4E4E57);
 
-  /// The one app font (pubspec `fonts:` family).
-  static const String fontFamily = 'NotoSansThai';
+  /// Default app font family (pubspec `fonts:`); the user can pick another
+  /// one (see ui_font.dart) — read it from `Theme.of(context)`.
+  static const String fontFamily = 'GoogleSans';
 
   static const double radius = 16;
   static const double cardRadius = 20;
@@ -33,14 +35,14 @@ class AppTheme {
 
   /// Built themes by (brightness, accent). Building a ThemeData is not free
   /// text themes, so rebuilding on every app notify caused visible hitches.
-  static final Map<(Brightness, int), ThemeData> _cache = {};
+  static final Map<(Brightness, int, String), ThemeData> _cache = {};
 
-  static ThemeData themed({required Brightness brightness, Color? accent}) {
-    final key = (brightness, (accent ?? primary).toARGB32());
-    return _cache[key] ??= _build(brightness: brightness, accent: accent);
+  static ThemeData themed({required Brightness brightness, Color? accent, String family = fontFamily}) {
+    final key = (brightness, (accent ?? primary).toARGB32(), family);
+    return _cache[key] ??= _build(brightness: brightness, accent: accent, family: family);
   }
 
-  static ThemeData _build({required Brightness brightness, Color? accent}) {
+  static ThemeData _build({required Brightness brightness, Color? accent, required String family}) {
     final primaryColor = accent ?? primary;
     final isDark = brightness == Brightness.dark;
     final container = isDark
@@ -75,6 +77,7 @@ class AppTheme {
     final scaffold = isDark ? _darkSurface : lightBg;
     final cardColor = isDark ? _darkVariant : lightCard;
     return _base(
+      family: family,
       brightness: brightness,
       scheme: scheme,
       scaffold: scaffold,
@@ -91,6 +94,7 @@ class AppTheme {
   }
 
   static ThemeData _base({
+    required String family,
     required Brightness brightness,
     required ColorScheme scheme,
     required Color scaffold,
@@ -100,15 +104,15 @@ class AppTheme {
     required NxAtmosphereTokens atmosphere,
   }) {
     final isDark = brightness == Brightness.dark;
-    final text = _uiText(scheme);
+    final text = _uiText(scheme, family);
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
       colorScheme: scheme,
       canvasColor: scaffold,
       scaffoldBackgroundColor: scaffold,
-      fontFamily: fontFamily,
-      fontFamilyFallback: const ['Noto Sans Thai', 'Leelawadee UI', 'Tahoma', 'sans-serif'],
+      fontFamily: family,
+      fontFamilyFallback: uiFontFallback(family),
       dialogTheme: DialogThemeData(
         backgroundColor: card,
         elevation: 0,
@@ -249,7 +253,7 @@ class AppTheme {
     );
   }
 
-  static TextTheme _uiText(ColorScheme scheme) {
+  static TextTheme _uiText(ColorScheme scheme, String family) {
     const base = TextTheme(
       displayLarge: TextStyle(
         fontSize: 44,
@@ -269,8 +273,8 @@ class AppTheme {
       labelMedium: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
       labelSmall: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
     );
-    // Noto Sans Thai everywhere (bundled in assets/fonts — no network, no flicker).
-    return base.apply(fontFamily: fontFamily, bodyColor: scheme.onSurface, displayColor: scheme.onSurface);
+    // The chosen font everywhere (bundled in assets/fonts — no network, no flicker).
+    return base.apply(fontFamily: family, fontFamilyFallback: uiFontFallback(family), bodyColor: scheme.onSurface, displayColor: scheme.onSurface);
   }
 }
 

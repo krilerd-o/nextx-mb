@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -44,8 +45,12 @@ class GoogleAuth {
       throw StateError('เปลี่ยนเซิร์ฟเวอร์แล้ว กรุณาปิดและเปิดแอปใหม่ก่อนเข้าสู่ระบบด้วย Google');
     }
     try {
-      final account = await gs.authenticate();
+      // Bounded: a Credential Manager sheet that never answers must not
+      // leave the login button spinning forever.
+      final account = await gs.authenticate().timeout(const Duration(minutes: 3));
       return account.authentication.idToken;
+    } on TimeoutException {
+      throw const GoogleAuthError('Google ไม่ตอบกลับ กรุณาลองใหม่ หรือเข้าสู่ระบบด้วยวิธีอื่น');
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) return null;
       // Every account marked "unusable" / config errors = Google does not know

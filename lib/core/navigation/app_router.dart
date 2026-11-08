@@ -68,7 +68,11 @@ GoRouter createAppRouter(AppConfig config) {
       // LINE started with ?app=1 comes back as moainext://app/login?token=… (or ?error=).
       if (state.uri.path == AppRoutes.login && !config.isLoggedIn) {
         final r = parseAuthRedirect(state.uri.toString());
-        if (r != null && (r.token != null || r.error != null || r.mergeIntent != null)) config.handleAuthDeepLink(r);
+        if (r != null && (r.token != null || r.error != null || r.mergeIntent != null)) {
+          config.handleAuthDeepLink(r);
+          // Drop the query so later refreshes don't hand the same link over again.
+          return AppRoutes.login;
+        }
       }
       // QR from the web scanned with the phone camera → login screen finishes it.
       final qr = state.uri.path == '/qr-login'
