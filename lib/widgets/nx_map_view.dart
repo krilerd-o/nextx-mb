@@ -1,16 +1,38 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart' as fm;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'nx_icons.dart';
+import '../core/build_target.dart';
 import '../core/i18n.dart';
 
 /// True when the build has a Google Maps key (`--dart-define=NX_MAPS=1`).
 /// Without it a coordinate card is shown instead of a blank grey map.
 const bool kMapsEnabled = bool.fromEnvironment('NX_MAPS', defaultValue: false);
 
+/// OpenStreetMap tile URL (Huawei build, or no Google Maps key). Can point to
+/// your own tile server with `--dart-define=NX_OSM_TILES=https://.../{z}/{x}/{y}.png`.
+const String kOsmTiles = String.fromEnvironment('NX_OSM_TILES', defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png');
+
+/// Which map NxMapView draws.
+enum NxMapKind { google, osm, card }
+
+NxMapKind nxMapKind({bool? huawei, bool? mapsKey, bool? underTest}) {
+  if (kIsWeb) return NxMapKind.card;
+  // Widget tests have no network: keep the coordinate card there.
+  final testing = underTest ?? (!kIsWeb && Platform.environment.containsKey('FLUTTER_TEST'));
+  if ((mapsKey ?? kMapsEnabled) && !(huawei ?? isHuaweiBuild)) return NxMapKind.google;
+  return testing ? NxMapKind.card : NxMapKind.osm;
+}
+
 /// Map with "me" + destination pins and the allowed check-in radius.
+/// Google Maps when the build has a key (Play / iOS); OpenStreetMap on Huawei
+/// (no Google services) and on builds without a key.
 class NxMapView extends StatelessWidget {
   const NxMapView({
     super.key,
@@ -34,7 +56,11 @@ class NxMapView extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final radius = BorderRadius.circular(22);
-    if (!kMapsEnabled || kIsWeb) return _Fallback(me: me, dest: dest, height: height);
+    final kind = nxMapKind();
+    if (kind == NxMapKind.card) return _Fallback(me: me, dest: dest, height: height);
+    if (kind == NxMapKind.osm) {
+      return _OsmMap(me: me, accuracy: accuracy, dest: dest, rangeMeters: rangeMeters, height: height);
+    }
     final d = dest;
     return ClipRRect(
       borderRadius: radius,
@@ -77,6 +103,62 @@ class NxMapView extends StatelessWidget {
                 fillColor: const Color(0x148B5CF6),
               ),
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _OsmMap extends StatelessWidget {
+  const _OsmMap({required this.me, this.accuracy, this.dest, this.rangeMeters, required this.height});
+  final LatLng me;
+  final double? accuracy;
+  final LatLng? dest;
+  final double? rangeMeters;
+  final double height;
+
+  static ll.LatLng _p(LatLng p) => ll.LatLng(p.latitude, p.longitude);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final d = dest;
+    Widget pin(Color color, IconData icon) => Icon(icon, color: color, size: 36, shadows: const [Shadow(blurRadius: 6, color: Color(0x55000000))]);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: SizedBox(
+        height: height,
+        child: fm.FlutterMap(
+          options: fm.MapOptions(initialCenter: _p(me), initialZoom: 16.5),
+          children: [
+            fm.TileLayer(urlTemplate: kOsmTiles, userAgentPackageName: 'com.moai.nextt.mobile'),
+            fm.CircleLayer(circles: [
+              if (accuracy != null)
+                fm.CircleMarker(
+                  point: _p(me),
+                  radius: accuracy!,
+                  useRadiusInMeter: true,
+                  color: cs.primary.withValues(alpha: 0.12),
+                  borderColor: cs.primary.withValues(alpha: 0.5),
+                  borderStrokeWidth: 1,
+                ),
+              if (d != null && rangeMeters != null)
+                fm.CircleMarker(
+                  point: _p(d),
+                  radius: rangeMeters!,
+                  useRadiusInMeter: true,
+                  color: const Color(0x148B5CF6),
+                  borderColor: const Color(0xFF8B5CF6),
+                  borderStrokeWidth: 2,
+                ),
+            ]),
+            fm.MarkerLayer(markers: [
+              if (d != null) fm.Marker(point: _p(d), width: 40, height: 40, alignment: Alignment.topCenter, child: pin(const Color(0xFF8B5CF6), NxI.mapPin)),
+              fm.Marker(point: _p(me), width: 40, height: 40, alignment: Alignment.topCenter, child: pin(cs.primary, NxI.mapPin)),
+            ]),
+            // OpenStreetMap licence: attribution must stay visible.
+            const fm.SimpleAttributionWidget(source: Text('© OpenStreetMap contributors')),
+          ],
         ),
       ),
     );

@@ -13,6 +13,7 @@ import 'core/error_reporting.dart';
 import 'services/api_client.dart';
 import 'services/device_push_service.dart';
 import 'app.dart';
+import 'services/hms_push.dart';
 import 'widgets/nx_overlay_panel.dart' show NxTapTracker;
 
 void main() {
@@ -23,6 +24,7 @@ void main() {
     await DetailFieldsPref.load();
     await _initDeviceHeaders();
     await initFirebasePush();
+    await HmsPush.init();
     initAppAlice();
     // Menus grow out of the button that opened them (see showNxBlurPanel).
     NxTapTracker.ensure();

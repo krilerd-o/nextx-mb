@@ -9,8 +9,10 @@ import '../core/app_config.dart';
 import 'api_client.dart';
 import '../core/navigation/notification_deep_link.dart';
 import '../core/push_navigation.dart';
+import 'hms_push.dart';
 
 const _tokenKey = 'staff_device_push_token';
+const _hmsTokenKey = 'staff_device_hms_token';
 const _androidChannelId = 'high_importance_channel';
 
 final FlutterLocalNotificationsPlugin _localNotifications =
@@ -117,6 +119,9 @@ class DevicePushService {
 
   Future<void> sync(AppConfig config) async {
     _boundConfig = config;
+    // AppGallery build: HMS first. One token per device, so a phone that also has
+    // GBox / microG does not get every notification twice.
+    if (HmsPush.enabled && await _syncHms(config)) return;
     try {
       await _refreshFcmToken();
     } catch (e) {
@@ -136,6 +141,41 @@ class DevicePushService {
       debugPrint('[push] register: $e');
     }
   }
+
+  /// Registers the HMS token (platform `huawei`) and drops an FCM token this
+  /// device registered before. False when HMS is not available → use FCM.
+  Future<bool> _syncHms(AppConfig config) async {
+    HmsPush.onTokenRefresh = (t) => _registerHms(t);
+    final hms = await HmsPush.token();
+    if (hms == null) return false;
+    await _registerHms(hms);
+    final prefs = await SharedPreferences.getInstance();
+    final fcm = prefs.getString(_tokenKey);
+    if (fcm != null && fcm.isNotEmpty) {
+      try {
+        await config.apiClient.unregisterDeviceToken(fcm);
+      } catch (_) {}
+      await prefs.remove(_tokenKey);
+      lastToken = null;
+    }
+    return true;
+  }
+
+  Future<void> _registerHms(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_hmsTokenKey, token);
+    hmsToken = token;
+    final config = _boundConfig;
+    if (config == null || !config.isLoggedIn) return;
+    try {
+      await config.apiClient.registerDeviceToken(token: token, platform: 'huawei', deviceName: defaultTargetPlatform.name);
+    } catch (e) {
+      debugPrint('[push] hms register: $e');
+    }
+  }
+
+  /// HMS token of this device (AppGallery build), if any.
+  String? hmsToken;
 
   /// FCM rotated the token: persist it and tell the server, otherwise pushes stop arriving.
   Future<void> onTokenRefreshed(String token) async {
@@ -157,6 +197,12 @@ class DevicePushService {
   /// out of a Space) — the FCM token stays valid for the other Spaces.
   Future<void> unregisterFrom(ApiClient api) async {
     final prefs = await SharedPreferences.getInstance();
+    final hms = hmsToken ?? prefs.getString(_hmsTokenKey);
+    if (hms != null && hms.isNotEmpty) {
+      try {
+        await api.unregisterDeviceToken(hms);
+      } catch (_) {}
+    }
     final token = lastToken ?? prefs.getString(_tokenKey);
     if (token == null || token.isEmpty) return;
     await api.unregisterDeviceToken(token);
@@ -165,6 +211,15 @@ class DevicePushService {
   Future<void> unregister(AppConfig config) async {
     _boundConfig = null;
     final prefs = await SharedPreferences.getInstance();
+    final hms = hmsToken ?? prefs.getString(_hmsTokenKey);
+    if (hms != null && hms.isNotEmpty) {
+      try {
+        await config.apiClient.unregisterDeviceToken(hms);
+      } catch (_) {}
+      await prefs.remove(_hmsTokenKey);
+      hmsToken = null;
+      await HmsPush.deleteToken();
+    }
     final token = lastToken ?? prefs.getString(_tokenKey);
     if (token == null || token.isEmpty) return;
     try {

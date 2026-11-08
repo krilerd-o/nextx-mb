@@ -136,6 +136,36 @@ jobs:
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 14
 
+      # Huawei AppGallery build: HMS push + OpenStreetMap, Google sign-in kept (GBox / microG).
+      # Secret AGCONNECT_SERVICES_JSON_BASE64 = base64 of agconnect-services.json (push).
+      - name: Huawei AppGallery build
+        env:
+          NX_ALLOW_DEBUG_SIGNING: '1'
+          AGC_B64: ${{ secrets.AGCONNECT_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$AGC_B64" ]; then
+            mkdir -p android/app/src/main/assets
+            echo "$AGC_B64" | base64 -d > android/app/src/main/assets/agconnect-services.json
+          else
+            echo "::warning::No AGCONNECT_SERVICES_JSON_BASE64 secret — HMS push is off in the Huawei build."
+          fi
+          flutter build apk --release --target-platform android-arm64 --dart-define=NX_STORE=huawei
+          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/app-huawei-arm64-release.apk
+          if [ -f android/key.properties ]; then
+            flutter build appbundle --release --dart-define=NX_STORE=huawei
+            mv build/app/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/app-huawei-release.aab
+          fi
+          rm -f android/app/src/main/assets/agconnect-services.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-huawei-appgallery
+          path: |
+            build/app/outputs/flutter-apk/app-huawei-arm64-release.apk
+            build/app/outputs/bundle/release/app-huawei-release.aab
+          if-no-files-found: warn
+          retention-days: 14
+
   # iOS / iPadOS: always build without signing (catches Xcode / pod errors on every push).
   # With the App Store secrets it also signs an .ipa and uploads it to TestFlight.
   # Secrets (Settings → Secrets → Actions), all optional:
