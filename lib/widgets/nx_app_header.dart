@@ -43,6 +43,7 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.menu,
     this.subtitleWidget,
     this.largeTitle = false,
+    this.onTitleTap,
   })  : mode = NxHeaderMode.page,
         unreadCount = null;
 
@@ -57,7 +58,8 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
         leading = null,
         menu = null,
         subtitleWidget = null,
-        largeTitle = false;
+        largeTitle = false,
+        onTitleTap = null;
 
   const NxAppHeader.page({
     super.key,
@@ -69,6 +71,7 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.menu,
     this.subtitleWidget,
     this.largeTitle = false,
+    this.onTitleTap,
   })  : mode = NxHeaderMode.page,
         unreadCount = null;
 
@@ -86,6 +89,9 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
 
   /// Big menu title (list roots) that shrinks while the page chrome is collapsed.
   final bool largeTitle;
+
+  /// Title becomes a button with a ▾ (e.g. calendar: switch year / month).
+  final VoidCallback? onTitleTap;
 
   static const double controlSize = 40;
 
@@ -384,12 +390,23 @@ class _PageBar extends StatelessWidget {
                       letterSpacing: -0.2,
                       color: theme.colorScheme.onSurface,
                     ),
-                    child: Text(
-                      tr(header.title),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.start,
-                    ),
+                    child: header.onTitleTap == null
+                        ? Text(
+                            tr(header.title),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.start,
+                          )
+                        : GestureDetector(
+                            key: const ValueKey('nx-header-title'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: header.onTitleTap,
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Flexible(child: Text(tr(header.title), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                              const SizedBox(width: 2),
+                              Icon(NxI.caretDown, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                            ]),
+                          ),
                   ),
                   if (header.subtitleWidget != null)
                     header.subtitleWidget!

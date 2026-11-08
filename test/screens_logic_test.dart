@@ -95,10 +95,10 @@ void main() {
     expect(flat.lines, isEmpty);
   });
 
-  test('week starts on Monday', () {
-    expect(weekStart(DateTime(2026, 11, 6)), DateTime(2026, 11, 2)); // Fri → Mon
-    expect(weekStart(DateTime(2026, 11, 2)), DateTime(2026, 11, 2));
-    expect(weekStart(DateTime(2026, 11, 8)), DateTime(2026, 11, 2)); // Sun → Mon
+  test('week starts on Sunday (Thai calendar layout)', () {
+    expect(weekStart(DateTime(2026, 11, 6)), DateTime(2026, 11, 1)); // Fri → Sun
+    expect(weekStart(DateTime(2026, 11, 1)), DateTime(2026, 11, 1));
+    expect(weekStart(DateTime(2026, 11, 8)), DateTime(2026, 11, 8)); // Sun starts its week
   });
 
   test('task attachments from list or JSON string', () {

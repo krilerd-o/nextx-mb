@@ -858,3 +858,18 @@ List<T> nxApplyLocalQuery<T>(
   if (s != null) out.sort(s);
   return out;
 }
+
+/// The toolbar's filter + sort sheet on its own (screens whose filters live
+/// behind a header icon, e.g. the calendar). Returns the new query or null.
+Future<NxListQuery?> showNxFilterSheet(
+  BuildContext context, {
+  required NxListQuery query,
+  required List<NxFilterGroup> groups,
+  List<NxSortOption> sorts = const [],
+}) =>
+    showNxSnapSheet<NxListQuery>(
+      context: context,
+      title: 'ตัวกรอง',
+      snaps: const [0.6, 0.92],
+      builder: (ctx, controller) => _FilterSheet(query: query, groups: groups, sorts: sorts, controller: controller),
+    );
