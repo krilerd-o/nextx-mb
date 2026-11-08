@@ -65,7 +65,7 @@ void main() {
     expect(find.byType(EntityListScreen), findsOneWidget);
   });
 
-  testWidgets('hub shows FSM and CRM for matching keys, not files', (tester) async {
+  testWidgets('hub shows web groups for matching keys, not files', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final config = AppConfig();
     await tester.pumpWidget(
@@ -82,8 +82,11 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('CRM'), findsOneWidget);
-    expect(find.text('FSM'), findsOneWidget);
+    // Grouped like the web nav rail: quotation → งานขาย, job → งานบริการ.
+    expect(find.text('งานขาย'), findsOneWidget);
+    expect(find.text('งานบริการ'), findsOneWidget);
+    expect(find.text('ลูกค้า'), findsNothing);
+    expect(find.text('แอปอื่น'), findsNothing);
     expect(find.text('ไฟล์'), findsNothing);
     expect(find.text('โปรไฟล์'), findsNothing);
   });

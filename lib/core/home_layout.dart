@@ -10,20 +10,23 @@ class HomeLayout extends ChangeNotifier {
 
   /// Section keys → Thai label (translated by tr()) and a short hint.
   static const Map<String, (String, String)> sections = {
-    'today': ('วันนี้', 'ลงเวลา งานเลยกำหนด นัดถัดไป'),
-    'pending': ('งานค้าง', 'กิจกรรมค้าง + งาน Workspace ค้าง'),
-    'birthdays': ('วันเกิดลูกค้าวันนี้', 'Lead / Contact / Account ที่เกิดวันนี้และพรุ่งนี้'),
-    'quick': ('ทางลัด', 'ลงเวลา ขอลา แชท ปฏิทิน …'),
+    'today': ('ลงเวลา', 'ลงเวลาเข้า-ออก งานเลยกำหนด นัดถัดไป'),
     'ai': ('สรุปโดย AI', 'สรุปวันนี้แบบสั้นๆ'),
-    'work': ('งานของฉัน', 'งาน Workspace ที่มอบให้ฉัน'),
-    'upcoming': ('กิจกรรมถัดไป', 'นัดหมายที่กำลังมา'),
+    'work': ('งานวันนี้', 'งาน Workspace ของฉัน (ค่าเริ่มต้นวันนี้)'),
+    'pending': ('งานค้าง', 'กิจกรรมค้าง + งาน Workspace ค้าง'),
+    'quick': ('ทางลัด', 'ลงเวลา ขอลา แชท ปฏิทิน …'),
     'recent': ('เปิดล่าสุด', 'รายการที่เพิ่งเปิดในเครื่องนี้'),
-    'stats': ('ภาพรวม', 'จำนวนรายการ + กราฟ 7 วัน'),
-    'sales': ('ยอดขายและเคส', 'ตัวเลขงานขายและงานบริการ'),
+    'sales': ('ยอดขาย', 'ดีลและใบเสนอราคาของฉัน ตามช่วงเวลา'),
+    'cases': ('เคส', 'เคสของฉัน ตามช่วงเวลา'),
+    'stats': ('ภาพรวม', 'จำนวนรายการของฉัน + กราฟ 7 วัน'),
+    'birthdays': ('วันเกิดลูกค้าวันนี้', 'Lead / Contact / Account ที่เกิดวันนี้และพรุ่งนี้'),
+    'upcoming': ('กิจกรรมถัดไป', 'นัดหมายที่กำลังมา'),
   };
 
+  /// Default Home: ลงเวลา · สรุป AI · งานวันนี้ · งานค้าง · ทางลัด · เปิดล่าสุด ·
+  /// ยอดขาย · เคส · ภาพรวม, then birthdays and upcoming activities.
   static const List<String> defaultOrder = [
-    'today', 'pending', 'birthdays', 'quick', 'ai', 'work', 'upcoming', 'recent', 'stats', 'sales',
+    'today', 'ai', 'work', 'pending', 'quick', 'recent', 'sales', 'cases', 'stats', 'birthdays', 'upcoming',
   ];
 
   List<String> _order = List.of(defaultOrder);

@@ -11,9 +11,8 @@ import '../../core/workspace_models.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_status_stepper.dart';
 
-/// Passed steps are green with a check, like the CRM stepper.
-const _green = Color(0xFF16A34A);
 
 /// Status stepper: the board's statuses in order, the current one filled.
 /// Tapping another step changes the status (with a haptic tick).
@@ -27,78 +26,13 @@ class WsStatusStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final at = statuses.indexWhere((s) => s.id == current);
-    return SizedBox(
-      height: 44,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: statuses.length,
-        separatorBuilder: (_, i) => Center(
-          child: Container(
-            width: 14,
-            height: 2,
-            color: i < at ? _green.withValues(alpha: 0.7) : cs.outlineVariant,
-          ),
-        ),
-        itemBuilder: (context, i) {
-          final s = statuses[i];
-          final on = i == at;
-          final passed = at >= 0 && i < at;
-          return Semantics(
-            button: true,
-            selected: on,
-            label: s.label,
-            child: GestureDetector(
-              onTap: busy || on || onPick == null
-                  ? null
-                  : () {
-                      HapticFeedback.selectionClick();
-                      onPick!(s);
-                    },
-              child: AnimatedContainer(
-                key: ValueKey('ws-step-${s.id}'),
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: on ? s.color : (passed ? _green.withValues(alpha: 0.14) : cs.surfaceContainerHighest),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: on ? s.color : (passed ? _green : cs.outlineVariant), width: 1.2),
-                  boxShadow: on ? [BoxShadow(color: s.color.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))] : null,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (passed)
-                      Container(
-                        width: 16,
-                        height: 16,
-                        margin: const EdgeInsets.only(right: 6),
-                        decoration: const BoxDecoration(color: _green, shape: BoxShape.circle),
-                        child: const Icon(NxI.check, size: 11, color: Colors.white),
-                      )
-                    else if (on && s.isDone) ...[
-                      const Icon(NxI.check, size: 14, color: Colors.white),
-                      const SizedBox(width: 4),
-                    ],
-                    Text(
-                      s.label,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: on ? Colors.white : (passed ? (theme.brightness == Brightness.dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D)) : cs.onSurfaceVariant),
-                        fontWeight: on ? FontWeight.w800 : FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
+    return NxStatusStepper(
+      steps: [for (final s in statuses) NxStep(id: s.id, label: s.label, color: s.color, isDone: s.isDone)],
+      current: statuses.indexWhere((s) => s.id == current),
+      busy: busy,
+      stepKeyPrefix: 'ws-step-',
+      doneKeyPrefix: 'ws-step-done-',
+      onPick: onPick == null ? null : (i) => onPick!(statuses[i]),
     );
   }
 }

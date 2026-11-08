@@ -49,8 +49,8 @@ void main() {
     });
   });
 
-  test('home layout has the birthday box after pending', () {
-    expect(HomeLayout.defaultOrder.indexOf('birthdays'), HomeLayout.defaultOrder.indexOf('pending') + 1);
+  test('home layout has the birthday box after the main widgets', () {
+    expect(HomeLayout.defaultOrder.indexOf('birthdays'), HomeLayout.defaultOrder.indexOf('stats') + 1);
     expect(HomeLayout.sections['birthdays']!.$1, 'วันเกิดลูกค้าวันนี้');
   });
 

@@ -40,6 +40,8 @@ List<String>? requiredMenusFor(String path) {
       return const [MenuAccess.mailbox];
     case 'files':
       return const [MenuAccess.files];
+    case 'call-log':
+      return const [MenuAccess.callLog];
     case 'hr':
       if (segs.length >= 2 && segs[1] == 'attendance-report') {
         return const [MenuAccess.attendanceReport, MenuAccess.hrDashboard];

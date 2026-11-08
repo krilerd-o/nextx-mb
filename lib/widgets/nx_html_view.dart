@@ -28,6 +28,13 @@ class NxHtmlView extends StatelessWidget {
     final theme = Theme.of(context);
     final bodyStyle = style ?? theme.textTheme.bodyMedium;
     final resolvedBase = baseUrl ?? _baseUrlOf(context);
+    // HTML saved escaped (`a&lt;br&gt;b`) shows its tags as text: render the
+    // decoded markup instead when it is real HTML.
+    var html = this.html;
+    if (!html.contains('<') && html.contains('&lt;')) {
+      final decoded = decodeHtmlEntities(html);
+      if (looksLikeHtmlString(decoded) && decoded.contains('<')) html = decoded;
+    }
     if (!looksLikeHtmlString(html)) {
       final plain = decodeHtmlEntities(html);
       if (plain.trim().isEmpty) {
