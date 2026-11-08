@@ -158,11 +158,29 @@ class AppTheme {
         foregroundColor: onCta,
         shape: const CircleBorder(),
       ),
+      // Chips must read as "pills" on any surface (cards and sheets are
+      // _darkVariant in dark mode): a lighter fill plus a hairline outline;
+      // selected = solid accent with white text.
+      // Explicit: ColorScheme.dark() without inversePrimary made the "เลิกทำ"
+      // action white on a light bar.
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: isDark ? const Color(0xFF2C2C34) : const Color(0xFF1F2937),
+        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+        actionTextColor: Color.lerp(scheme.primary, Colors.white, isDark ? 0.45 : 0.55),
+        closeIconColor: Colors.white70,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
       chipTheme: ChipThemeData(
-        side: BorderSide.none,
+        side: WidgetStateBorderSide.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? BorderSide(color: scheme.primary)
+              : BorderSide(color: isDark ? const Color(0xFF3A3B46) : const Color(0xFFE2E2E8)),
+        ),
         shape: const StadiumBorder(),
-        backgroundColor: isDark ? _darkVariant : const Color(0xFFF2F2F7),
-        selectedColor: cta,
+        backgroundColor: isDark ? const Color(0xFF2A2B36) : const Color(0xFFF2F2F7),
+        selectedColor: scheme.primary,
+        checkmarkColor: Colors.white,
         labelStyle: TextStyle(
           fontWeight: FontWeight.w500,
           color: isDark ? _darkOn : ink,

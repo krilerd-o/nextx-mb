@@ -43,35 +43,34 @@ void main() {
 
   Finder searchField() => find.widgetWithText(TextField, 'ค้นหาทดสอบ');
 
-  testWidgets('scrolling down folds the toolbar into header icons and hides the tab bar', (tester) async {
+  testWidgets('search / filter are header icons by default; status chips stay under the header', (tester) async {
     await pumpPage(tester);
-    expect(find.byTooltip('ค้นหา'), findsNothing);
-    expect(tester.getSize(find.byType(NxListToolbar)).height, greaterThan(60));
+    expect(find.byTooltip('ค้นหา'), findsOneWidget);
+    expect(find.byTooltip('ตัวกรอง'), findsOneWidget);
+    expect(searchField(), findsNothing);
+    expect(find.text('A'), findsNothing, reason: 'no quick group: chips row is empty');
 
     await tester.drag(find.text('[QA] แถว 3'), const Offset(0, -300));
     await tester.pumpAndSettle();
     expect(NxChromeBus.hidden.value, isTrue);
-    expect(tester.getSize(find.byType(NxListToolbar)).height, lessThan(1));
     expect(find.byTooltip('ค้นหา'), findsOneWidget);
-    expect(find.byTooltip('ตัวกรอง'), findsOneWidget);
 
-    // A small scroll back brings everything back.
     await tester.drag(find.byType(ListView), const Offset(0, 40));
     await tester.pumpAndSettle();
     expect(NxChromeBus.hidden.value, isFalse);
-    expect(find.byTooltip('ค้นหา'), findsNothing);
-    expect(tester.getSize(find.byType(NxListToolbar)).height, greaterThan(60));
   });
 
-  testWidgets('header search icon reopens the toolbar and focuses search', (tester) async {
+  testWidgets('header search icon opens the box ready to type; X closes it', (tester) async {
     await pumpPage(tester);
     await tester.drag(find.text('[QA] แถว 3'), const Offset(0, -300));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('ค้นหา'));
     await tester.pumpAndSettle();
-    expect(tester.getSize(find.byType(NxListToolbar)).height, greaterThan(60));
     final field = tester.widget<TextField>(searchField());
     expect(field.focusNode?.hasFocus, isTrue);
+    await tester.tap(find.byTooltip('ปิดค้นหา'));
+    await tester.pumpAndSettle();
+    expect(searchField(), findsNothing);
   });
 
   testWidgets('header filter icon opens one sheet with sort and filters, badge counts them', (tester) async {

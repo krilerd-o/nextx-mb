@@ -14,12 +14,12 @@ import '../../services/unread_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_workspace_switcher.dart';
-import 'team_overview_card.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_streaming_text.dart';
 import '../../core/thai_time.dart';
+import '../../core/workspace_models.dart';
 import '../../core/i18n.dart';
 import '../../core/nx_page_route.dart';
 import 'home_layout_editor.dart';
@@ -27,6 +27,7 @@ import '../../core/home_layout.dart';
 import '../../core/recent_records.dart';
 import '../../widgets/nx_refresh.dart';
 import 'home_birthday_box.dart';
+import 'home_boxes.dart';
 import '../hr/attendance_punch_sheet.dart';
 
 /// Thai greeting for the hour of day.
@@ -93,8 +94,6 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   Map<String, dynamic>? _attendance;
   Map<String, dynamic>? _summary;
   Map<String, dynamic>? _work;
-  Map<String, dynamic>? _sales;
-  Map<String, dynamic>? _cases;
   int _whatsNew = 0;
   bool _loading = true;
   bool _refreshing = false;
@@ -128,7 +127,21 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   bool _pendingLoaded = false;
   int _overdueTotal = 0;
 
+  /// Overdue Workspace work (Task / Subtask / Bug / Story only — no Epic or Checklist).
+  List<Map<String, dynamic>> _overdueWork = const [];
+
+  Future<void> _loadOverdueWork() async {
+    final config = context.read<AppConfig>();
+    if (!MenuAccess.allow(config.session, MenuAccess.workspace)) return;
+    try {
+      final r = await config.apiClient.getHomeWork(bucket: 'overdue', limit: 30);
+      final items = extractMapList(r['items'] ?? r['work']).where((e) => e['status_is_done'] != true && isWorkType(e)).toList();
+      if (mounted) setState(() => _overdueWork = items);
+    } catch (_) {}
+  }
+
   Future<void> _loadOverdue() async {
+    _loadOverdueWork();
     final config = context.read<AppConfig>();
     if (!MenuAccess.any(config.session, const [MenuAccess.calendar, MenuAccess.pending])) {
       // Workspace-only users still get the (empty or task-only) box.
@@ -167,11 +180,13 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
           due: parseWall(a['date_start']),
           route: a['id'] == null ? null : AppRoutes.activity('${a['id']}'),
         ),
-      for (final t in _workItems())
+      for (final t in _overdueWork)
         _PendingItem(
           kind: 'task',
+          type: wsType(t),
           title: '${t['title'] ?? '—'}',
           detail: [
+            if ('${t['board_name'] ?? ''}'.isNotEmpty) '${t['board_name']}',
             if ('${t['board_code'] ?? ''}'.isNotEmpty) '${t['board_code']}-${t['item_no'] ?? ''}',
             '${t['status_label_th'] ?? t['status_name'] ?? ''}',
           ].where((e) => e.isNotEmpty).join(' · '),
@@ -187,7 +202,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
     return out;
   }
 
-  int _pendingTotal() => _overdueTotal + _workItems().length;
+  int _pendingTotal() => _overdueTotal + _overdueWork.length;
 
   int _revision = 0; // bumps on pull-to-refresh → boxes with their own data reload
 
@@ -221,12 +236,8 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
           ? guard(api.getHomeWork(limit: 8))
           : Future<Object?>.value(),
       guard(UnreadNotifications.instance.refresh(api).then((_) => null)),
-      MenuAccess.any(session, const ['deal', 'quotation'])
-          ? guard(api.getSalesDashboard())
-          : Future<Object?>.value(),
-      MenuAccess.allow(session, 'case')
-          ? guard(api.getCaseDashboard())
-          : Future<Object?>.value(),
+      Future<Object?>.value(), // sales: own box with a period filter
+      Future<Object?>.value(), // cases: own box with a period filter
       api.getWhatsNewUnread().then<Object?>((n) => n).catchError((_) => 0),
     ]);
     if (!mounted) return;
@@ -234,8 +245,6 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       _attendance = results[0] as Map<String, dynamic>?;
       _summary = results[1] as Map<String, dynamic>?;
       _work = results[2] as Map<String, dynamic>?;
-      _sales = results[4] as Map<String, dynamic>?;
-      _cases = results[5] as Map<String, dynamic>?;
       _whatsNew = (results[6] as int?) ?? 0;
       _error = (_summary == null && _attendance == null && _work == null)
           ? firstError
@@ -292,10 +301,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   int _count(Map<String, dynamic>? m, String key) =>
       int.tryParse(m?[key]?.toString() ?? '') ?? 0;
 
-  List<Map<String, dynamic>> _workItems() {
-    final items = extractMapList(_work?['items'] ?? _work?['work']);
-    return items.where((e) => e['status_is_done'] != true).take(5).toList();
-  }
+
 
   List<Map<String, dynamic>> _upcoming() {
     final now = thaiNow().subtract(const Duration(hours: 1));
@@ -444,14 +450,9 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
               ],
             ],
             'work': [
-              if (counts != null && _workItems().isNotEmpty) ...[
-                const SizedBox(height: 24),
-                _SectionTitle(
-                  'งานของฉัน',
-                  action: 'ทั้งหมด',
-                  onAction: () => context.push(AppRoutes.workspaceHome),
-                ),
-                for (final it in _workItems()) _WorkRow(item: it),
+              if (MenuAccess.allow(session, MenuAccess.workspace)) ...[
+                const SizedBox(height: 20),
+                MyWorkBox(revision: _revision),
               ],
             ],
             'upcoming': [
@@ -480,44 +481,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                   ),
               ],
             ],
-            'recent': [
-              // Records opened lately on this device (per user).
-              ValueListenableBuilder<List<Map<String, String>>>(
-                valueListenable: RecentRecords.instance.items,
-                builder: (context, recent, _) {
-                  final allowed = [
-                    for (final r in recent)
-                      if (MenuAccess.allow(
-                        session,
-                        EntityModules.menuKeyOf(r['module'] ?? ''),
-                      ))
-                        r,
-                  ].take(5).toList();
-                  if (allowed.isEmpty) return const SizedBox.shrink();
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 24),
-                      const _SectionTitle('เปิดล่าสุด'),
-                      for (final r in allowed)
-                        _ListRow(
-                          icon: NxI.clockCounterClockwise,
-                          title: r['title'] ?? '',
-                          subtitle: EntityModules.titleOf(r['module'] ?? ''),
-                          onTap: () => context.push(
-                            r['module'] == 'activity'
-                                ? AppRoutes.activity(r['id'] ?? '')
-                                : AppRoutes.crmRecord(
-                                    r['module'] ?? '',
-                                    r['id'] ?? '',
-                                  ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ],
+            'recent': [const RecentStrip()],
             'stats': [
               if (statTiles.isNotEmpty) ...[
                 const SizedBox(height: 24),
@@ -541,16 +505,13 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
               ],
             ],
             'sales': [
-              if (salesFigures(_sales).isNotEmpty ||
-                  caseFigures(_cases).isNotEmpty) ...[
-                const SizedBox(height: 24),
-                const _SectionTitle('ยอดขายและเคส'),
-                TeamOverviewCard(
-                  sales: _sales,
-                  cases: _cases,
-                  onOpenSales: () => context.push(AppRoutes.crmModule('deal')),
-                  onOpenCases: () => context.push(AppRoutes.crmModule('case')),
-                ),
+              if (MenuAccess.any(session, const ['deal', 'quotation'])) ...[
+                const SizedBox(height: 20),
+                SalesPeriodBox(revision: _revision, onOpen: () => context.push(AppRoutes.crmModule('deal'))),
+              ],
+              if (MenuAccess.allow(session, 'case')) ...[
+                const SizedBox(height: 16),
+                CasePeriodBox(revision: _revision, onOpen: () => context.push(AppRoutes.crmModule('case'))),
               ],
               const SizedBox(height: 24),
             ],
@@ -1107,33 +1068,6 @@ class _CountPill extends StatelessWidget {
   }
 }
 
-class _WorkRow extends StatelessWidget {
-  const _WorkRow({required this.item});
-  final Map<String, dynamic> item;
-
-  @override
-  Widget build(BuildContext context) {
-    final code = item['board_code']?.toString() ?? '';
-    final no = item['item_no']?.toString() ?? '';
-    final board = item['board_id']?.toString();
-    final id = item['id']?.toString();
-    return _ListRow(
-      icon: NxI.kanban,
-      title: item['title']?.toString() ?? '—',
-      subtitle: [
-        if (code.isNotEmpty) '$code-$no',
-        item['status_label_th']?.toString() ??
-            item['status_name']?.toString() ??
-            '',
-        if (item['due_at'] != null) 'ส่ง ${formatThaiField(item['due_at'], 'due_at', dateOnly: true, year: uiYear)}',
-      ].where((e) => e.isNotEmpty).join(' · '),
-      onTap: board == null || id == null
-          ? null
-          : () => context.push(AppRoutes.task(board, id)),
-    );
-  }
-}
-
 class _ListRow extends StatelessWidget {
   const _ListRow({
     required this.icon,
@@ -1342,8 +1276,9 @@ class _SparkPainter extends CustomPainter {
 
 
 class _PendingItem {
-  const _PendingItem({required this.kind, required this.title, this.detail = '', this.due, this.route});
+  const _PendingItem({required this.kind, required this.title, this.detail = '', this.due, this.route, this.type});
   final String kind; // activity | task
+  final String? type; // workspace item type (task / subtask / bug / story)
   final String title;
   final String detail;
   final DateTime? due;
@@ -1363,6 +1298,16 @@ class _PendingBox extends StatefulWidget {
 
 class _PendingBoxState extends State<_PendingBox> {
   String _kind = 'all';
+  bool _collapsed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    () async {
+      final saved = await HomePrefs.get(context, 'pending_collapsed');
+      if (mounted && saved == '1') setState(() => _collapsed = true);
+    }();
+  }
 
   String _late(DateTime? due) {
     if (due == null) return tr('ไม่กำหนดส่ง');
@@ -1407,23 +1352,24 @@ class _PendingBoxState extends State<_PendingBox> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(color: cs.error.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-                child: Icon(NxI.warningCircle, size: 19, color: cs.error),
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: Text(tr('งานค้าง'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(12)),
-                child: Text('${widget.total}', style: theme.textTheme.labelLarge?.copyWith(color: cs.onError)),
-              ),
-            ],
+          HomeBoxHeader(
+            key: const ValueKey('pending-header'),
+            icon: NxI.warningCircle,
+            title: 'งานค้าง',
+            color: cs.error,
+            count: widget.total,
+            collapsed: _collapsed,
+            onToggle: () {
+              setState(() => _collapsed = !_collapsed);
+              HomePrefs.set(context, 'pending_collapsed', _collapsed ? '1' : '0');
+            },
           ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            alignment: Alignment.topCenter,
+            child: _collapsed
+                ? const SizedBox(width: double.infinity)
+                : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const SizedBox(height: 10),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -1458,7 +1404,11 @@ class _PendingBoxState extends State<_PendingBox> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Icon(it.kind == 'activity' ? NxI.calendarBlank : NxI.kanban, size: 18, color: cs.onSurfaceVariant),
+                          Icon(
+                            it.kind == 'activity' ? NxI.calendarBlank : wsTypeStyle(it.type ?? 'task').icon,
+                            size: 18,
+                            color: it.kind == 'activity' ? cs.onSurfaceVariant : wsTypeStyle(it.type ?? 'task').color,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -1490,6 +1440,8 @@ class _PendingBoxState extends State<_PendingBox> {
               if (tasks > 0)
                 TextButton(onPressed: () => context.push(AppRoutes.workspaceHome), child: Text(tr('งาน Workspace'))),
             ],
+          ),
+                  ]),
           ),
         ],
       ),

@@ -5,11 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/session_state.dart';
+import 'package:nextx_mobile/screens/profile/profile_hub_screen.dart';
 import 'package:nextx_mobile/screens/settings_screen.dart';
 
 import 'support/fake_api.dart';
 
-Future<AppConfig> _pump(WidgetTester tester) async {
+Future<AppConfig> _pump(WidgetTester tester, {Widget home = const SettingsScreen()}) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(430, 2400);
   tester.view.devicePixelRatio = 1;
@@ -26,7 +27,7 @@ Future<AppConfig> _pump(WidgetTester tester) async {
     menuKeys: ['lead', 'calendar'],
   ));
   config.apiClient.debugSetHttpAdapter(FakeNextxAdapter({}));
-  await tester.pumpWidget(ChangeNotifierProvider.value(value: config, child: const MaterialApp(home: SettingsScreen())));
+  await tester.pumpWidget(ChangeNotifierProvider.value(value: config, child: MaterialApp(home: home)));
   await tester.pumpAndSettle(const Duration(milliseconds: 100));
   return config;
 }
@@ -48,11 +49,19 @@ void main() {
     expect(find.text('สีธีม'), findsNothing);
   });
 
-  testWidgets('theme mode and colour pickers update AppConfig', (tester) async {
-    final config = await _pump(tester);
+  testWidgets('theme + language on the profile, colour in settings, all update AppConfig', (tester) async {
+    var config = await _pump(tester, home: const ProfileHubScreen());
     await tester.tap(find.text('มืด'));
     await tester.pumpAndSettle();
     expect(config.themeMode, ThemeMode.dark);
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    expect(config.uiLocaleCode, 'en');
+    await tester.tap(find.text('ไทย'));
+    await tester.pumpAndSettle();
+
+    config = await _pump(tester);
+    expect(find.text('ตามเครื่อง'), findsNothing, reason: 'theme switch moved to the profile');
 
     await tester.tap(find.bySemanticsLabel('กุหลาบ'));
     await tester.pumpAndSettle();

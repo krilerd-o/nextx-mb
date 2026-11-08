@@ -10,7 +10,9 @@ import '../widgets/nx_icons.dart';
 import '../widgets/nx_invite_prompt.dart';
 import '../widgets/nx_tab_nav.dart';
 import '../core/shell_tabs.dart';
+import '../core/nx_page_route.dart';
 import 'ai/ai_chat_screen.dart';
+import 'auth/qr_login_scan_screen.dart';
 import 'approvals/approvals_screen.dart';
 import 'calendar/calendar_home_screen.dart';
 import 'chat/chat_home_screen.dart';
@@ -109,13 +111,20 @@ class _AppShellState extends State<AppShell> {
     final bp = NxBreakpoint.of(context);
     // Only the tab list and invite matter here; a full watch rebuilt every
     // open tab on each AppConfig notify (session refresh, unread, queue…).
-    context.select((AppConfig c) => (c.shellTabs.join(','), c.pendingInvite));
+    context.select((AppConfig c) => (c.shellTabs.join(','), c.pendingInvite, c.hasPendingQr));
     final config = context.read<AppConfig>();
     if (config.pendingInvite != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         // Joined → go pick the new business.
         if (await maybePromptInviteJoin(context)) await config.clearBusiness();
+      });
+    }
+    if (config.hasPendingQr) {
+      // QR from the web opened with the phone camera while signed in → add that Space.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final qr = mounted ? config.takePendingQr() : null;
+        if (qr != null) nxPush<bool>(context, QrLoginScanScreen(initial: qr));
       });
     }
     final ids = [...config.shellTabs, kMenuTabId];

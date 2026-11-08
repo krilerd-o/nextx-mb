@@ -58,7 +58,7 @@ void main() {
 
   testWidgets('login OTP mode asks to send a code first', (tester) async {
     await _pump(tester, const LoginScreen());
-    await tester.tap(find.text('OTP อีเมล'));
+    await tester.tap(find.text('อีเมล'));
     await tester.pump();
     expect(find.text('ส่งรหัส OTP'), findsOneWidget);
     expect(find.text('รหัส OTP 6 หลัก'), findsNothing);

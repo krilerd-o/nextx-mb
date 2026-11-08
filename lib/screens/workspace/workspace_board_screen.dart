@@ -10,6 +10,7 @@ import '../../core/nx_page_route.dart';
 import '../../core/workspace_models.dart';
 import '../../services/api_client.dart';
 import '../../services/realtime_service.dart';
+import '../../widgets/nx_avatar.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_create_fab.dart';
@@ -60,6 +61,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
   void initState() {
     super.initState();
     _board = Map<String, dynamic>.from(widget.board);
+    wsRememberBoard(_board);
     final hit = _boardCache[_boardId];
     if (hit != null) _apply(hit.statuses, hit.tasks, hit.epics);
     _prefs.loadQuery().then((q) {
@@ -117,6 +119,8 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
       setState(() {
         final b = r[3] as Map<String, dynamic>;
         if (b.isNotEmpty) _board = {..._board, ...b};
+        wsRememberBoard(_board);
+        nxRememberUserPhotos(r[4] as List<Map<String, dynamic>>, context.read<AppConfig>().apiClient.absoluteUrl);
         _users = {
           for (final u in r[4] as List<Map<String, dynamic>>)
             '${u['id']}': [u['first_name'], u['last_name']].where((e) => e != null && '$e'.isNotEmpty).join(' ').trim().isNotEmpty
@@ -234,12 +238,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
   Future<void> _quickAdd(String statusId, String title) async {
     final config = context.read<AppConfig>();
     try {
-      await config.apiClient.createWorkspaceItem(_boardId, 'task', {
-        'title': title,
-        'type': 'task',
-        'status_id': int.tryParse(statusId) ?? statusId,
-        if (config.session.userId != null) 'reporter_id': int.tryParse(config.session.userId!),
-      });
+      await config.apiClient.createWorkspaceItem(_boardId, 'task', wsQuickAddBody(title: title, statusId: statusId, me: config.session.userId));
       HapticFeedback.lightImpact();
       await _load();
     } catch (e) {
@@ -379,7 +378,8 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
           )
         : NxAppHeader(
             title: name,
-            subtitle: _code.isEmpty ? null : _code,
+            // Automatic deal codes (D26…) mean nothing to people.
+            subtitle: _code.isEmpty || RegExp(r'^D\d{8,}$').hasMatch(_code) || _code.toUpperCase() == name.toUpperCase() ? null : _code,
             actions: [
             ],
             menu: [
@@ -403,20 +403,12 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
           onTap: _pickView,
         ),
       ],
+      // Compact view switch (icons; the current one also shows its name),
+      // on the same row as the "ของฉัน" chip.
       leading: [
         Padding(
           padding: const EdgeInsets.only(right: 8),
-          child: SegmentedButton<String>(
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            showSelectedIcon: false,
-            segments: [
-              ButtonSegment(value: 'kanban', icon: const Icon(NxI.kanban, size: 16), label: Text(tr('บอร์ด'))),
-              ButtonSegment(value: 'list', icon: const Icon(NxI.listBullets, size: 16), label: Text(tr('รายการ'))),
-              ButtonSegment(value: 'epic', icon: const Icon(NxI.lightning, size: 16), label: Text(tr('Epic'))),
-            ],
-            selected: {_view},
-            onSelectionChanged: (v) => setState(() => _view = v.first),
-          ),
+          child: _ViewSwitch(value: _view, onChanged: (v) => setState(() => _view = v)),
         ),
       ],
       sorts: const [
@@ -610,6 +602,61 @@ class _StatusSectionState extends State<_StatusSection> {
           child: _open ? Column(children: [for (final t in widget.items) widget.builder(t)]) : const SizedBox(width: double.infinity),
         ),
       ],
+    );
+  }
+}
+
+class _ViewSwitch extends StatelessWidget {
+  const _ViewSwitch({required this.value, required this.onChanged});
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  static const _views = [('kanban', 'บอร์ด', NxI.kanban), ('list', 'รายการ', NxI.listBullets), ('epic', 'Epic', NxI.lightning)];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Container(
+      height: 36,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (v, label, icon) in _views)
+            Semantics(
+              button: true,
+              selected: v == value,
+              label: tr(label),
+              child: GestureDetector(
+                key: ValueKey('ws-view-$v'),
+                onTap: () {
+                  if (v == value) return;
+                  HapticFeedback.selectionClick();
+                  onChanged(v);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  padding: EdgeInsets.symmetric(horizontal: v == value ? 10 : 8),
+                  decoration: BoxDecoration(color: v == value ? cs.primary : Colors.transparent, borderRadius: BorderRadius.circular(15)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(icon, size: 16, color: v == value ? cs.onPrimary : cs.onSurfaceVariant),
+                    if (v == value) ...[
+                      const SizedBox(width: 4),
+                      Text(tr(label), style: theme.textTheme.labelMedium?.copyWith(color: cs.onPrimary, fontWeight: FontWeight.w700)),
+                    ],
+                  ]),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

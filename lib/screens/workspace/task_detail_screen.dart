@@ -158,10 +158,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       ];
       _tasks = r[3] as List<Map<String, dynamic>>;
       _users = {for (final u in r[4] as List<Map<String, dynamic>>) '${u['id']}': userDisplayName(u)};
+      nxRememberUserPhotos(r[4] as List<Map<String, dynamic>>, _api.absoluteUrl);
       if (r.length > 5 && r[5] is Map) {
         final b = r[5] as Map;
         _item['board_code'] ??= b['code'];
         _item['board_name'] ??= b['name'];
+        wsRememberBoard(Map<String, dynamic>.from(b));
       }
     });
     _loadSide();
@@ -666,13 +668,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   String get _webUrl {
     final base = Uri.tryParse(context.read<AppConfig>().apiBaseUrl);
-    final key = wsKey(_item, boardCode: _code);
+    final key = wsLinkKey(_item, boardCode: _code);
     if (base == null) return key;
     return base.replace(path: key.contains('-') ? '/workspace/$key' : '/workspace/$_boardId', query: null).toString();
   }
 
   void _copyKey() {
-    Clipboard.setData(ClipboardData(text: wsKey(_item, boardCode: _code)));
+    Clipboard.setData(ClipboardData(text: wsLinkKey(_item, boardCode: _code)));
     HapticFeedback.selectionClick();
     _snack('คัดลอกรหัสแล้ว');
   }
@@ -726,7 +728,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               if (!_isEpic) item(NxI.clock, 'ลงเวลา', _logTime),
               item(NxI.arrowsLeftRight, 'ย้ายไปบอร์ดอื่น', _moveBoard),
               item(NxI.hash, 'คัดลอกรหัส', _copyKey),
-              item(NxI.shareNetwork, 'แชร์ลิงก์', () => Share.share('${wsKey(_item, boardCode: _code)} ${wsTitle(_item)}\n$_webUrl')),
+              item(NxI.shareNetwork, 'แชร์ลิงก์', () => Share.share(wsShareText(_item, _webUrl, boardCode: _code))),
               item(NxI.trash, _isEpic ? 'ลบ Epic' : 'ลบงาน', _delete, color: cs.error),
             ],
           ),
@@ -749,9 +751,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final children = _children;
 
     return NxScrollScaffold(
+      // Board in the header; the key shows once, in the path below.
       header: NxAppHeader(
-        title: key,
-        subtitle: _item['board_name']?.toString(),
+        title: '${_item['board_name'] ?? wsDisplayCode(_code ?? '')}',
         actions: [
           if (_saving)
             const Padding(
@@ -770,76 +772,80 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           await _activity.currentState?.reload();
         },
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(0, 4, 0, 40),
+          padding: const EdgeInsets.fromLTRB(0, 12, 0, 40),
           // Everything gets the page gutter except the full-width status stepper.
           children: [
             for (final c in <Widget>[
-              // Type · key · priority
+              // Path: EPIC-1 › TASK-2 › SUB-5 (keys only, tap to open) · priority
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: type.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(type.icon, size: 14, color: type.color),
-                        const SizedBox(width: 4),
-                        Text(
-                          tr(type.label),
-                          style: theme.textTheme.labelMedium?.copyWith(color: type.color, fontWeight: FontWeight.w700),
-                        ),
-                      ],
+                  Tooltip(
+                    message: tr(type.label),
+                    child: Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(color: type.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
+                      child: Icon(type.icon, size: 15, color: type.color),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  GestureDetector(
-                    onLongPress: _copyKey,
-                    child: Text(
-                      key,
-                      style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final row in [?epic, ?parent]) ...[
+                            InkWell(
+                              key: ValueKey('ws-path-${wsKey(row, boardCode: _code)}'),
+                              borderRadius: BorderRadius.circular(6),
+                              onTap: () => _open(row),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                                child: Text(
+                                  wsKey(row, boardCode: _code),
+                                  style: theme.textTheme.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              child: Icon(NxI.caretRight, size: 14, color: cs.outline),
+                            ),
+                          ],
+                          GestureDetector(
+                            onLongPress: _copyKey,
+                            child: Text(
+                              key,
+                              key: const ValueKey('ws-path-self'),
+                              style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  const Spacer(),
                   if (_item['priority'] != null)
                     Builder(
                       builder: (_) {
                         final p = wsPriorityStyle('${_item['priority']}');
-                        return Row(
-                          children: [
-                            Icon(p.icon, size: 16, color: p.color),
-                            const SizedBox(width: 2),
-                            Text(
-                              tr(p.label),
-                              style: theme.textTheme.labelMedium?.copyWith(color: p.color, fontWeight: FontWeight.w700),
-                            ),
-                          ],
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(color: p.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(p.icon, size: 14, color: p.color),
+                              const SizedBox(width: 3),
+                              Text(tr(p.label), style: theme.textTheme.labelMedium?.copyWith(color: p.color, fontWeight: FontWeight.w700)),
+                            ],
+                          ),
                         );
                       },
                     ),
                 ],
               ),
-              // Breadcrumb board › epic › parent
-              if (epic != null || parent != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 4,
-                    children: [
-                      for (final (i, row) in [?epic, ?parent].indexed) ...[
-                        if (i > 0) Icon(NxI.caretRight, size: 12, color: cs.outline),
-                        ActionChip(
-                          visualDensity: VisualDensity.compact,
-                          avatar: Icon(wsTypeStyle(wsType(row)).icon, size: 14, color: wsTypeStyle(wsType(row)).color),
-                          label: Text('${wsKey(row, boardCode: _code)} ${wsTitle(row)}', overflow: TextOverflow.ellipsis),
-                          onPressed: () => _open(row),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               // Title (tap to edit in place)
               if (_editingTitle)
                 TextField(
@@ -859,9 +865,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           _editingTitle = true;
                         })
                       : null,
-                  child: Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  child: Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, height: 1.25)),
                 ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
               if (_statuses.isNotEmpty)
                 Padding(
                   key: _bleed,

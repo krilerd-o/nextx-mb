@@ -86,7 +86,7 @@ class WsLookups {
     case 'assignee_change':
       return (icon: NxI.user, text: tr('เปลี่ยนผู้รับผิดชอบ'), from: l.user(oldV), to: l.user(newV));
     case 'comment':
-      return (icon: NxI.chatCircle, text: tr('แสดงความคิดเห็น'), from: null, to: val(newV));
+      return (icon: NxI.chatCircle, text: tr('คอมเม้นท์'), from: null, to: val(newV));
     case 'worklog':
       return (icon: NxI.clock, text: tr('ลงเวลา ${newV ?? ''}').trim(), from: null, to: null);
     case 'worklog_update':
@@ -274,7 +274,7 @@ class WsActivityPanelState extends State<WsActivityPanel> {
   }
 
   Future<void> _deleteComment(Map<String, dynamic> c) async {
-    final ok = await _confirm('ลบความคิดเห็นนี้?');
+    final ok = await _confirm('ลบคอมเม้นท์นี้?');
     if (!ok) return;
     try {
       await _api.deleteItemComment(widget.boardId, widget.kind, widget.itemId, '${c['id']}');
@@ -341,7 +341,7 @@ class WsActivityPanelState extends State<WsActivityPanel> {
   @override
   Widget build(BuildContext context) {
     final tabs = [
-      (0, 'ความคิดเห็น', NxI.chatCircle, _comments?.length),
+      (0, 'คอมเม้นท์', NxI.chatCircle, _comments?.length),
       if (_isTask) (1, 'ลงเวลา', NxI.clock, _logs?.length),
       (2, 'ประวัติ', NxI.clockCounterClockwise, null),
     ];
@@ -394,7 +394,7 @@ class WsActivityPanelState extends State<WsActivityPanel> {
         if (list != null && list.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
-            child: Center(child: Text(tr('ยังไม่มีความคิดเห็น'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant))),
+            child: Center(child: Text(tr('ยังไม่มีคอมเม้นท์'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant))),
           ),
         for (final c in roots) ...[
           _comment(context, c),
@@ -413,7 +413,7 @@ class WsActivityPanelState extends State<WsActivityPanel> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final banner = _editing != null
-        ? tr('กำลังแก้ไขความคิดเห็น')
+        ? tr('กำลังแก้ไขคอมเม้นท์')
         : _replyTo != null
             ? tr('ตอบกลับ ${_replyTo!['user_name'] ?? ''}')
             : null;
@@ -462,7 +462,7 @@ class WsActivityPanelState extends State<WsActivityPanel> {
                   minLines: 1,
                   maxLines: 5,
                   enabled: _live,
-                  decoration: InputDecoration(hintText: tr('เขียนความคิดเห็น…'), border: InputBorder.none, isDense: true),
+                  decoration: InputDecoration(hintText: tr('เขียนคอมเม้นท์…'), border: InputBorder.none, isDense: true),
                 ),
               ),
               if (_editing == null)

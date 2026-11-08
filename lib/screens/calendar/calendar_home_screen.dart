@@ -19,9 +19,9 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_list_toolbar.dart';
 import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
-import '../crm/entity_create_screen.dart';
 import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
 import 'activity_detail_screen.dart';
+import 'activity_form_screen.dart';
 import 'cal/cal_agenda_view.dart';
 import 'cal/cal_birthday_actions.dart';
 import 'cal/cal_birthdays.dart';
@@ -258,12 +258,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
   Future<void> _create(DateTime at) async {
     await nxPush<void>(
       context,
-      EntityCreateScreen(
-        module: 'activity',
-        title: 'นัดหมายใหม่',
-        // Thai wall time, the way the web saves activity times.
-        initialValues: {'date_start': ymdhm(at), 'date_end': ymdhm(at.add(const Duration(hours: 1)))},
-      ),
+      ActivityFormScreen(start: at),
     );
     if (mounted) _reload();
   }

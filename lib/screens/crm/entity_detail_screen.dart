@@ -30,6 +30,7 @@ import '../../core/entity_form_rules.dart';
 import '../../core/recent_records.dart';
 import '../../core/detail_fields_pref.dart';
 import '../calendar/activity_detail_screen.dart';
+import '../calendar/activity_form_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../widgets/nx_refresh.dart';
 
@@ -139,13 +140,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   Future<bool?> _createLinkedActivity() {
     return nxPush<bool>(
       context,
-      EntityCreateScreen(
-        module: 'activity',
+      ActivityFormScreen(
         title: 'สร้างนัดหมาย',
-        initialValues: {
+        initial: {
           'related_module': widget.module,
           'related_id': int.tryParse(_id) ?? _id,
           'subject': entityTitle(_row, module: widget.module),
+          'customer_name': entityTitle(_row, module: widget.module),
+          'activitytype': 'Visit',
+          for (final k in const ['email', 'email1', 'email_1st']) if (_row[k] != null && '${_row[k]}'.isNotEmpty) 'customer_email': _row[k],
+          for (final k in const ['mobile', 'mobile_1st', 'phone']) if (_row[k] != null && '${_row[k]}'.isNotEmpty) 'customer_mobile': _row[k],
           if (_row['account_name'] != null) 'account_name': _row['account_name'],
         },
       ),
@@ -535,8 +539,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 labels: [
                   'ข้อมูล',
                   _comments.isEmpty
-                      ? 'ความคิดเห็น'
-                      : 'ความคิดเห็น ${_comments.length}',
+                      ? 'คอมเม้นท์'
+                      : 'คอมเม้นท์ ${_comments.length}',
                   'ไฟล์',
                   'ประวัติ',
                   if (widget.module != 'activity') 'กิจกรรม',

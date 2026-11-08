@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/i18n.dart';
 import '../../core/workspace_models.dart';
+import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_chrome.dart';
 import '../../widgets/nx_icons.dart';
 
@@ -884,10 +885,11 @@ class WsTaskCard extends StatelessWidget {
                     if (assignee != null)
                       Tooltip(
                         message: assignee,
-                        child: CircleAvatar(
-                          radius: 11,
-                          backgroundColor: cs.primary.withValues(alpha: 0.15),
-                          child: Text(assignee.characters.first, style: TextStyle(fontSize: 11, color: cs.primary, fontWeight: FontWeight.w700)),
+                        child: NxAvatar(
+                          key: ValueKey('ws-card-avatar-${item['assignee_id']}'),
+                          label: assignee,
+                          size: 24,
+                          imageUrl: nxUserPhotos['${item['assignee_id']}'],
                         ),
                       ),
                   ],

@@ -3,16 +3,13 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
-import '../../core/entity_display.dart';
 import '../../core/menu_access.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
-import '../../widgets/dense_card_tile.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
-import '../../core/error_reporting.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_refresh.dart';
 
@@ -24,39 +21,6 @@ class ModuleHubScreen extends StatefulWidget {
 }
 
 class _ModuleHubScreenState extends State<ModuleHubScreen> {
-  List<Map<String, dynamic>> _recent = [];
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadRecent());
-  }
-
-  Future<void> _loadRecent() async {
-    if (!mounted) return;
-    final config = context.read<AppConfig>();
-    if (!config.isLoggedIn) return;
-    final api = config.apiClient;
-    final next = <Map<String, dynamic>>[];
-    try {
-      final jobs = await api.getMyJobs(limit: 5);
-      for (final row in jobs.take(5)) {
-        next.add({'module': 'job', 'row': row});
-      }
-    } catch (e, s) {
-      ErrorReporting.report(e, s);
-    }
-    try {
-      final page = await api.getEntityList('activity', limit: 5);
-      for (final row in page.items.take(5)) {
-        next.add({'module': 'activity', 'row': row});
-      }
-    } catch (e, s) {
-      ErrorReporting.report(e, s);
-    }
-    if (!mounted) return;
-    setState(() => _recent = next);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,7 +68,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
         Expanded(
           child: NxRefresh(
             color: theme.colorScheme.primary,
-            onRefresh: _loadRecent,
+            onRefresh: () async {},
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: bp.scrollPadding(context, inShell: true),
@@ -150,33 +114,6 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
                     );
                   },
                 ),
-                if (_recent.isNotEmpty) ...[
-                  const SizedBox(height: 28),
-                  Text(tr('ล่าสุด'), style: theme.textTheme.titleLarge),
-                  const SizedBox(height: 12),
-                  for (final item in _recent)
-                    DenseCardTile(
-                      title: entityTitle(
-                        Map<String, dynamic>.from(item['row'] as Map),
-                        module: item['module']?.toString(),
-                      ),
-                      subtitle: item['module']?.toString(),
-                      onTap: () {
-                        final module = item['module']?.toString();
-                        final row = Map<String, dynamic>.from(item['row'] as Map);
-                        final id = strId(row['id']);
-                        if (module == 'job' && id.isNotEmpty) {
-                          context.push(AppRoutes.job(id));
-                        } else if (module == 'activity' && id.isNotEmpty) {
-                          context.push(AppRoutes.activity(id));
-                        } else if (module == 'job') {
-                          context.push(AppRoutes.jobs);
-                        } else {
-                          context.push(AppRoutes.calendar);
-                        }
-                      },
-                    ),
-                ],
               ],
             ),
           ),

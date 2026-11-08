@@ -41,6 +41,12 @@ String? entityStatusKey(Map<String, dynamic> row, String module) {
   return null;
 }
 
+const kStepDoneGreen = Color(0xFF16A34A);
+
+/// Readable green text on the light-green pill (lighter in dark mode).
+Color kStepDoneGreenFg(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
+
 /// Status pills the user can tap to move the record (like the web stepper).
 class EntityStatusStepper extends StatelessWidget {
   const EntityStatusStepper({
@@ -69,8 +75,9 @@ class EntityStatusStepper extends StatelessWidget {
           final o = options[i];
           final done = idx >= 0 && i < idx;
           final active = i == idx;
-          final bg = active ? cs.primary : (done ? cs.primary.withValues(alpha: 0.14) : cs.surface);
-          final fg = active ? cs.onPrimary : (done ? cs.primary : cs.onSurfaceVariant);
+          // Passed stages: green with a check (like the web stepper).
+          final bg = active ? cs.primary : (done ? kStepDoneGreen.withValues(alpha: 0.16) : cs.surface);
+          final fg = active ? cs.onPrimary : (done ? kStepDoneGreenFg(context) : cs.onSurfaceVariant);
           return Material(
             color: bg,
             shape: StadiumBorder(side: BorderSide(color: active || done ? Colors.transparent : cs.outlineVariant)),
@@ -87,7 +94,16 @@ class EntityStatusStepper extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (done) ...[Icon(NxI.check, size: 14, color: fg), const SizedBox(width: 4)],
+                    if (done) ...[
+                      Container(
+                        key: ValueKey('step-done-${o.value}'),
+                        width: 16,
+                        height: 16,
+                        decoration: const BoxDecoration(color: kStepDoneGreen, shape: BoxShape.circle),
+                        child: const Icon(NxI.check, size: 11, color: Colors.white),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
                     Text(tr(o.label), style: TextStyle(color: fg, fontWeight: active ? FontWeight.w700 : FontWeight.w500, fontSize: 13)),
                   ],
                 ),
@@ -363,7 +379,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
                       focusNode: _focus,
                       minLines: 1,
                       maxLines: 5,
-                      decoration: InputDecoration(hintText: tr('เขียนความคิดเห็น'), border: InputBorder.none, filled: false),
+                      decoration: InputDecoration(hintText: tr('เขียนคอมเม้นท์'), border: InputBorder.none, filled: false),
                     ),
                   ),
                   _busy
@@ -378,7 +394,7 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
         if (threads.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Text(tr('ยังไม่มีความคิดเห็น'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+            child: Text(tr('ยังไม่มีคอมเม้นท์'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
           ),
         for (final (root, replies) in threads)
           Padding(
@@ -585,7 +601,7 @@ class EntityFilesPanel extends StatelessWidget {
     case 'engagement':
       final kind = (e['event_type'] ?? e['source'])?.toString() ?? '';
       const names = {
-        'comment': 'แสดงความคิดเห็น',
+        'comment': 'คอมเม้นท์',
         'email_open': 'เปิดอีเมล',
         'email_click': 'คลิกลิงก์ในอีเมล',
         'email_sent': 'ส่งอีเมล',
@@ -760,7 +776,7 @@ class PendingEntityDeletes extends ChangeNotifier {
       duration: window,
       behavior: SnackBarBehavior.floating,
       content: Text(tr('ลบ $label แล้ว')),
-      action: SnackBarAction(label: 'เลิกทำ', onPressed: () => undone = true),
+      action: SnackBarAction(label: tr('เลิกทำ'), onPressed: () => undone = true),
     ));
     ctrl.closed.then((_) async {
       if (!undone) {

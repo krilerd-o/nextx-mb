@@ -49,6 +49,7 @@ import '../../screens/onboarding/tab_setup_screen.dart';
 import '../../screens/settings_screen.dart';
 import '../../screens/settings/diagnostics_screen.dart';
 import 'notification_deep_link.dart';
+import '../qr_login.dart';
 import 'route_access.dart';
 import '../i18n.dart';
 import '../../screens/profile/profile_hub_screen.dart';
@@ -62,7 +63,15 @@ GoRouter createAppRouter(AppConfig config) {
       // LINE started with ?app=1 comes back as moainext://app/login?token=… (or ?error=).
       if (state.uri.path == AppRoutes.login && !config.isLoggedIn) {
         final r = parseAuthRedirect(state.uri.toString());
-        if (r != null && (r.token != null || r.error != null)) config.handleAuthDeepLink(r);
+        if (r != null && (r.token != null || r.error != null || r.mergeIntent != null)) config.handleAuthDeepLink(r);
+      }
+      // QR from the web scanned with the phone camera → login screen finishes it.
+      final qr = state.uri.path == '/qr-login'
+          ? QrLoginLink.parse('moainext://app/qr-login?${state.uri.query}')
+          : QrLoginLink.parse(state.uri.toString());
+      if (qr != null) {
+        config.stashQr(qr);
+        return config.isLoggedIn ? AppRoutes.mainShell : AppRoutes.login;
       }
       // Server requires a newer app (GET /api/health → mobile.min_version).
       if (config.isReady && config.updateNeed == UpdateNeed.required) {

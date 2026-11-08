@@ -8,6 +8,7 @@ import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/profile/delete_account_screen.dart';
 import 'package:nextx_mobile/screens/profile/profile_hub_screen.dart';
+import 'package:nextx_mobile/screens/settings_screen.dart';
 
 import 'support/fake_api.dart';
 
@@ -58,9 +59,14 @@ Future<void> _walk(WidgetTester tester, {String word = 'ลบบัญชี'})
 }
 
 void main() {
-  testWidgets('profile → account & security has "ลบบัญชี"', (tester) async {
+  testWidgets('"ลบบัญชี" lives in Settings → security; profile has theme + language instead', (tester) async {
     await _pump(tester, const ProfileHubScreen(), {'GET /api/me/profile': {'profile': {}}});
-    expect(find.byKey(const ValueKey('profile-delete-account')), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-delete-account')), findsNothing);
+    expect(find.byKey(const ValueKey('profile-theme')), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-language')), findsOneWidget);
+    await _pump(tester, const SettingsScreen(), const {});
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('settings-delete-account')), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.byKey(const ValueKey('settings-delete-account')), findsOneWidget);
   });
 
   testWidgets('explains first; the delete button needs OTP and the typed word', (tester) async {

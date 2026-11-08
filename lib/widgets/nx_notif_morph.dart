@@ -7,13 +7,13 @@ import 'package:provider/provider.dart';
 
 import '../core/app_config.dart';
 import '../core/effects.dart';
-import '../core/html_display.dart';
 import '../core/navigation/app_routes.dart';
 import '../core/navigation/notification_deep_link.dart';
 import '../core/nx_motion.dart';
 import '../screens/notifications/notification_center_screen.dart' show relativeTime;
 import '../services/unread_service.dart';
 import 'nx_icons.dart';
+import 'nx_notification_view.dart';
 import '../core/i18n.dart';
 
 /// Bell that morphs into an inline notification tray (expo-notif-morph):
@@ -60,26 +60,47 @@ class _MorphTray extends StatefulWidget {
 class _MorphTrayState extends State<_MorphTray> {
   List<Map<String, dynamic>>? _items;
   Object? _error;
+  String _cat = 'all';
+  Map<String, int> _unreadBy = const {};
+  int _seq = 0;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadSummary();
+  }
+
+  Future<void> _loadSummary() async {
+    try {
+      final s = await context.read<AppConfig>().apiClient.getNotificationSummary();
+      final by = s['by_category'];
+      if (by is Map && mounted) {
+        setState(() => _unreadBy = {for (final e in by.entries) '${e.key}': int.tryParse('${e.value}') ?? 0});
+      }
+    } catch (_) {}
   }
 
   Future<void> _load() async {
+    final seq = ++_seq;
     try {
-      final rows = await context.read<AppConfig>().apiClient.getNotifications(limit: 6);
-      if (mounted) setState(() => _items = rows);
+      final page = await context.read<AppConfig>().apiClient.getNotificationsPage(limit: 8, category: _cat);
+      if (mounted && seq == _seq) setState(() => _items = page.items);
     } catch (e) {
-      if (mounted) setState(() => _error = e);
+      if (mounted && seq == _seq) setState(() => _error = e);
     }
+  }
+
+  void _openLink(String path) {
+    final router = GoRouter.of(context);
+    Navigator.of(context).pop();
+    router.push(notificationDeepLink(path));
   }
 
   void _open(Map<String, dynamic> it) {
     final router = GoRouter.of(context);
     final id = it['id']?.toString();
-    if (id != null && it['is_read'] != true) {
+    if (id != null && notifUnread(it)) {
       context.read<AppConfig>().apiClient.markNotificationRead(id).catchError((_) {});
       UnreadNotifications.instance.markedRead();
     }
@@ -154,6 +175,38 @@ class _MorphTrayState extends State<_MorphTray> {
               ],
             ),
           ),
+          SizedBox(
+            height: 38,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                for (final c in kNotifTrayTabs)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      key: ValueKey('tray-tab-$c'),
+                      showCheckmark: false,
+                      visualDensity: VisualDensity.compact,
+                      selected: _cat == c,
+                      labelStyle: TextStyle(color: _cat == c ? Colors.white : null, fontWeight: FontWeight.w600),
+                      label: Text([
+                        tr(notifCategoryStyle(c).label),
+                        if (c != 'all' && (_unreadBy[c] ?? 0) > 0) '${_unreadBy[c]}',
+                      ].join(' ')),
+                      onSelected: (_) {
+                        setState(() {
+                          _cat = c;
+                          _items = null;
+                          _error = null;
+                        });
+                        _load();
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
           Expanded(child: _list(theme, cs)),
           const Divider(height: 1),
           TextButton(
@@ -179,7 +232,6 @@ class _MorphTrayState extends State<_MorphTray> {
       itemCount: items.length,
       itemBuilder: (context, i) {
         final it = items[i];
-        final unread = it['is_read'] != true;
         // Stagger rows in after the box settles.
         return TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: 1),
@@ -189,27 +241,12 @@ class _MorphTrayState extends State<_MorphTray> {
             opacity: v,
             child: Transform.translate(offset: Offset(0, (1 - v) * 8), child: child),
           ),
-          child: ListTile(
-            dense: true,
-            onTap: () => _open(it),
-            leading: CircleAvatar(
-              radius: 16,
-              backgroundColor: unread ? cs.primary.withValues(alpha: 0.12) : cs.surfaceContainerHighest,
-              child: Icon(NxI.bell, size: 16, color: unread ? cs.primary : cs.onSurfaceVariant),
-            ),
-            title: Text(
-              tr(stripHtmlPreview(it['title']?.toString() ?? '', maxLen: 80)),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontWeight: unread ? FontWeight.w700 : FontWeight.w500),
-            ),
-            subtitle: Text(
-              tr([stripHtmlPreview(it['body']?.toString() ?? '', maxLen: 60), relativeTime(it['created_at'])]
-                  .where((e) => e.isNotEmpty)
-                  .join(' · ')),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+          child: NxNotifTile(
+            item: it,
+            compact: true,
+            timeLabel: relativeTime(it['created_at']),
+            onOpen: () => _open(it),
+            onOpenLink: _openLink,
           ),
         );
       },

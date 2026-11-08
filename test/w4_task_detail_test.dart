@@ -98,7 +98,8 @@ void main() {
     expect(find.text('[QA] Task A'), findsOneWidget);
     expect(find.text('QAM-1'), findsWidgets);
     expect(find.textContaining('45m / 2h', findRichText: true), findsOneWidget, reason: 'spent / estimate');
-    expect(find.text('38%'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ws-time-card')), findsOneWidget);
+    expect(find.textContaining('คงเหลือ'), findsOneWidget);
     expect(find.text('QA Tester'), findsWidgets, reason: 'assignee name from the users cache');
     expect(find.textContaining('[QA] Sub 1'), findsOneWidget);
     expect(find.text('[QA] เห็นด้วย'), findsOneWidget);

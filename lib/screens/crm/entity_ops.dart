@@ -9,6 +9,7 @@ import '../../core/nx_page_route.dart';
 import '../../services/api_client.dart';
 import '../../services/file_open.dart';
 import '../../widgets/dense_card_tile.dart';
+import '../dashboard/home_boxes.dart' show RecentStrip;
 import '../../widgets/fields/nx_entity_picker_sheet.dart';
 import '../../widgets/fields/nx_lift_sheet.dart';
 import '../../widgets/fields/nx_pick_option.dart';
@@ -16,6 +17,7 @@ import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../calendar/activity_detail_screen.dart';
+import '../calendar/activity_form_screen.dart';
 import '../deep_link_loaders.dart';
 import '../workspace/workspace_board_screen.dart';
 import 'entity_create_screen.dart';
@@ -2020,10 +2022,9 @@ class CreateActivityFromCaseBar extends StatelessWidget {
       onPressed: () async {
         final saved = await nxPush<bool>(
           context,
-          EntityCreateScreen(
-            module: 'activity',
+          ActivityFormScreen(
             title: 'สร้างนัดหมายจากเคส',
-            initialValues: {'related_case_id': id},
+            initial: {'related_module': 'case', 'related_id': int.tryParse(id) ?? id, 'related_case_id': id},
           ),
         );
         if (saved == true && context.mounted) {
@@ -2266,17 +2267,21 @@ class _RelatedHubPanelState extends State<_RelatedHubPanel> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final g in _groups) ...[
-            const SizedBox(height: 12),
+          // Relations with no rows are hidden entirely (header too).
+          for (final g in _groups.where((g) => extractMapList(g['items']).isNotEmpty)) ...[
             _RelatedCard(
               title: g['label_th']?.toString() ?? g['label']?.toString() ?? g['key']?.toString() ?? 'ที่เกี่ยวข้อง',
+              module: _moduleOf(g, extractMapList(g['items']).first),
+              count: extractMapList(g['items']).length,
               loading: false,
-              empty: extractMapList(g['items']).isEmpty,
+              empty: false,
               children: [
                 for (final item in extractMapList(g['items']))
-                  DenseCardTile(
-                    title: item['title']?.toString() ?? entityTitle(item, module: _moduleOf(g, item)),
-                    subtitle: item['subtitle']?.toString(),
+                  RelatedItemTile(
+                    module: _moduleOf(g, item),
+                    name: item['title']?.toString() ?? entityTitle(item, module: _moduleOf(g, item)),
+                    no: relatedNo(_moduleOf(g, item), item),
+                    status: relatedStatus(_moduleOf(g, item), item),
                     onTap: () {
                       final module = _moduleOf(g, item);
                       final id = strId(item['id']);
@@ -2297,7 +2302,6 @@ class _RelatedHubPanelState extends State<_RelatedHubPanel> {
     return Column(
       children: [
         for (final spec in widget.fallback) ...[
-          const SizedBox(height: 12),
           _RelatedRecordsPanel(
             parentId: widget.id,
             spec: spec,
@@ -2369,8 +2373,11 @@ class _RelatedRecordsPanelState extends State<_RelatedRecordsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_loading && _items.isEmpty) return const SizedBox.shrink();
     return _RelatedCard(
       title: EntityModules.titleOf(widget.spec.module),
+      module: widget.spec.module,
+      count: _items.length,
       loading: _loading,
       empty: _items.isEmpty,
       actions: widget.canCreate
@@ -2384,9 +2391,11 @@ class _RelatedRecordsPanelState extends State<_RelatedRecordsPanel> {
           : const [],
       children: [
         for (final row in _items)
-          DenseCardTile(
-            title: entityTitle(row, module: widget.spec.module),
-            subtitle: entitySubtitle(row),
+          RelatedItemTile(
+            module: widget.spec.module,
+            name: entityTitle(row, module: widget.spec.module),
+            no: relatedNo(widget.spec.module, row),
+            status: relatedStatus(widget.spec.module, row),
             onTap: () {
               final id = strId(row['id']);
               if (id.isNotEmpty) widget.onOpen(widget.spec.module, id, row: row);
@@ -2471,6 +2480,8 @@ class _RelatedCard extends StatelessWidget {
     required this.children,
     this.actions = const [],
     this.trailing,
+    this.module,
+    this.count,
   });
 
   final String title;
@@ -2479,32 +2490,153 @@ class _RelatedCard extends StatelessWidget {
   final List<Widget> children;
   final List<Widget> actions;
   final Widget? trailing;
+  final String? module;
+  final int? count;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+    final cs = theme.colorScheme;
+    final color = RecentStrip.colorOf(module ?? '');
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: Text(tr(title), style: theme.textTheme.titleMedium)),
-            if (trailing != null) trailing!,
-            ...actions,
+            Row(
+              children: [
+                if (module != null) ...[
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
+                    child: Icon(RecentStrip.iconOf(module!), size: 16, color: color),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(child: Text(tr(title), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+                if (count != null && count! > 0)
+                  Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(10)),
+                    child: Text('$count', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  ),
+                if (trailing != null) trailing!,
+                ...actions,
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (loading) const LinearProgressIndicator(minHeight: 2),
+            if (empty && !loading)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  tr('ยังไม่มีรายการ'),
+                  style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ),
+            ...children,
           ],
         ),
-        const SizedBox(height: 8),
-        if (loading) const LinearProgressIndicator(minHeight: 2),
-        if (empty && !loading)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              tr('ยังไม่มีรายการ'),
-              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
+/// Record number of a related row (`no` from the API, else `<module>_no`).
+String relatedNo(String module, Map<String, dynamic> row) {
+  final short = switch (module) {
+    'service_contract' => 'contract',
+    'service_location' => 'location',
+    _ => module,
+  };
+  for (final k in ['no', '_no', '${short}_no', '${module}_no']) {
+    final v = '${row[k] ?? ''}'.trim();
+    if (v.isNotEmpty && v != 'null') return v;
+  }
+  return '';
+}
+
+/// Status of a related row (`status` from the API, else `<module>_status` / stage).
+String relatedStatus(String module, Map<String, dynamic> row) {
+  final short = switch (module) {
+    'service_contract' => 'contract',
+    'service_location' => 'location',
+    _ => module,
+  };
+  for (final k in ['status', '_status', '${short}_status', '${module}_status', 'deal_stage', 'stage']) {
+    final v = '${row[k] ?? ''}'.trim();
+    if (v.isNotEmpty && v != 'null') return v;
+  }
+  return '';
+}
+
+/// One related record: name, number and status always on the row.
+class RelatedItemTile extends StatelessWidget {
+  const RelatedItemTile({super.key, required this.module, required this.name, required this.no, required this.status, this.onTap});
+  final String module;
+  final String name;
+  final String no;
+  final String status;
+  final VoidCallback? onTap;
+
+  static Color statusColor(ColorScheme cs, String v) {
+    final s = v.toLowerCase();
+    if (RegExp(r'won|approved|accept|done|complete|closed|qualified|paid|active|อนุมัติ|สำเร็จ|เสร็จ|ปิด').hasMatch(s)) return const Color(0xFF16A34A);
+    if (RegExp(r'lost|reject|cancel|expired|unqualified|ยกเลิก|ไม่อนุมัติ').hasMatch(s)) return cs.error;
+    if (RegExp(r'draft|new|ร่าง|ใหม่').hasMatch(s)) return cs.onSurfaceVariant;
+    return const Color(0xFFF59E0B);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final sc = statusColor(cs, status);
+    return InkWell(
+      key: ValueKey('related-$module-$no$name'),
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name.isEmpty ? '—' : name, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Text(no.isEmpty ? '—' : no, style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant, fontFeatures: const [FontFeature.tabularFigures()])),
+                      if (status.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                            decoration: BoxDecoration(color: sc.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
+                            child: Text(tr(status), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall?.copyWith(color: sc, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ...children,
-      ],
+            Icon(NxI.caretRight, size: 16, color: cs.onSurfaceVariant),
+          ],
+        ),
+      ),
     );
   }
 }

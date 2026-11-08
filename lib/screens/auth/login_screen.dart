@@ -17,11 +17,12 @@ import '../../widgets/nx_app_logo.dart';
 import '../../widgets/nx_icons.dart';
 import '../crm/field_gallery_screen.dart';
 import 'line_login_screen.dart';
+import 'qr_login_scan_screen.dart';
 import 'link_confirm_screen.dart';
 import 'register_screen.dart';
 import '../../core/i18n.dart';
 
-enum _Mode { password, otpEmail, otpSms }
+enum _Mode { password, otpEmail, otpSms, scan }
 
 /// Which social sign-ins the current server has configured.
 class SocialAvailability {
@@ -62,6 +63,24 @@ class _LoginScreenState extends State<LoginScreen> {
     final invite = config.pendingInvite;
     if (invite != null) WidgetsBinding.instance.addPostFrameCallback((_) => _openRegister());
     _loadSocial();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumePending());
+  }
+
+  /// QR opened from the phone camera app, or a Google browser sign-in that
+  /// needs the user to confirm linking an existing account.
+  Future<void> _consumePending() async {
+    if (!mounted) return;
+    final config = context.read<AppConfig>();
+    final merge = config.takePendingGoogleMerge();
+    if (merge != null) await _openLinkConfirm(merge, google: true);
+    final qr = config.takePendingQr();
+    if (qr != null && mounted) await nxPush<bool>(context, QrLoginScanScreen(initial: qr));
+  }
+
+  Future<void> _scan() async {
+    context.read<AppConfig>().clearAuthLinkError();
+    setState(() => _error = null);
+    await nxPush<bool>(context, const QrLoginScanScreen());
   }
 
   Future<void> _openRegister() async {
@@ -123,6 +142,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final id = _id.text.trim();
     final config = context.read<AppConfig>();
     switch (_mode) {
+      case _Mode.scan:
+        await _scan();
       case _Mode.password:
         if (id.isEmpty || _password.text.isEmpty) {
           setState(() => _error = 'กรุณากรอกอีเมล/ชื่อผู้ใช้ และรหัสผ่าน');
@@ -177,11 +198,23 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _google() async {
     final clientId = _social.googleClientId;
     if (clientId == null) return;
+    final config = context.read<AppConfig>();
     await _run(() async {
-      final idToken = await GoogleAuth.idToken(clientId);
+      String? idToken;
+      try {
+        idToken = await GoogleAuth.idToken(clientId);
+      } on GoogleAuthError {
+        // Huawei with GBox / microG (no Credential Manager) or a key not yet
+        // registered: sign in through the browser, which returns to the app.
+        if (config.serverInfo?.has('google_app') ?? false) {
+          final ok = await launchUrl(Uri.parse(config.apiClient.googleAppLoginUrl), mode: LaunchMode.externalApplication);
+          if (ok) return;
+        }
+        rethrow;
+      }
       if (idToken == null) return; // cancelled
       if (!mounted) return;
-      await context.read<AppConfig>().loginWithGoogleIdToken(idToken);
+      await config.loginWithGoogleIdToken(idToken);
     });
   }
 
@@ -226,10 +259,12 @@ class _LoginScreenState extends State<LoginScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final config = context.watch<AppConfig>();
-    final otp = _mode != _Mode.password;
+    final scan = _mode == _Mode.scan;
+    final otp = _mode == _Mode.otpEmail || _mode == _Mode.otpSms;
     final sms = _mode == _Mode.otpSms;
     final primaryLabel = switch (_mode) {
       _Mode.password => 'เข้าสู่ระบบ',
+      _Mode.scan => 'สแกน QR จากเว็บ',
       _ => _otpSent ? 'ยืนยันรหัส OTP' : 'ส่งรหัส OTP',
     };
 
@@ -288,7 +323,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                       ),
                       const SizedBox(height: 24),
-                      _ModeSwitch(value: _mode.index, labels: [tr('รหัสผ่าน'), tr('OTP อีเมล'), tr('OTP SMS')], onChanged: _loading ? null : (i) => _setMode(_Mode.values[i])),
+                      _ModeSwitch(value: _mode.index, labels: [tr('รหัสผ่าน'), tr('อีเมล'), tr('SMS'), tr('สแกน')], onChanged: _loading ? null : (i) => _setMode(_Mode.values[i])),
                       if (config.pendingInvite != null) ...[
                         const SizedBox(height: 14),
                         Material(
@@ -303,86 +338,90 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
                       const SizedBox(height: 18),
-                      TextField(
-                        key: const ValueKey('login-id'),
-                        controller: _id,
-                        enabled: !_loading && !(otp && _otpSent),
-                        keyboardType: sms ? TextInputType.phone : TextInputType.emailAddress,
-                        autocorrect: false,
-                        autofillHints: sms ? const [AutofillHints.telephoneNumber] : const [AutofillHints.username, AutofillHints.email],
-                        decoration:
-                            field(switch (_mode) {
-                              _Mode.password => 'อีเมลหรือชื่อผู้ใช้',
-                              _Mode.otpEmail => 'อีเมล',
-                              _Mode.otpSms => 'เบอร์มือถือ',
-                            }, sms ? NxI.phone : NxI.envelope).copyWith(
-                              // Saved accounts live behind one small button instead of a row of chips.
-                              suffixIcon: config.recentAccounts.isEmpty || sms || (otp && _otpSent)
-                                  ? null
-                                  : IconButton(
-                                      key: const ValueKey('login-recent'),
-                                      tooltip: tr('บัญชีที่เคยใช้'),
-                                      icon: const Icon(NxI.users, size: 20),
-                                      onPressed: _loading ? null : () => _pickRecent(config),
+                      if (scan) _ScanPanel(key: const ValueKey('login-scan'), onTap: _loading ? null : _scan),
+                      if (!scan) ...[
+                        TextField(
+                          key: const ValueKey('login-id'),
+                          controller: _id,
+                          enabled: !_loading && !(otp && _otpSent),
+                          keyboardType: sms ? TextInputType.phone : TextInputType.emailAddress,
+                          autocorrect: false,
+                          autofillHints: sms ? const [AutofillHints.telephoneNumber] : const [AutofillHints.username, AutofillHints.email],
+                          decoration:
+                              field(switch (_mode) {
+                                _Mode.password => 'อีเมลหรือชื่อผู้ใช้',
+                                _Mode.otpEmail => 'อีเมล',
+                                _Mode.otpSms => 'เบอร์มือถือ',
+                                _Mode.scan => '',
+                              }, sms ? NxI.phone : NxI.envelope).copyWith(
+                                // Saved accounts live behind one small button instead of a row of chips.
+                                suffixIcon: config.recentAccounts.isEmpty || sms || (otp && _otpSent)
+                                    ? null
+                                    : IconButton(
+                                        key: const ValueKey('login-recent'),
+                                        tooltip: tr('บัญชีที่เคยใช้'),
+                                        icon: const Icon(NxI.users, size: 20),
+                                        onPressed: _loading ? null : () => _pickRecent(config),
+                                      ),
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          child: !otp
+                              ? TextField(
+                                  key: const ValueKey('login-password'),
+                                  controller: _password,
+                                  enabled: !_loading,
+                                  obscureText: _obscure,
+                                  autofillHints: const [AutofillHints.password],
+                                  onSubmitted: (_) => _loading ? null : _primary(),
+                                  decoration: field('รหัสผ่าน', NxI.password).copyWith(
+                                    suffixIcon: IconButton(
+                                      tooltip: trn(_obscure ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน'),
+                                      icon: Icon(_obscure ? NxI.eye : NxI.eyeOff, size: 20),
+                                      onPressed: () => setState(() => _obscure = !_obscure),
                                     ),
-                            ),
-                      ),
-                      const SizedBox(height: 12),
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOutCubic,
-                        child: !otp
-                            ? TextField(
-                                key: const ValueKey('login-password'),
-                                controller: _password,
-                                enabled: !_loading,
-                                obscureText: _obscure,
-                                autofillHints: const [AutofillHints.password],
-                                onSubmitted: (_) => _loading ? null : _primary(),
-                                decoration: field('รหัสผ่าน', NxI.password).copyWith(
-                                  suffixIcon: IconButton(
-                                    tooltip: trn(_obscure ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน'),
-                                    icon: Icon(_obscure ? NxI.eye : NxI.eyeOff, size: 20),
-                                    onPressed: () => setState(() => _obscure = !_obscure),
                                   ),
-                                ),
-                              )
-                            : _otpSent
-                            ? TextField(
-                                controller: _code,
-                                enabled: !_loading,
-                                autofocus: true,
-                                keyboardType: TextInputType.number,
-                                maxLength: 6,
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 10, fontWeight: FontWeight.w700),
-                                autofillHints: const [AutofillHints.oneTimeCode],
-                                onSubmitted: (_) => _loading ? null : _primary(),
-                                decoration: field('รหัส OTP 6 หลัก', NxI.shieldCheck).copyWith(counterText: ''),
-                              )
-                            : const SizedBox(width: double.infinity),
-                      ),
-                      if (!otp)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(onPressed: _loading ? null : _forgot, child: Text(tr('ลืมรหัสผ่าน?'))),
+                                )
+                              : _otpSent
+                              ? TextField(
+                                  controller: _code,
+                                  enabled: !_loading,
+                                  autofocus: true,
+                                  keyboardType: TextInputType.number,
+                                  maxLength: 6,
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 10, fontWeight: FontWeight.w700),
+                                  autofillHints: const [AutofillHints.oneTimeCode],
+                                  onSubmitted: (_) => _loading ? null : _primary(),
+                                  decoration: field('รหัส OTP 6 หลัก', NxI.shieldCheck).copyWith(counterText: ''),
+                                )
+                              : const SizedBox(width: double.infinity),
                         ),
-                      if (otp && _otpSent)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            TextButton(onPressed: _loading ? null : () => setState(() => _otpSent = false), child: Text(tr(sms ? 'เปลี่ยนเบอร์' : 'เปลี่ยนอีเมล'))),
-                            TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () {
-                                      setState(() => _otpSent = false);
-                                      _primary();
-                                    },
-                              child: Text(tr('ส่งรหัสอีกครั้ง')),
-                            ),
-                          ],
-                        ),
+                        if (!otp && !scan)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(onPressed: _loading ? null : _forgot, child: Text(tr('ลืมรหัสผ่าน?'))),
+                          ),
+                        if (otp && _otpSent)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              TextButton(onPressed: _loading ? null : () => setState(() => _otpSent = false), child: Text(tr(sms ? 'เปลี่ยนเบอร์' : 'เปลี่ยนอีเมล'))),
+                              TextButton(
+                                onPressed: _loading
+                                    ? null
+                                    : () {
+                                        setState(() => _otpSent = false);
+                                        _primary();
+                                      },
+                                child: Text(tr('ส่งรหัสอีกครั้ง')),
+                              ),
+                            ],
+                          ),
+                      ],
                       if (config.authLinkBusy)
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
@@ -416,7 +455,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                       ),
                       SizedBox(height: otp && !_otpSent ? 4 : 12),
-                      NxHeroCta(label: primaryLabel, busy: _loading, onPressed: _loading ? null : _primary),
+                      NxHeroCta(key: const ValueKey('login-primary'), label: primaryLabel, busy: _loading, onPressed: _loading ? null : _primary),
                       if (_social.line || _social.google || AppleAuth.supported) ...[
                         const SizedBox(height: 22),
                         Row(
@@ -661,6 +700,53 @@ class _SocialButton extends StatelessWidget {
             const SizedBox(width: 8),
             Text(tr(label), style: const TextStyle(fontWeight: FontWeight.w700)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Body of the "สแกน" mode: what to open on the web, and a big scan button.
+class _ScanPanel extends StatelessWidget {
+  const _ScanPanel({super.key, required this.onTap});
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Material(
+      color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(16)),
+                child: Icon(NxI.qrCode, color: cs.primary, size: 28),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(tr('เข้าสู่ระบบด้วย QR'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 3),
+                    Text(
+                      tr('บนเว็บ: ตั้งค่า → ความปลอดภัย → เข้าใช้งานแอปมือถือด้วย QR แล้วสแกนด้วยแอปนี้ เข้าได้ทันทีไม่ต้องพิมพ์รหัส'),
+                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -15,13 +15,13 @@ import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_sliding_segmented.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../profile_edit_screen.dart';
 import '../settings_screen.dart';
 import '../spaces/add_space_sheet.dart';
 import '../spaces/space_switcher.dart';
 import 'change_password_screen.dart';
-import 'delete_account_screen.dart';
 import 'my_signatures_screen.dart';
 import 'phone_verify_screen.dart';
 
@@ -151,13 +151,6 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                     title: 'ตำแหน่ง / แผนก',
                     subtitle: [?_p('title'), ?_p('department')].join(' · '),
                   ),
-                SettingsTile(
-                  icon: NxI.buildings,
-                  tint: const Color(0xFF6366F1),
-                  title: 'ธุรกิจ',
-                  subtitle: [s.businessName ?? '—', if ((s.packageCode ?? '').isNotEmpty) s.packageCode!].join(' · '),
-                  onTap: () => config.clearBusiness(),
-                ),
               ]),
             ),
 
@@ -211,6 +204,41 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
               ]),
             ),
 
+            // ── Look: theme + language right on the profile, animated switches.
+            SettingsAppear(
+              index: i++,
+              child: SettingsGroup(title: 'การแสดงผล', children: [
+                SettingsTile(
+                  key: const ValueKey('profile-theme'),
+                  icon: _themeIcon(context, config.themeMode),
+                  tint: const Color(0xFF8B5CF6),
+                  title: 'ธีม',
+                  below: NxSlidingSegmented<ThemeMode>(
+                    value: config.themeMode,
+                    options: const [
+                      (ThemeMode.light, 'สว่าง', NxI.sun),
+                      (ThemeMode.dark, 'มืด', NxI.moon),
+                      (ThemeMode.system, 'ตามเครื่อง', NxI.deviceMobile),
+                    ],
+                    onChanged: config.setThemeMode,
+                  ),
+                ),
+                SettingsTile(
+                  key: const ValueKey('profile-language'),
+                  icon: NxI.languages,
+                  tint: const Color(0xFFF97316),
+                  title: 'ภาษา',
+                  subtitle: 'มีผลทั้งแอปทันที',
+                  below: NxSlidingSegmented<String>(
+                    value: config.uiLocaleCode,
+                    options: const [('th', 'ไทย', null), ('en', 'English', null)],
+                    translate: false,
+                    onChanged: config.setUiLocaleCode,
+                  ),
+                ),
+              ]),
+            ),
+
             // ── Account & security
             SettingsAppear(
               index: i++,
@@ -235,14 +263,6 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                   title: 'อุปกรณ์ที่เข้าใช้งาน',
                   subtitle: 'ดูและออกจากระบบเครื่องอื่น',
                   onTap: () => context.push(AppRoutes.devices),
-                ),
-                SettingsTile(
-                  key: const ValueKey('profile-delete-account'),
-                  icon: NxI.trash,
-                  tint: const Color(0xFFDC2626),
-                  title: 'ลบบัญชี',
-                  subtitle: 'ปิดบัญชีถาวร ยืนยันด้วย OTP',
-                  onTap: () => nxPush<void>(context, const DeleteAccountScreen()),
                 ),
               ]),
             ),
@@ -410,25 +430,34 @@ class _Hero extends StatelessWidget {
           if ((s.businessName ?? '').isNotEmpty) chip(s.businessName!, cs.onSurfaceVariant),
         ]),
         const SizedBox(height: 16),
+        // Two equal pills, one line each (the label never wraps to a taller button).
         Row(children: [
           Expanded(
             child: FilledButton.tonalIcon(
               key: const ValueKey('profile-edit'),
+              style: FilledButton.styleFrom(fixedSize: const Size.fromHeight(44), padding: const EdgeInsets.symmetric(horizontal: 12)),
               onPressed: () => nxPush<bool>(context, const ProfileEditScreen()),
               icon: const Icon(NxI.pencilSimple, size: 18),
-              label: Text(tr('แก้ไขโปรไฟล์')),
+              label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('แก้ไขโปรไฟล์'), maxLines: 1)),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: OutlinedButton.icon(
+              key: const ValueKey('profile-switch'),
+              style: OutlinedButton.styleFrom(fixedSize: const Size.fromHeight(44), padding: const EdgeInsets.symmetric(horizontal: 12)),
               onPressed: () => showSpaceSwitcher(context),
               icon: const Icon(NxI.arrowsClockwise, size: 18),
-              label: Text(tr('สลับ Space')),
+              label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('สลับ Space'), maxLines: 1)),
             ),
           ),
         ]),
       ]),
     );
   }
+}
+
+IconData _themeIcon(BuildContext context, ThemeMode m) {
+  final dark = m == ThemeMode.dark || (m == ThemeMode.system && MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+  return dark ? NxI.moon : NxI.sun;
 }
