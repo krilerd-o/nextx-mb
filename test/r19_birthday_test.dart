@@ -88,6 +88,7 @@ void main() {
     expect(find.byKey(const ValueKey('cal-bday-card')), findsOneWidget);
     expect(find.text('สุขสันต์วันเกิดวันนี้'), findsOneWidget);
     expect(find.text('ผู้ติดต่อ'), findsOneWidget);
+    expect(find.text('Contact'), findsWidgets, reason: 'record type shown on the card and the row');
     expect(find.text('ครบ ${today.year - 1990} ปี'), findsWidgets);
     expect(find.text('[QA] บริษัททดสอบ'), findsWidgets);
     expect(find.text('0811111111'), findsOneWidget);
@@ -97,6 +98,7 @@ void main() {
   testWidgets('day view: birthday chip in the all-day row', (tester) async {
     await pump(tester, view: 'day');
     expect(find.byKey(const ValueKey('cal-bday-chip-contact-71')), findsOneWidget);
+    expect(find.textContaining('Contact · [QA] คุณวันเกิด'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('cal-bday-chip-contact-71')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('cal-bday-card')), findsOneWidget);
@@ -106,6 +108,8 @@ void main() {
     await pump(tester, view: 'list');
     expect(find.byKey(const ValueKey('cal-bday-contact-71')), findsOneWidget);
     expect(find.byKey(const ValueKey('cal-bday-lead-72')), findsOneWidget);
+    expect(find.byKey(const ValueKey('cal-bday-type-lead-72')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('cal-bday-type-lead-72')), matching: find.text('Lead')), findsOneWidget);
     expect(find.textContaining('· พรุ่งนี้'), findsOneWidget);
   });
 

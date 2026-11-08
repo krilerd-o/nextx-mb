@@ -509,7 +509,7 @@ class _GridPageState extends State<_GridPage> {
                         () => Builder(
                               builder: (c) => _chip(
                                 context,
-                                '🎂 ${b.name}',
+                                days.length == 1 ? '🎂 ${b.typeLabel} · ${b.name}' : '🎂 ${b.typeLabel[0]} · ${b.name}',
                                 calBirthdayColor,
                                 () => w.store.openBirthday(c, b, days[i]),
                                 key: ValueKey('cal-bday-chip-${b.module}-${b.id}'),

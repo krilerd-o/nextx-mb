@@ -85,6 +85,20 @@ class CalBirthday {
     );
   }
 
+  /// Record type as the CRM names it.
+  String get typeLabel => switch (module) {
+        'lead' => 'Lead',
+        'contact' => 'Contact',
+        _ => 'Account',
+      };
+
+  /// One colour per type (also on the badge).
+  Color get typeColor => switch (module) {
+        'lead' => const Color(0xFFF59E0B),
+        'contact' => const Color(0xFF3B82F6),
+        _ => const Color(0xFF10B981),
+      };
+
   String get kindLabel => switch (module) {
         'lead' => tr('ลูกค้าเป้าหมาย'),
         'contact' => tr('ผู้ติดต่อ'),
@@ -227,6 +241,30 @@ class CalBirthdayAvatar extends StatelessWidget {
   }
 }
 
+/// "Lead" / "Contact" / "Account" pill in the type's colour.
+class CalBirthdayTypeBadge extends StatelessWidget {
+  const CalBirthdayTypeBadge({super.key, required this.b, this.large = false});
+  final CalBirthday b;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: ValueKey('cal-bday-type-${b.module}-${b.id}'),
+      padding: EdgeInsets.symmetric(horizontal: large ? 8 : 6, vertical: large ? 2 : 1),
+      decoration: BoxDecoration(
+        color: b.typeColor.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: b.typeColor.withValues(alpha: 0.5), width: 0.8),
+      ),
+      child: Text(
+        b.typeLabel,
+        style: TextStyle(fontSize: large ? 11 : 10, height: 1.2, fontWeight: FontWeight.w800, color: Color.lerp(b.typeColor, Colors.black, 0.3)),
+      ),
+    );
+  }
+}
+
 /// "ครบ 36 ปี · วันนี้" style line for [b] on [day].
 String calBirthdayLine(CalBirthday b, DateTime day) {
   final age = b.ageIn(day.year);
@@ -265,12 +303,19 @@ class CalBirthdayTile extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(b.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700)),
-              Text(
-                [b.kindLabel, ?b.org].join(' · '),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-              ),
+              const SizedBox(height: 2),
+              Row(children: [
+                CalBirthdayTypeBadge(b: b),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    [if (b.module == 'account') b.kindLabel, ?b.org].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ),
+              ]),
             ]),
           ),
           const SizedBox(width: 8),
@@ -388,6 +433,7 @@ Future<void> showCalBirthdayCard(
                   Text(b.name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
                   Wrap(spacing: 6, runSpacing: 4, children: [
+                    CalBirthdayTypeBadge(b: b, large: true),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(color: cs.surface.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(20)),
