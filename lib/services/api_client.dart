@@ -1404,26 +1404,30 @@ class ApiClient {
 
   /// `GET /api/dashboard/sales` — deal + quotation pipeline (this year by default).
   /// [dateFrom]/[dateTo] are YYYY-MM-DD (Thai days); none = the server's default.
-  Future<Map<String, dynamic>> getSalesDashboard({String? dateFrom, String? dateTo}) async => _dataMap(await _send(
+  /// [userId] = only that owner's deals/quotes (the server checks it is visible).
+  Future<Map<String, dynamic>> getSalesDashboard({String? dateFrom, String? dateTo, String? userId}) async => _dataMap(await _send(
         'GET',
         '/api/dashboard/sales',
-        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo},
+        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo, if (userId != null) 'userId': userId},
       ));
 
   /// `GET /api/dashboard/case` — case counts by status / type / priority.
-  Future<Map<String, dynamic>> getCaseDashboard({String? dateFrom, String? dateTo}) async => _dataMap(await _send(
+  Future<Map<String, dynamic>> getCaseDashboard({String? dateFrom, String? dateTo, String? userId}) async => _dataMap(await _send(
         'GET',
         '/api/dashboard/case',
-        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo},
+        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo, if (userId != null) 'userId': userId},
       ));
 
   /// Service dashboard (menu `svc-dash-case-summary`): kpis open/closed/overdue + by_status.
-  Future<Map<String, dynamic>> getCaseSummary({required String dateFrom, required String dateTo}) async =>
-      _dataMap(await _send('GET', '/api/service-dashboard/case-summary', query: {'dateFrom': dateFrom, 'dateTo': dateTo}));
+  /// [owner] = only cases of that owner (`owners=`).
+  Future<Map<String, dynamic>> getCaseSummary({required String dateFrom, required String dateTo, String? owner}) async =>
+      _dataMap(await _send('GET', '/api/service-dashboard/case-summary',
+          query: {'dateFrom': dateFrom, 'dateTo': dateTo, if (owner != null) 'owners': owner}));
 
   /// Service dashboard (menu `svc-dash-case-performance`): SLA met / missed / %.
-  Future<Map<String, dynamic>> getCasePerformance({required String dateFrom, required String dateTo}) async =>
-      _dataMap(await _send('GET', '/api/service-dashboard/case-performance', query: {'dateFrom': dateFrom, 'dateTo': dateTo}));
+  Future<Map<String, dynamic>> getCasePerformance({required String dateFrom, required String dateTo, String? owner}) async =>
+      _dataMap(await _send('GET', '/api/service-dashboard/case-performance',
+          query: {'dateFrom': dateFrom, 'dateTo': dateTo, if (owner != null) 'owners': owner}));
 
   /// Light SLA summary for Home (any user with cases): `counts{open_ok, open_overdue, met, missed}`.
   Future<Map<String, dynamic>> getCaseSlaSummary({int days = 30}) async =>
