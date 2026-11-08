@@ -217,34 +217,39 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// Multi-step progressive blur toward one edge: several blur layers, each
-/// masked to a shorter band, so blur grows smoothly toward the edge instead
-/// of ending in a hard line. Lite/off devices get a background fade only.
+/// Progressive blur toward one edge.
+///
+/// Full: many fine steps, each a hair stronger than the one below it and
+/// blurred evenly in both directions, so the eye sees one smooth ramp instead
+/// of stacked bands. Lite: one light blur under the header (cheap) plus the
+/// wash, so text behind the header is still softened. Off: wash only.
 class NxEdgeBlur extends StatelessWidget {
-  const NxEdgeBlur({super.key, required this.fromTop, this.maxSigma = 16, this.steps = 6, this.solidFraction = 0.45});
+  const NxEdgeBlur({super.key, required this.fromTop, this.maxSigma = 14, this.steps = 12, this.solidFraction = 0.45});
 
-  /// Fraction of the band covered by step [i] (0 = tallest).
-  double _bandHeight(int i) {
+  /// Fraction of the band covered by step [i] (0 = tallest, lightest).
+  double bandHeight(int i) {
     if (steps <= 1) return 1;
     final t = i / (steps - 1);
-    // Ease so more, finer steps sit in the fade-out part.
-    return 1 - (1 - solidFraction) * (t * t * (3 - 2 * t));
+    return 1 - (1 - solidFraction) * t;
   }
 
-  /// Blur of step [i]: grows smoothly from ~1 to [maxSigma].
-  double _sigma(int i) {
+  /// Blur of step [i]: even increments from ~0.6 to [maxSigma], so no step
+  /// edge is a visible jump.
+  double sigma(int i) {
     if (steps <= 1) return maxSigma;
-    final t = (i + 1) / steps;
-    return 1 + (maxSigma - 1) * t * t;
+    final t = i / (steps - 1);
+    return 0.6 + (maxSigma - 0.6) * t;
   }
 
   final bool fromTop;
 
   /// Part of the band (from the edge) that stays fully blurred — e.g. the
-  /// header itself; the rest is an eased fade with no visible end line.
+  /// header itself; the rest fades out.
   final double solidFraction;
   final double maxSigma;
   final int steps;
+
+  static const liteSigma = 6.0;
 
   @override
   Widget build(BuildContext context) {
@@ -252,42 +257,62 @@ class NxEdgeBlur extends StatelessWidget {
     final level = Effects.of(context);
     final edge = fromTop ? Alignment.topCenter : Alignment.bottomCenter;
     final away = fromTop ? Alignment.bottomCenter : Alignment.topCenter;
+    final full = level == EffectsLevel.full;
+    final lite = level == EffectsLevel.lite;
+    // Eased wash: many stops so the fade has no visible end line.
+    final alphas = full
+        ? const [0.42, 0.34, 0.24, 0.15, 0.08, 0.03, 0.0]
+        : lite
+            ? const [0.82, 0.74, 0.62, 0.46, 0.28, 0.12, 0.0]
+            : const [0.94, 0.86, 0.72, 0.52, 0.3, 0.12, 0.0];
     final tint = DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: edge,
           end: away,
-          colors: [
-            // Mostly blur, a light wash only — reads as frosted glass, not a white bar.
-            bg.withValues(alpha: level == EffectsLevel.full ? 0.38 : 0.94),
-            bg.withValues(alpha: level == EffectsLevel.full ? 0.2 : 0.7),
-            bg.withValues(alpha: level == EffectsLevel.full ? 0.06 : 0.3),
-            bg.withValues(alpha: 0),
-          ],
-          stops: const [0, 0.4, 0.7, 1],
+          colors: [for (final a in alphas) bg.withValues(alpha: a)],
+          stops: const [0, 0.3, 0.48, 0.64, 0.78, 0.9, 1],
         ),
       ),
       child: const SizedBox.expand(),
     );
-    if (level != EffectsLevel.full) return IgnorePointer(child: tint);
+    if (!full && !lite) return IgnorePointer(child: tint);
+    if (lite) {
+      return IgnorePointer(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Align(
+              alignment: edge,
+              child: FractionallySizedBox(
+                widthFactor: 1,
+                heightFactor: solidFraction + (1 - solidFraction) * 0.35,
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(sigmaX: liteSigma, sigmaY: liteSigma),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ),
+            ),
+            tint,
+          ],
+        ),
+      );
+    }
     return IgnorePointer(
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Stepped progressive blur: bands anchored at the edge, tallest =
-          // lightest blur, shortest = strongest (drawn last, on top). Adjacent
-          // steps differ only slightly and the outermost step is barely blurred,
-          // so no edge line shows. Works without masking backdrop filters
-          // (ShaderMask doesn't fade a BackdropFilter on every renderer).
           for (var i = 0; i < steps; i++)
             Align(
               alignment: edge,
               child: FractionallySizedBox(
                 widthFactor: 1,
-                heightFactor: _bandHeight(i),
+                heightFactor: bandHeight(i),
                 child: ClipRect(
                   child: BackdropFilter.grouped(
-                    filter: ui.ImageFilter.blur(sigmaX: _sigma(i) * 0.6, sigmaY: _sigma(i)),
+                    filter: ui.ImageFilter.blur(sigmaX: sigma(i), sigmaY: sigma(i)),
                     child: const SizedBox.expand(),
                   ),
                 ),
@@ -298,6 +323,7 @@ class NxEdgeBlur extends StatelessWidget {
       ),
     );
   }
+
 }
 
 /// Vertical motion blur while a child scrollable flings fast (expo-motion-blur).

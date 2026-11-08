@@ -747,7 +747,8 @@ class _FilterSheetState extends State<_FilterSheet> {
                           HapticFeedback.selectionClick();
                           setState(() => _q = _q.copyWith(sort: o.key));
                         },
-                        selectedColor: cs.primaryContainer,
+                        selectedColor: cs.primary,
+                        labelStyle: TextStyle(color: (_q.sort ?? widget.sorts.first.key) == o.key ? cs.onPrimary : null),
                       ),
                   ],
                 ),
@@ -788,7 +789,9 @@ class _FilterSheetState extends State<_FilterSheet> {
                             HapticFeedback.selectionClick();
                             setState(() => _q = _q.toggle(g, o.value));
                           },
-                          selectedColor: cs.primaryContainer,
+                          selectedColor: cs.primary,
+                          checkmarkColor: cs.onPrimary,
+                          labelStyle: TextStyle(color: _q.has(g.key, o.value) ? cs.onPrimary : null),
                         ),
                       if (fold)
                         ActionChip(

@@ -158,11 +158,19 @@ class AppTheme {
         foregroundColor: onCta,
         shape: const CircleBorder(),
       ),
+      // Chips must read as "pills" on any surface (cards and sheets are
+      // _darkVariant in dark mode): a lighter fill plus a hairline outline;
+      // selected = solid accent with white text.
       chipTheme: ChipThemeData(
-        side: BorderSide.none,
+        side: WidgetStateBorderSide.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? BorderSide(color: scheme.primary)
+              : BorderSide(color: isDark ? const Color(0xFF3A3B46) : const Color(0xFFE2E2E8)),
+        ),
         shape: const StadiumBorder(),
-        backgroundColor: isDark ? _darkVariant : const Color(0xFFF2F2F7),
-        selectedColor: cta,
+        backgroundColor: isDark ? const Color(0xFF2A2B36) : const Color(0xFFF2F2F7),
+        selectedColor: scheme.primary,
+        checkmarkColor: Colors.white,
         labelStyle: TextStyle(
           fontWeight: FontWeight.w500,
           color: isDark ? _darkOn : ink,

@@ -261,7 +261,6 @@ class NxEntityFormState extends State<NxEntityForm> {
               final meta = widget.sections[key];
               final req = list.where(fieldIsRequired).toList();
               final done = req.where(_filled).length;
-              final hasError = list.any((f) => widget.errors.containsKey(fieldName(f)));
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 margin: const EdgeInsets.only(bottom: 16),
@@ -269,9 +268,8 @@ class NxEntityFormState extends State<NxEntityForm> {
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: hasError ? cs.error.withValues(alpha: 0.6) : cs.outlineVariant.withValues(alpha: 0.4),
-                  ),
+                  // Only the missing field is marked red (not the whole group).
+                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
