@@ -61,7 +61,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
           String planOf(Map r) => '${r['plan_start'] ?? r['due_datetime'] ?? ''}';
           final today = thaiNow();
           bool onDay(Map r, Set<String> v) {
-            final d = parseThai(planOf(r));
+            final d = r['plan_start'] != null ? parseThaiField(r['plan_start'], 'plan_start') : parseThaiField(r['due_datetime'], 'due_datetime');
             if (d == null) return v.contains('none');
             final day = DateTime(d.year, d.month, d.day);
             final t0 = DateTime(today.year, today.month, today.day);

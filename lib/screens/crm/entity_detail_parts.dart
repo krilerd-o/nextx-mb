@@ -901,7 +901,7 @@ class _EntityActivitiesPanelState extends State<EntityActivitiesPanel> {
 }
 
 String _activityWhen(dynamic raw) {
-  final d = parseThai(raw);
+  final d = parseWall(raw); // activity date_start = Bangkok wall clock
   if (d == null) return '';
   String two(int n) => n.toString().padLeft(2, '0');
   return '${d.day}/${d.month}/${uiYear(d.year)} ${two(d.hour)}:${two(d.minute)}';

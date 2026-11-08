@@ -216,7 +216,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
       picks.sort((a, b) => (a.key == 'pl:$status' ? 0 : 1).compareTo(b.key == 'pl:$status' ? 0 : 1));
       final saved = await CardLayoutStore.load(widget.module, context.read<AppConfig>().prefsScope);
       if (!mounted) return;
-      final ctx0 = CardFieldContext(fields: schema.fields, picklists: schema.picklists);
+      final ctx0 = CardFieldContext(fields: schema.fields, picklists: schema.picklists, module: widget.module);
       final def = CardLayout.defaults(widget.module, schema.fields, statusKey: status).sanitized(ctx0);
       setState(() {
         _defaultLayout = def;
@@ -269,6 +269,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
         _cardCtx = CardFieldContext(
           fields: schema.fields,
           picklists: schema.picklists,
+          module: widget.module,
           users: {for (final u in users) u.value: u.label},
         );
         _ownerGroups = users.isEmpty

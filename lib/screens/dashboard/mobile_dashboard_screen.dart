@@ -161,7 +161,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
           detail: [a['account_name'], a['contact_name'], a['location']]
               .where((e) => e != null && '$e'.isNotEmpty)
               .join(' · '),
-          due: parseThai(a['date_start']),
+          due: parseWall(a['date_start']),
           route: a['id'] == null ? null : AppRoutes.activity('${a['id']}'),
         ),
       for (final t in _workItems())
@@ -296,7 +296,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
     final all = extractMapList(_summary?['activities']);
     return all
         .where((a) {
-          final d = DateTime.tryParse(a['date_start']?.toString() ?? '');
+          final d = parseWall(a['date_start']);
           return d == null || d.isAfter(now);
         })
         .take(4)
@@ -1107,7 +1107,7 @@ class _WorkRow extends StatelessWidget {
         item['status_label_th']?.toString() ??
             item['status_name']?.toString() ??
             '',
-        if (item['due_at'] != null) 'ส่ง ${item['due_at']}',
+        if (item['due_at'] != null) 'ส่ง ${formatThaiField(item['due_at'], 'due_at', dateOnly: true, year: uiYear)}',
       ].where((e) => e.isNotEmpty).join(' · '),
       onTap: board == null || id == null
           ? null

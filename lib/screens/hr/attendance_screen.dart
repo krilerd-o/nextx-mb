@@ -237,11 +237,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(tr(row['work_date']?.toString() ?? ''), style: theme.textTheme.titleMedium),
+                              Text(thaiDate(row['work_date'], year: uiYear), style: theme.textTheme.titleMedium),
                               Text(
                                 tr([
-                                  if (row['clock_in_at'] != null) 'เข้า ${row['clock_in_at']}${offlinePunchFlags(row).$1 ? ' (ออฟไลน์)' : ''}',
-                                  if (row['clock_out_at'] != null) 'ออก ${row['clock_out_at']}${offlinePunchFlags(row).$2 ? ' (ออฟไลน์)' : ''}',
+                                  if (row['clock_in_at'] != null) 'เข้า ${_hm(row['clock_in_at'])}${offlinePunchFlags(row).$1 ? ' (ออฟไลน์)' : ''}',
+                                  if (row['clock_out_at'] != null) 'ออก ${_hm(row['clock_out_at'])}${offlinePunchFlags(row).$2 ? ' (ออฟไลน์)' : ''}',
                                 ].join(' · ')),
                                 style: theme.textTheme.bodySmall,
                               ),
@@ -280,4 +280,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     row['clock_in_at'] != null && (on(row['clock_in_offline']) || row['source'] == 'app_offline'),
     row['clock_out_at'] != null && on(row['clock_out_offline']),
   );
+}
+
+String _hm(dynamic raw) {
+  final d = parseThai(raw);
+  if (d == null) return '$raw';
+  return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 }

@@ -813,6 +813,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             uiType: uiType,
             label: _labelFor(name),
             value: _row[name],
+            fieldName: name,
+            module: widget.module,
             relatedModule: related,
             options: [
               for (final o

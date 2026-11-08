@@ -317,7 +317,7 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(tr('ยกเลิกคำขอลา?')),
-        content: Text(tr('${p['leave_type_name'] ?? 'ลา'} ${p['start_date'] ?? ''} – ${p['end_date'] ?? ''}')),
+        content: Text(tr('${p['leave_type_name'] ?? 'ลา'} ${thaiDate(p['start_date'], year: uiYear)} – ${thaiDate(p['end_date'], year: uiYear)}')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ไม่'))),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ยกเลิกคำขอ'))),
@@ -357,7 +357,8 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
           filters: {
             'status': (p, v) => v.contains('${p['status'] ?? ''}'),
             'month': (p, v) {
-              final m = '${p['start_date'] ?? ''}'.length >= 7 ? '${p['start_date']}'.substring(0, 7) : '';
+              final sd = parseThaiDate(p['start_date']);
+              final m = sd == null ? '' : '${sd.year}-${sd.month.toString().padLeft(2, '0')}';
               return (v.contains('this') && m == thisMonth) ||
                   (v.contains('last') && m == lastMonth) ||
                   (v.contains('year') && m.startsWith('${now.year}'));
@@ -441,7 +442,7 @@ class _LeaveRequestCard extends StatelessWidget {
     final who = row['user_name']?.toString();
     final reason = row['reason']?.toString() ?? '';
     final reject = row['reject_reason']?.toString() ?? '';
-    String d(dynamic v) => (v?.toString() ?? '').split('T').first;
+    String d(dynamic v) => thaiDate(v, year: uiYear);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(

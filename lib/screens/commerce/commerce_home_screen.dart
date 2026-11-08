@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/thai_time.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -247,7 +248,7 @@ class _OrdersTabState extends State<_OrdersTab> {
                               tr([
                                 o['customer_name']?.toString() ?? '',
                                 paymentStatusLabel(o['payment_status']?.toString()),
-                                (o['order_date']?.toString() ?? '').split('T').first,
+                                thaiDate(o['order_date'], year: uiYear),
                               ].where((e) => e.isNotEmpty).join(' · ')),
                             ),
                             trailing: Column(
