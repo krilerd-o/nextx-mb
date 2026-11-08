@@ -1416,6 +1416,7 @@ const Map<String, String> enStrings = {
   'ข้อความแชท และอีเมล': 'Chat messages and email',
   'เมนูและคำสั่ง — เช่น "ลา" "ลงเวลา" "ตั้งค่า"': 'Menus and actions — e.g. "leave", "clock in", "settings"',
   'เคล็ดลับ: พิมพ์อย่างน้อย 2 ตัวอักษร ผลลัพธ์จะขึ้นทีละกลุ่มทันทีที่พบ': 'Tip: type at least 2 letters; results appear group by group as they are found',
+  'เครื่องนี้ไม่มีบริการ Google — ติดตั้ง GBox หรือ microG หรือเข้าสู่ระบบด้วย LINE / OTP': 'This phone has no Google services — install GBox or microG, or sign in with LINE / OTP',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
