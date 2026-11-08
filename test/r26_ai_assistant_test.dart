@@ -12,6 +12,7 @@ import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/ai/assistant/ai_assistant_controller.dart';
 import 'package:nextx_mobile/screens/ai/assistant/ai_assistant_screen.dart';
 import 'package:nextx_mobile/screens/ai/assistant/ai_cards.dart';
+import 'package:nextx_mobile/services/api_exceptions.dart';
 import 'package:nextx_mobile/widgets/nx_markdown.dart';
 
 import 'support/fake_api.dart';
@@ -162,6 +163,23 @@ void main() {
     expect(find.byKey(const ValueKey('ai-error')), findsOneWidget);
     expect(find.text('[QA] ทดสอบ'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('HTTP error before the stream (503 AI_AUTO_NO_MODEL) shows Thai text', (tester) async {
+    await pump(tester, const AiAssistantScreen(), base, status: {'POST /api/ai/chat': 503});
+    await tester.enterText(find.byKey(const ValueKey('ai-input')), '[QA] สวัสดี');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('ai-send')));
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byKey(const ValueKey('ai-error')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-stop')), findsNothing);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  test('error text for the QA server reply', () {
+    expect(aiErrorText(ApiEnvelopeException(503, 'AI_AUTO_NO_MODEL', 'x')), contains('ยังไม่มีโมเดล AI'));
   });
 
   testWidgets('proposal card: confirm calls /tools/confirm and shows done', (tester) async {
