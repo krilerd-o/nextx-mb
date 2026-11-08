@@ -1683,6 +1683,9 @@ const Map<String, String> enStrings = {
   'เปิดดูได้โดยไม่ต้องเข้าสู่ระบบ': 'Can view without signing in',
   'แชทที่แชร์': 'Shared chat',
   'แชร์จาก ISAAC AI · อ่านอย่างเดียว': 'Shared from ISAAC AI · read-only',
+  'เช็กลิสต์': 'Checklist',
+  'เพิ่มรายการในเช็กลิสต์ แล้วกด Enter': 'Add a checklist item, then press Enter',
+  'คัดลอกงานย่อยและเช็กลิสต์ด้วย': 'Also copy subtasks and checklist',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

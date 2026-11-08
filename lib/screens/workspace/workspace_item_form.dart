@@ -343,7 +343,7 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
                 if (widget.duplicateFrom != null && _kind == 'task')
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(tr('คัดลอกงานย่อยและ Smart Checklist ด้วย')),
+                    title: Text(tr('คัดลอกงานย่อยและเช็กลิสต์ด้วย')),
                     subtitle: Text(tr('ไม่รวมเวลาที่ลงไว้และคอมเมนต์')),
                     value: _copyChildren,
                     onChanged: (v) => setState(() => _copyChildren = v),

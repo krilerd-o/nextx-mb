@@ -95,8 +95,8 @@ void main() {
       ),
     );
     expect(find.text('[QA] งานต้นฉบับ (สำเนา)'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('คัดลอกงานย่อยและ Smart Checklist ด้วย'), 300, scrollable: find.byType(Scrollable).first);
-    expect(find.text('คัดลอกงานย่อยและ Smart Checklist ด้วย'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('คัดลอกงานย่อยและเช็กลิสต์ด้วย'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('คัดลอกงานย่อยและเช็กลิสต์ด้วย'), findsOneWidget);
     await save(tester);
     final b = _body(adapter, 'POST /api/boards/1/tasks');
     expect(b['title'], '[QA] งานต้นฉบับ (สำเนา)');
