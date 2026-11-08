@@ -264,6 +264,33 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
     if (saved != null && mounted) _load();
   }
 
+  /// Long-press on +: choose Task or Epic.
+  Future<void> _createChoice() async {
+    HapticFeedback.mediumImpact();
+    final kind = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      useRootNavigator: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            key: const ValueKey('ws-create-task'),
+            leading: const Icon(NxI.checkSquare),
+            title: Text(tr('สร้าง Task')),
+            onTap: () => Navigator.pop(ctx, 'task'),
+          ),
+          ListTile(
+            key: const ValueKey('ws-create-epic'),
+            leading: const Icon(NxI.lightning),
+            title: Text(tr('สร้าง Epic')),
+            onTap: () => Navigator.pop(ctx, 'epic'),
+          ),
+        ]),
+      ),
+    );
+    if (kind != null && mounted) _create(kind: kind);
+  }
+
   void _toggle(Map<String, dynamic> item) {
     HapticFeedback.selectionClick();
     final id = '${item['id']}';
@@ -383,6 +410,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
             actions: [
             ],
             menu: [
+              NxHeaderMenuItem(label: 'สร้าง Task', icon: NxI.checkSquare, onTap: () => _create()),
               NxHeaderMenuItem(label: 'สร้าง Epic', icon: NxI.lightning, onTap: () => _create(kind: 'epic')),
             ],
           );
@@ -425,7 +453,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
 
     Widget body;
     if (_loading) {
-      body = const NxSkeletonList();
+      body = _view == 'kanban' ? const NxSkeletonBoard() : const NxSkeletonList();
     } else if (_error != null && _tasks.isEmpty) {
       body = Center(child: Text(tr(formatApiError(_error!))));
     } else if (_view == 'epic') {
@@ -449,7 +477,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
 
     return NxScrollScaffold(
       header: header,
-      floatingActionButton: _selected.isEmpty ? NxCreateFab(onPressed: () => _create()) : null,
+      floatingActionButton: _selected.isEmpty ? NxCreateFab(onPressed: () => _create(), onLongPress: _createChoice) : null,
       body: Column(
         children: [
           toolbar,

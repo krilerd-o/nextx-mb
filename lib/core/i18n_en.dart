@@ -1650,6 +1650,7 @@ const Map<String, String> enStrings = {
   'ยืนยันการทำงานบน CRM': 'Confirm CRM action',
   'ลิงก์หมดอายุ — แตะเพื่อสร้างใหม่': 'Link expired — tap to regenerate',
   'โหลดใหม่': 'Reload',
+  'สร้าง Task': 'Create task',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
