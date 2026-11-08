@@ -72,6 +72,7 @@ class NxI {
   static const receipt = LucideIcons300.receiptText;
   static const arrowRight = LucideIcons300.arrowRight;
   static const arrowDown = LucideIcons300.arrowDown;
+  static const userCircle = LucideIcons300.circleUser;
   static const send = LucideIcons300.send;
   static const cake = LucideIcons300.cake;
   static const cakeFill = LucideIcons500.cake;

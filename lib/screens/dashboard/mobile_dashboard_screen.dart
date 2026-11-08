@@ -27,6 +27,7 @@ import '../../core/home_layout.dart';
 import '../../core/recent_records.dart';
 import '../../widgets/nx_refresh.dart';
 import 'home_birthday_box.dart';
+import '../hr/attendance_punch_sheet.dart';
 
 /// Thai greeting for the hour of day.
 String greetingFor(DateTime now) {
@@ -384,6 +385,13 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       insetBody: false,
       header: NxAppHeader.hub(
         actions: [
+          // Search everything (customers, documents, tasks, chat, mail, menus).
+          IconButton(
+            key: const ValueKey('home-search'),
+            tooltip: tr('ค้นหาทุกอย่าง'),
+            icon: const Icon(NxI.magnifyingGlass),
+            onPressed: () => context.push(AppRoutes.globalSearch),
+          ),
         ],
       ),
       body: Builder(
@@ -402,6 +410,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                 ),
                 clockIn: clockIn,
                 clockOut: clockOut,
+                onPunch: (inn) async {
+                  final r = await showAttendancePunchSheet(context, clockIn: inn, clockedInAt: parseThai(clockIn));
+                  if (r != null && mounted) _load();
+                },
                 next: _upcoming().isEmpty ? null : _upcoming().first,
                 overdue: _count(counts, 'overdue'),
                 today: _count(counts, 'today'),
@@ -723,7 +735,11 @@ class _TodayCard extends StatelessWidget {
     required this.today,
     required this.upcoming,
     required this.hasWork,
+    this.onPunch,
   });
+
+  /// Opens the clock in / out window (true = clock in).
+  final void Function(bool clockIn)? onPunch;
 
   final bool showAttendance;
   final dynamic clockIn;
@@ -757,7 +773,7 @@ class _TodayCard extends StatelessWidget {
       rows.add(
         Row(
           children: [
-            _dot(cs.primary, NxI.clock, cs),
+            clockIn == null ? _dot(cs.primary, NxI.clock, cs) : _dot(const Color(0xFF16A34A), NxI.checkCircle, cs),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -786,7 +802,8 @@ class _TodayCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 18),
                 minimumSize: const Size(0, 40),
               ),
-              onPressed: () => context.push(AppRoutes.attendance),
+              key: const ValueKey('home-punch'),
+              onPressed: () => clockOut != null || onPunch == null ? context.push(AppRoutes.attendance) : onPunch!(clockIn == null),
               child: Text(tr(cta)),
             ),
           ],

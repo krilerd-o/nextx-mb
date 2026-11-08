@@ -260,6 +260,7 @@ class ApiClient {
     Map<String, dynamic>? query,
     Object? data,
     Options? options,
+    CancelToken? cancel,
   }) async {
     try {
       final isForm = data is FormData;
@@ -267,6 +268,7 @@ class ApiClient {
         path,
         queryParameters: query,
         data: data,
+        cancelToken: cancel,
         options: (options ?? Options()).copyWith(
           method: method,
           contentType: isForm ? null : options?.contentType,
@@ -533,6 +535,7 @@ class ApiClient {
     int? page,
     String? q,
     Map<String, String>? extra,
+    CancelToken? cancel,
   }) async {
     final p = page ?? ((offset ~/ (limit == 0 ? 30 : limit)) + 1);
     final query = <String, dynamic>{
@@ -541,7 +544,7 @@ class ApiClient {
       if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
       ...?extra,
     };
-    final env = await _send('GET', '/api/entity/$module', query: query);
+    final env = await _send('GET', '/api/entity/$module', query: query, cancel: cancel);
     final data = env['data'];
     final items = extractMapList(data);
     int? total;
@@ -1053,8 +1056,9 @@ class ApiClient {
     bool excludeDone = false,
     bool excludeEpic = false,
     int limit = 200,
+    CancelToken? cancel,
   }) async {
-    final env = await _send('GET', '/api/workspace/items', query: {
+    final env = await _send('GET', '/api/workspace/items', cancel: cancel, query: {
       if (boardIds != null && boardIds.isNotEmpty) 'board_ids': boardIds,
       if (q != null && q.isNotEmpty) 'q': q,
       if (assigneeId != null && assigneeId.isNotEmpty) 'assignee_id': assigneeId,
@@ -1676,8 +1680,8 @@ class ApiClient {
   }
 
   /// Full-text search across the rooms I belong to (`GET /api/chat/search`).
-  Future<List<Map<String, dynamic>>> searchChat(String q, {int limit = 30}) async {
-    final env = await _send('GET', '/api/chat/search', query: {'q': q, 'limit': '$limit'});
+  Future<List<Map<String, dynamic>>> searchChat(String q, {int limit = 30, CancelToken? cancel}) async {
+    final env = await _send('GET', '/api/chat/search', query: {'q': q, 'limit': '$limit'}, cancel: cancel);
     return extractMapList(env['data']);
   }
 
@@ -1964,8 +1968,8 @@ class ApiClient {
     }));
   }
   /// Search internal mail (subject / body / sender) — `GET /api/mail/search?q=`.
-  Future<List<Map<String, dynamic>>> searchMail(String q) async {
-    final env = await _send('GET', '/api/mail/search', query: {'q': q});
+  Future<List<Map<String, dynamic>>> searchMail(String q, {CancelToken? cancel}) async {
+    final env = await _send('GET', '/api/mail/search', query: {'q': q}, cancel: cancel);
     return extractMapList(env['data']);
   }
 
