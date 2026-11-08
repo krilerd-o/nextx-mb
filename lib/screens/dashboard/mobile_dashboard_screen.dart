@@ -26,6 +26,7 @@ import 'home_layout_editor.dart';
 import '../../core/home_layout.dart';
 import '../../core/recent_records.dart';
 import '../../widgets/nx_refresh.dart';
+import 'home_birthday_box.dart';
 
 /// Thai greeting for the hour of day.
 String greetingFor(DateTime now) {
@@ -187,7 +188,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
 
   int _pendingTotal() => _overdueTotal + _workItems().length;
 
+  int _revision = 0; // bumps on pull-to-refresh → boxes with their own data reload
+
   Future<void> _load() async {
+    _revision++;
     final had = _summary != null || _attendance != null || _work != null;
     setState(() {
       _loading = !had;
@@ -414,6 +418,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                 const _NoPending(),
               ],
             ],
+            'birthdays': [HomeBirthdayBox(revision: _revision)],
             'ai': [
               if (MenuAccess.allow(session, MenuAccess.ai)) ...[
                 const SizedBox(height: 12),

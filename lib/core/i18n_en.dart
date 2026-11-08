@@ -1321,6 +1321,12 @@ const Map<String, String> enStrings = {
   'อวยพรวันเกิด': 'Birthday greeting for',
   'ซ่อนวันเกิดลูกค้า': 'Hide customer birthdays',
   'แสดงวันเกิดลูกค้า': 'Show customer birthdays',
+  'วันเกิดลูกค้าวันนี้': 'Customer birthdays today',
+  'วันนี้ไม่มี': 'None today',
+  'แตะเพื่อดูในปฏิทิน': 'Tap to see it in the calendar',
+  'เตือนวันเกิดลูกค้าล่วงหน้า 1 วัน': 'Customer birthday reminder (1 day before)',
+  'Lead / Contact / Account · แจ้งเวลา 09:00 ของวันก่อนวันเกิด': 'Lead / Contact / Account · at 09:00 the day before',
+  'Lead / Contact / Account ที่เกิดวันนี้และพรุ่งนี้': 'Leads / contacts / accounts born today and tomorrow',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1498,4 +1504,9 @@ const Map<String, String> enPatterns = {
   'ตัวกรอง ({})': 'Filters ({})',
   'ผ่านมา {} วัน': '{} days ago',
   'ครบ {} ปี': 'Turns {}',
+  '{} คน': '{} people',
+  'พรุ่งนี้ {} คน': 'Tomorrow {}',
+  'และอีก {} คน': 'and {} more',
+  'พรุ่งนี้วันเกิด {}': 'Tomorrow is {}\'s birthday',
+  'พรุ่งนี้วันเกิดลูกค้า {} คน': '{} customer birthdays tomorrow',
 };

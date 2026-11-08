@@ -41,6 +41,7 @@ dependencies:
   lucide_icons_flutter: 4.0.1
   simple_icons: ^16.23.0
   device_info_plus: ^12.4.0
+  timezone: ^0.9.4
 
 dev_dependencies:
   flutter_test:

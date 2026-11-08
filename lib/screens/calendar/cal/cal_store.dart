@@ -7,7 +7,7 @@ import 'cal_model.dart';
 /// Activities for the calendar, loaded a month at a time and cached, so
 /// moving between views/periods only fetches what is missing.
 class CalStore extends ChangeNotifier {
-  CalStore(this._api) : birthdays = CalBirthdays(_api) {
+  CalStore(this._api, {String? scope}) : birthdays = CalBirthdays(_api, scope: scope) {
     birthdays.addListener(notifyListeners);
   }
 

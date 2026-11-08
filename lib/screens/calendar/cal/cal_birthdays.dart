@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/i18n.dart';
 import '../../../core/thai_time.dart';
 import '../../../services/api_client.dart';
+import '../../../services/birthday_reminders.dart';
 import '../../../widgets/nx_icons.dart';
 import '../../../widgets/nx_overlay_panel.dart';
 import 'cal_model.dart';
@@ -129,8 +130,18 @@ class CalBirthday {
 /// Pages of 500, up to [maxPerModule] per module; modules the user may not
 /// read are skipped quietly.
 class CalBirthdays extends ChangeNotifier {
-  CalBirthdays(this._api);
+  CalBirthdays(this._api, {this.scope});
   final ApiClient _api;
+
+  /// Server + user prefs scope: when set, reminders are rescheduled on load.
+  final String? scope;
+
+  /// Shared between Home and the calendar for a while (same API client).
+  static final Map<ApiClient, (DateTime, List<CalBirthday>)> _cache = {};
+  static const cacheFor = Duration(minutes: 30);
+
+  @visibleForTesting
+  static void clearCache() => _cache.clear();
 
   static const maxPerModule = 5000;
 
@@ -145,11 +156,19 @@ class CalBirthdays extends ChangeNotifier {
   Future<void> load({bool force = false}) async {
     if (_loading || (loaded && !force)) return;
     _loading = true;
-    final out = <CalBirthday>[];
-    await Future.wait([
-      for (final m in CalBirthday.fields.keys) _loadModule(m, out),
-    ]);
-    out.sort((a, b) => a.name.compareTo(b.name));
+    final hit = _cache[_api];
+    final List<CalBirthday> out;
+    if (!force && hit != null && DateTime.now().difference(hit.$1) < cacheFor) {
+      out = hit.$2;
+    } else {
+      out = <CalBirthday>[];
+      await Future.wait([
+        for (final m in CalBirthday.fields.keys) _loadModule(m, out),
+      ]);
+      out.sort((a, b) => a.name.compareTo(b.name));
+      _cache[_api] = (DateTime.now(), out);
+      if (scope != null) BirthdayReminders.instance.sync(out, scope: scope!);
+    }
     _all = out;
     _byMonthDay.clear();
     for (final b in out) {

@@ -12,6 +12,7 @@ class HomeLayout extends ChangeNotifier {
   static const Map<String, (String, String)> sections = {
     'today': ('วันนี้', 'ลงเวลา งานเลยกำหนด นัดถัดไป'),
     'pending': ('งานค้าง', 'กิจกรรมค้าง + งาน Workspace ค้าง'),
+    'birthdays': ('วันเกิดลูกค้าวันนี้', 'Lead / Contact / Account ที่เกิดวันนี้และพรุ่งนี้'),
     'quick': ('ทางลัด', 'ลงเวลา ขอลา แชท ปฏิทิน …'),
     'ai': ('สรุปโดย AI', 'สรุปวันนี้แบบสั้นๆ'),
     'work': ('งานของฉัน', 'งาน Workspace ที่มอบให้ฉัน'),
@@ -22,7 +23,7 @@ class HomeLayout extends ChangeNotifier {
   };
 
   static const List<String> defaultOrder = [
-    'today', 'pending', 'quick', 'ai', 'work', 'upcoming', 'recent', 'stats', 'sales',
+    'today', 'pending', 'birthdays', 'quick', 'ai', 'work', 'upcoming', 'recent', 'stats', 'sales',
   ];
 
   List<String> _order = List.of(defaultOrder);

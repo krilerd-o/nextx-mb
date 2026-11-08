@@ -23,6 +23,7 @@ class _HomeLayoutEditorScreenState extends State<HomeLayoutEditorScreen> {
   static const _icons = {
     'today': NxI.sun,
     'pending': NxI.warningCircle,
+    'birthdays': NxI.cake,
     'quick': NxI.lightning,
     'ai': NxI.sparkle,
     'work': NxI.kanban,

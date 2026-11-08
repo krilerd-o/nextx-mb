@@ -29,6 +29,8 @@ import 'profile_screen.dart' show showChangePasswordDialog;
 import 'spaces/space_switcher.dart' show showSpaceSwitcher, SpaceAvatar;
 import 'update_required_screen.dart';
 import 'dashboard/home_layout_editor.dart';
+import '../services/birthday_reminders.dart';
+import 'calendar/cal/cal_birthdays.dart';
 
 /// Profile hub — opened from the avatar (and Menu → ตั้งค่า). Everything the
 /// user can set, in groups: profile, Space & business, appearance (theme,
@@ -222,6 +224,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: 'ศูนย์การแจ้งเตือน',
         onTap: () => context.push(AppRoutes.notifications),
       )),
+      _Entry('การแจ้งเตือน', ['วันเกิด', 'birthday', 'ลูกค้า'], const _BirthdayReminderTile()),
       _Entry('การแจ้งเตือน', ['มีอะไรใหม่', 'ประกาศ', 'เวอร์ชัน'], _Tile(
         icon: NxI.megaphone,
         tint: const Color(0xFFF59E0B),
@@ -955,6 +958,54 @@ class _AppLockTileState extends State<_AppLockTile> {
                   if (mounted) setState(() => _busy = false);
                 },
         ),
+      ),
+    );
+  }
+}
+
+/// "เตือนวันเกิดลูกค้าล่วงหน้า 1 วัน" (09:00 the day before), on by default.
+class _BirthdayReminderTile extends StatefulWidget {
+  const _BirthdayReminderTile();
+
+  @override
+  State<_BirthdayReminderTile> createState() => _BirthdayReminderTileState();
+}
+
+class _BirthdayReminderTileState extends State<_BirthdayReminderTile> {
+  bool? _on;
+
+  @override
+  void initState() {
+    super.initState();
+    BirthdayReminders.isEnabled(context.read<AppConfig>().prefsScope).then((v) {
+      if (mounted) setState(() => _on = v);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _Tile(
+      icon: NxI.cake,
+      tint: const Color(0xFFEC4899),
+      title: 'เตือนวันเกิดลูกค้าล่วงหน้า 1 วัน',
+      subtitle: 'Lead / Contact / Account · แจ้งเวลา 09:00 ของวันก่อนวันเกิด',
+      trailing: Switch(
+        key: const ValueKey('settings-bday-remind'),
+        value: _on ?? true,
+        onChanged: _on == null
+            ? null
+            : (v) async {
+                setState(() => _on = v);
+                final config = context.read<AppConfig>();
+                List<CalBirthday>? all;
+                if (v) {
+                  final b = CalBirthdays(config.apiClient);
+                  await b.load();
+                  all = b.all;
+                  b.dispose();
+                }
+                await BirthdayReminders.setEnabled(config.prefsScope, v, birthdays: all);
+              },
       ),
     );
   }

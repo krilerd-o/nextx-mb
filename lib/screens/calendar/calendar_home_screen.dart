@@ -20,10 +20,10 @@ import '../../widgets/nx_list_toolbar.dart';
 import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../crm/entity_create_screen.dart';
-import '../crm/entity_detail_screen.dart';
 import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
 import 'activity_detail_screen.dart';
 import 'cal/cal_agenda_view.dart';
+import 'cal/cal_birthday_actions.dart';
 import 'cal/cal_birthdays.dart';
 import 'cal/cal_model.dart';
 import 'cal/cal_month_view.dart';
@@ -54,7 +54,7 @@ class CalendarHomeScreen extends StatefulWidget {
 enum _CalMode { calendar, incoming, pending }
 
 class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTickerProviderStateMixin {
-  late final CalStore _store = CalStore(context.read<AppConfig>().apiClient);
+  late final CalStore _store = CalStore(context.read<AppConfig>().apiClient, scope: context.read<AppConfig>().prefsScope);
   late final TabController _tabs = TabController(length: CalView.values.length, vsync: this, initialIndex: CalView.month.index);
   CalView _view = CalView.month;
   CalView _prev = CalView.month;
@@ -240,31 +240,9 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
 
   /// Birthday card → call / email / open the customer / plan a greeting.
   void _openBirthday(CalBirthday b, DateTime day, Rect? anchor) {
-    showCalBirthdayCard(
-      context,
-      b: b,
-      day: day,
-      anchor: anchor,
-      onOpenRecord: () => nxPush<void>(context, EntityDetailScreen(module: b.module, row: b.row)),
-      onPlanGreeting: () async {
-        final at = DateTime(day.year, day.month, day.day, 9);
-        await nxPush<void>(
-          context,
-          EntityCreateScreen(
-            module: 'activity',
-            title: 'นัดหมายใหม่',
-            initialValues: {
-              'subject': '${tr('อวยพรวันเกิด')} ${b.name}',
-              'date_start': ymdhm(at),
-              'date_end': ymdhm(at.add(const Duration(minutes: 30))),
-              'related_module': b.module,
-              'related_id': b.id,
-            },
-          ),
-        );
-        if (mounted) _reload();
-      },
-    );
+    openCalBirthday(context, b, day, anchor: anchor, onChanged: () {
+      if (mounted) _reload();
+    });
   }
 
   Future<void> _toggleBirthdays() async {
