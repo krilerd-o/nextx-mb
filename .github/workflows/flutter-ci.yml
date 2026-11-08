@@ -72,14 +72,14 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -n "$TESTER_B64" ]; then
-            echo "$TESTER_B64" | base64 -d > android/app/tester.keystore
+            python3 .github/scripts/secret_file.py TESTER_B64 android/app/tester.keystore
             printf 'storePassword=%s\nkeyAlias=tester\nkeyPassword=%s\n' "$TESTER_PASSWORD" "$TESTER_PASSWORD" > android/tester.properties
             echo "Tester key SHA-1:"; keytool -list -v -keystore android/app/tester.keystore -storepass "$TESTER_PASSWORD" -alias tester | grep -E 'SHA1'
           else
             echo "::warning::No ANDROID_TESTER_KEYSTORE_BASE64 secret — APKs use a random debug key, Google Sign-In will not work on them."
           fi
           if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > android/app/release.jks
+            python3 .github/scripts/secret_file.py KEYSTORE_B64 android/app/release.jks
             printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/key.properties
             echo "Release key SHA-1:"; keytool -list -v -keystore android/app/release.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | grep -E 'SHA1'
           fi
@@ -91,7 +91,7 @@ jobs:
           GSJ_B64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
           if [ -n "$GSJ_B64" ]; then
-            echo "$GSJ_B64" | base64 -d > android/app/google-services.json
+            python3 .github/scripts/secret_file.py GSJ_B64 android/app/google-services.json json
             echo "google-services.json written"
           else
             echo "::warning::No GOOGLE_SERVICES_JSON_BASE64 secret — push notifications are off in this build."
@@ -153,7 +153,7 @@ jobs:
         run: |
           if [ -n "$AGC_B64" ]; then
             mkdir -p android/app/src/main/assets
-            echo "$AGC_B64" | base64 -d > android/app/src/main/assets/agconnect-services.json
+            python3 .github/scripts/secret_file.py AGC_B64 android/app/src/main/assets/agconnect-services.json json
           else
             echo "::warning::No AGCONNECT_SERVICES_JSON_BASE64 secret — HMS push is off in the Huawei build."
           fi
@@ -214,7 +214,7 @@ jobs:
               echo "GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.${IOS_GOOGLE_CLIENT_ID%.apps.googleusercontent.com}"
             fi
           } > ios/Flutter/Secrets.xcconfig
-          if [ -n "$GSI_B64" ]; then echo "$GSI_B64" | base64 -d > ios/Runner/GoogleService-Info.plist; fi
+          if [ -n "$GSI_B64" ]; then python3 .github/scripts/secret_file.py GSI_B64 ios/Runner/GoogleService-Info.plist plist; fi
           [ -n "$IOS_GOOGLE_CLIENT_ID" ] || echo "::warning::No IOS_GOOGLE_CLIENT_ID secret — the Google button is hidden on iPhone."
           [ -n "$GSI_B64" ] || echo "::warning::No GOOGLE_SERVICE_INFO_PLIST_BASE64 secret — push notifications are off on iPhone."
           echo "DEFINES=--dart-define=NX_STORE=google --dart-define=NX_MAPS=$([ -n "$MAPS_API_KEY" ] && echo 1 || echo 0) --dart-define=NX_IOS_GOOGLE_CLIENT_ID=${IOS_GOOGLE_CLIENT_ID}" >> "$GITHUB_ENV"
@@ -231,11 +231,11 @@ jobs:
           security create-keychain -p "$KC_PW" "$KC"
           security set-keychain-settings -lut 21600 "$KC"
           security unlock-keychain -p "$KC_PW" "$KC"
-          echo "$CERT_B64" | base64 -d > "$RUNNER_TEMP/dist.p12"
+          python3 .github/scripts/secret_file.py CERT_B64 "$RUNNER_TEMP/dist.p12"
           security import "$RUNNER_TEMP/dist.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
           security set-key-partition-list -S apple-tool:,apple: -k "$KC_PW" "$KC" >/dev/null
           security list-keychain -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
-          echo "$PROFILE_B64" | base64 -d > "$RUNNER_TEMP/app.mobileprovision"
+          python3 .github/scripts/secret_file.py PROFILE_B64 "$RUNNER_TEMP/app.mobileprovision"
           security cms -D -i "$RUNNER_TEMP/app.mobileprovision" > "$RUNNER_TEMP/profile.plist"
           APPID=$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")
           case "$APPID" in
@@ -277,5 +277,5 @@ jobs:
         if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' && env.ASC_KEY_ID != '' && (github.ref == 'refs/heads/main' || inputs.testflight) }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$ASC_KEY_P8_B64" | base64 -d > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          python3 .github/scripts/secret_file.py ASC_KEY_P8_B64 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8 pem
           xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
