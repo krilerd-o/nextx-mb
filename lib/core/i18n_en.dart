@@ -1417,6 +1417,22 @@ const Map<String, String> enStrings = {
   'เมนูและคำสั่ง — เช่น "ลา" "ลงเวลา" "ตั้งค่า"': 'Menus and actions — e.g. "leave", "clock in", "settings"',
   'เคล็ดลับ: พิมพ์อย่างน้อย 2 ตัวอักษร ผลลัพธ์จะขึ้นทีละกลุ่มทันทีที่พบ': 'Tip: type at least 2 letters; results appear group by group as they are found',
   'เครื่องนี้ไม่มีบริการ Google — ติดตั้ง GBox หรือ microG หรือเข้าสู่ระบบด้วย LINE / OTP': 'This phone has no Google services — install GBox or microG, or sign in with LINE / OTP',
+  'ลบบัญชี': 'Delete account',
+  'เซิร์ฟเวอร์นี้ยังไม่รองรับการลบบัญชีในแอป ขอลบได้จากหน้าเว็บ': 'This server cannot delete accounts in the app yet. Request it on the web page.',
+  'ลบบัญชีแล้ว': 'Account deleted',
+  'ลบบัญชีแล้วกู้คืนเองไม่ได้': 'A deleted account cannot be restored',
+  'สิ่งที่ถูกลบ': 'What is removed',
+  'บัญชีผู้ใช้และการเข้าสู่ระบบทุกเครื่อง ข้อมูลส่วนตัวในโปรไฟล์ และการรับแจ้งเตือน': 'Your user account and sign-ins on every device, your profile details and notifications',
+  'สิ่งที่ยังอยู่กับธุรกิจ': 'What stays with the business',
+  'ข้อมูลงานที่บันทึกไว้ (ลูกค้า ใบเสนอราคา กิจกรรม ไฟล์) เป็นของธุรกิจ และประวัติการใช้งานเพื่อความปลอดภัย': 'Work records (customers, quotations, activities, files) belong to the business, plus security logs',
+  'ทุก Space ของบัญชีนี้': 'Every Space of this account',
+  'ถ้าใช้บัญชีเดียวกันหลายธุรกิจ จะเข้าไม่ได้ทั้งหมด': 'If you use this account in several businesses, you lose access to all of them',
+  'ฉันเข้าใจและต้องการลบบัญชีนี้': 'I understand and want to delete this account',
+  '2. ใส่รหัส OTP': '2. Enter the OTP code',
+  '3. พิมพ์ "ลบบัญชี" เพื่อยืนยัน': '3. Type "DELETE" to confirm',
+  'ลบบัญชีถาวร': 'Delete permanently',
+  'เปิดหน้าขอลบบัญชี': 'Open the deletion page',
+  'ปิดบัญชีถาวร ยืนยันด้วย OTP': 'Close your account for good, confirmed by OTP',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

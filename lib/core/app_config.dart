@@ -169,6 +169,16 @@ class AppConfig extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// After the account was deleted on the server: forget it on this device
+  /// (recent-accounts list) and sign this Space out.
+  Future<void> signOutDeletedAccount() async {
+    final email = (_session.email ?? '').trim();
+    if (email.isNotEmpty) {
+      await forgetRecentAccount(RecentAccount(server: _apiBaseUrl, loginId: email));
+    }
+    await logout();
+  }
+
   InviteLink? _pendingInvite;
 
   /// Invite link opened before sign-in / setup finished; used by the

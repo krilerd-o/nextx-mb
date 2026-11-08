@@ -478,6 +478,7 @@ class SettingsGroup extends StatelessWidget {
 /// optional control underneath (segmented picker, colour palette, preview).
 class SettingsTile extends StatelessWidget {
   const SettingsTile({
+    super.key,
     required this.icon,
     required this.tint,
     required this.title,
