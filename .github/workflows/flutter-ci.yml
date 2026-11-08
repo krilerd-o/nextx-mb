@@ -176,7 +176,7 @@ jobs:
           FIREBASE_ANDROID_APP_ID: '1:628579731141:android:4e5588d9e4984a67af12ac'
           BUILD_NAME: ${{ inputs.android_version }}
           BUILD_NUMBER: ${{ inputs.android_build }}
-          GROUPS: ${{ inputs.firebase_groups }}
+          TESTER_GROUPS: ${{ inputs.firebase_groups }}
           NOTES: ${{ inputs.release_notes }}
         run: |
           if [ -z "$SA_JSON" ]; then echo "::error::Add secret FIREBASE_APPDIST_SERVICE_ACCOUNT_JSON first (see docs/RELEASE_STORES.md)"; exit 1; fi
@@ -189,7 +189,7 @@ jobs:
           ls -la "$APK"
           [ -n "$NOTES" ] || NOTES="MOAI NEXT ${BUILD_NAME:-build} — $(git log -1 --pretty=%s)"
           DIST=""
-          [ -n "$GROUPS" ] && DIST="--groups $GROUPS"
+          [ -n "$TESTER_GROUPS" ] && DIST="--groups $TESTER_GROUPS"
           GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/appdist.json" npx -y firebase-tools@14 appdistribution:distribute "$APK" \
             --app "$FIREBASE_ANDROID_APP_ID" --release-notes "$NOTES" $DIST
           rm -f "$RUNNER_TEMP/appdist.json"
