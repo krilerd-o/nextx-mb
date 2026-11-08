@@ -15,6 +15,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_overlay_panel.dart';
 
 String formatBytes(dynamic raw) {
   final n = num.tryParse(raw?.toString() ?? '');
@@ -133,10 +134,10 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
   }
 
   Future<void> _addMenu() async {
-    final choice = await showModalBottomSheet<String>(
+    final choice = await showNxBlurPanel<String>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -214,14 +215,18 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
 
   Future<void> _itemMenu(Map<String, dynamic> item, {required bool folder}) async {
     final name = (folder ? item['name'] : item['file_name'])?.toString() ?? '';
-    final action = await showModalBottomSheet<String>(
+    // Grows out of the ⋯ button (see showNxBlurPanel), not a sheet.
+    final action = await showNxBlurPanel<String>(
       context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(title: Text(tr(name), style: Theme.of(ctx).textTheme.titleMedium)),
+            ListTile(
+              dense: true,
+              title: Text(tr(name), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(ctx).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+            ),
             if (!folder) ...[
               ListTile(leading: const Icon(NxI.arrowSquareOut), title: Text(tr('เปิด')), onTap: () => Navigator.pop(ctx, 'open')),
               ListTile(leading: const Icon(NxI.shareNetwork), title: Text(tr('แชร์')), onTap: () => Navigator.pop(ctx, 'share')),

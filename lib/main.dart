@@ -13,6 +13,7 @@ import 'core/error_reporting.dart';
 import 'services/api_client.dart';
 import 'services/device_push_service.dart';
 import 'app.dart';
+import 'widgets/nx_overlay_panel.dart' show NxTapTracker;
 
 void main() {
   ErrorReporting.runGuarded(() async {
@@ -23,6 +24,8 @@ void main() {
     await _initDeviceHeaders();
     await initFirebasePush();
     initAppAlice();
+    // Menus grow out of the button that opened them (see showNxBlurPanel).
+    NxTapTracker.ensure();
     runApp(
       ChangeNotifierProvider(
         create: (_) => AppConfig(),

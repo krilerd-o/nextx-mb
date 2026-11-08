@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../services/api_exceptions.dart';
-import '../../widgets/app_bottom_sheet.dart';
 import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
 import 'package:provider/provider.dart';
 
@@ -24,6 +23,7 @@ import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_overlay_panel.dart';
 
 class CalendarHomeScreen extends StatefulWidget {
   const CalendarHomeScreen({super.key});
@@ -140,12 +140,16 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> {
     if (id.isEmpty) return;
     final api = context.read<AppConfig>().apiClient;
     final messenger = ScaffoldMessenger.of(context);
-    final pick = await showAppBottomSheet<String>(
+    final title = entityTitle(row, module: 'activity');
+    final pick = await showNxBlurPanel<String>(
       context: context,
-      title: entityTitle(row, module: 'activity'),
-      child: Column(
+      builder: (context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          ListTile(
+            dense: true,
+            title: Text(tr(title), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          ),
           ListTile(leading: const Icon(NxI.copySimple), title: Text(tr('ทำซ้ำ')), onTap: () => Navigator.pop(context, 'dup')),
           ListTile(leading: const Icon(NxI.trash), title: Text(tr('ลบ')), onTap: () => Navigator.pop(context, 'del')),
         ],

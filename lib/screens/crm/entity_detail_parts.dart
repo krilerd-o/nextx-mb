@@ -9,7 +9,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_config.dart';
 import '../../services/api_exceptions.dart';
-import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_icons.dart';
@@ -19,6 +18,7 @@ import '../../core/i18n.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../core/thai_time.dart';
 import '../../core/entity_display.dart';
+import '../../widgets/nx_overlay_panel.dart';
 
 /// Field that holds a record's status / stage for [module] (first one present).
 String? entityStatusKey(Map<String, dynamic> row, String module) {
@@ -204,10 +204,9 @@ List<(Map<String, dynamic>, List<Map<String, dynamic>>)> threadComments(List<Map
 
 /// Picks files from camera / gallery / storage and returns them as uploads.
 Future<List<MultipartFile>> pickAttachments(BuildContext context) async {
-  final source = await showAppBottomSheet<String>(
+  final source = await showNxBlurPanel<String>(
     context: context,
-    title: 'แนบไฟล์',
-    child: Column(
+    builder: (context) => Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         ListTile(leading: const Icon(NxI.camera), title: Text(tr('ถ่ายรูป')), onTap: () => Navigator.pop(context, 'camera')),
