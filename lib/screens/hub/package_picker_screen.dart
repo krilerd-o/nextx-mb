@@ -102,8 +102,18 @@ class _PackagePickerScreenState extends State<PackagePickerScreen> {
     if (widget.manual && Navigator.of(context).canPop()) Navigator.of(context).pop(true);
   }
 
+  // System back does the same as the header's back (instead of closing the app).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PopScope(
+        canPop: widget.manual,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) context.read<AppConfig>().clearBusiness();
+        },
+        child: _buildPage(context),
+      );
+
+
+  Widget _buildPage(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final config = context.watch<AppConfig>();

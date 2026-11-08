@@ -378,7 +378,8 @@ class _LogTimeBodyState extends State<_LogTimeBody> {
     final theme = Theme.of(context);
     String two(int n) => n.toString().padLeft(2, '0');
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 4, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
+      // showAppBottomSheet already lifts the sheet above the keyboard.
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

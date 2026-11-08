@@ -43,8 +43,18 @@ class _RoleSetupScreenState extends State<RoleSetupScreen> {
     if (mounted) context.push(AppRoutes.tabSetup, extra: next);
   }
 
+  // System back does the same as the header's back (instead of closing the app).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PopScope(
+        canPop: widget.fromSettings,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) context.read<AppConfig>().clearPackage();
+        },
+        child: _buildPage(context),
+      );
+
+
+  Widget _buildPage(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Scaffold(

@@ -17,6 +17,7 @@ import 'task_detail_screen.dart';
 import 'workspace_board_screen.dart';
 import 'workspace_trash_screen.dart';
 import '../../widgets/nx_refresh.dart';
+import '../../widgets/nx_back_handler.dart';
 
 /// Which of my open items to show at the top.
 enum WsMyScope { today, overdue, week, all }
@@ -201,7 +202,10 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => NxBackHandler(active: _searching, onBack: _toggleSearch, child: _buildPage(context));
+
+
+  Widget _buildPage(BuildContext context) {
     final theme = Theme.of(context);
     final boards = _boards;
     final shownBoards = [

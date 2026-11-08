@@ -5,6 +5,7 @@ import '../core/app_config.dart';
 import '../core/entity_modules.dart';
 import '../core/navigation/notification_deep_link.dart';
 import '../services/api_client.dart';
+import '../widgets/nx_app_header.dart';
 import '../widgets/nx_cached_future.dart';
 import '../widgets/nx_skeleton.dart';
 import 'calendar/activity_detail_screen.dart';
@@ -49,10 +50,10 @@ class _EntityByIdLoaderState extends State<EntityByIdLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
+          return const _LoaderPage(child: NxSkeletonDetail());
         }
         if (snap.hasError) {
-          return Scaffold(body: Center(child: Text(tr(formatApiError(snap.error!)))));
+          return _LoaderPage(child: Center(child: Text(tr(formatApiError(snap.error!)))));
         }
         final row = {...?snap.data, 'id': widget.id};
         return EntityDetailScreen(
@@ -87,7 +88,7 @@ class _ActivityByIdLoaderState extends State<ActivityByIdLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
+          return const _LoaderPage(child: NxSkeletonDetail());
         }
         final row = {...?snap.data, 'id': widget.id};
         return ActivityDetailScreen(row: row);
@@ -148,15 +149,15 @@ class _BoardByCodeLoaderState extends State<BoardByCodeLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
+          return const _LoaderPage(child: NxSkeletonDetail());
         }
         if (snap.hasError) {
-          return Scaffold(body: NxErrorRetry(error: snap.error!, onRetry: () => setState(() => _future = _resolve())));
+          return _LoaderPage(child: NxErrorRetry(error: snap.error!, onRetry: () => setState(() => _future = _resolve())));
         }
         final board = snap.data;
         if (board == null) {
-          return Scaffold(
-            body: Center(child: Text(tr('ไม่พบบอร์ด ${widget.code}'))),
+          return _LoaderPage(
+            child: Center(child: Text(tr('ไม่พบบอร์ด ${widget.code}'))),
           );
         }
         return WorkspaceBoardScreen(board: board);
@@ -225,11 +226,11 @@ class _WorkspaceItemBySlugLoaderState extends State<WorkspaceItemBySlugLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
+          return const _LoaderPage(child: NxSkeletonDetail());
         }
         if (snap.hasError) {
-          return Scaffold(
-            body: NxErrorRetry(
+          return _LoaderPage(
+            child: NxErrorRetry(
               error: snap.error!,
               onRetry: () => setState(() => _future = _resolve()),
             ),
@@ -237,8 +238,8 @@ class _WorkspaceItemBySlugLoaderState extends State<WorkspaceItemBySlugLoader> {
         }
         final row = snap.data;
         if (row == null) {
-          return Scaffold(
-            body: Center(child: Text(tr('ไม่พบงาน ${widget.slug}'))),
+          return _LoaderPage(
+            child: Center(child: Text(tr('ไม่พบงาน ${widget.slug}'))),
           );
         }
         return TaskDetailScreen(task: row);
@@ -312,7 +313,7 @@ class _TaskRecordLoaderState extends State<_TaskRecordLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
+          return const _LoaderPage(child: NxSkeletonDetail());
         }
         return TaskDetailScreen(
           task: snap.data ?? {'id': widget.taskId, 'board_id': widget.boardId},
@@ -358,7 +359,7 @@ class _ChatByIdLoaderState extends State<ChatByIdLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const Scaffold(body: SafeArea(child: NxSkeletonDetail()));
+          return const _LoaderPage(child: NxSkeletonDetail());
         }
         return ChatRoomScreen(room: snap.data ?? {'id': widget.roomId, 'name': 'แชท'});
       },
@@ -374,4 +375,20 @@ class JobByIdLoader extends StatelessWidget {
   Widget build(BuildContext context) {
     return EntityDetailScreen(module: 'job', row: {'id': id});
   }
+}
+
+/// Loading / error page for a link: always has a header, so there is a way
+/// back (or home when the link opened the app).
+class _LoaderPage extends StatelessWidget {
+  const _LoaderPage({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: const PreferredSize(
+          preferredSize: Size.fromHeight(64),
+          child: SafeArea(bottom: false, child: NxAppHeader(title: '')),
+        ),
+        body: child,
+      );
 }

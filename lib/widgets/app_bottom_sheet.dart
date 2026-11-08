@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/effects.dart';
 import '../core/i18n.dart';
+import 'nx_overlay_panel.dart' show NxTapTracker;
 
 /// Bottom sheet route whose barrier blurs the page behind (expo-backdrop),
 /// falling back to a plain dim on lite/off devices.
@@ -15,6 +16,7 @@ class NxSheetRoute<T> extends ModalBottomSheetRoute<T> {
     super.showDragHandle = false,
     super.useSafeArea = false,
     super.settings,
+    super.anchorPoint,
   }) : super(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -94,9 +96,12 @@ Future<T?> showAppBottomSheet<T>({
   required String title,
   required Widget child,
 }) {
-  return Navigator.of(context).push<T>(
+  // Root navigator: above the tab bar and any nested list navigator, so
+  // system back closes the sheet. anchorPoint: opens on the tapped side of a fold.
+  return Navigator.of(context, rootNavigator: true).push<T>(
     NxSheetRoute<T>(
       blur: Effects.blur(context),
+      anchorPoint: NxTapTracker.recent(),
       builder: (ctx) => NxSheetBody(
         title: title,
         padding: EdgeInsets.only(
@@ -121,21 +126,35 @@ Future<T?> showNxSnapSheet<T>({
   double? initial,
 }) {
   final sizes = [...snaps]..sort();
-  return Navigator.of(context).push<T>(
+  return Navigator.of(context, rootNavigator: true).push<T>(
     NxSheetRoute<T>(
       blur: Effects.blur(context),
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        snap: true,
-        minChildSize: sizes.first * 0.6,
-        initialChildSize: initial ?? sizes.first,
-        maxChildSize: sizes.last,
-        snapSizes: sizes,
-        builder: (ctx, controller) => NxSheetBody(
-          title: title,
-          child: builder(ctx, controller),
+      anchorPoint: NxTapTracker.recent(),
+      // Lift the whole sheet above the keyboard (search fields in it).
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+        child: DraggableScrollableSheet(
+          expand: false,
+          snap: true,
+          minChildSize: sizes.first * 0.6,
+          initialChildSize: initial ?? sizes.first,
+          maxChildSize: sizes.last,
+          snapSizes: sizes,
+          builder: (ctx, controller) => NxSheetBody(
+            title: title,
+            child: builder(ctx, controller),
+          ),
         ),
       ),
     ),
   );
+}
+
+/// Height for a sheet of [fraction] of the screen that still fits above the
+/// keyboard (pair with bottom padding = viewInsets).
+double nxSheetHeight(BuildContext context, double fraction) {
+  final mq = MediaQuery.of(context);
+  final room = mq.size.height - mq.viewInsets.bottom - mq.padding.top - 24;
+  final want = mq.size.height * fraction;
+  return want < room ? want : (room < 160 ? 160 : room);
 }

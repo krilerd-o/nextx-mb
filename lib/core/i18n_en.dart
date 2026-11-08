@@ -1686,6 +1686,12 @@ const Map<String, String> enStrings = {
   'เช็กลิสต์': 'Checklist',
   'เพิ่มรายการในเช็กลิสต์ แล้วกด Enter': 'Add a checklist item, then press Enter',
   'คัดลอกงานย่อยและเช็กลิสต์ด้วย': 'Also copy subtasks and checklist',
+  'กดย้อนกลับอีกครั้งเพื่อออกจากแอป': 'Press back again to exit',
+  'กลับหน้าแรก': 'Back to home',
+  'ทิ้งข้อมูลที่กรอกไว้?': 'Discard what you entered?',
+  'ยังไม่ได้บันทึก ถ้าออกตอนนี้ข้อมูลที่กรอกจะหายไป': 'Not saved yet — leaving now loses what you entered',
+  'กรอกต่อ': 'Keep editing',
+  'ทิ้งและออก': 'Discard and leave',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

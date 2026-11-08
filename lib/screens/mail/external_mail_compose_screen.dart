@@ -9,6 +9,7 @@ import '../../widgets/nx_icons.dart';
 import '../crm/entity_detail_parts.dart' show pickAttachments;
 import 'mail_compose_screen.dart' show MailComposeMode, escapeHtml, plainTextToHtml;
 import '../../core/i18n.dart';
+import '../../widgets/nx_unsaved_guard.dart';
 
 final _emailRe = RegExp(r'^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$');
 
@@ -132,8 +133,16 @@ class _ExternalMailComposeScreenState extends State<ExternalMailComposeScreen> {
     }
   }
 
+  // Back / swipe asks before throwing away what was typed.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => NxUnsavedGuard(
+        enabled: true,
+        snapshot: () => [_to.text, _cc.text, _bcc.text, _subject.text, _body.text, _files.length].join('|'),
+        child: _buildForm(context),
+      );
+
+
+  Widget _buildForm(BuildContext context) {
     final title = switch (widget.mode) {
       MailComposeMode.reply => 'ตอบกลับ',
       MailComposeMode.forward => 'ส่งต่อ',

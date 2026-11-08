@@ -109,7 +109,14 @@ GoRouter createAppRouter(AppConfig config) {
       }
       final pending = PushNavigation.instance.take();
       if (pending != null && pending.isNotEmpty && pending != loc) {
-        return accessRedirectFor(config.session, pending) ?? pending;
+        // A tapped notification opens ON TOP of the app (home stays below),
+        // so back returns into the app instead of closing it.
+        final target = accessRedirectFor(config.session, pending) ?? pending;
+        final router = GoRouter.of(context);
+        WidgetsBinding.instance.addPostFrameCallback((_) => router.push(target));
+        final current = accessRedirectFor(config.session, loc);
+        if (loc == AppRoutes.splash) return AppRoutes.mainShell;
+        return current;
       }
       return accessRedirectFor(config.session, loc);
     },

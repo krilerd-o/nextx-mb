@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_config.dart';
@@ -6,6 +7,7 @@ import '../core/nx_breakpoint.dart';
 import '../services/offline_queue.dart';
 import '../services/unread_service.dart';
 import '../widgets/nx_scroll_scaffold.dart';
+import '../widgets/nx_back_handler.dart';
 import '../widgets/nx_icons.dart';
 import '../widgets/nx_invite_prompt.dart';
 import '../widgets/nx_tab_nav.dart';
@@ -142,17 +144,9 @@ class _AppShellState extends State<AppShell> {
     final destinations = [
       for (final id in ids)
         if (id == kMenuTabId)
-          const NxTabDestination(
-            icon: NxI.dotsThreeCircle,
-            selectedIcon: NxI.dotsThreeCircleFill,
-            label: 'เมนู',
-          )
+          const NxTabDestination(icon: NxI.dotsThreeCircle, selectedIcon: NxI.dotsThreeCircleFill, label: 'เมนู')
         else
-          NxTabDestination(
-            icon: shellTabById(id)!.icon,
-            selectedIcon: shellTabById(id)!.selectedIcon,
-            label: shellTabById(id)!.label,
-          ),
+          NxTabDestination(icon: shellTabById(id)!.icon, selectedIcon: shellTabById(id)!.selectedIcon, label: shellTabById(id)!.label),
     ];
     final nav = ListenableBuilder(
       listenable: UnreadNotifications.instance,
@@ -183,9 +177,7 @@ class _AppShellState extends State<AppShell> {
               for (final id in ids)
                 KeyedSubtree(
                   key: ValueKey('tab-$id'),
-                  child: _built.contains(id)
-                      ? shellTabScreen(id)
-                      : const SizedBox.shrink(),
+                  child: NxShellTabScope(tabId: id, child: _built.contains(id) ? shellTabScreen(id) : const SizedBox.shrink()),
                 ),
             ],
           ),
@@ -193,8 +185,9 @@ class _AppShellState extends State<AppShell> {
       ],
     );
 
+    final Widget page;
     if (bp.useRail) {
-      return Scaffold(
+      page = Scaffold(
         body: Row(
           children: [
             nav,
@@ -203,51 +196,80 @@ class _AppShellState extends State<AppShell> {
         ),
       );
     }
-
     // Every tab scrolls under the floating glass bar; content dissolves into a
     // progressive blur toward the bottom edge (pages pad via MediaQuery).
-    return Scaffold(
-      extendBody: true,
-      body: Stack(
-        children: [
-          stack,
-          // Tabs built on NxScrollScaffold blur under their own FAB; the hub
-          // tabs (own header, no FAB) get the band from here.
-          if (_hubTabs.contains(_current))
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              // Ends at about the middle of the floating tab bar (bar ≈ 76 + 10 margin).
-              height: 48 + MediaQuery.viewPaddingOf(context).bottom,
-              child: const NxEdgeBlur(fromTop: false, solidFraction: 0.5),
-            ),
-        ],
-      ),
-      // Slides away while reading down a page (or while dragging a card, so
-      // the drop dock has the bottom edge); a small scroll back brings it in.
-      // Its layout height stays, so pages don't jump.
-      bottomNavigationBar: ListenableBuilder(
-        listenable: Listenable.merge([NxChromeBus.hidden, NxChromeBus.dragging]),
-        child: nav,
-        builder: (context, child) {
-          final away = NxChromeBus.hidden.value || NxChromeBus.dragging.value;
-          return IgnorePointer(
-            ignoring: away,
-            child: AnimatedSlide(
-              offset: away ? const Offset(0, 1.5) : Offset.zero,
-              duration: const Duration(milliseconds: 280),
-              curve: away ? Curves.easeInCubic : Curves.easeOutCubic,
-              child: AnimatedOpacity(
-                opacity: away ? 0 : 1,
-                duration: const Duration(milliseconds: 220),
-                child: child,
+    else {
+      page = Scaffold(
+        extendBody: true,
+        body: Stack(
+          children: [
+            stack,
+            // Tabs built on NxScrollScaffold blur under their own FAB; the hub
+            // tabs (own header, no FAB) get the band from here.
+            if (_hubTabs.contains(_current))
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                // Ends at about the middle of the floating tab bar (bar ≈ 76 + 10 margin).
+                height: 48 + MediaQuery.viewPaddingOf(context).bottom,
+                child: const NxEdgeBlur(fromTop: false, solidFraction: 0.5),
               ),
-            ),
-          );
-        },
-      ),
+          ],
+        ),
+        // Slides away while reading down a page (or while dragging a card, so
+        // the drop dock has the bottom edge); a small scroll back brings it in.
+        // Its layout height stays, so pages don't jump.
+        bottomNavigationBar: ListenableBuilder(
+          listenable: Listenable.merge([NxChromeBus.hidden, NxChromeBus.dragging]),
+          child: nav,
+          builder: (context, child) {
+            final away = NxChromeBus.hidden.value || NxChromeBus.dragging.value;
+            return IgnorePointer(
+              ignoring: away,
+              child: AnimatedSlide(
+                offset: away ? const Offset(0, 1.5) : Offset.zero,
+                duration: const Duration(milliseconds: 280),
+                curve: away ? Curves.easeInCubic : Curves.easeOutCubic,
+                child: AnimatedOpacity(opacity: away ? 0 : 1, duration: const Duration(milliseconds: 220), child: child),
+              ),
+            );
+          },
+        ),
+      );
+    }
+    // System back on the shell: close what the tab has open (search, a
+    // selected row, a sub-folder) → back to the first tab → press twice to exit.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _onBack(ids);
+      },
+      child: page,
     );
+  }
+
+  DateTime? _lastBack;
+
+  void _onBack(List<String> ids) {
+    if (NxShellBack.instance.handle(_current)) return;
+    if (_current != ids.first) {
+      NxChromeBus.reset();
+      setState(() => _current = ids.first);
+      context.read<AppConfig>().setLastTab(ids.first);
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastBack != null && now.difference(_lastBack!) < const Duration(seconds: 2)) {
+      SystemNavigator.pop();
+      return;
+    }
+    _lastBack = now;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(key: const ValueKey('shell-exit-hint'), content: Text(tr('กดย้อนกลับอีกครั้งเพื่อออกจากแอป')), duration: const Duration(seconds: 2)),
+      );
   }
 }
 
@@ -269,14 +291,8 @@ class _PendingSyncBanner extends StatelessWidget {
             child: ListTile(
               dense: true,
               leading: Icon(NxI.cloud, color: cs.onTertiaryContainer),
-              title: Text(
-                tr('มี $n รายการรอส่ง (บันทึกตอนออฟไลน์)'),
-                style: TextStyle(color: cs.onTertiaryContainer),
-              ),
-              trailing: TextButton(
-                onPressed: () => context.read<AppConfig>().flushOfflineQueue(),
-                child: Text(tr('ส่งตอนนี้')),
-              ),
+              title: Text(tr('มี $n รายการรอส่ง (บันทึกตอนออฟไลน์)'), style: TextStyle(color: cs.onTertiaryContainer)),
+              trailing: TextButton(onPressed: () => context.read<AppConfig>().flushOfflineQueue(), child: Text(tr('ส่งตอนนี้'))),
             ),
           ),
         );

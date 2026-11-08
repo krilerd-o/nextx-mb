@@ -23,6 +23,7 @@ import '../../../widgets/nx_attachments.dart';
 import '../../../widgets/nx_icons.dart';
 import '../../../widgets/nx_markdown.dart';
 import '../../../widgets/nx_skeleton.dart';
+import '../../../widgets/nx_split_view.dart' show NxHingeSplit;
 import '../web_session_screen.dart';
 import 'ai_assistant_controller.dart';
 import 'ai_cards.dart';
@@ -479,8 +480,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               },
               onClose: _c.clearError,
             ),
-          if (_c.followUps.isNotEmpty && !_c.sending) _followUps(context),
-          _usageStrip(context),
+          if (_c.followUps.isNotEmpty && !_c.sending && !_cramped(context)) _followUps(context),
+          if (!_cramped(context)) _usageStrip(context),
           if (_c.contextModule != null) _contextChip(context),
           _composer(context),
         ],
@@ -492,24 +493,24 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         drawer: Drawer(child: SafeArea(child: _chatList(context))),
         body: chat,
       );
-    // Tablet / opened foldable: chats stay on the left (left of the fold).
-    final listWidth = bp.hinge != null ? bp.hinge!.left : 320.0;
+    // Tablet / opened foldable: chats stay on the left (left of the fold,
+    // measured from where this view starts, e.g. after the side rail).
+    final sidebar = Material(
+      key: const ValueKey('ai-chat-sidebar'),
+      color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+      child: SafeArea(right: false, child: _chatList(context, docked: true)),
+    );
     return Scaffold(
       key: _scaffold,
-      body: Row(
-        children: [
-          SizedBox(
-            key: const ValueKey('ai-chat-sidebar'),
-            width: listWidth,
-            child: Material(
-              color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-              child: SafeArea(right: false, child: _chatList(context, docked: true)),
+      body: bp.hinge != null
+          ? NxHingeSplit(hinge: bp.hinge!, list: sidebar, detail: chat)
+          : Row(
+              children: [
+                SizedBox(width: 320, child: sidebar),
+                VerticalDivider(width: 1, color: cs.outlineVariant),
+                Expanded(child: chat),
+              ],
             ),
-          ),
-          if (bp.hinge != null) SizedBox(width: bp.hinge!.width) else VerticalDivider(width: 1, color: cs.outlineVariant),
-          Expanded(child: chat),
-        ],
-      ),
     );
   }
 
@@ -903,6 +904,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     setState(() => _listening = true);
   }
 
+  /// Keyboard up in a short window: drop the extras around the composer.
+  bool _cramped(BuildContext context) => MediaQuery.viewInsetsOf(context).bottom > 0 && MediaQuery.sizeOf(context).height < 700;
+
   Widget _contextChip(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Padding(
@@ -956,7 +960,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               focusNode: _focus,
               enabled: !locked,
               minLines: 1,
-              maxLines: 6,
+              // Short window (landscape / split screen): keep the chat visible above the keyboard.
+              maxLines: MediaQuery.sizeOf(context).height < 520 ? 2 : 6,
               textInputAction: TextInputAction.newline,
               decoration: InputDecoration(
                 hintText: tr(locked ? 'โควตาหมด — ส่งข้อความไม่ได้' : 'ถามอะไรก็ได้…'),

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../core/nx_page_route.dart' show nxLeavePage;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -154,7 +156,7 @@ class _IsaacEmbedScreenState extends State<IsaacEmbedScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (await _back() && context.mounted) Navigator.of(context).pop();
+        if (await _back() && context.mounted) nxLeavePage(context);
       },
       child: Scaffold(
         appBar: PreferredSize(

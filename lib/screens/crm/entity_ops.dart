@@ -1546,6 +1546,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true, // fields stay reachable above the keyboard
         title: Text(tr('เพิ่มอะไหล่')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1708,6 +1709,7 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true, // fields stay reachable above the keyboard
         title: Text(tr('เพิ่ม manday')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1754,6 +1756,7 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true, // fields stay reachable above the keyboard
         title: Text(tr('ปรับ manday')),
         content: StatefulBuilder(
           builder: (context, setLocal) {
@@ -1888,6 +1891,7 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true, // fields stay reachable above the keyboard
         title: Text(tr('ขอ manday')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2076,6 +2080,7 @@ class _AccountMandayPanelState extends State<AccountMandayPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true, // fields stay reachable above the keyboard
         title: Text(tr('เพิ่มพูล manday')),
         content: Column(
           mainAxisSize: MainAxisSize.min,

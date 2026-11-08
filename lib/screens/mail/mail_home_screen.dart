@@ -34,6 +34,7 @@ import '../../core/entity_modules.dart';
 import '../../core/menu_access.dart';
 import '../../widgets/nx_list_toolbar.dart';
 import '../../widgets/nx_refresh.dart';
+import '../../widgets/nx_back_handler.dart';
 
 class MailHomeScreen extends StatefulWidget {
   const MailHomeScreen({super.key});
@@ -356,7 +357,21 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => NxBackHandler(
+        active: _searching,
+        onBack: () {
+          setState(() {
+            _searching = false;
+            _search.clear();
+            _query = '';
+          });
+          _reload();
+        },
+        child: _buildPage(context),
+      );
+
+  
+  Widget _buildPage(BuildContext context) {
     final twoPane = NxBreakpoint.of(context).twoPane;
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -626,6 +641,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
       ),
     );
     return NxSplitView(
+      onClose: () => setState(() => _selected = null),
       list: list,
       detail: _selected == null
           ? null

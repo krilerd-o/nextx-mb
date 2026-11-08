@@ -12,6 +12,7 @@ import '../../services/file_open.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_create_fab.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_back_handler.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
@@ -412,11 +413,10 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
       );
     }
 
-    return PopScope(
-      canPop: _folderId == null,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        // Back goes up one folder first.
+    // Back goes up one folder first (only while this tab is showing).
+    return NxBackHandler(
+      active: _folderId != null,
+      onBack: () {
         final parent = _breadcrumb.length >= 2 ? _breadcrumb[_breadcrumb.length - 2]['id']?.toString() : null;
         _goTo(parent);
       },

@@ -127,7 +127,10 @@ class _NxScrollScaffoldState extends State<NxScrollScaffold> {
     final barLift = underFloatingBar
         ? (MediaQuery.paddingOf(context).bottom - MediaQuery.viewPaddingOf(context).bottom).clamp(0.0, 200.0)
         : 0.0;
-    final fab = floatingActionButton == null
+    // While typing, the + button would sit right over the focused field.
+    // (MediaQuery for the rebuild; View for tab pages whose outer Scaffold already took the inset.)
+    final typing = MediaQuery.viewInsetsOf(context).bottom > 0 || View.of(context).viewInsets.bottom > 0;
+    final fab = floatingActionButton == null || typing
         ? null
         : ListenableBuilder(
             listenable: Listenable.merge([NxChromeBus.hidden, NxChromeBus.dragging]),

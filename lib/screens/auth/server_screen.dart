@@ -56,8 +56,18 @@ class _ServerScreenState extends State<ServerScreen> {
     context.go(AppRoutes.login);
   }
 
+  // System back does the same as the header's back (instead of closing the app).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) context.go(AppRoutes.welcome);
+        },
+        child: _buildPage(context),
+      );
+
+
+  Widget _buildPage(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final config = context.watch<AppConfig>();

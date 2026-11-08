@@ -665,6 +665,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
       module: widget.module,
       row: _selected!,
       embedded: true,
+      onDeleted: () => setState(() => _selected = null),
     );
   }
 
@@ -748,6 +749,10 @@ class _EntityListScreenState extends State<EntityListScreen> {
         body: NxSplitView(
           list: list,
           detail: _creating || _selected != null ? _detail() : null,
+          onClose: () => setState(() {
+            _selected = null;
+            _creating = false;
+          }),
         ),
       );
     }

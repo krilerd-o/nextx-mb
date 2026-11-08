@@ -9,6 +9,7 @@ import '../core/i18n.dart';
 import 'app_bottom_sheet.dart';
 import 'nx_chrome.dart';
 import 'nx_icons.dart';
+import 'nx_back_handler.dart';
 
 /// One choice inside a filter group.
 class NxFilterOption {
@@ -510,10 +511,15 @@ class _NxListToolbarState extends State<NxListToolbar> {
       hasFilters: widget.groups.isNotEmpty || widget.sorts.isNotEmpty,
       filterBadge: q.activeFilterCount + (sortOn ? 1 : 0),
     );
-    return NxChromeCollapse(
-      // Keep it open while the user is typing in it.
-      enabled: widget.collapsible && !_focus.hasFocus,
-      child: _body(context, q, quick, sheetGroups, sheetCount, chip, hasChips),
+    // Back closes an open search box before leaving the page.
+    return NxBackHandler(
+      active: _iconMode && _searchOpen,
+      onBack: _closeSearch,
+      child: NxChromeCollapse(
+        // Keep it open while the user is typing in it.
+        enabled: widget.collapsible && !_focus.hasFocus,
+        child: _body(context, q, quick, sheetGroups, sheetCount, chip, hasChips),
+      ),
     );
   }
 

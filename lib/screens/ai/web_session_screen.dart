@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../../core/nx_page_route.dart' show nxLeavePage;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -89,7 +91,7 @@ class _WebSessionScreenState extends State<WebSessionScreen> {
             return;
           }
         }
-        if (context.mounted) Navigator.of(context).pop();
+        if (context.mounted) nxLeavePage(context);
       },
       child: Scaffold(
         appBar: PreferredSize(

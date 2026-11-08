@@ -42,10 +42,14 @@ class EntityDetailScreen extends StatefulWidget {
     required this.module,
     required this.row,
     this.embedded = false,
+    this.onDeleted,
   });
 
   final String module;
   final Map<String, dynamic> row;
+
+  /// Embedded (two-pane): close the pane after a delete.
+  final VoidCallback? onDeleted;
   final bool embedded;
 
   @override
@@ -1020,7 +1024,11 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       label: entityTitle(_row, module: widget.module),
       commit: () => api.deleteEntity(widget.module, _id),
     );
-    if (!widget.embedded) Navigator.of(context).maybePop();
+    if (widget.embedded) {
+      widget.onDeleted?.call();
+    } else {
+      Navigator.of(context).maybePop();
+    }
   }
 
   Future<void> _openEdit(BuildContext context) async {

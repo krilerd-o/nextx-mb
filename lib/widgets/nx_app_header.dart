@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../core/app_config.dart';
 import '../core/entity_display.dart';
 import '../core/navigation/app_routes.dart';
+import 'nx_back_handler.dart' show NxShellTabScope;
 import 'nx_icons.dart';
 import '../screens/spaces/space_switcher.dart' show showSpaceSwitcher;
 import 'nx_notif_morph.dart';
@@ -115,6 +116,7 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
 
 class _CircleBtn extends StatelessWidget {
   const _CircleBtn({
+    super.key,
     required this.icon,
     required this.onTap,
     this.tooltip,
@@ -356,6 +358,9 @@ class _PageBar extends StatelessWidget {
     final folded = chrome != null && chrome.collapsed;
     // Collapsed toolbars leave their search / filter / view icons here.
     final chromeActions = chrome == null ? const <NxChromeAction>[] : [for (final a in chrome.actions) if (folded || a.pinned) a];
+    // Opened straight from a notification / link with nothing under it:
+    // the back arrow takes you home instead of being missing.
+    final homeBack = !canPop && header.automaticallyImplyLeading && nxIsOrphanAppPage(context);
     final leading = header.leading ??
         (canPop
             ? _CircleBtn(
@@ -363,7 +368,14 @@ class _PageBar extends StatelessWidget {
                 tooltip: tr('กลับ'),
                 onTap: () => Navigator.of(context).maybePop(),
               )
-            : null);
+            : homeBack
+                ? _CircleBtn(
+                    key: const ValueKey('nx-header-home-back'),
+                    icon: NxI.arrowLeft,
+                    tooltip: tr('กลับหน้าแรก'),
+                    onTap: () => context.go(AppRoutes.mainShell),
+                  )
+                : null);
     final big = header.largeTitle && !folded;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -453,4 +465,23 @@ class _PageBar extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Routes that are the first page of their own flow (no "back" expected).
+const _kFlowRoots = {
+  AppRoutes.splash, AppRoutes.login, AppRoutes.welcome, AppRoutes.server, AppRoutes.register,
+  AppRoutes.lineLogin, AppRoutes.linkConfirm, AppRoutes.package, AppRoutes.roleSetup, AppRoutes.tabSetup,
+  AppRoutes.updateRequired, AppRoutes.hub, AppRoutes.gettingStarted, AppRoutes.mainShell,
+};
+
+/// True for an app page that is alone on the stack outside the tabs (deep link / push).
+bool nxIsOrphanAppPage(BuildContext context) {
+  if (NxShellTabScope.maybeOf(context) != null) return false;
+  final router = GoRouter.maybeOf(context);
+  if (router == null) return false;
+  final path = router.routerDelegate.currentConfiguration.uri.path;
+  if (path.isEmpty || _kFlowRoots.contains(path)) return false;
+  // Only signed-in app pages (the onboarding steps have their own back).
+  return context.read<AppConfig>().isLoggedIn;
 }

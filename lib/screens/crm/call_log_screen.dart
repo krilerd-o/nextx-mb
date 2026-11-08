@@ -67,6 +67,7 @@ class _CallLogScreenState extends State<CallLogScreen> {
             },
           );
           return NxSplitView(
+            onClose: () => setState(() => _selected = null),
             list: items,
             detail: _selected == null
                 ? null
