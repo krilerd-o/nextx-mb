@@ -15,6 +15,7 @@ import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_logout.dart';
 import '../../widgets/nx_sliding_segmented.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../profile_edit_screen.dart';
@@ -82,19 +83,7 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
   }
 
   Future<void> _logout(AppConfig config) async {
-    final sp = config.activeSpace;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('ออกจากระบบ?')),
-        content: Text(tr('ออกจาก ${sp?.title ?? serverLabel(config.apiBaseUrl)} บนเครื่องนี้')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ออก'))),
-        ],
-      ),
-    );
-    if (ok == true) await config.logout();
+    if (await confirmNxLogout(context, config)) await config.logout();
   }
 
   @override
@@ -307,21 +296,9 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
             const SizedBox(height: 18),
             SettingsAppear(
               index: i++,
-              child: Material(
-                color: cs.errorContainer.withValues(alpha: 0.45),
-                borderRadius: BorderRadius.circular(20),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () => _logout(config),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(NxI.signOut, size: 20, color: cs.error),
-                      const SizedBox(width: 10),
-                      Text(tr('ออกจากระบบ Space นี้'), style: theme.textTheme.titleSmall?.copyWith(color: cs.error)),
-                    ]),
-                  ),
-                ),
+              child: NxLogoutButton(
+                onPressed: () => _logout(config),
+                subtitle: config.activeSpace?.title == null ? null : tr('เฉพาะ ${config.activeSpace!.title}'),
               ),
             ),
             if (config.spaces.length > 1)

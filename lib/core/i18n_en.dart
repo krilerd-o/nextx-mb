@@ -1666,6 +1666,11 @@ const Map<String, String> enStrings = {
   'เลือกบอร์ดก่อนยืนยัน': 'Select a board before confirming',
   'ดูไดอะแกรม': 'View diagram',
   'ไดอะแกรม': 'Diagram',
+  'ออกจากระบบใช่ไหม?': 'Sign out?',
+  'ข้อมูลและงานของคุณยังอยู่ครบ ไม่มีอะไรถูกลบ': 'Your data and work stay safe — nothing is deleted',
+  'กลับมาเข้าสู่ระบบได้อีกครั้งทุกเมื่อ ด้วยบัญชีเดิม': 'You can sign back in any time with the same account',
+  'Space อื่นในแอปยังใช้งานได้ตามปกติ': 'Your other Spaces in the app keep working',
+  'อยู่ต่อ': 'Stay signed in',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1873,4 +1878,5 @@ const Map<String, String> enPatterns = {
   'ลบ "{}" แล้ว': 'Deleted "{}"',
   'เหลือ {} / {}': '{} / {} left',
   'สลับไป {}': 'Switch to {}',
+  'เฉพาะ {}': 'Only {}',
 };

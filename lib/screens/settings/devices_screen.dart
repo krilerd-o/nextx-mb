@@ -7,6 +7,7 @@ import '../../core/app_config.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_logout.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../notifications/notification_center_screen.dart' show relativeTime;
@@ -107,7 +108,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
   Future<void> _logoutHere() async {
     final config = context.read<AppConfig>();
-    if (!await _confirm('ออกจากระบบเครื่องนี้?', 'ออกจาก ${config.activeSpace?.title ?? 'Space นี้'} บนเครื่องนี้ (Space อื่นยังใช้งานได้)', 'ออกจากระบบ')) return;
+    if (!await confirmNxLogout(context, config)) return;
     await config.logout();
   }
 
