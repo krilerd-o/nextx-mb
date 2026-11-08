@@ -13,6 +13,7 @@ import '../../widgets/nx_surface_card.dart';
 import '../../core/error_reporting.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_refresh.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -136,7 +137,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       header: const NxAppHeader(title: 'ลงเวลา'),
       body: _loading
           ? const NxSkeletonForm(fields: 4)
-          : RefreshIndicator(
+          : NxRefresh(
               color: theme.colorScheme.primary,
               onRefresh: _reload,
               child: ListView(

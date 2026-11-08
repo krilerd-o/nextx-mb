@@ -16,6 +16,7 @@ import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
 import '../../widgets/nx_overlay_panel.dart';
+import '../../widgets/nx_refresh.dart';
 
 String formatBytes(dynamic raw) {
   final n = num.tryParse(raw?.toString() ?? '');
@@ -423,7 +424,6 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         header: NxAppHeader(
           title: _breadcrumb.isEmpty ? 'ไฟล์' : (_breadcrumb.last['name']?.toString() ?? 'ไฟล์'),
           actions: [
-            IconButton(onPressed: _load, icon: const Icon(NxI.arrowCounterClockwise)),
             if (NxBreakpoint.of(context).twoPane) NxAddButton(tooltip: tr('เพิ่ม'), onPressed: _busy ? () {} : _addMenu),
           ],
         ),
@@ -431,7 +431,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         body: Column(
           children: [
             if (_busy) const LinearProgressIndicator(minHeight: 2),
-            Expanded(child: RefreshIndicator(onRefresh: _load, child: body)),
+            Expanded(child: NxRefresh(onRefresh: _load, child: body)),
           ],
         ),
       ),

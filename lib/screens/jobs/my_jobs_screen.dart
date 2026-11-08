@@ -36,15 +36,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
   Widget build(BuildContext context) {
     final twoPane = NxBreakpoint.of(context).twoPane;
     return NxScrollScaffold(
-      header: NxAppHeader(
-        title: 'งานภาคสนาม',
-        actions: [
-          IconButton(
-            icon: const Icon(NxI.arrowCounterClockwise),
-            onPressed: () => setState(() => _revision++),
-          ),
-        ],
-      ),
+      header: NxAppHeader(title: 'งานภาคสนาม'),
       body: NxCachedFuture<List<Map<String, dynamic>>>(
         revision: _revision,
         // Server returns at most 100 assigned jobs (no offset) — fetch them all, filter locally.
@@ -56,8 +48,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
           final statuses = <String>{
             for (final r in all)
               if ('${r['job_status'] ?? ''}'.isNotEmpty) '${r['job_status']}',
-          }.toList()
-            ..sort();
+          }.toList()..sort();
           String planOf(Map r) => '${r['plan_start'] ?? r['due_datetime'] ?? ''}';
           final today = thaiNow();
           bool onDay(Map r, Set<String> v) {
@@ -72,33 +63,31 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
           }
 
           final groups = [
-            if (statuses.isNotEmpty)
-              NxFilterGroup(key: 'status', label: 'สถานะ', options: [for (final st in statuses) NxFilterOption(st, st)]),
-            const NxFilterGroup(key: 'day', label: 'วันนัด', options: [
-              NxFilterOption('today', 'วันนี้'),
-              NxFilterOption('tomorrow', 'พรุ่งนี้'),
-              NxFilterOption('week', '7 วันข้างหน้า'),
-              NxFilterOption('overdue', 'เลยกำหนด'),
-              NxFilterOption('none', 'ยังไม่นัด'),
-            ]),
+            if (statuses.isNotEmpty) NxFilterGroup(key: 'status', label: 'สถานะ', options: [for (final st in statuses) NxFilterOption(st, st)]),
+            const NxFilterGroup(
+              key: 'day',
+              label: 'วันนัด',
+              options: [
+                NxFilterOption('today', 'วันนี้'),
+                NxFilterOption('tomorrow', 'พรุ่งนี้'),
+                NxFilterOption('week', '7 วันข้างหน้า'),
+                NxFilterOption('overdue', 'เลยกำหนด'),
+                NxFilterOption('none', 'ยังไม่นัด'),
+              ],
+            ),
           ];
           final list = nxApplyLocalQuery<Map<String, dynamic>>(
             all,
             _lq.copyWith(q: _query),
             text: (r) => '${entityTitle(r, module: 'job')} ${entitySubtitle(r) ?? ''} ${r['job_no'] ?? ''} ${r['customer_name'] ?? ''}',
-            filters: {
-              'status': (r, v) => v.contains('${r['job_status'] ?? ''}'),
-              'day': onDay,
-            },
+            filters: {'status': (r, v) => v.contains('${r['job_status'] ?? ''}'), 'day': onDay},
             sorts: {
               'plan_asc': (a, b) => (planOf(a).isEmpty ? 'z' : planOf(a)).compareTo(planOf(b).isEmpty ? 'z' : planOf(b)),
               'plan_desc': (a, b) => planOf(b).compareTo(planOf(a)),
               'new': (a, b) => '${b['createdtime'] ?? b['id'] ?? ''}'.compareTo('${a['createdtime'] ?? a['id'] ?? ''}'),
             },
           );
-          final items = RefreshIndicator(
-            onRefresh: () async => setState(() => _revision++),
-            child: ListView.builder(
+          final items = ListView.builder(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             itemCount: list.length + 1,
@@ -112,11 +101,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
                   quickGroup: 'day',
                   groups: groups,
                   resultCount: list.length,
-                  sorts: const [
-                    NxSortOption('plan_asc', 'วันนัดใกล้สุด'),
-                    NxSortOption('plan_desc', 'วันนัดล่าสุด'),
-                    NxSortOption('new', 'สร้างล่าสุด'),
-                  ],
+                  sorts: const [NxSortOption('plan_asc', 'วันนัดใกล้สุด'), NxSortOption('plan_desc', 'วันนัดล่าสุด'), NxSortOption('new', 'สร้างล่าสุด')],
                   onChanged: (q) => setState(() {
                     _query = q.q;
                     _lq = q.copyWith(q: '');
@@ -143,10 +128,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
                         tooltip: tr('เช็คอิน'),
                         icon: const Icon(NxI.clock),
                         onPressed: () {
-                          nxPush<void>(
-                            context,
-                            ActivityDetailScreen(row: {'id': strId(row['related_activity_id'])}),
-                          );
+                          nxPush<void>(context, ActivityDetailScreen(row: {'id': strId(row['related_activity_id'])}));
                         },
                       ),
                     IconButton(
@@ -159,18 +141,10 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
                 ),
               );
             },
-          ),
           );
           return NxSplitView(
             list: items,
-            detail: _selected == null
-                ? null
-                : EntityDetailScreen(
-                    key: ValueKey(_selected!['id']),
-                    module: 'job',
-                    row: _selected!,
-                    embedded: true,
-                  ),
+            detail: _selected == null ? null : EntityDetailScreen(key: ValueKey(_selected!['id']), module: 'job', row: _selected!, embedded: true),
           );
         },
       ),

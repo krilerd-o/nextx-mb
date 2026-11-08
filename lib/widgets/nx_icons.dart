@@ -71,6 +71,7 @@ class NxI {
   static const headsetFill = LucideIcons500.headset;
   static const receipt = LucideIcons300.receiptText;
   static const arrowRight = LucideIcons300.arrowRight;
+  static const arrowDown = LucideIcons300.arrowDown;
   static const chatCircle = LucideIcons300.messageCircle;
   static const robot = LucideIcons300.bot;
   static const folder = LucideIcons300.folder;

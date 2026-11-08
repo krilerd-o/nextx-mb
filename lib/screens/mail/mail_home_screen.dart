@@ -33,6 +33,7 @@ import '../../widgets/fields/nx_entity_picker_sheet.dart';
 import '../../core/entity_modules.dart';
 import '../../core/menu_access.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_refresh.dart';
 
 class MailHomeScreen extends StatefulWidget {
   const MailHomeScreen({super.key});
@@ -522,7 +523,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
       );
     }
     if (shown.isEmpty) {
-      return RefreshIndicator(
+      return NxRefresh(
         onRefresh: _reload,
         child: ListView(
           children: [
@@ -541,7 +542,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
       );
     }
     final acc = _account;
-    final list = RefreshIndicator(
+    final list = NxRefresh(
       onRefresh: _reload,
       child: ListView.builder(
         controller: _scroll,

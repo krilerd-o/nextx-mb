@@ -15,6 +15,7 @@ import '../../widgets/nx_icons.dart';
 import '../crm/order_summary_screen.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// NEXTX order queues (backend/src/services/commercialOrderQueueService.js).
 const orderQueues = <String, String>{
@@ -224,7 +225,7 @@ class _OrdersTabState extends State<_OrdersTab> {
                     orderId: _selected!['id'].toString(),
                     preview: _selected!,
                   ),
-            list: RefreshIndicator(
+            list: NxRefresh(
             onRefresh: _load,
             child: _loading
                 ? const NxSkeletonList()
@@ -401,7 +402,7 @@ class _StockTabState extends State<_StockTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return RefreshIndicator(
+    return NxRefresh(
       onRefresh: _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),

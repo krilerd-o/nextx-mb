@@ -17,6 +17,7 @@ import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// NEXTX notification categories (backend/src/services/notificationCategory.js).
 const notificationCategories = <String, String>{
@@ -347,7 +348,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
               if (reload) _reload();
             },
           ),
-          Expanded(child: RefreshIndicator(onRefresh: _reload, child: body)),
+          Expanded(child: NxRefresh(onRefresh: _reload, child: body)),
         ],
       ),
     );

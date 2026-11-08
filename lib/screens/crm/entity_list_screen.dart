@@ -28,6 +28,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/entity_display.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_refresh.dart';
 
 class EntityListScreen extends StatefulWidget {
   const EntityListScreen({
@@ -737,11 +738,6 @@ class _EntityListScreenState extends State<EntityListScreen> {
                 NxHeaderMenuItem(label: 'ปรับแต่งการ์ด', icon: NxI.squaresFour, onTap: _openCardEditor),
             ],
             actions: [
-              IconButton(
-                tooltip: tr('รีเฟรช'),
-                icon: const Icon(NxI.arrowCounterClockwise),
-                onPressed: () => _load(reset: true),
-              ),
               if (twoPane) NxAddButton(onPressed: _openCreate),
             ],
           );
@@ -804,7 +800,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     }
     final items = _visible;
     if (items.isEmpty) {
-      return RefreshIndicator(
+      return NxRefresh(
         color: theme.colorScheme.primary,
         onRefresh: () => _load(reset: true),
         child: ListView(
@@ -848,7 +844,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
         ),
       );
     }
-    return RefreshIndicator(
+    return NxRefresh(
       edgeOffset: top,
       color: theme.colorScheme.primary,
       onRefresh: () => _load(reset: true),

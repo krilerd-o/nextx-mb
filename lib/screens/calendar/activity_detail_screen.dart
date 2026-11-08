@@ -22,6 +22,7 @@ import 'visit_check_sheet.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
 import '../../core/recent_records.dart';
+import '../../widgets/nx_refresh.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
   const ActivityDetailScreen({super.key, required this.row});
@@ -337,7 +338,10 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         ],
       ),
       body: Builder(
-        builder: (context) => ListView(
+        builder: (context) => NxRefresh(
+          onRefresh: () => Future.wait([_loadRecord(), _loadVisit()]),
+          child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(
             16,
             8 + NxScrollScaffold.topInset(context),
@@ -532,6 +536,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               ),
             ],
           ],
+        ),
         ),
       ),
     );

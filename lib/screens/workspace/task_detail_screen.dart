@@ -31,6 +31,7 @@ import 'smart_checklist_section.dart';
 import 'workspace_item_form.dart';
 import 'ws_activity_panel.dart';
 import 'ws_detail_parts.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// NEXTX board priorities (backend/src/routes/boards.js).
 const taskPriorities = <String, String>{'highest': 'สูงสุด', 'high': 'สูง', 'medium': 'ปานกลาง', 'low': 'ต่ำ', 'lowest': 'ต่ำสุด'};
@@ -763,7 +764,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           ],
         ],
       ),
-      body: RefreshIndicator(
+      body: NxRefresh(
         onRefresh: () async {
           await _load();
           await _activity.currentState?.reload();

@@ -18,6 +18,7 @@ import '../../widgets/nx_surface_card.dart';
 import '../crm/entity_list_screen.dart';
 import '../jobs/my_jobs_screen.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_refresh.dart';
 
 class FsmHomeScreen extends StatefulWidget {
   const FsmHomeScreen({super.key});
@@ -132,7 +133,10 @@ class _FsmHomeScreenState extends State<FsmHomeScreen> {
         title: 'FSM',
         subtitle: 'งานบริการภาคสนาม',
       ),
-      body: ListView(
+      body: NxRefresh(
+          onRefresh: _loadCounts,
+          child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
         padding: bp.scrollPadding(context),
         children: [
           LayoutBuilder(
@@ -179,6 +183,7 @@ class _FsmHomeScreenState extends State<FsmHomeScreen> {
           ),
         ],
       ),
+        ),
     );
   }
 }

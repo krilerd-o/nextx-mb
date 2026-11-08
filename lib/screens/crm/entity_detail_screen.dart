@@ -31,6 +31,7 @@ import '../../core/recent_records.dart';
 import '../../core/detail_fields_pref.dart';
 import '../calendar/activity_detail_screen.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../widgets/nx_refresh.dart';
 
 class EntityDetailScreen extends StatefulWidget {
   const EntityDetailScreen({
@@ -445,7 +446,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             : null,
       ),
       body: Builder(
-        builder: (context) => RefreshIndicator(
+        builder: (context) => NxRefresh(
           edgeOffset: NxScrollScaffold.topInset(context),
           color: theme.colorScheme.primary,
           onRefresh: _reload,

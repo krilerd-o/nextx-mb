@@ -25,6 +25,7 @@ import '../../core/nx_page_route.dart';
 import 'home_layout_editor.dart';
 import '../../core/home_layout.dart';
 import '../../core/recent_records.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// Thai greeting for the hour of day.
 String greetingFor(DateTime now) {
@@ -379,11 +380,6 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
       insetBody: false,
       header: NxAppHeader.hub(
         actions: [
-          IconButton(
-            icon: const Icon(NxI.arrowCounterClockwise),
-            tooltip: tr('รีเฟรช'),
-            onPressed: _load,
-          ),
         ],
       ),
       body: Builder(
@@ -562,7 +558,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
                             padding: listPad,
                             children: const [NxSkeletonKpiGrid()],
                           )
-                        : RefreshIndicator(
+                        : NxRefresh(
                             edgeOffset: NxScrollScaffold.topInset(context),
                             color: cs.primary,
                             onRefresh: _load,

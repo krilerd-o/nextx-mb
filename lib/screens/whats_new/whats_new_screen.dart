@@ -11,6 +11,7 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// Thai label + colour for an announcement `type`.
 (String, Color) whatsNewType(String? type) {
@@ -107,7 +108,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
         child: Text(tr('ยังไม่มีประกาศ'), style: theme.textTheme.bodyLarge),
       );
     } else {
-      body = RefreshIndicator(
+      body = NxRefresh(
         onRefresh: _load,
         child: Builder(
           builder: (context) => ListView.builder(

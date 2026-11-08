@@ -37,12 +37,6 @@ class _CallLogScreenState extends State<CallLogScreen> {
     return NxScrollScaffold(
       header: NxAppHeader(
         title: 'บันทึกการโทร',
-        actions: [
-          IconButton(
-            icon: const Icon(NxI.arrowCounterClockwise),
-            onPressed: () => setState(() => _revision++),
-          ),
-        ],
       ),
       body: NxCachedFuture<List<Map<String, dynamic>>>(
         revision: _revision,

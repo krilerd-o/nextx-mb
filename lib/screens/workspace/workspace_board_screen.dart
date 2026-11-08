@@ -21,6 +21,7 @@ import '../../widgets/nx_skeleton.dart';
 import 'task_detail_screen.dart';
 import 'workspace_item_form.dart';
 import 'ws_kanban.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// One board: Kanban (drag & drop with edge auto-scroll), grouped list, or
 /// epics; search/filters; quick add per column; multi-select actions.
@@ -380,7 +381,6 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
             title: name,
             subtitle: _code.isEmpty ? null : _code,
             actions: [
-              IconButton(tooltip: tr('รีเฟรช'), icon: const Icon(NxI.arrowCounterClockwise), onPressed: _load),
             ],
             menu: [
               NxHeaderMenuItem(label: 'สร้าง Epic', icon: NxI.lightning, onTap: () => _create(kind: 'epic')),
@@ -468,7 +468,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
   }
 
   Widget _groupedList(ThemeData theme, List<Map<String, dynamic>> tasks) {
-    return RefreshIndicator(
+    return NxRefresh(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),

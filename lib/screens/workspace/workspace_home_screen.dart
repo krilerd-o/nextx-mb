@@ -15,6 +15,7 @@ import '../../widgets/nx_skeleton.dart';
 import 'task_detail_screen.dart';
 import 'workspace_board_screen.dart';
 import 'workspace_trash_screen.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// Which of my open items to show at the top.
 enum WsMyScope { overdue, today, week, all }
@@ -177,10 +178,9 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
               if (mounted) _load();
             },
           ),
-          IconButton(tooltip: tr('รีเฟรช'), icon: const Icon(NxI.arrowCounterClockwise), onPressed: _load),
         ],
       ),
-      body: RefreshIndicator(
+      body: NxRefresh(
         onRefresh: _load,
         child: boards == null && _error == null
             ? const NxSkeletonList()

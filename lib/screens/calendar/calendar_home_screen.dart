@@ -29,6 +29,7 @@ import 'cal/cal_store.dart';
 import 'cal/cal_time_grid.dart';
 import 'cal/cal_widgets.dart';
 import 'cal/cal_year_view.dart';
+import '../../widgets/nx_refresh.dart';
 
 export 'cal/cal_model.dart' show groupActivitiesByDay, activityTimeLabel, weekStart, CalView;
 
@@ -366,7 +367,6 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
           if (_mode != _CalMode.calendar) NxHeaderMenuItem(label: 'ปฏิทิน', icon: NxI.calendarBlank, onTap: () => _setMode(_CalMode.calendar)),
           if (showIncoming && _mode != _CalMode.incoming) NxHeaderMenuItem(label: 'งานใกล้ถึง', icon: NxI.clockCountdown, onTap: () => _setMode(_CalMode.incoming)),
           if (showPending && _mode != _CalMode.pending) NxHeaderMenuItem(label: 'งานค้าง', icon: NxI.warningCircle, onTap: () => _setMode(_CalMode.pending)),
-          NxHeaderMenuItem(label: 'รีเฟรช', icon: NxI.arrowCounterClockwise, onTap: _reload),
         ],
       ),
       floatingActionButton: Column(
@@ -406,7 +406,11 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
           Expanded(
             key: _bodyKey,
             child: ClipRect(
-              child: AnimatedSwitcher(
+              // Pull down at the top of any view to reload (no refresh button).
+              child: NxRefresh(
+                notificationPredicate: (n) => n.depth <= 2,
+                onRefresh: _reload,
+                child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 340),
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
@@ -425,6 +429,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
                   );
                 },
                 child: KeyedSubtree(key: ValueKey(_viewKey), child: _buildView()),
+              ),
               ),
             ),
           ),

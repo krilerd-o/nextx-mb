@@ -11,6 +11,7 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../commerce/commerce_home_screen.dart' show formatBaht, paymentStatusLabel;
 import '../../core/i18n.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// `GET /api/commercial/orders/:id` returns `{order, lines, address}`; older
 /// callers passed the order row directly — accept both.
@@ -118,7 +119,10 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
       ),
       body: _loading
           ? const NxSkeletonForm(fields: 4)
-          : ListView(
+          : NxRefresh(
+          onRefresh: _load,
+          child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               children: [
                 if (_busy) const LinearProgressIndicator(minHeight: 2),
@@ -197,6 +201,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                 ),
               ],
             ),
+        ),
     );
   }
 }

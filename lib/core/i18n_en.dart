@@ -1310,6 +1310,7 @@ const Map<String, String> enStrings = {
   'เพิ่มกิจกรรม': 'Add activity',
   'ทั้งวัน': 'All day',
   'ต่อ': 'cont.',
+  'อัปเดตแล้ว': 'Updated',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

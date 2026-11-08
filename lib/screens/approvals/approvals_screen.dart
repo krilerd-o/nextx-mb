@@ -17,6 +17,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
 import '../../core/thai_time.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// Everything waiting for the current user's decision, gathered from the
 /// NEXTX endpoints that already exist (quotation approval chain, HR leave,
@@ -131,16 +132,10 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     return NxScrollScaffold(
       header: NxAppHeader(
         title: 'รออนุมัติ',
-        actions: [
-          IconButton(
-            onPressed: () => setState(() => _revision++),
-            icon: const Icon(NxI.arrowCounterClockwise),
-          ),
-        ],
       ),
       body: sections.isEmpty
           ? Center(child: Text(tr('ไม่มีสิทธิ์อนุมัติรายการใด')))
-          : RefreshIndicator(
+          : NxRefresh(
               onRefresh: () async => setState(() => _revision++),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),

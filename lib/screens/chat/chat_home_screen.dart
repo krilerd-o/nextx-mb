@@ -21,6 +21,7 @@ import 'chat_search_screen.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_refresh.dart';
 
 class ChatHomeScreen extends StatefulWidget {
   const ChatHomeScreen({super.key});
@@ -225,7 +226,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
               'name': (a, b) => '${a['name'] ?? ''}'.toLowerCase().compareTo('${b['name'] ?? ''}'.toLowerCase()),
             },
           );
-          final items = RefreshIndicator(
+          final items = NxRefresh(
             onRefresh: () async => setState(() => _revision++),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),

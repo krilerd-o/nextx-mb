@@ -10,6 +10,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_refresh.dart';
 
 /// Workspace trash (`/api/workspace/trash`): restore, or delete for good
 /// when the server says this user may purge.
@@ -133,7 +134,7 @@ class _WorkspaceTrashScreenState extends State<WorkspaceTrashScreen> {
     final cs = theme.colorScheme;
     return NxScrollScaffold(
       header: NxAppHeader(title: 'ถังขยะ Workspace', subtitle: _loading ? null : tr('$_total รายการ')),
-      body: RefreshIndicator(
+      body: NxRefresh(
         onRefresh: _load,
         child: _loading
             ? const NxSkeletonList()
