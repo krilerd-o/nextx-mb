@@ -12,6 +12,9 @@ import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
 
+/// Passed steps are green with a check, like the CRM stepper.
+const _green = Color(0xFF16A34A);
+
 /// Status stepper: the board's statuses in order, the current one filled.
 /// Tapping another step changes the status (with a haptic tick).
 class WsStatusStepper extends StatelessWidget {
@@ -37,7 +40,7 @@ class WsStatusStepper extends StatelessWidget {
           child: Container(
             width: 14,
             height: 2,
-            color: i < at ? statuses[i].color.withValues(alpha: 0.7) : cs.outlineVariant,
+            color: i < at ? _green.withValues(alpha: 0.7) : cs.outlineVariant,
           ),
         ),
         itemBuilder: (context, i) {
@@ -62,22 +65,30 @@ class WsStatusStepper extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: on ? s.color : (passed ? s.color.withValues(alpha: 0.12) : cs.surfaceContainerHighest),
+                  color: on ? s.color : (passed ? _green.withValues(alpha: 0.14) : cs.surfaceContainerHighest),
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: on || passed ? s.color : cs.outlineVariant, width: 1.2),
+                  border: Border.all(color: on ? s.color : (passed ? _green : cs.outlineVariant), width: 1.2),
                   boxShadow: on ? [BoxShadow(color: s.color.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))] : null,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (passed || (on && s.isDone)) ...[
-                      Icon(NxI.check, size: 14, color: on ? Colors.white : s.color),
+                    if (passed)
+                      Container(
+                        width: 16,
+                        height: 16,
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: const BoxDecoration(color: _green, shape: BoxShape.circle),
+                        child: const Icon(NxI.check, size: 11, color: Colors.white),
+                      )
+                    else if (on && s.isDone) ...[
+                      const Icon(NxI.check, size: 14, color: Colors.white),
                       const SizedBox(width: 4),
                     ],
                     Text(
                       s.label,
                       style: theme.textTheme.labelLarge?.copyWith(
-                        color: on ? Colors.white : (passed ? s.color : cs.onSurfaceVariant),
+                        color: on ? Colors.white : (passed ? (theme.brightness == Brightness.dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D)) : cs.onSurfaceVariant),
                         fontWeight: on ? FontWeight.w800 : FontWeight.w600,
                       ),
                     ),

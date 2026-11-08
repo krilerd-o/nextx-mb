@@ -27,7 +27,7 @@ class NxFieldStyle {
     );
   }
 
-  static const double lineHeight = 22;
+  static const double lineHeight = 24;
 
   static TextStyle restingStyle(ColorScheme scheme) => TextStyle(
         color: scheme.onSurfaceVariant,
@@ -154,6 +154,7 @@ class NxOutlinedTapField extends StatelessWidget {
     this.enabled = true,
     this.errorText,
     this.suffixIcon,
+    this.prefixIcon,
     this.onTap,
   });
 
@@ -164,6 +165,9 @@ class NxOutlinedTapField extends StatelessWidget {
   final bool enabled;
   final String? errorText;
   final Widget? suffixIcon;
+
+  /// Field type icon — always on the left, like the text inputs.
+  final Widget? prefixIcon;
   final VoidCallback? onTap;
 
   @override
@@ -180,6 +184,7 @@ class NxOutlinedTapField extends StatelessWidget {
           required: required,
           errorText: trn(errorText),
           suffixIcon: suffixIcon,
+          prefixIcon: prefixIcon,
           floatLabel: !isEmpty,
           skipRestingHint: true,
         ),

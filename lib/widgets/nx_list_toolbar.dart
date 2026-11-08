@@ -315,6 +315,21 @@ class _NxListToolbarState extends State<NxListToolbar> {
     super.dispose();
   }
 
+  /// Search icon in the header → open the box *and* the keyboard, ready to
+  /// type (the box may only be laid out after the header unfolds).
+  void _focusSearchSoon([int tries = 0]) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      _focus.requestFocus();
+      if (_focus.hasFocus || tries >= 6) {
+        _c.selection = TextSelection.collapsed(offset: _c.text.length);
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      _focusSearchSoon(tries + 1);
+    });
+  }
+
   /// Header icons left behind while folded: search, filter (with badge).
   void _registerChrome({required int filterBadge, required bool hasFilters}) {
     final chrome = _chrome;
@@ -333,9 +348,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
           badge: widget.query.q.isEmpty ? 0 : 1,
           onTap: () {
             chrome.expand();
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _focus.requestFocus();
-            });
+            _focusSearchSoon();
           },
         ),
       if (hasFilters)

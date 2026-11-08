@@ -157,7 +157,7 @@ class NxFormField extends StatelessWidget {
           onChanged: _on ? (v) => onChanged?.call(v) : null,
           hint: hint ?? 'name@email.com',
           keyboard: TextInputType.emailAddress,
-          suffix: IconButton(
+          prefix: IconButton(
             tooltip: tr('ส่งอีเมล'),
             onPressed: () => _launchAction(FieldUiType.email, value?.toString()),
             icon: Icon(nxTypeIcon(IconDataSpec.email), size: 20, color: _muted(context)),
@@ -170,7 +170,7 @@ class NxFormField extends StatelessWidget {
           onChanged: _on ? (v) => onChanged?.call(digitsOnly(v, 10)) : null,
           hint: hint ?? '0xx-xxx-xxxx',
           keyboard: TextInputType.phone,
-          suffix: IconButton(
+          prefix: IconButton(
             tooltip: tr('โทร'),
             onPressed: () => _launchAction(FieldUiType.phone, digitsOnly(value, 10)),
             icon: Icon(nxTypeIcon(IconDataSpec.phone), size: 20, color: _muted(context)),
@@ -184,7 +184,7 @@ class NxFormField extends StatelessWidget {
           onChanged: _on ? (v) => onChanged?.call(v) : null,
           hint: hint ?? 'https://',
           keyboard: TextInputType.url,
-          suffix: IconButton(
+          prefix: IconButton(
             tooltip: tr('เปิดลิงก์'),
             onPressed: () => _launchAction(FieldUiType.link, value?.toString()),
             icon: Icon(nxTypeIcon(IconDataSpec.link), size: 20, color: _muted(context)),
@@ -1216,8 +1216,8 @@ class _DateTrigger extends StatelessWidget {
       isEmpty: empty,
       enabled: enabled,
       onTap: onTap,
-      suffixIcon: Icon(icon, size: 20, color: muted),
-      child: empty ? const SizedBox(height: 22) : Text(tr(text)),
+      prefixIcon: Icon(icon, size: 20, color: muted),
+      child: empty ? const SizedBox(height: NxFieldStyle.lineHeight) : Text(tr(text)),
     );
   }
 }
@@ -1254,9 +1254,10 @@ class _SelectTrigger extends StatelessWidget {
       isEmpty: empty,
       enabled: enabled,
       onTap: onTap,
+      prefixIcon: Icon(NxI.listBullets, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
       suffixIcon: Icon(NxI.caretDown, color: Theme.of(context).colorScheme.onSurfaceVariant),
       child: empty
-          ? const SizedBox(height: 22)
+          ? const SizedBox(height: NxFieldStyle.lineHeight)
           : Row(
               children: [
                 if (radio)
@@ -1312,9 +1313,11 @@ class _PersonTrigger extends StatelessWidget {
       isEmpty: empty,
       enabled: enabled,
       onTap: onTap,
+      // Filled: the avatar is the icon.
+      prefixIcon: empty ? Icon(NxI.user, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant) : null,
       suffixIcon: Icon(NxI.caretDown, color: Theme.of(context).colorScheme.onSurfaceVariant),
       child: empty
-          ? const SizedBox(height: 22)
+          ? const SizedBox(height: NxFieldStyle.lineHeight)
           : Row(
               children: [
                 NxAvatar(label: label, size: 28),
@@ -1370,9 +1373,10 @@ class _ChipTrigger extends StatelessWidget {
       isEmpty: values.isEmpty,
       enabled: enabled,
       onTap: onTap,
+      prefixIcon: Icon(NxI.tag, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
       suffixIcon: Icon(NxI.caretDown, color: Theme.of(context).colorScheme.onSurfaceVariant),
       child: values.isEmpty
-          ? const SizedBox(height: 22)
+          ? const SizedBox(height: NxFieldStyle.lineHeight)
           : Wrap(
               spacing: 6,
               runSpacing: 4,
@@ -1455,9 +1459,10 @@ class _ColorTrigger extends StatelessWidget {
       isEmpty: empty,
       enabled: enabled,
       onTap: onTap,
+      prefixIcon: Icon(NxI.palette, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
       suffixIcon: Icon(NxI.caretDown, color: Theme.of(context).colorScheme.onSurfaceVariant),
       child: empty
-          ? const SizedBox(height: 22)
+          ? const SizedBox(height: NxFieldStyle.lineHeight)
           : Row(
               children: [
                 Container(

@@ -163,6 +163,9 @@ class _NxScrollScaffoldState extends State<NxScrollScaffold> {
 }
 
 class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
+  /// Fade below the header (content dissolves into it).
+  static const double _tail = 14;
+
   const _FloatingHeader({required this.header, required this.extend, this.bottom, this.bottomHeight = 0});
   final PreferredSizeWidget header;
   final Widget? bottom;
@@ -193,12 +196,13 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
             right: 0,
             top: 0,
             // A short tail below the header so the blur ends softly but takes little room.
-            height: top + h + (extend ? 6 : 0),
+            height: top + h + (extend ? _tail : 0),
             child: IgnorePointer(
               child: NxEdgeBlur(
                 fromTop: true,
                 // Full blur over the status bar + most of the header, fade below.
-                solidFraction: extend ? (top + h * 0.25) / (top + h + 6) : 0.6,
+                solidFraction: extend ? (top + h * 0.25) / (top + h + _tail) : 0.6,
+                washSolid: extend ? (top + h - 4) / (top + h + _tail) : 0.9,
               ),
             ),
           ),
@@ -224,7 +228,7 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
 /// of stacked bands. Lite: one light blur under the header (cheap) plus the
 /// wash, so text behind the header is still softened. Off: wash only.
 class NxEdgeBlur extends StatelessWidget {
-  const NxEdgeBlur({super.key, required this.fromTop, this.maxSigma = 14, this.steps = 12, this.solidFraction = 0.45});
+  const NxEdgeBlur({super.key, required this.fromTop, this.maxSigma = 14, this.steps = 12, this.solidFraction = 0.45, this.washSolid});
 
   /// Fraction of the band covered by step [i] (0 = tallest, lightest).
   double bandHeight(int i) {
@@ -249,6 +253,11 @@ class NxEdgeBlur extends StatelessWidget {
   final double maxSigma;
   final int steps;
 
+  /// Lite / off: part of the band (from the edge) where the wash stays almost
+  /// solid — the header itself — so tall headers (title + search + chips) read
+  /// as clearly as Home's; only the tail below fades.
+  final double? washSolid;
+
   static const liteSigma = 6.0;
 
   @override
@@ -265,14 +274,25 @@ class NxEdgeBlur extends StatelessWidget {
         : lite
             ? const [0.82, 0.74, 0.62, 0.46, 0.28, 0.12, 0.0]
             : const [0.94, 0.86, 0.72, 0.52, 0.3, 0.12, 0.0];
+    final ws = full ? null : washSolid?.clamp(0.0, 0.95);
     final tint = DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: edge,
-          end: away,
-          colors: [for (final a in alphas) bg.withValues(alpha: a)],
-          stops: const [0, 0.3, 0.48, 0.64, 0.78, 0.9, 1],
-        ),
+        gradient: ws == null
+            ? LinearGradient(
+                begin: edge,
+                end: away,
+                colors: [for (final a in alphas) bg.withValues(alpha: a)],
+                stops: const [0, 0.3, 0.48, 0.64, 0.78, 0.9, 1],
+              )
+            : LinearGradient(
+                begin: edge,
+                end: away,
+                colors: [
+                  for (final a in lite ? const [0.92, 0.9, 0.86, 0.62, 0.32, 0.1, 0.0] : const [0.97, 0.95, 0.92, 0.66, 0.34, 0.1, 0.0])
+                    bg.withValues(alpha: a),
+                ],
+                stops: [0, ws * 0.5, ws, ws + (1 - ws) * 0.3, ws + (1 - ws) * 0.6, ws + (1 - ws) * 0.85, 1],
+              ),
       ),
       child: const SizedBox.expand(),
     );
