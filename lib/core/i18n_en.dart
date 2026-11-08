@@ -1438,6 +1438,14 @@ const Map<String, String> enStrings = {
   'เข้าสู่ระบบด้วย Apple': 'Sign in with Apple',
   'เข้าสู่ระบบด้วย Apple ไม่สำเร็จ ลองใหม่อีกครั้ง': 'Sign in with Apple failed. Please try again.',
   'เครื่องนี้ใช้ Sign in with Apple ไม่ได้': 'Sign in with Apple is not available on this device',
+  'ไตรมาสนี้': 'This quarter',
+  'ไม่มีงานในช่วงนี้': 'No tasks in this range',
+  'ยังไม่มีข้อมูลในช่วงนี้': 'No data for this period yet',
+  'เคสที่เปิด': 'Open cases',
+  'กำลังดำเนินการ': 'In progress',
+  'เคสที่ปิด': 'Closed cases',
+  'เคสค้าง': 'Overdue cases',
+  'รอปิด': 'Waiting to close',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -1632,4 +1640,5 @@ const Map<String, String> enPatterns = {
   'รวมเวลาทำงาน {}': 'Total worked {}',
   'กำลังค้นหาอีก {} แหล่ง…': 'Searching {} more sources…',
   'ไม่พบ "{}"': 'No results for "{}"',
+  'ดูทั้งหมด {}': 'See all {}',
 };

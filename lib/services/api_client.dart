@@ -1063,9 +1063,15 @@ class ApiClient {
     bool excludeDone = false,
     bool excludeEpic = false,
     int limit = 200,
+    String? dueFrom,
+    String? dueTo,
+    String? types,
     CancelToken? cancel,
   }) async {
     final env = await _send('GET', '/api/workspace/items', cancel: cancel, query: {
+      if (dueFrom != null) 'due_from': dueFrom,
+      if (dueTo != null) 'due_to': dueTo,
+      if (types != null && types.isNotEmpty) 'type': types,
       if (boardIds != null && boardIds.isNotEmpty) 'board_ids': boardIds,
       if (q != null && q.isNotEmpty) 'q': q,
       if (assigneeId != null && assigneeId.isNotEmpty) 'assignee_id': assigneeId,
@@ -1384,10 +1390,31 @@ class ApiClient {
   }
 
   /// `GET /api/dashboard/sales` — deal + quotation pipeline (this year by default).
-  Future<Map<String, dynamic>> getSalesDashboard() async => _dataMap(await _send('GET', '/api/dashboard/sales'));
+  /// [dateFrom]/[dateTo] are YYYY-MM-DD (Thai days); none = the server's default.
+  Future<Map<String, dynamic>> getSalesDashboard({String? dateFrom, String? dateTo}) async => _dataMap(await _send(
+        'GET',
+        '/api/dashboard/sales',
+        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo},
+      ));
 
   /// `GET /api/dashboard/case` — case counts by status / type / priority.
-  Future<Map<String, dynamic>> getCaseDashboard() async => _dataMap(await _send('GET', '/api/dashboard/case'));
+  Future<Map<String, dynamic>> getCaseDashboard({String? dateFrom, String? dateTo}) async => _dataMap(await _send(
+        'GET',
+        '/api/dashboard/case',
+        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo},
+      ));
+
+  /// Service dashboard (menu `svc-dash-case-summary`): kpis open/closed/overdue + by_status.
+  Future<Map<String, dynamic>> getCaseSummary({required String dateFrom, required String dateTo}) async =>
+      _dataMap(await _send('GET', '/api/service-dashboard/case-summary', query: {'dateFrom': dateFrom, 'dateTo': dateTo}));
+
+  /// Service dashboard (menu `svc-dash-case-performance`): SLA met / missed / %.
+  Future<Map<String, dynamic>> getCasePerformance({required String dateFrom, required String dateTo}) async =>
+      _dataMap(await _send('GET', '/api/service-dashboard/case-performance', query: {'dateFrom': dateFrom, 'dateTo': dateTo}));
+
+  /// Light SLA summary for Home (any user with cases): `counts{open_ok, open_overdue, met, missed}`.
+  Future<Map<String, dynamic>> getCaseSlaSummary({int days = 30}) async =>
+      _dataMap(await _send('GET', '/api/home/case-sla-summary', query: {'period': '$days'}));
 
   /// My workspace items grouped by due bucket (`GET /api/home/work`).
   /// `counts` holds overdue / today / upcoming / nodue.
