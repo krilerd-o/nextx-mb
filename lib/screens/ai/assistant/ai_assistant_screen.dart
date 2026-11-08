@@ -343,6 +343,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       elapsedMs: _c.sendStartedAt == null ? null : DateTime.now().difference(_c.sendStartedAt!).inMilliseconds,
       finishedAgoMs: last && _finishedAt != null ? DateTime.now().difference(_finishedAt!).inMilliseconds : null,
       simpleQa: (m?.proposals.isEmpty ?? true) && (m?.content.length ?? 0) < 600,
+      actionConfirmed: (m?.proposals ?? const []).any((p) => _c.proposalState['${p['proposalId']}'] == 'done'),
+      uploading: _c.uploading,
     );
   }
 

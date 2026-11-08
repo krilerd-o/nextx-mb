@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -72,9 +73,29 @@ void main() {
     expect(resolveIsaacState(streaming: true), 'speaking');
     expect(resolveIsaacState(error: true, loading: true), 'error');
     expect(resolveIsaacState(hasDownloads: true), 'celebrate');
-    expect(resolveIsaacState(finishedAgoMs: 100), 'done');
+    expect(resolveIsaacState(finishedAgoMs: 100), 'answer_ready');
+    expect(resolveIsaacState(finishedAgoMs: 5000), 'peace');
+    expect(resolveIsaacState(hasAskUser: true), 'curious');
+    expect(resolveIsaacState(actionConfirmed: true), 'success');
+    expect(resolveIsaacState(loading: true, uploading: true), 'uploading');
+    expect(resolveIsaacState(loading: true, phase: 'auto_route'), 'loading');
+    expect(resolveIsaacState(loading: true, phase: 'vision'), 'processing');
+    expect(resolveIsaacState(loading: true, phase: 'finalizing'), 'typing');
+    expect(resolveIsaacState(loading: true, phase: 'tool_done'), 'checking');
+    expect(resolveIsaacState(loading: true, phase: 'stall_retry'), 'retry');
+    expect(resolveIsaacState(loading: true, toolName: 'generate_document'), 'downloading');
+    // V3 names saved earlier still show a V4 pose.
+    expect(normalizeIsaacState('done'), 'answer_ready');
+    expect(normalizeIsaacState('scholar'), 'graduate');
+    expect(normalizeIsaacState('flower_peace'), 'peace');
     expect(kIsaacStates.length, 60);
     expect(kIsaacLabels.keys.toSet(), kIsaacStates.toSet());
+  });
+
+  test('every Isaac state has a bundled PNG', () {
+    for (final st in kIsaacStates) {
+      expect(File('assets/isaac/isaac-$st.png').existsSync(), isTrue, reason: st);
+    }
   });
 
   test('in-app links: workspace/modules open in the app, others outside', () {
