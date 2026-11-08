@@ -618,11 +618,12 @@ class _ViewSwitch extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Container(
-      height: 36,
+      // Same height as the chips next to it; the purple pill fills it.
+      height: 40,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
       ),
       child: Row(
@@ -643,10 +644,13 @@ class _ViewSwitch extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeOutCubic,
-                  padding: EdgeInsets.symmetric(horizontal: v == value ? 10 : 8),
-                  decoration: BoxDecoration(color: v == value ? cs.primary : Colors.transparent, borderRadius: BorderRadius.circular(15)),
+                  height: double.infinity,
+                  constraints: const BoxConstraints(minWidth: 40),
+                  alignment: Alignment.center,
+                  padding: EdgeInsets.symmetric(horizontal: v == value ? 12 : 9),
+                  decoration: BoxDecoration(color: v == value ? cs.primary : Colors.transparent, borderRadius: BorderRadius.circular(17)),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(icon, size: 16, color: v == value ? cs.onPrimary : cs.onSurfaceVariant),
+                    Icon(icon, size: 18, color: v == value ? cs.onPrimary : cs.onSurfaceVariant),
                     if (v == value) ...[
                       const SizedBox(width: 4),
                       Text(tr(label), style: theme.textTheme.labelMedium?.copyWith(color: cs.onPrimary, fontWeight: FontWeight.w700)),
