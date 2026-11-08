@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../core/thai_time.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -130,7 +132,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                 KeyValueCard(
                   entries: [
                     MapEntry('เลขที่', no.toString()),
-                    MapEntry('วันที่', (_row['order_date']?.toString() ?? '—').split('T').first),
+                    MapEntry('วันที่', _row['order_date'] == null ? '—' : thaiDate(_row['order_date'], year: uiYear)),
                     MapEntry('สถานะ', (_row['status'] ?? '—').toString()),
                     MapEntry('การชำระ', paymentStatusLabel(_row['payment_status']?.toString())),
                     MapEntry('ยอดรวม', formatBaht(_row['grand_total'] ?? _row['total']).isEmpty ? '—' : formatBaht(_row['grand_total'] ?? _row['total'])),

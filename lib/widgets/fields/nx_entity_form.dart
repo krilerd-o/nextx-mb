@@ -15,6 +15,7 @@ import 'nx_form_field.dart';
 import 'nx_pick_option.dart';
 import '../nx_shake.dart';
 import '../../core/i18n.dart';
+import '../../core/thai_time.dart';
 
 class NxEntityForm extends StatefulWidget {
   const NxEntityForm({
@@ -401,6 +402,34 @@ String extractUploadedMedia(Map<String, dynamic> data) {
   }
   final url = (data['url'] ?? data['path'] ?? '').toString();
   return formatMedia(url: url, fileId: data['id'] ?? data['file_id']);
+}
+
+/// Server dates for an edit / duplicate form, as Thai-time form values:
+/// DATE columns (`1990-11-09T17:00:00.000Z` = 10 Nov in Thailand) become
+/// `1990-11-10`, date-times become `yyyy-MM-ddTHH:mm:00` in Thai time —
+/// what the pickers produce. Untouched dates then go back unchanged in
+/// meaning (no day lost on every save).
+void normalizeFormDates(List<Map<String, dynamic>> fields, Map<String, dynamic> values) {
+  for (final f in fields) {
+    final name = fieldName(f);
+    final raw = values[name];
+    if (name.isEmpty || raw is! String || raw.trim().isEmpty) continue;
+    final v = raw.trim();
+    switch (resolveFieldUiType(f)) {
+      case FieldUiType.date:
+        if (v.length > 10 && v.contains(RegExp(r'^\d{4}-\d{2}-\d{2}[T ]'))) {
+          final d = parseThaiDate(v);
+          if (d != null) values[name] = formatYmd(d);
+        }
+      case FieldUiType.dateTime:
+        if (RegExp(r'(Z|[+-]\d{2}:?\d{2})$', caseSensitive: false).hasMatch(v)) {
+          final d = parseThaiField(v, name);
+          if (d != null) values[name] = '${formatYmd(d)}T${two(d.hour)}:${two(d.minute)}:00';
+        }
+      default:
+        break;
+    }
+  }
 }
 
 Map<String, dynamic> collectEntityPayload(

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/thai_time.dart';
+import 'task_detail_screen.dart' show taskDateOnly;
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/workspace_models.dart';
@@ -86,7 +87,7 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
         'due_date', 'epic_id', 'parent_id', 'blocked_by_id', 'story_points', 'recurrence_type', 'release_id',
       ]) {
         final v = src[k];
-        if (v != null && '$v'.isNotEmpty) _values[k] = k.endsWith('_date') ? '$v'.split('T').first : v;
+        if (v != null && '$v'.isNotEmpty) _values[k] = k.endsWith('_date') ? (taskDateOnly(v) ?? v) : v;
       }
       _values['title'] = wsTitle(src);
       // Show names, not ids, in the people pickers.

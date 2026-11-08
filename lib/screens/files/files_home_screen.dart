@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+
+import '../../core/thai_time.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -400,7 +402,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
                 ),
                 title: Text(tr(f['file_name']?.toString() ?? 'ไฟล์'), maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: Text(
-                  tr([formatBytes(f['file_size']), (f['created_at']?.toString() ?? '').split('T').first]
+                  tr([formatBytes(f['file_size']), thaiDate(f['created_at'], year: uiYear)]
                       .where((e) => e.isNotEmpty)
                       .join(' · ')),
                 ),
