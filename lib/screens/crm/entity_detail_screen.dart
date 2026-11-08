@@ -136,7 +136,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   void _rememberRecent() {
     final config = context.read<AppConfig>();
     RecentRecords.instance.add(
-      config.prefsScope,
+      config.businessScope,
       module: widget.module,
       id: _id,
       title: entityTitle(_row, module: widget.module),

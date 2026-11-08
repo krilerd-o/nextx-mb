@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/nx_icons.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../../screens/ai/assistant/ai_assistant_screen.dart';
 import '../../screens/ai/assistant/ai_shared_chat_screen.dart';
@@ -192,7 +193,13 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: AppRoutes.mainShell,
-        builder: (_, _) => const AppShell(),
+        // A new business / package = a fresh shell: every tab (Home, calendar,
+        // lists, search, notifications) reloads for it instead of keeping the
+        // previous business's data.
+        builder: (_, _) => Selector<AppConfig, String>(
+          selector: (_, c) => '${c.session.businessId}|${c.session.packageCode}',
+          builder: (_, scope, _) => AppShell(key: ValueKey('shell-$scope')),
+        ),
       ),
       GoRoute(
         path: AppRoutes.notifications,

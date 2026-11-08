@@ -105,6 +105,12 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   static const debounce = Duration(milliseconds: 280);
   static final Map<String, Map<String, List<SearchHit>>> _cache = {};
 
+  /// Cached results belong to one business + package.
+  String _scoped(String q) {
+    final c = context.read<AppConfig>();
+    return '${c.businessScope}|p${c.session.packageCode ?? ''}|${q.toLowerCase()}';
+  }
+
   late final _controller = TextEditingController(text: widget.initialQuery ?? '');
   final _focus = FocusNode();
   Timer? _timer;
@@ -164,7 +170,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       _hits.clear();
     });
     _searchLocal(q, gen);
-    final cached = _cache[q.toLowerCase()];
+    final cached = _cache[_scoped(q)];
     if (cached != null) {
       setState(() => _hits.addAll(cached));
       return;
@@ -247,7 +253,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     setState(() {});
     await Future.wait(jobs);
     if (gen == _gen && mounted) {
-      _cache[q.toLowerCase()] = {for (final e in _hits.entries) if (e.key != 'menu' && e.key != 'people') e.key: [...e.value]};
+      _cache[_scoped(q)] = {for (final e in _hits.entries) if (e.key != 'menu' && e.key != 'people') e.key: [...e.value]};
       if (_cache.length > 30) _cache.remove(_cache.keys.first);
       config.addSearchHistory(q);
     }

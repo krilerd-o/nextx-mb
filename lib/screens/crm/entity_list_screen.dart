@@ -519,8 +519,10 @@ class _EntityListScreenState extends State<EntityListScreen> {
     return out;
   }
 
-  String get _cacheKey =>
-      '${context.read<AppConfig>().prefsScope}|${widget.module}|$_cvId|${_query.q}|${_query.toJson()}';
+  String get _cacheKey {
+    final c = context.read<AppConfig>();
+    return '${c.businessScope}|p${c.session.packageCode ?? ''}|${widget.module}|$_cvId|${_query.q}|${_query.toJson()}';
+  }
 
   /// Bumped on every reset load; older responses are ignored.
   int _loadGen = 0;

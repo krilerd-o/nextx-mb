@@ -276,7 +276,14 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
         final otherBiz = _bizId;
         if (otherBiz != null) {
           // New business and its package in one go — never an empty session.
-          await config.selectBusiness(businessId: otherBiz, businessName: _bizName ?? 'ธุรกิจ', packageCode: code);
+          // New business and its package in one go: one session refresh.
+          await config.selectBusiness(
+            businessId: otherBiz,
+            businessName: _bizName ?? 'ธุรกิจ',
+            packageCode: code,
+            packageId: p['id']?.toString(),
+          );
+          return;
         }
         await config.selectPackage(code: code, packageId: p['id']?.toString());
       },

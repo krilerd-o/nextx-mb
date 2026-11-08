@@ -48,13 +48,15 @@ class WorkspaceHomeScreen extends StatefulWidget {
   State<WorkspaceHomeScreen> createState() => _WorkspaceHomeScreenState();
 }
 
-/// Last load, so coming back shows it at once and refreshes underneath.
-List<Map<String, dynamic>>? _boardsCache;
-List<Map<String, dynamic>>? _mineCache;
+/// Last load per server + business, so coming back shows it at once and
+/// refreshes underneath (never another business's boards).
+final Map<String, List<Map<String, dynamic>>> _boardsCache = {};
+final Map<String, List<Map<String, dynamic>>> _mineCache = {};
 
 class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
-  List<Map<String, dynamic>>? _boards = _boardsCache;
-  List<Map<String, dynamic>>? _mine = _mineCache;
+  late final String _cacheKey = context.read<AppConfig>().businessScope;
+  late List<Map<String, dynamic>>? _boards = _boardsCache[_cacheKey];
+  late List<Map<String, dynamic>>? _mine = _mineCache[_cacheKey];
   String? _error;
   WsMyScope _scope = WsMyScope.today;
   bool _expanded = false;
@@ -118,11 +120,11 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
       ]);
       if (!mounted) return;
       setState(() {
-        _boards = _boardsCache = r[0];
+        _boards = _boardsCache[_cacheKey] = r[0];
         for (final b in r[0]) {
           wsRememberBoard(b);
         }
-        _mine = _mineCache = r.length > 1 ? r[1] : const [];
+        _mine = _mineCache[_cacheKey] = r.length > 1 ? r[1] : const [];
         _error = null;
       });
     } catch (e) {

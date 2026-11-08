@@ -115,6 +115,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 30));
     }
     expect(config.session.packageCode, 'next_h');
+    // /api/me is not mocked: the switch retries the session refresh once.
+    await tester.pumpWidget(const SizedBox());
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 600)));
+      await tester.pump(const Duration(minutes: 1));
+    }
   });
 
   // ---- Round 5 C ----

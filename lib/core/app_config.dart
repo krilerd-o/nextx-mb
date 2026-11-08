@@ -396,6 +396,10 @@ class AppConfig extends ChangeNotifier {
   String get _userScope => '${serverLabel(_apiBaseUrl)}_${_session.userId ?? ''}';
   /// Per server + user key prefix for local UI prefs (list filters, recents…).
   String get prefsScope => _userScope;
+
+  /// [prefsScope] + current business: data that belongs to one business
+  /// (recently opened records, cached first pages).
+  String get businessScope => '$_userScope|b${_session.businessId ?? ''}';
   String get _shellKey => 'shell_v1_$_userScope';
   String get _lastTabKey => 'last_tab_$_userScope';
   String? _lastTab;
@@ -1062,6 +1066,7 @@ class AppConfig extends ChangeNotifier {
     required String businessId,
     required String businessName,
     String? packageCode,
+    String? packageId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyBusinessId, businessId);
@@ -1071,10 +1076,12 @@ class AppConfig extends ChangeNotifier {
     await prefs.remove(_keyPackageId);
     if (packageCode != null) {
       await prefs.setString(_keyPackageCode, packageCode);
+      if (packageCode.isNotEmpty) await prefs.setString(_lastPackageKey(businessId), packageCode);
     } else {
       await prefs.remove(_keyPackageCode);
     }
-    _packageId = null;
+    if (packageId != null) await prefs.setString(_keyPackageId, packageId);
+    _packageId = packageId;
     _session = SessionState(
       accessToken: _session.accessToken,
       userId: _session.userId,
@@ -1093,13 +1100,25 @@ class AppConfig extends ChangeNotifier {
       packageCode: packageCode,
     );
     notifyListeners();
-    try {
-      await refreshSession();
-    } catch (_) {}
+    await _refreshAfterSwitch();
     try {
       await apiClient.setDefaultBusiness(businessId);
     } catch (_) {}
     _connectRealtime();
+  }
+
+  /// Menus for the new business / package. One retry: a failed refresh
+  /// would otherwise leave the app with almost no tabs until the next resume.
+  Future<void> _refreshAfterSwitch() async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await refreshSession();
+        return;
+      } catch (e) {
+        debugPrint('[switch] refreshSession: $e');
+        if (attempt == 0) await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    }
   }
 
   /// Last package this user used in [businessId] on this server.
@@ -1123,9 +1142,7 @@ class AppConfig extends ChangeNotifier {
     _manualPackagePick = false;
     _session = _session.copyWith(packageCode: code, menusLoaded: false, clearMenus: true);
     notifyListeners();
-    try {
-      await refreshSession();
-    } catch (_) {}
+    await _refreshAfterSwitch();
     if (setDefault && packageId != null && bid != null) {
       try {
         await apiClient.setDefaultPackage(packageId: packageId, businessId: bid);
