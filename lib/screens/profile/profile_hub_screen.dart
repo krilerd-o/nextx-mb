@@ -151,13 +151,6 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                     title: 'ตำแหน่ง / แผนก',
                     subtitle: [?_p('title'), ?_p('department')].join(' · '),
                   ),
-                SettingsTile(
-                  icon: NxI.buildings,
-                  tint: const Color(0xFF6366F1),
-                  title: 'ธุรกิจ',
-                  subtitle: [s.businessName ?? '—', if ((s.packageCode ?? '').isNotEmpty) s.packageCode!].join(' · '),
-                  onTap: () => config.clearBusiness(),
-                ),
               ]),
             ),
 
@@ -410,21 +403,25 @@ class _Hero extends StatelessWidget {
           if ((s.businessName ?? '').isNotEmpty) chip(s.businessName!, cs.onSurfaceVariant),
         ]),
         const SizedBox(height: 16),
+        // Two equal pills, one line each (the label never wraps to a taller button).
         Row(children: [
           Expanded(
             child: FilledButton.tonalIcon(
               key: const ValueKey('profile-edit'),
+              style: FilledButton.styleFrom(fixedSize: const Size.fromHeight(44), padding: const EdgeInsets.symmetric(horizontal: 12)),
               onPressed: () => nxPush<bool>(context, const ProfileEditScreen()),
               icon: const Icon(NxI.pencilSimple, size: 18),
-              label: Text(tr('แก้ไขโปรไฟล์')),
+              label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('แก้ไขโปรไฟล์'), maxLines: 1)),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: OutlinedButton.icon(
+              key: const ValueKey('profile-switch'),
+              style: OutlinedButton.styleFrom(fixedSize: const Size.fromHeight(44), padding: const EdgeInsets.symmetric(horizontal: 12)),
               onPressed: () => showSpaceSwitcher(context),
               icon: const Icon(NxI.arrowsClockwise, size: 18),
-              label: Text(tr('สลับ Space')),
+              label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('สลับ Space'), maxLines: 1)),
             ),
           ),
         ]),

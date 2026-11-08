@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -11,6 +12,7 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../core/i18n.dart';
+import '../../core/thai_time.dart';
 import '../../widgets/nx_refresh.dart';
 
 /// Thai label + colour for an announcement `type`.
@@ -154,7 +156,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
                           ),
                           const Spacer(),
                           Text(
-                            tr(it['date']?.toString().split('T').first ?? ''),
+                            thaiDate(it['date']?.toString().split('T').first ?? '', year: uiYear),
                             style: theme.textTheme.bodySmall,
                           ),
                         ],
@@ -167,10 +169,12 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      NxHtmlView(
-                        html:
-                            (it['description_th'] ?? it['description_en'] ?? '')
-                                .toString(),
+                      // 6 lines, then "ดูเพิ่มเติม"; short notes fit the card.
+                      WhatsNewBody(
+                        key: ValueKey('wn-body-${it['id'] ?? it['title_th']}'),
+                        child: NxHtmlView(
+                          html: (it['description_th'] ?? it['description_en'] ?? '').toString(),
+                        ),
                       ),
                       Row(
                         children: [
@@ -225,5 +229,99 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
       header: const NxAppHeader(title: 'มีอะไรใหม่'),
       body: body,
     );
+  }
+}
+
+/// Folds a note to about [lines] lines with a soft fade and a
+/// "ดูเพิ่มเติม / ย่อ" toggle; shorter notes simply fit.
+class WhatsNewBody extends StatefulWidget {
+  const WhatsNewBody({super.key, required this.child, this.lines = 6});
+  final Widget child;
+  final int lines;
+
+  @override
+  State<WhatsNewBody> createState() => _WhatsNewBodyState();
+}
+
+class _WhatsNewBodyState extends State<WhatsNewBody> {
+  bool _open = false;
+  double? _full;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final style = theme.textTheme.bodyMedium ?? const TextStyle(fontSize: 14);
+    final line = (style.fontSize ?? 14) * (style.height ?? 1.5);
+    final max = line * widget.lines;
+    final tall = (_full ?? 0) > max + 4;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnimatedSize(
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: _open || !tall ? double.infinity : max),
+            child: ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (r) => LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: tall && !_open ? const [Colors.black, Colors.black, Colors.transparent] : const [Colors.black, Colors.black],
+                stops: tall && !_open ? const [0, 0.7, 1] : const [0, 1],
+              ).createShader(r),
+              child: ClipRect(
+                child: SingleChildScrollView(
+                  physics: const NeverScrollableScrollPhysics(),
+                  child: _Measure(
+                    onSize: (h) {
+                      if (_full != h) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? setState(() => _full = h) : null);
+                    },
+                    child: widget.child,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (tall)
+          TextButton(
+            key: const ValueKey('wn-more'),
+            style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+            onPressed: () => setState(() => _open = !_open),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(tr(_open ? 'ย่อ' : 'ดูเพิ่มเติม'), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 2),
+              Icon(_open ? NxI.caretUp : NxI.caretDown, size: 16, color: cs.primary),
+            ]),
+          ),
+      ],
+    );
+  }
+}
+
+/// Reports its child's laid-out height.
+class _Measure extends SingleChildRenderObjectWidget {
+  const _Measure({required this.onSize, super.child});
+  final ValueChanged<double> onSize;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderMeasure(onSize);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderMeasure renderObject) => renderObject.onSize = onSize;
+}
+
+class _RenderMeasure extends RenderProxyBox {
+  _RenderMeasure(this.onSize);
+  ValueChanged<double> onSize;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    onSize(size.height);
   }
 }

@@ -103,20 +103,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         trailing: sp == null ? null : SpaceAvatar(space: sp, size: 30),
         onTap: () => showSpaceSwitcher(context),
       )),
-      _Entry('Space และธุรกิจ', ['ธุรกิจ', 'บริษัท'], SettingsTile(
-        icon: NxI.briefcase,
-        tint: const Color(0xFF0EA5E9),
-        title: 'สลับธุรกิจ',
-        subtitle: session.businessName ?? '—',
-        onTap: () => config.clearBusiness(),
-      )),
-      _Entry('Space และธุรกิจ', ['Package', 'แพ็กเกจ'], SettingsTile(
-        icon: NxI.package,
-        tint: const Color(0xFF10B981),
-        title: 'สลับ Package',
-        subtitle: (session.packageCode ?? '').isEmpty ? '—' : session.packageCode,
-        onTap: () => config.clearPackage(),
-      )),
+      // Business / package switching lives in the header switcher (not repeated here).
       _Entry('Space และธุรกิจ', ['อุปกรณ์', 'เครื่อง', 'ออกจากระบบ'], SettingsTile(
         icon: NxI.monitorSmartphone,
         tint: const Color(0xFF64748B),

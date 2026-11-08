@@ -1492,6 +1492,7 @@ const Map<String, String> enStrings = {
   'ใช้ตำแหน่งนี้': 'Use this place',
   'ยังไม่ได้ปักหมุด': 'No pin yet',
   'ใช้ตำแหน่งปัจจุบัน': 'Use current location',
+  'ดูเพิ่มเติม': 'Show more',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

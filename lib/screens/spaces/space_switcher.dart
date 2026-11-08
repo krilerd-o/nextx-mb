@@ -421,8 +421,18 @@ Future<void> runColorHandOff(
   final from = origin ?? Rect.fromCenter(center: size.center(Offset.zero), width: 56, height: 56);
   final grow = ValueNotifier<double>(0);
   final fade = ValueNotifier<double>(1);
+  // The overlay sits above the app's Material: give it the app theme and text
+  // style, or Flutter draws the yellow "missing Material" underline and a
+  // fallback font.
+  final theme = Theme.of(context);
   final entry = OverlayEntry(
-    builder: (ctx) => IgnorePointer(
+    builder: (ctx) => Theme(
+      data: theme,
+      child: Material(
+        type: MaterialType.transparency,
+        child: DefaultTextStyle(
+          style: theme.textTheme.bodyMedium!.copyWith(color: Colors.white, decoration: TextDecoration.none),
+          child: IgnorePointer(
       child: ValueListenableBuilder<double>(
         valueListenable: fade,
         builder: (ctx, o, _) => Opacity(
@@ -450,28 +460,24 @@ Future<void> runColorHandOff(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(
-                            width: 76,
-                            height: 76,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(22)),
-                            child: Text(
-                              tr(badge),
-                              style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700),
-                            ),
+                          // Badge as text only (like the switcher popup), app font, no box.
+                          Text(
+                            tr(badge),
+                            key: const ValueKey('handoff-badge'),
+                            style: theme.textTheme.displaySmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 1, decoration: TextDecoration.none),
                           ),
                           const SizedBox(height: 14),
                           Text(
                             tr(title),
-                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, decoration: TextDecoration.none),
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w700, decoration: TextDecoration.none),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             tr(subtitle),
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.85),
                               decoration: TextDecoration.none,
                             ),
                           ),
@@ -486,6 +492,9 @@ Future<void> runColorHandOff(
         ),
       ),
     ),
+          ),
+        ),
+      ),
   );
   overlay.insert(entry);
   HapticFeedback.mediumImpact();
