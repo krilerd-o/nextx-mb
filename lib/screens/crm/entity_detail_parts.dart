@@ -1,3 +1,4 @@
+import '../../widgets/nx_status_stepper.dart';
 import 'package:dio/dio.dart' show MultipartFile;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -41,7 +42,7 @@ String? entityStatusKey(Map<String, dynamic> row, String module) {
   return null;
 }
 
-const kStepDoneGreen = Color(0xFF16A34A);
+const kStepDoneGreen = kNxStepPassedGreen;
 
 /// Readable green text on the light-green pill (lighter in dark mode).
 Color kStepDoneGreenFg(BuildContext context) =>
@@ -63,55 +64,14 @@ class EntityStatusStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final idx = options.indexWhere((o) => o.value == current || o.label == current);
-    return SizedBox(
-      height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: options.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
-        itemBuilder: (context, i) {
-          final o = options[i];
-          final done = idx >= 0 && i < idx;
-          final active = i == idx;
-          // Passed stages: green with a check (like the web stepper).
-          final bg = active ? cs.primary : (done ? kStepDoneGreen.withValues(alpha: 0.16) : cs.surface);
-          final fg = active ? cs.onPrimary : (done ? kStepDoneGreenFg(context) : cs.onSurfaceVariant);
-          return Material(
-            color: bg,
-            shape: StadiumBorder(side: BorderSide(color: active || done ? Colors.transparent : cs.outlineVariant)),
-            child: InkWell(
-              customBorder: const StadiumBorder(),
-              onTap: onSelect == null || active
-                  ? null
-                  : () {
-                      HapticFeedback.selectionClick();
-                      onSelect!(o.value);
-                    },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (done) ...[
-                      Container(
-                        key: ValueKey('step-done-${o.value}'),
-                        width: 16,
-                        height: 16,
-                        decoration: const BoxDecoration(color: kStepDoneGreen, shape: BoxShape.circle),
-                        child: const Icon(NxI.check, size: 11, color: Colors.white),
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    Text(tr(o.label), style: TextStyle(color: fg, fontWeight: active ? FontWeight.w700 : FontWeight.w500, fontSize: 13)),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
+    // Same stepper as Workspace: ordered, joined by lines, shadow not cut.
+    return NxStatusStepper(
+      steps: [for (final o in options) NxStep(id: o.value, label: o.label)],
+      current: options.indexWhere((o) => o.value == current || o.label == current),
+      stepKeyPrefix: 'step-',
+      doneKeyPrefix: 'step-done-',
+      padding: EdgeInsets.zero,
+      onPick: onSelect == null ? null : (i) => onSelect!(options[i].value),
     );
   }
 }
