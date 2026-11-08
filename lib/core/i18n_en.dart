@@ -1433,6 +1433,11 @@ const Map<String, String> enStrings = {
   'ลบบัญชีถาวร': 'Delete permanently',
   'เปิดหน้าขอลบบัญชี': 'Open the deletion page',
   'ปิดบัญชีถาวร ยืนยันด้วย OTP': 'Close your account for good, confirmed by OTP',
+  'ยืนยันตัวตนกับ Apple ไม่สำเร็จ ลองใหม่อีกครั้ง': 'Apple could not verify you. Please try again.',
+  'เซิร์ฟเวอร์นี้ยังไม่รองรับการเข้าสู่ระบบด้วย Apple — ใช้อีเมล, OTP หรือ LINE': 'This server does not support Sign in with Apple yet. Use email, OTP or LINE.',
+  'เข้าสู่ระบบด้วย Apple': 'Sign in with Apple',
+  'เข้าสู่ระบบด้วย Apple ไม่สำเร็จ ลองใหม่อีกครั้ง': 'Sign in with Apple failed. Please try again.',
+  'เครื่องนี้ใช้ Sign in with Apple ไม่ได้': 'Sign in with Apple is not available on this device',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

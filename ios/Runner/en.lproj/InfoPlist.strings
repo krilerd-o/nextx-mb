@@ -1,0 +1,7 @@
+/* Permission prompts (English) */
+"CFBundleDisplayName" = "MOAI NEXT";
+"NSLocationWhenInUseUsageDescription" = "Your location is used to check in on site and to clock in or out.";
+"NSFaceIDUsageDescription" = "Face ID unlocks the app instead of signing in again.";
+"NSCameraUsageDescription" = "The camera takes photos as proof for check-ins, clock-ins and inspections.";
+"NSPhotoLibraryUsageDescription" = "Pick photos as check-in proof and for your profile picture.";
+"NSPhotoLibraryAddUsageDescription" = "Save files you download in the app.";

@@ -54,3 +54,6 @@ env.shared-db
 # OS
 .DS_Store
 Thumbs.db
+
+# iOS secrets (CI writes it from IOS_GOOGLE_CLIENT_ID / MAPS_API_KEY)
+ios/Flutter/Secrets.xcconfig

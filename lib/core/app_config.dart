@@ -22,6 +22,7 @@ import 'auth_redirect.dart';
 import 'menu_access.dart';
 import 'invite_link.dart';
 import 'recent_accounts.dart';
+import '../services/apple_auth.dart';
 import 'server_profile.dart';
 import 'session_state.dart';
 import 'shell_tabs.dart';
@@ -739,6 +740,25 @@ class AppConfig extends ChangeNotifier {
     if (data['need_merge'] == true) {
       throw GoogleMergeRequired(data['merge_intent']?.toString() ?? '');
     }
+    await _completeLogin(data, fallbackEmail: '');
+  }
+
+  /// Apple identity token (Sign in with Apple, iOS) → NEXTX session.
+  /// An existing account found by Apple's verified email asks to link first.
+  Future<void> loginWithAppleIdToken(String identityToken) async {
+    _api.attachSession(baseUrl: _apiBaseUrl);
+    final Map<String, dynamic> data;
+    try {
+      data = await _api.appleLogin(identityToken);
+    } on ApiEnvelopeException catch (e) {
+      if (e.statusCode == 401) throw const AppleAuthError('ยืนยันตัวตนกับ Apple ไม่สำเร็จ ลองใหม่อีกครั้ง');
+      rethrow;
+    } on ApiException catch (e) {
+      // Plain 404 = this NEXTX server has no Apple sign-in yet.
+      if (e.statusCode == 404) throw const AppleAuthError('เซิร์ฟเวอร์นี้ยังไม่รองรับการเข้าสู่ระบบด้วย Apple — ใช้อีเมล, OTP หรือ LINE');
+      rethrow;
+    }
+    _throwIfLinkNeeded(data);
     await _completeLogin(data, fallbackEmail: '');
   }
 

@@ -1,1 +1,8 @@
 #include "Generated.xcconfig"
+
+// Values from CI secrets (or your own copy for local builds) — never committed.
+// Flutter/Secrets.xcconfig is git-ignored; see docs/RELEASE_STORES.md.
+GMS_API_KEY =
+GOOGLE_IOS_CLIENT_ID =
+GOOGLE_REVERSED_CLIENT_ID = moainext-google-not-set
+#include? "Secrets.xcconfig"

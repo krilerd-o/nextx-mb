@@ -385,6 +385,11 @@ class ApiClient {
     return _dataMap(await _send('POST', '/api/auth/google/one-tap', data: {'credential': idToken}));
   }
 
+  /// Sign in with Apple (iOS): session, or `{needLinkConfirm, intentToken}`.
+  Future<Map<String, dynamic>> appleLogin(String identityToken) async {
+    return _dataMap(await _send('POST', '/api/auth/apple', data: {'identity_token': identityToken, 'remember': true}));
+  }
+
   Future<Map<String, dynamic>> googleMergePreview(String intent) async {
     return _dataMap(await _send('GET', '/api/auth/google/merge/preview', query: {'intent_token': intent}));
   }

@@ -10,6 +10,7 @@ import '../../core/auth_redirect.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_page_route.dart';
 import '../../core/server_profile.dart';
+import '../../services/apple_auth.dart';
 import '../../services/google_auth.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_app_logo.dart';
@@ -181,6 +182,14 @@ class _LoginScreenState extends State<LoginScreen> {
       if (idToken == null) return; // cancelled
       if (!mounted) return;
       await context.read<AppConfig>().loginWithGoogleIdToken(idToken);
+    });
+  }
+
+  Future<void> _apple() async {
+    await _run(() async {
+      final token = await AppleAuth.identityToken();
+      if (token == null || !mounted) return; // cancelled
+      await context.read<AppConfig>().loginWithAppleIdToken(token);
     });
   }
 
@@ -408,7 +417,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       SizedBox(height: otp && !_otpSent ? 4 : 12),
                       NxHeroCta(label: primaryLabel, busy: _loading, onPressed: _loading ? null : _primary),
-                      if (_social.line || _social.google) ...[
+                      if (_social.line || _social.google || AppleAuth.supported) ...[
                         const SizedBox(height: 22),
                         Row(
                           children: [
@@ -421,6 +430,20 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                         const SizedBox(height: 14),
+                        if (AppleAuth.supported) ...[
+                          SizedBox(
+                            width: double.infinity,
+                            child: _SocialButton(
+                              key: const ValueKey('login-apple'),
+                              label: 'เข้าสู่ระบบด้วย Apple',
+                              background: theme.brightness == Brightness.dark ? Colors.white : Colors.black,
+                              foreground: theme.brightness == Brightness.dark ? Colors.black : Colors.white,
+                              leading: Icon(NxI.brandApple, size: 18, color: theme.brightness == Brightness.dark ? Colors.black : Colors.white),
+                              onPressed: _loading ? null : _apple,
+                            ),
+                          ),
+                          if (_social.line || _social.google) const SizedBox(height: 12),
+                        ],
                         Row(
                           children: [
                             if (_social.google)
@@ -610,7 +633,7 @@ class _ModeSwitch extends StatelessWidget {
 }
 
 class _SocialButton extends StatelessWidget {
-  const _SocialButton({required this.label, required this.background, required this.foreground, this.border, this.leading, this.onPressed});
+  const _SocialButton({super.key, required this.label, required this.background, required this.foreground, this.border, this.leading, this.onPressed});
 
   final String label;
   final Color background;

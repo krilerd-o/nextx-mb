@@ -1,4 +1,5 @@
 import '../services/api_client.dart';
+import '../services/apple_auth.dart';
 import '../services/google_auth.dart';
 
 /// Friendly Thai text for NEXTX auth error codes (backend errorHandler / authLimiter).
@@ -13,6 +14,7 @@ String authErrorMessage(Object e) {
     return e.message.isNotEmpty ? e.message : 'เข้าสู่ระบบไม่สำเร็จ';
   }
   if (e is GoogleAuthError) return e.message;
+  if (e is AppleAuthError) return e.message;
   if (e is ApiException && e.statusCode == 429) return 'ลองหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่';
   if (e is ApiException && e.statusCode == 401) return 'อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง';
   return formatApiError(e);

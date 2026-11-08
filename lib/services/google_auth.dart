@@ -13,14 +13,27 @@ class GoogleAuth {
 
   static String? _initializedWith;
 
-  static bool get supported => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+  /// iOS OAuth client id (CI secret IOS_GOOGLE_CLIENT_ID → `--dart-define`).
+  /// The same value goes to Info.plist `GIDClientID` via Flutter/Secrets.xcconfig.
+  static const iosClientId = String.fromEnvironment('NX_IOS_GOOGLE_CLIENT_ID');
+
+  /// Android: always (Huawei too — GBox / microG may provide Google).
+  /// iOS: only when this build has an iOS client id, otherwise the button is hidden.
+  static bool get supported {
+    if (kIsWeb) return false;
+    if (defaultTargetPlatform == TargetPlatform.android) return true;
+    return defaultTargetPlatform == TargetPlatform.iOS && iosClientId.isNotEmpty;
+  }
 
   /// Returns the ID token, or null when the user cancelled.
   static Future<String?> idToken(String serverClientId) async {
     final gs = GoogleSignIn.instance;
     if (_initializedWith == null) {
       try {
-        await gs.initialize(serverClientId: serverClientId);
+        await gs.initialize(
+          clientId: defaultTargetPlatform == TargetPlatform.iOS && iosClientId.isNotEmpty ? iosClientId : null,
+          serverClientId: serverClientId,
+        );
       } catch (e) {
         // Huawei phones without GBox / microG have no Google services at all.
         if (isHuaweiBuild || '$e'.toLowerCase().contains('google play services')) throw const GoogleAuthError(noGoogleServicesMessage);
