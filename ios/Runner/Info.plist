@@ -43,6 +43,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Only standard HTTPS: no export-compliance question on every TestFlight build. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
@@ -64,11 +67,18 @@
 	</array>
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<true/>
-	<!-- Google Sign-In (iOS): add the iOS OAuth client from the server's GCP
-	     project before enabling Google on iPhone:
-	       <key>GIDClientID</key><string>XXXX.apps.googleusercontent.com</string>
-	     and a CFBundleURLSchemes entry with the reversed client id
-	     (com.googleusercontent.apps.XXXX). See PUSH_AND_RELEASE.md. -->
+	<!-- Google Sign-In (iOS): values come from Flutter/Secrets.xcconfig (CI secret IOS_GOOGLE_CLIENT_ID). -->
+	<key>GIDClientID</key>
+	<string>$(GOOGLE_IOS_CLIENT_ID)</string>
+	<!-- LINE app login: the app checks whether LINE is installed. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>line</string>
+		<string>lineauth2</string>
+	</array>
+	<!-- iPad: Split View, Slide Over and Stage Manager. -->
+	<key>UIRequiresFullScreen</key>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -79,6 +89,16 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>moainext</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>google-sign-in</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
 			</array>
 		</dict>
 	</array>

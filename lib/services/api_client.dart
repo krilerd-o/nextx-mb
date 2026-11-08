@@ -169,7 +169,9 @@ class ApiClient {
           // Any /api/auth/* call (login, OTP, link, Google, register) may return 401
           // for bad credentials — that must not log the current session out.
           final isAuthCall = path.contains('/api/auth/');
-          if (code == 401 && !isAuthCall) {
+          // A one-off OTP token was refused: the signed-in session itself is fine.
+          final oneOffToken = err.requestOptions.extra['nx_token'] != null;
+          if (code == 401 && !isAuthCall && !oneOffToken) {
             // Signed out from another device (NEXTX X-Session-Revoked) vs token simply expired.
             lastUnauthorizedRevoked = err.response?.headers.value('x-session-revoked') == '1';
             _onUnauthorized?.call();
@@ -381,6 +383,11 @@ class ApiClient {
   /// Google ID token → `{token,user,business}` or `{need_merge, merge_intent}`.
   Future<Map<String, dynamic>> googleOneTap(String idToken) async {
     return _dataMap(await _send('POST', '/api/auth/google/one-tap', data: {'credential': idToken}));
+  }
+
+  /// Sign in with Apple (iOS): session, or `{needLinkConfirm, intentToken}`.
+  Future<Map<String, dynamic>> appleLogin(String identityToken) async {
+    return _dataMap(await _send('POST', '/api/auth/apple', data: {'identity_token': identityToken, 'remember': true}));
   }
 
   Future<Map<String, dynamic>> googleMergePreview(String intent) async {
@@ -1793,6 +1800,22 @@ class ApiClient {
       try {
         await _send('POST', '/api/auth/logout', options: Options(extra: {'nx_token': otpToken}));
       } catch (_) {}
+    }
+  }
+
+  /// Closes the signed-in user's own account (App Store / Google Play rule).
+  /// [otpToken] is the fresh session from an OTP check (NEXTX accepts tokens
+  /// issued in the last 10 minutes only). Returns false when this server has
+  /// no in-app deletion yet (older NEXTX) so the app can point to the web page.
+  Future<bool> deleteMyAccount(String otpToken) async {
+    try {
+      await _send('POST', '/api/me/delete-account',
+          data: {'confirm': 'DELETE'}, options: Options(extra: {'nx_token': otpToken}));
+      return true;
+    } on ApiException catch (e) {
+      // Route missing (plain 404, not a NEXTX error envelope) → older server.
+      if (e.statusCode == 404) return false;
+      rethrow;
     }
   }
 

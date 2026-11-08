@@ -77,6 +77,8 @@ android {
             if (testerKeyFile.exists()) signingConfig = signingConfigs.tester
         }
         release {
+            // Keeps the Huawei Push SDK working after R8 shrinking.
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.release
             } else if (System.getenv("NX_ALLOW_DEBUG_SIGNING") == "1") {

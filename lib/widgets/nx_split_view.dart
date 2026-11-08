@@ -31,6 +31,8 @@ class NxSplitView extends StatelessWidget {
         ),
       );
     }
+    final hinge = bp.hinge;
+    if (hinge != null) return _HingeSplit(hinge: hinge, list: list, detail: _detail(context));
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -43,20 +45,65 @@ class NxSplitView extends StatelessWidget {
           thickness: 1,
           color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.35),
         ),
-        Expanded(
-          child: detail ??
-              empty ??
-              Center(
-                child: Text(
-                  tr('เลือกจากรายการ'),
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-              ),
-        ),
+        Expanded(child: _detail(context)),
       ],
     );
+  }
+
+  Widget _detail(BuildContext context) =>
+      detail ??
+      empty ??
+      Center(
+        child: Text(
+          tr('เลือกจากรายการ'),
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+      );
+}
+
+/// List on one side of a foldable's fold, detail on the other — nothing sits
+/// under the hinge. The hinge rect is global, so the split is measured from
+/// where this view actually starts on screen (e.g. after a side rail).
+class _HingeSplit extends StatefulWidget {
+  const _HingeSplit({required this.hinge, required this.list, required this.detail});
+  final Rect hinge;
+  final Widget list;
+  final Widget detail;
+
+  @override
+  State<_HingeSplit> createState() => _HingeSplitState();
+}
+
+class _HingeSplitState extends State<_HingeSplit> {
+  double _originX = 0;
+
+  void _measure() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final x = box.localToGlobal(Offset.zero).dx;
+    if ((x - _originX).abs() > 0.5 && mounted) setState(() => _originX = x);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    final cs = Theme.of(context).colorScheme;
+    return LayoutBuilder(builder: (context, box) {
+      final left = (widget.hinge.left - _originX).clamp(0.0, box.maxWidth);
+      final gap = widget.hinge.width.clamp(0.0, box.maxWidth - left);
+      return Row(
+        key: const ValueKey('nx-hinge-split'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(width: left, child: widget.list),
+          // A physical hinge has width (leave it empty); a flexible fold is a line.
+          gap > 0 ? SizedBox(width: gap) : VerticalDivider(width: 1, thickness: 1, color: cs.outline.withValues(alpha: 0.35)),
+          Expanded(child: widget.detail),
+        ],
+      );
+    });
   }
 }
 

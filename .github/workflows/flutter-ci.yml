@@ -4,6 +4,14 @@ on:
   push:
     branches: [main, 'claude/**']
   pull_request:
+  # Run by hand (Actions → Flutter CI → Run workflow). Tick "testflight" to upload
+  # the signed iOS build to TestFlight from any branch (no merge needed).
+  workflow_dispatch:
+    inputs:
+      testflight:
+        description: 'Upload the iOS build to TestFlight'
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -64,16 +72,29 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -n "$TESTER_B64" ]; then
-            echo "$TESTER_B64" | base64 -d > android/app/tester.keystore
+            python3 .github/scripts/secret_file.py TESTER_B64 android/app/tester.keystore
             printf 'storePassword=%s\nkeyAlias=tester\nkeyPassword=%s\n' "$TESTER_PASSWORD" "$TESTER_PASSWORD" > android/tester.properties
             echo "Tester key SHA-1:"; keytool -list -v -keystore android/app/tester.keystore -storepass "$TESTER_PASSWORD" -alias tester | grep -E 'SHA1'
           else
             echo "::warning::No ANDROID_TESTER_KEYSTORE_BASE64 secret — APKs use a random debug key, Google Sign-In will not work on them."
           fi
           if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > android/app/release.jks
+            python3 .github/scripts/secret_file.py KEYSTORE_B64 android/app/release.jks
             printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/key.properties
             echo "Release key SHA-1:"; keytool -list -v -keystore android/app/release.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | grep -E 'SHA1'
+          fi
+
+      # Firebase (push) config from a secret: base64 of google-services.json.
+      # Without it the app still builds; push notifications just stay off.
+      - name: Firebase config (optional)
+        env:
+          GSJ_B64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GSJ_B64" ]; then
+            python3 .github/scripts/secret_file.py GSJ_B64 android/app/google-services.json json
+            echo "google-services.json written"
+          else
+            echo "::warning::No GOOGLE_SERVICES_JSON_BASE64 secret — push notifications are off in this build."
           fi
 
       - name: Debug APK (no signing keys needed)
@@ -108,3 +129,153 @@ jobs:
             build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
             build/app/outputs/flutter-apk/app-x86_64-release.apk
           retention-days: 7
+
+      # Play Store bundle (only when the release key secrets are present).
+      - name: Play Store bundle (AAB)
+        if: ${{ hashFiles('android/key.properties') != '' }}
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: flutter build appbundle --release --dart-define=NX_STORE=google --dart-define=NX_MAPS=${{ secrets.MAPS_API_KEY != '' && '1' || '0' }}
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ hashFiles('android/key.properties') != '' }}
+        with:
+          name: app-release-aab-play
+          path: build/app/outputs/bundle/release/app-release.aab
+          retention-days: 14
+
+      # Huawei AppGallery build: HMS push + OpenStreetMap, Google sign-in kept (GBox / microG).
+      # Secret AGCONNECT_SERVICES_JSON_BASE64 = base64 of agconnect-services.json (push).
+      - name: Huawei AppGallery build
+        env:
+          NX_ALLOW_DEBUG_SIGNING: '1'
+          AGC_B64: ${{ secrets.AGCONNECT_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$AGC_B64" ]; then
+            mkdir -p android/app/src/main/assets
+            python3 .github/scripts/secret_file.py AGC_B64 android/app/src/main/assets/agconnect-services.json json
+          else
+            echo "::warning::No AGCONNECT_SERVICES_JSON_BASE64 secret — HMS push is off in the Huawei build."
+          fi
+          flutter build apk --release --target-platform android-arm64 --dart-define=NX_STORE=huawei
+          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/app-huawei-arm64-release.apk
+          if [ -f android/key.properties ]; then
+            flutter build appbundle --release --dart-define=NX_STORE=huawei
+            mv build/app/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/app-huawei-release.aab
+          fi
+          rm -f android/app/src/main/assets/agconnect-services.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-huawei-appgallery
+          path: |
+            build/app/outputs/flutter-apk/app-huawei-arm64-release.apk
+            build/app/outputs/bundle/release/app-huawei-release.aab
+          if-no-files-found: warn
+          retention-days: 14
+
+  # iOS / iPadOS: always build without signing (catches Xcode / pod errors on every push).
+  # With the App Store secrets it also signs an .ipa and uploads it to TestFlight.
+  # Secrets (Settings → Secrets → Actions), all optional:
+  # - IOS_GOOGLE_CLIENT_ID          iOS OAuth client of the server's Google project (Google Sign-In)
+  # - GOOGLE_SERVICE_INFO_PLIST_BASE64  base64 of GoogleService-Info.plist (push)
+  # - MAPS_API_KEY                  Google Maps key (shared with Android)
+  # - IOS_DIST_CERT_P12_BASE64 / IOS_DIST_CERT_PASSWORD / IOS_PROFILE_BASE64  App Store signing
+  # - ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8_BASE64  App Store Connect API key (upload)
+  build-ios:
+    needs: analyze-test
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      IOS_GOOGLE_CLIENT_ID: ${{ secrets.IOS_GOOGLE_CLIENT_ID }}
+      GSI_B64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
+      MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+      CERT_B64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+      CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+      PROFILE_B64: ${{ secrets.IOS_PROFILE_BASE64 }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
+
+      - name: iOS config from secrets (optional)
+        run: |
+          {
+            echo "GMS_API_KEY = ${MAPS_API_KEY}"
+            if [ -n "$IOS_GOOGLE_CLIENT_ID" ]; then
+              echo "GOOGLE_IOS_CLIENT_ID = ${IOS_GOOGLE_CLIENT_ID}"
+              echo "GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.${IOS_GOOGLE_CLIENT_ID%.apps.googleusercontent.com}"
+            fi
+          } > ios/Flutter/Secrets.xcconfig
+          if [ -n "$GSI_B64" ]; then python3 .github/scripts/secret_file.py GSI_B64 ios/Runner/GoogleService-Info.plist plist; fi
+          [ -n "$IOS_GOOGLE_CLIENT_ID" ] || echo "::warning::No IOS_GOOGLE_CLIENT_ID secret — the Google button is hidden on iPhone."
+          [ -n "$GSI_B64" ] || echo "::warning::No GOOGLE_SERVICE_INFO_PLIST_BASE64 secret — push notifications are off on iPhone."
+          echo "DEFINES=--dart-define=NX_STORE=google --dart-define=NX_MAPS=$([ -n "$MAPS_API_KEY" ] && echo 1 || echo 0) --dart-define=NX_IOS_GOOGLE_CLIENT_ID=${IOS_GOOGLE_CLIENT_ID}" >> "$GITHUB_ENV"
+
+      - name: Build iOS (no signing)
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign $DEFINES
+
+      - name: Signing (App Store)
+        if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' }}
+        run: |
+          KC="$RUNNER_TEMP/build.keychain-db"; KC_PW="$(uuidgen)"
+          security create-keychain -p "$KC_PW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KC_PW" "$KC"
+          python3 .github/scripts/secret_file.py CERT_B64 "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KC_PW" "$KC" >/dev/null
+          security list-keychain -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          python3 .github/scripts/secret_file.py PROFILE_B64 "$RUNNER_TEMP/app.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/app.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          APPID=$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")
+          case "$APPID" in
+            *.com.moai.nextt.mobile) echo "Profile is for $APPID" ;;
+            *) echo "::error::IOS_PROFILE_BASE64 is for '$APPID', not com.moai.nextt.mobile — make an App Store profile for com.moai.nextt.mobile"; exit 1 ;;
+          esac
+          UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")
+          NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/profile.plist")
+          TEAM=$(/usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "$RUNNER_TEMP/profile.plist")
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$RUNNER_TEMP/app.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>$TEAM</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key><dict><key>com.moai.nextt.mobile</key><string>$NAME</string></dict>
+          </dict></plist>
+          PLIST
+          echo "DEVELOPMENT_TEAM = $TEAM" >> ios/Flutter/Secrets.xcconfig
+          echo "CODE_SIGN_STYLE = Manual" >> ios/Flutter/Secrets.xcconfig
+          echo "CODE_SIGN_IDENTITY = Apple Distribution" >> ios/Flutter/Secrets.xcconfig
+          echo "PROVISIONING_PROFILE_SPECIFIER = $NAME" >> ios/Flutter/Secrets.xcconfig
+
+      - name: Build IPA
+        if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' }}
+        run: flutter build ipa --release $DEFINES --build-number=${{ github.run_number }} --export-options-plist="$RUNNER_TEMP/ExportOptions.plist"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' }}
+        with:
+          name: app-ios-ipa
+          path: build/ios/ipa/*.ipa
+          retention-days: 14
+
+      - name: Upload to TestFlight
+        if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' && env.ASC_KEY_ID != '' && (github.ref == 'refs/heads/main' || inputs.testflight) }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          python3 .github/scripts/secret_file.py ASC_KEY_P8_B64 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8 pem
+          xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"

@@ -21,6 +21,7 @@ import '../settings_screen.dart';
 import '../spaces/add_space_sheet.dart';
 import '../spaces/space_switcher.dart';
 import 'change_password_screen.dart';
+import 'delete_account_screen.dart';
 import 'my_signatures_screen.dart';
 import 'phone_verify_screen.dart';
 
@@ -234,6 +235,14 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                   title: 'อุปกรณ์ที่เข้าใช้งาน',
                   subtitle: 'ดูและออกจากระบบเครื่องอื่น',
                   onTap: () => context.push(AppRoutes.devices),
+                ),
+                SettingsTile(
+                  key: const ValueKey('profile-delete-account'),
+                  icon: NxI.trash,
+                  tint: const Color(0xFFDC2626),
+                  title: 'ลบบัญชี',
+                  subtitle: 'ปิดบัญชีถาวร ยืนยันด้วย OTP',
+                  onTap: () => nxPush<void>(context, const DeleteAccountScreen()),
                 ),
               ]),
             ),

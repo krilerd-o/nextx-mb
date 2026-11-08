@@ -189,6 +189,7 @@ class NxI {
   static const IconData brandOutlook = LucideIcons300.mail;
   static const IconData brandGoogle = SimpleIcons.google;
   static const IconData brandLine = SimpleIcons.line;
+  static const IconData brandApple = SimpleIcons.apple;
   static const IconData brandFacebook = SimpleIcons.facebook;
   static const IconData brandShopee = SimpleIcons.shopee;
   static const IconData brandTiktok = SimpleIcons.tiktok;

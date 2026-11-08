@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../core/build_target.dart';
+
 /// Native Google Sign-In → ID token for NEXTX `POST /api/auth/google/one-tap`.
 ///
 /// The server checks the token's audience against its web client id, so the
@@ -11,13 +13,32 @@ class GoogleAuth {
 
   static String? _initializedWith;
 
-  static bool get supported => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
+  /// iOS OAuth client id (CI secret IOS_GOOGLE_CLIENT_ID → `--dart-define`).
+  /// The same value goes to Info.plist `GIDClientID` via Flutter/Secrets.xcconfig.
+  static const iosClientId = String.fromEnvironment('NX_IOS_GOOGLE_CLIENT_ID');
+
+  /// Android: always (Huawei too — GBox / microG may provide Google).
+  /// iOS: only when this build has an iOS client id, otherwise the button is hidden.
+  static bool get supported {
+    if (kIsWeb) return false;
+    if (defaultTargetPlatform == TargetPlatform.android) return true;
+    return defaultTargetPlatform == TargetPlatform.iOS && iosClientId.isNotEmpty;
+  }
 
   /// Returns the ID token, or null when the user cancelled.
   static Future<String?> idToken(String serverClientId) async {
     final gs = GoogleSignIn.instance;
     if (_initializedWith == null) {
-      await gs.initialize(serverClientId: serverClientId);
+      try {
+        await gs.initialize(
+          clientId: defaultTargetPlatform == TargetPlatform.iOS && iosClientId.isNotEmpty ? iosClientId : null,
+          serverClientId: serverClientId,
+        );
+      } catch (e) {
+        // Huawei phones without GBox / microG have no Google services at all.
+        if (isHuaweiBuild || '$e'.toLowerCase().contains('google play services')) throw const GoogleAuthError(noGoogleServicesMessage);
+        rethrow;
+      }
       _initializedWith = serverClientId;
     } else if (_initializedWith != serverClientId) {
       throw StateError('เปลี่ยนเซิร์ฟเวอร์แล้ว กรุณาปิดและเปิดแอปใหม่ก่อนเข้าสู่ระบบด้วย Google');
@@ -30,6 +51,7 @@ class GoogleAuth {
       // Every account marked "unusable" / config errors = Google does not know
       // this app build (package + signing SHA-1 not registered for the
       // server's Google project). See docs/GOOGLE_SIGNIN.md.
+      if (looksLikeNoGoogleServices(e)) throw const GoogleAuthError(noGoogleServicesMessage);
       if (e.code == GoogleSignInExceptionCode.clientConfigurationError ||
           e.code == GoogleSignInExceptionCode.providerConfigurationError) {
         throw GoogleAuthError(
@@ -39,6 +61,23 @@ class GoogleAuth {
       throw GoogleAuthError('เข้าสู่ระบบด้วย Google ไม่สำเร็จ (${e.code.name}) ลองอีกครั้ง หรือใช้อีเมล/OTP');
     }
   }
+}
+
+/// Shown when the phone has no Google services (e.g. Huawei without GBox /
+/// microG). The Google button stays visible on every Android build because
+/// those apps can make Google sign-in work.
+const noGoogleServicesMessage =
+    'เครื่องนี้ไม่มีบริการ Google — ติดตั้ง GBox หรือ microG หรือเข้าสู่ระบบด้วย LINE / OTP';
+
+/// Errors that mean "no Google services on this device" rather than a
+/// misconfigured app: Credential Manager has no Google provider, or the
+/// error text mentions Play services. On a Huawei build any provider error
+/// is treated this way.
+bool looksLikeNoGoogleServices(GoogleSignInException e) {
+  final text = '${e.description ?? ''}'.toLowerCase();
+  if (text.contains('play services') || text.contains('no provider') || text.contains('providerconfiguration')) return true;
+  return isHuaweiBuild &&
+      (e.code == GoogleSignInExceptionCode.providerConfigurationError || e.code == GoogleSignInExceptionCode.uiUnavailable);
 }
 
 /// Readable Google sign-in failure (shown as is on the login screen).

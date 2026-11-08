@@ -2,6 +2,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // Huawei Push Kit (huawei_push plugin) for the AppGallery build.
+        maven { url "https://developer.huawei.com/repo/" }
     }
 }
 

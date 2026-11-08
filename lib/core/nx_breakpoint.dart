@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' show DisplayFeatureType, DisplayFeatureState;
 
 export 'nx_motion.dart';
 
@@ -6,11 +7,30 @@ enum NxSize { mini, mobile, tablet, desktop, wide }
 
 /// Window width only — never switch layout just because of landscape.
 class NxBreakpoint {
-  const NxBreakpoint._(this.size, this.width, this.height);
+  const NxBreakpoint._(this.size, this.width, this.height, [this.hinge]);
 
   final NxSize size;
   final double width;
   final double height;
+
+  /// A foldable's vertical fold or hinge (global rect) when the screen is
+  /// opened across it (book style). Two-pane layouts split exactly here.
+  final Rect? hinge;
+
+  /// Vertical fold/hinge from [MediaQuery.displayFeaturesOf], or null.
+  /// A horizontal fold (laptop / tabletop posture) is ignored: panes stay
+  /// side by side only for book-style folds.
+  static Rect? verticalHinge(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    for (final f in MediaQuery.displayFeaturesOf(context)) {
+      if (f.type == DisplayFeatureType.cutout) continue;
+      if (f.type == DisplayFeatureType.fold && f.state == DisplayFeatureState.unknown) continue;
+      final b = f.bounds;
+      final spansHeight = b.top <= 0 && b.bottom >= size.height;
+      if (spansHeight && b.width <= b.height && b.left > 0 && b.right < size.width) return b;
+    }
+    return null;
+  }
 
   static NxBreakpoint of(BuildContext context) {
     final mq = MediaQuery.sizeOf(context);
@@ -27,7 +47,7 @@ class NxBreakpoint {
     } else {
       size = NxSize.wide;
     }
-    return NxBreakpoint._(size, w, mq.height);
+    return NxBreakpoint._(size, w, mq.height, verticalHinge(context));
   }
 
   bool get isMini => size == NxSize.mini;
@@ -35,7 +55,10 @@ class NxBreakpoint {
   /// Rail / two-pane need width and enough height so a phone in landscape
   /// keeps the bottom glass bar (width-only would treat 844×390 as desktop).
   bool get useRail => !isCompact && height >= 600;
-  bool get twoPane => useRail;
+
+  /// Two panes on wide screens, and always on an opened foldable (one pane
+  /// per side of the fold, even when the total width is phone-like).
+  bool get twoPane => useRail || hinge != null;
   bool get iconOnlyNav => isMini;
 
   double get titleSize => isMini ? 22 : 28;

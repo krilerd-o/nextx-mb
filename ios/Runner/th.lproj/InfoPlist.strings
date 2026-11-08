@@ -1,0 +1,7 @@
+/* ข้อความขอสิทธิ์ (ภาษาไทย) */
+"CFBundleDisplayName" = "MOAI NEXT";
+"NSLocationWhenInUseUsageDescription" = "ใช้ตำแหน่งเพื่อเช็คอินหน้างานและลงเวลา";
+"NSFaceIDUsageDescription" = "ใช้ Face ID ปลดล็อกแอปแทนการเข้าสู่ระบบใหม่";
+"NSCameraUsageDescription" = "ใช้กล้องถ่ายหลักฐานเช็คอิน ลงเวลา และใบตรวจ";
+"NSPhotoLibraryUsageDescription" = "เลือกภาพหลักฐานเช็คอินและรูปโปรไฟล์";
+"NSPhotoLibraryAddUsageDescription" = "บันทึกไฟล์ที่ดาวน์โหลดจากแอป";
