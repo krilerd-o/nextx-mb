@@ -105,10 +105,8 @@ class BirthdayReminders {
     final title = people.length == 1
         ? tr('พรุ่งนี้วันเกิด ${people.first.name}')
         : tr('พรุ่งนี้วันเกิดลูกค้า ${people.length} คน');
-    String one(CalBirthday b) {
-      final age = b.ageIn(day.year);
-      return [b.name, '(${b.typeLabel}${b.org == null ? '' : ' · ${b.org}'})', if (age != null) tr('ครบ $age ปี')].join(' ');
-    }
+    // No age in the reminder (not shown anywhere).
+    String one(CalBirthday b) => [b.name, '(${b.typeLabel}${b.org == null ? '' : ' · ${b.org}'})'].join(' ');
 
     final body = people.length == 1
         ? [one(people.first), tr('แตะเพื่อดูในปฏิทิน')].join('\n')
