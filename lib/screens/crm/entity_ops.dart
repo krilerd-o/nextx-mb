@@ -1491,7 +1491,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
       lastDate: thaiNow().add(const Duration(days: 365)),
     );
     if (date == null || !context.mounted) return;
-    final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(thaiNow()));
     if (time == null || !context.mounted) return;
     final when = DateTime(date.year, date.month, date.day, time.hour, time.minute);
     setState(() => _busy = true);

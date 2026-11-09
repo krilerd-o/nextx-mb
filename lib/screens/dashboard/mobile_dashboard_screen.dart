@@ -105,7 +105,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   void initState() {
     super.initState();
     _load();
-    RecentRecords.instance.load(context.read<AppConfig>().prefsScope);
+    RecentRecords.instance.load(context.read<AppConfig>().businessScope);
     HomeLayout.instance.load(context.read<AppConfig>().prefsScope);
     HomeLayout.instance.addListener(_onLayout);
   }

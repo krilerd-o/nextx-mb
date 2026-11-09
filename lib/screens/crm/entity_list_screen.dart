@@ -102,7 +102,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
   int _page = 1;
   bool _hasMore = true;
   NxListQuery _query = const NxListQuery();
-  late final NxListPrefs _prefs = NxListPrefs('crm_${widget.module}_${context.read<AppConfig>().prefsScope}');
+  late final NxListPrefs _prefs = NxListPrefs('crm_${widget.module}_${context.read<AppConfig>().businessScope}');
   bool _showMine = true;
   int? _total;
 
@@ -126,7 +126,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     final ctx = _cardCtx;
     final def = _defaultLayout;
     if (ctx == null || def == null) return;
-    final scope = context.read<AppConfig>().prefsScope;
+    final scope = context.read<AppConfig>().businessScope;
     final result = await nxPush<CardLayout>(
       context,
       CardLayoutEditorScreen(
@@ -146,7 +146,8 @@ class _EntityListScreenState extends State<EntityListScreen> {
   /// Custom Views (มุมมอง CV) from the server, and the one applied.
   CustomViewList? _cvs;
   String? _cvId;
-  String get _cvPrefKey => 'nx_cv_${widget.module}_${context.read<AppConfig>().prefsScope}';
+  /// Filters, chosen view and card layout belong to the current business.
+  String get _cvPrefKey => 'nx_cv_${widget.module}_${context.read<AppConfig>().businessScope}';
 
   static const _statusCandidates = [
     'status', 'leadstatus', 'lead_status', 'deal_stage', 'sales_stage', 'case_status', 'quotation_status',
@@ -216,7 +217,8 @@ class _EntityListScreenState extends State<EntityListScreen> {
       }
       // Status first: it is also the inline quick-chip row.
       picks.sort((a, b) => (a.key == 'pl:$status' ? 0 : 1).compareTo(b.key == 'pl:$status' ? 0 : 1));
-      final saved = await CardLayoutStore.load(widget.module, context.read<AppConfig>().prefsScope);
+      final c0 = context.read<AppConfig>();
+      final saved = await CardLayoutStore.load(widget.module, c0.businessScope, fallbackScope: c0.prefsScope);
       if (!mounted) return;
       final ctx0 = CardFieldContext(fields: schema.fields, picklists: schema.picklists, module: widget.module);
       final def = CardLayout.defaults(widget.module, schema.fields, statusKey: status).sanitized(ctx0);
@@ -519,8 +521,10 @@ class _EntityListScreenState extends State<EntityListScreen> {
     return out;
   }
 
-  String get _cacheKey =>
-      '${context.read<AppConfig>().prefsScope}|${widget.module}|$_cvId|${_query.q}|${_query.toJson()}';
+  String get _cacheKey {
+    final c = context.read<AppConfig>();
+    return '${c.businessScope}|p${c.session.packageCode ?? ''}|${widget.module}|$_cvId|${_query.q}|${_query.toJson()}';
+  }
 
   /// Bumped on every reset load; older responses are ignored.
   int _loadGen = 0;

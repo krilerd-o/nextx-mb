@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -25,7 +26,9 @@ import 'recent_accounts.dart';
 import 'qr_login.dart';
 import '../services/apple_auth.dart';
 import 'server_profile.dart';
+import '../services/birthday_reminders.dart';
 import 'session_state.dart';
+import 'ui_font.dart';
 import 'shell_tabs.dart';
 import 'spaces.dart';
 
@@ -43,6 +46,8 @@ const String _keySearchHistory = 'search_history_json';
 const String _keyAccentIndex = 'accent_index';
 const String _keyAccentKey = 'accent_key';
 const String _keyUiLocale = 'ui_locale';
+const String _keyUiFont = 'ui_font';
+const String _keyUiScale = 'ui_scale';
 const String _keyDateFormat = 'date_format_pattern';
 const String _keyProfileAvatarB64 = 'profile_avatar_base64';
 const String _keyServerConfirmed = 'server_confirmed';
@@ -129,6 +134,8 @@ class AppConfig extends ChangeNotifier {
   bool _ready = false;
   int _accentIndex = 7; // indigo
   String _uiLocaleCode = 'th';
+  String _uiFontId = kDefaultUiFontId;
+  double _uiScale = kDefaultUiScale;
   String _dateFormatPattern = 'dd/MM/yyyy HH:mm';
   String? _profileAvatarBase64;
   bool _loggingOut = false;
@@ -152,6 +159,13 @@ class AppConfig extends ChangeNotifier {
   Color get accentColor =>
       accentOptions[_accentIndex.clamp(0, accentOptions.length - 1)];
   String get uiLocaleCode => _uiLocaleCode;
+
+  /// App font (this device only; same choices as the web). Default Google Sans.
+  String get uiFontId => _uiFontId;
+  String get uiFontFamily => uiFontById(_uiFontId).family;
+
+  /// Whole-app screen scale (text, spacing, icons). Default 95%.
+  double get uiScale => _uiScale;
   String get dateFormatPattern => _dateFormatPattern;
   String? get profileAvatarBase64 => _profileAvatarBase64;
 
@@ -261,8 +275,16 @@ class AppConfig extends ChangeNotifier {
 
   /// `moainext://app/login?token=…` from the LINE flow started with `?app=1`.
   /// Called from the router redirect, so the work runs after the current frame.
+  /// Last sign-in deep link handed over (the router re-runs its redirect on
+  /// every notify; without this the same link was handled again and again —
+  /// endless login / merge loops that froze the app after Google sign-in).
+  String? _handledAuthLink;
+
   void handleAuthDeepLink(AuthRedirect r) {
-    if (_session.isLoggedIn) return;
+    if (_session.isLoggedIn || _authLinkBusy) return;
+    final key = 't:${r.token}|m:${r.mergeIntent}|e:${r.error}';
+    if (key == _handledAuthLink) return;
+    _handledAuthLink = key;
     Future.microtask(() async {
       if (r.token != null) {
         _authLinkBusy = true;
@@ -375,6 +397,10 @@ class AppConfig extends ChangeNotifier {
   String get _userScope => '${serverLabel(_apiBaseUrl)}_${_session.userId ?? ''}';
   /// Per server + user key prefix for local UI prefs (list filters, recents…).
   String get prefsScope => _userScope;
+
+  /// [prefsScope] + current business: data that belongs to one business
+  /// (recently opened records, cached first pages).
+  String get businessScope => '$_userScope|b${_session.businessId ?? ''}';
   String get _shellKey => 'shell_v1_$_userScope';
   String get _lastTabKey => 'last_tab_$_userScope';
   String? _lastTab;
@@ -468,6 +494,8 @@ class AppConfig extends ChangeNotifier {
     final ai = accentKeys.indexOf(accentKey);
     _accentIndex = ai < 0 ? accentKeys.indexOf('indigo') : ai;
     _uiLocaleCode = prefs.getString(_keyUiLocale) == 'en' ? 'en' : 'th';
+    _uiFontId = resolveUiFontId(prefs.getString(_keyUiFont));
+    _uiScale = resolveUiScale(prefs.getDouble(_keyUiScale));
     L10n.set(_uiLocaleCode);
     _dateFormatPattern = prefs.getString(_keyDateFormat) ?? 'dd/MM/yyyy HH:mm';
     _recentServers = prefs.getStringList(_keyRecentServers) ?? const [];
@@ -658,6 +686,24 @@ class AppConfig extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAccentKey, accentKeys[_accentIndex]);
     notifyListeners();
+  }
+
+  Future<void> setUiFont(String id) async {
+    final f = resolveUiFontId(id);
+    if (f == _uiFontId) return;
+    _uiFontId = f;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyUiFont, f);
+  }
+
+  Future<void> setUiScale(double v) async {
+    final x = resolveUiScale(v);
+    if (x == _uiScale) return;
+    _uiScale = x;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyUiScale, x);
   }
 
   /// Switches the whole app's language at once. When the app's switch layer
@@ -867,6 +913,8 @@ class AppConfig extends ChangeNotifier {
   }
 
   /// Stores the session returned by any NEXTX login endpoint (`{token, user, business}`).
+  bool get hasPendingGoogleMerge => _pendingGoogleMerge != null;
+
   Future<void> _completeLogin(Map<String, dynamic> data, {required String fallbackEmail}) async {
     final email = fallbackEmail;
     final token = data['token']?.toString();
@@ -919,11 +967,30 @@ class AppConfig extends ChangeNotifier {
     );
     await _loadUserScoped(prefs);
     notifyListeners();
-    await refreshSession();
+    // Signed in from here on: the screen moves on now. Profile refresh is
+    // bounded; push / offline queue / realtime run in the background so a
+    // slow push service (GBox / microG) can never hold the login spinner.
+    try {
+      await refreshSession().timeout(const Duration(seconds: 12));
+    } catch (e) {
+      debugPrint('[login] refreshSession after login: $e');
+    }
     _connectRealtime();
-    await flushOfflineQueue();
-    await DevicePushService.instance.sync(this);
-    notifyListeners();
+    unawaited(_afterLoginBackground());
+  }
+
+  Future<void> _afterLoginBackground() async {
+    try {
+      await flushOfflineQueue();
+    } catch (e) {
+      debugPrint('[login] offline queue: $e');
+    }
+    try {
+      await DevicePushService.instance.sync(this).timeout(const Duration(seconds: 20));
+    } catch (e) {
+      debugPrint('[login] push sync: $e');
+    }
+    if (_session.isLoggedIn) notifyListeners();
   }
 
   Future<void> syncPushToken() async {
@@ -1000,19 +1067,25 @@ class AppConfig extends ChangeNotifier {
     required String businessId,
     required String businessName,
     String? packageCode,
+    String? packageId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyBusinessId, businessId);
     await prefs.setString(_keyBusinessName, businessName);
     // A different business means a different package list → pick again.
     _manualBusinessPick = false;
+    // Birthday reminders belong to the old business: drop them; Home sets the
+    // new business's when it loads its birthdays.
+    if (businessId != _session.businessId) unawaited(BirthdayReminders.instance.cancelAll().catchError((_) {}));
     await prefs.remove(_keyPackageId);
     if (packageCode != null) {
       await prefs.setString(_keyPackageCode, packageCode);
+      if (packageCode.isNotEmpty) await prefs.setString(_lastPackageKey(businessId), packageCode);
     } else {
       await prefs.remove(_keyPackageCode);
     }
-    _packageId = null;
+    if (packageId != null) await prefs.setString(_keyPackageId, packageId);
+    _packageId = packageId;
     _session = SessionState(
       accessToken: _session.accessToken,
       userId: _session.userId,
@@ -1031,13 +1104,25 @@ class AppConfig extends ChangeNotifier {
       packageCode: packageCode,
     );
     notifyListeners();
-    try {
-      await refreshSession();
-    } catch (_) {}
+    await _refreshAfterSwitch();
     try {
       await apiClient.setDefaultBusiness(businessId);
     } catch (_) {}
     _connectRealtime();
+  }
+
+  /// Menus for the new business / package. One retry: a failed refresh
+  /// would otherwise leave the app with almost no tabs until the next resume.
+  Future<void> _refreshAfterSwitch() async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await refreshSession();
+        return;
+      } catch (e) {
+        debugPrint('[switch] refreshSession: $e');
+        if (attempt == 0) await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    }
   }
 
   /// Last package this user used in [businessId] on this server.
@@ -1061,9 +1146,7 @@ class AppConfig extends ChangeNotifier {
     _manualPackagePick = false;
     _session = _session.copyWith(packageCode: code, menusLoaded: false, clearMenus: true);
     notifyListeners();
-    try {
-      await refreshSession();
-    } catch (_) {}
+    await _refreshAfterSwitch();
     if (setDefault && packageId != null && bid != null) {
       try {
         await apiClient.setDefaultPackage(packageId: packageId, businessId: bid);

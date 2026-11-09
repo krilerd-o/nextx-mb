@@ -64,17 +64,34 @@ class _LoginScreenState extends State<LoginScreen> {
     if (invite != null) WidgetsBinding.instance.addPostFrameCallback((_) => _openRegister());
     _loadSocial();
     WidgetsBinding.instance.addPostFrameCallback((_) => _consumePending());
+    _config = context.read<AppConfig>()..addListener(_onConfig);
+  }
+
+  AppConfig? _config;
+  bool _consuming = false;
+
+  /// A Google browser sign-in that needs linking can arrive while this screen
+  /// is already open (deep link) — open the confirm screen then too.
+  void _onConfig() {
+    final c = _config;
+    if (c == null || _consuming || !mounted || !c.hasPendingGoogleMerge) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumePending());
   }
 
   /// QR opened from the phone camera app, or a Google browser sign-in that
   /// needs the user to confirm linking an existing account.
   Future<void> _consumePending() async {
-    if (!mounted) return;
-    final config = context.read<AppConfig>();
-    final merge = config.takePendingGoogleMerge();
-    if (merge != null) await _openLinkConfirm(merge, google: true);
-    final qr = config.takePendingQr();
-    if (qr != null && mounted) await nxPush<bool>(context, QrLoginScanScreen(initial: qr));
+    if (!mounted || _consuming) return;
+    _consuming = true;
+    try {
+      final config = context.read<AppConfig>();
+      final merge = config.takePendingGoogleMerge();
+      if (merge != null) await _openLinkConfirm(merge, google: true);
+      final qr = config.takePendingQr();
+      if (qr != null && mounted) await nxPush<bool>(context, QrLoginScanScreen(initial: qr));
+    } finally {
+      _consuming = false;
+    }
   }
 
   Future<void> _scan() async {
@@ -91,6 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _config?.removeListener(_onConfig);
     _id.dispose();
     _password.dispose();
     _code.dispose();

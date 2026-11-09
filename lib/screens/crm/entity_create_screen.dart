@@ -13,6 +13,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
 import '../../core/entity_form_rules.dart';
+import '../../core/thai_time.dart';
 import '../../widgets/fields/field_validate.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/nx_unsaved_guard.dart';
@@ -99,6 +100,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
       });
     }
     applyFieldDefaults(_fields, _values);
+    normalizeFormDates(_fields, _values);
   }
 
   /// The case subject suggested from its type (while the user hasn't typed one).
@@ -118,8 +120,9 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
       }
       // An appointment ends an hour after it starts unless set later.
       if (widget.module == 'activity' && name == 'date_start') {
-        final start = DateTime.tryParse('${v ?? ''}'.replaceFirst(' ', 'T'));
-        final end = DateTime.tryParse('${_values['date_end'] ?? ''}'.replaceFirst(' ', 'T'));
+        // Both as Thai wall-clock time (the stored end may still carry a zone).
+        final start = parseThaiField(v, 'date_start', module: 'activity');
+        final end = parseThaiField(_values['date_end'], 'date_end', module: 'activity');
         if (start != null && (end == null || !end.isAfter(start))) {
           final e = start.add(const Duration(hours: 1));
           String two(int n) => n.toString().padLeft(2, '0');

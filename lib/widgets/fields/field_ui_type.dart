@@ -515,7 +515,43 @@ FieldUiType? fieldUiTypeFromName(String? raw) {
       _byWire[raw.trim().toLowerCase()];
 }
 
+/// Birthday-like column names (Lead/Contact `birthdate`, Account
+/// `contact_person_birthdate`, …) — always a date picker, never a text box.
+bool isBirthdayFieldName(String? name) {
+  final n = (name ?? '').toLowerCase();
+  if (n.isEmpty) return false;
+  return n == 'dob' ||
+      n.contains('birthdate') ||
+      n.contains('birthday') ||
+      n.contains('birth_date') ||
+      n.contains('date_of_birth') ||
+      n.endsWith('_dob');
+}
+
+/// Date types from vtiger-style metadata: numeric uitype or typeofdata.
+FieldUiType? _legacyDateType(Map<String, dynamic> field) {
+  final ui = int.tryParse(field['uitype']?.toString() ?? '');
+  if (ui == 5 || ui == 23) return FieldUiType.date;
+  if (ui == 6 || ui == 70) return FieldUiType.dateTime;
+  final tod = field['typeofdata']?.toString().toUpperCase() ?? '';
+  if (tod.startsWith('DT~')) return FieldUiType.dateTime;
+  if (tod.startsWith('D~')) return FieldUiType.date;
+  return null;
+}
+
 FieldUiType resolveFieldUiType(Map<String, dynamic> field) {
+  final t = _resolveFieldUiType(field);
+  if (t == FieldUiType.text) {
+    final legacy = _legacyDateType(field);
+    if (legacy != null) return legacy;
+    if (isBirthdayFieldName((field['name'] ?? field['columnname'] ?? field['key'])?.toString())) {
+      return FieldUiType.date;
+    }
+  }
+  return t;
+}
+
+FieldUiType _resolveFieldUiType(Map<String, dynamic> field) {
   final uitype = fieldUiTypeFromName(field['uitype']?.toString());
   if (uitype != null) return uitype;
   final type = fieldUiTypeFromName(field['type']?.toString());

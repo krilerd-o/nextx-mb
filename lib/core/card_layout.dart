@@ -142,13 +142,18 @@ class CardLayout {
   }
 }
 
-/// Per-user card layouts (local to the device, keyed by server + user).
+/// Card layouts (local to the device). Saved per business ([scope] =
+/// server + user + business): fields differ between businesses. A business
+/// without its own layout starts from [fallbackScope]'s (the older per-user
+/// layout), cleaned of fields it doesn't have by `sanitized()`.
 class CardLayoutStore {
   static String _key(String module, String scope) => 'nx_card_${module}_$scope';
 
-  static Future<CardLayout?> load(String module, String scope) async {
+  static Future<CardLayout?> load(String module, String scope, {String? fallbackScope}) async {
     try {
-      final raw = (await SharedPreferences.getInstance()).getString(_key(module, scope));
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_key(module, scope)) ??
+          (fallbackScope == null ? null : prefs.getString(_key(module, fallbackScope)));
       if (raw == null) return null;
       return CardLayout.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (e, s) {

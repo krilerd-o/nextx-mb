@@ -10,6 +10,8 @@ import 'package:nextx_mobile/core/qr_login.dart';
 import 'package:nextx_mobile/screens/auth/login_screen.dart';
 import 'package:nextx_mobile/screens/auth/qr_login_scan_screen.dart';
 
+import 'package:nextx_mobile/services/realtime_service.dart';
+
 import 'support/fake_api.dart';
 
 final _code = 'ab' * 32;
@@ -85,6 +87,11 @@ void main() {
     }
     expect(config.isLoggedIn, isTrue);
     expect(config.apiBaseUrl, 'https://qa.example.com');
+    // Login no longer waits on the profile refresh / push sync: let their
+    // bounded timeouts run out before the test ends.
+    RealtimeService.instance.disconnect();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 1));
   });
 
   testWidgets('used or expired QR → clear message and a rescan button', (tester) async {

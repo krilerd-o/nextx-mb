@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/nx_icons.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../../screens/ai/assistant/ai_assistant_screen.dart';
 import '../../screens/ai/assistant/ai_shared_chat_screen.dart';
@@ -68,7 +69,11 @@ GoRouter createAppRouter(AppConfig config) {
       // LINE started with ?app=1 comes back as moainext://app/login?token=… (or ?error=).
       if (state.uri.path == AppRoutes.login && !config.isLoggedIn) {
         final r = parseAuthRedirect(state.uri.toString());
-        if (r != null && (r.token != null || r.error != null || r.mergeIntent != null)) config.handleAuthDeepLink(r);
+        if (r != null && (r.token != null || r.error != null || r.mergeIntent != null)) {
+          config.handleAuthDeepLink(r);
+          // Drop the query so later refreshes don't hand the same link over again.
+          return AppRoutes.login;
+        }
       }
       // QR from the web scanned with the phone camera → login screen finishes it.
       final qr = state.uri.path == '/qr-login'
@@ -188,7 +193,13 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: AppRoutes.mainShell,
-        builder: (_, _) => const AppShell(),
+        // A new business / package = a fresh shell: every tab (Home, calendar,
+        // lists, search, notifications) reloads for it instead of keeping the
+        // previous business's data.
+        builder: (_, _) => Selector<AppConfig, String>(
+          selector: (_, c) => '${c.session.businessId}|${c.session.packageCode}',
+          builder: (_, scope, _) => AppShell(key: ValueKey('shell-$scope')),
+        ),
       ),
       GoRoute(
         path: AppRoutes.notifications,

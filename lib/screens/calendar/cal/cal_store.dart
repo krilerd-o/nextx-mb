@@ -24,11 +24,20 @@ class CalStore extends ChangeNotifier {
     onBirthday?.call(b, day, box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size);
   }
 
+  bool _disposed = false;
+
   @override
   void dispose() {
+    _disposed = true;
     birthdays.removeListener(notifyListeners);
     birthdays.dispose();
     super.dispose();
+  }
+
+  /// Month loads can finish after the calendar is gone (business switched).
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
   }
   final Map<String, List<CalEvent>> _months = {};
   final Set<String> _loading = {};

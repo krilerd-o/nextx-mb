@@ -625,18 +625,29 @@ class NxFormField extends StatelessWidget {
 
   Future<void> _pickDate(BuildContext context) async {
     final now = thaiNow();
-    final initial = parseThaiDate(value) ?? now;
+    final birthday = isBirthdayFieldName(name);
+    final saved = parseThaiDate(value);
+    // Birthdays: any year since 1900 up to today, opened on a year 30 years
+    // back (pick the year first) when empty.
+    final first = birthday ? DateTime(1900) : DateTime(now.year - 30);
+    final last = birthday ? DateTime(now.year, now.month, now.day) : DateTime(now.year + 15);
+    var initial = saved ?? (birthday ? DateTime(now.year - 30, now.month, now.day) : now);
+    initial = DateTime(initial.year, initial.month, initial.day);
     final picked = await showDatePicker(
         switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
         switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       locale: kFieldLocale,
       initialDate: initial,
-      firstDate: DateTime(now.year - 30),
-      lastDate: DateTime(now.year + 15),
+      firstDate: _minDay(first, initial),
+      lastDate: _maxDay(last, initial),
+      initialDatePickerMode: birthday && saved == null ? DatePickerMode.year : DatePickerMode.day,
     );
     if (picked != null) onChanged?.call(formatYmd(picked));
   }
+
+  static DateTime _minDay(DateTime a, DateTime b) => a.isBefore(b) ? a : b;
+  static DateTime _maxDay(DateTime a, DateTime b) => a.isAfter(b) ? a : b;
 
   Future<void> _pickTime(BuildContext context) async {
     final parsed = parseDate('1970-01-01T${_timeLabel(value) == 'เลือกเวลา' ? '00:00' : _timeLabel(value)}');
@@ -656,14 +667,16 @@ class NxFormField extends StatelessWidget {
   Future<void> _pickDateTime(BuildContext context) async {
     final now = thaiNow();
     final initial = _dateTime(value) ?? now;
+    final day0 = DateTime(initial.year, initial.month, initial.day);
     final day = await showDatePicker(
         switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
         switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       locale: kFieldLocale,
-      initialDate: initial,
-      firstDate: DateTime(now.year - 30),
-      lastDate: DateTime(now.year + 15),
+      initialDate: day0,
+      // Older/newer saved values still open (the picker throws otherwise).
+      firstDate: _minDay(DateTime(now.year - 30), day0),
+      lastDate: _maxDay(DateTime(now.year + 15), day0),
     );
     if (day == null || !context.mounted) return;
     final t = await showTimePicker(

@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/ui_font.dart';
+import '../../widgets/nx_appearance_controls.dart';
+
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/navigation/app_routes.dart';
@@ -223,6 +226,22 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                     translate: false,
                     onChanged: config.setUiLocaleCode,
                   ),
+                ),
+                SettingsTile(
+                  key: const ValueKey('profile-font'),
+                  icon: NxI.textT,
+                  tint: const Color(0xFF0EA5E9),
+                  title: 'ฟอนต์',
+                  subtitle: uiFontById(config.uiFontId).label,
+                  onTap: () => showUiFontPicker(context),
+                ),
+                SettingsTile(
+                  key: const ValueKey('profile-ui-scale'),
+                  icon: NxI.monitorSmartphone,
+                  tint: const Color(0xFF22C55E),
+                  title: 'ขนาดหน้าจอ',
+                  subtitle: 'ตัวอักษร ปุ่ม และไอคอนทั้งแอป',
+                  below: const NxUiScaleControl(),
                 ),
               ]),
             ),

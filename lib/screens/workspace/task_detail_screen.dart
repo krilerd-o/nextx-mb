@@ -55,12 +55,14 @@ List<Map<String, dynamic>> taskAttachments(dynamic raw) {
   ];
 }
 
-/// `2026-11-06T00:00:00.000Z` / `2026-11-06` → `2026-11-06`.
+/// A DATE column as its Thai day: `2026-11-05T17:00:00.000Z` (midnight in
+/// Bangkok) and `2026-11-06T00:00:00.000Z` / `2026-11-06` → `2026-11-06`.
 String? taskDateOnly(dynamic raw) {
   final s = raw?.toString().trim() ?? '';
   if (s.isEmpty) return null;
-  final m = RegExp(r'^(\d{4}-\d{2}-\d{2})').firstMatch(s);
-  return m?.group(1);
+  final d = parseThaiDate(s);
+  if (d != null) return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  return RegExp(r'^(\d{4}-\d{2}-\d{2})').firstMatch(s)?.group(1);
 }
 
 const _linkTypes = {'blocks': 'บล็อก', 'is_blocked_by': 'ถูกบล็อกโดย', 'relates_to': 'เกี่ยวข้องกับ'};

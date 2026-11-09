@@ -1739,6 +1739,18 @@ const Map<String, String> enStrings = {
   'ดีลและใบเสนอราคาของฉัน ตามช่วงเวลา': 'My deals and quotations by period',
   'เคสของฉัน ตามช่วงเวลา': 'My cases by period',
   'จำนวนรายการของฉัน + กราฟ 7 วัน': 'My record counts + 7-day chart',
+  'ฟอนต์': 'Font',
+  'ขนาดหน้าจอ': 'Screen size',
+  'ตัวอักษร ปุ่ม และไอคอนทั้งแอป': 'Text, buttons and icons across the app',
+  'ขนาด': 'Size',
+  'คืนค่าเริ่มต้น': 'Reset to default',
+  'Google ไม่ตอบกลับ กรุณาลองใหม่ หรือเข้าสู่ระบบด้วยวิธีอื่น': 'Google did not respond. Try again or sign in another way.',
+  'ดาวน์โหลด': 'Download',
+  'กำลังดาวน์โหลด…': 'Downloading…',
+  'บันทึกวิดีโอลงคลังภาพแล้ว': 'Video saved to your gallery',
+  'บันทึกรูปลงคลังภาพแล้ว': 'Photo saved to your gallery',
+  'ดาวน์โหลดไม่สำเร็จ': 'Download failed',
+  'เล่นวิดีโอนี้ไม่ได้': 'This video cannot be played',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

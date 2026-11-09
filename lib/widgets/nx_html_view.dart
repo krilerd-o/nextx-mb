@@ -6,7 +6,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_config.dart';
 import '../core/html_display.dart';
+import 'nx_attachments.dart' show openNxImageViewer;
 import 'nx_icons.dart';
+import 'nx_media.dart';
 import '../core/i18n.dart';
 
 class NxHtmlView extends StatelessWidget {
@@ -43,6 +45,15 @@ class NxHtmlView extends StatelessWidget {
       return SelectableText(tr(plain), style: bodyStyle);
     }
     final prepared = prepareHtml(html);
+    // Links to videos / images open in the app's player / viewer.
+    Future<void> open(String url) async {
+      if (nxIsVideoUrl(url)) return openNxVideoPlayer(context, url);
+      if (RegExp(r'\.(png|jpe?g|gif|webp|bmp|heic)$', caseSensitive: false).hasMatch(url.split('?').first)) {
+        return openNxImageViewer(context, [url], 0);
+      }
+      return (onOpenUrl ?? _launch)(url);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -51,14 +62,14 @@ class NxHtmlView extends StatelessWidget {
             html: prepared.body,
             style: bodyStyle,
             baseUrl: resolvedBase,
-            onOpenUrl: onOpenUrl ?? _launch,
+            onOpenUrl: open,
           ),
         for (final file in prepared.files) ...[
           const SizedBox(height: 8),
           _FileChip(
             card: file,
             baseUrl: resolvedBase,
-            onOpenUrl: onOpenUrl ?? _launch,
+            onOpenUrl: open,
           ),
         ],
       ],
@@ -162,6 +173,12 @@ class _HtmlBody extends StatelessWidget {
     );
   }
 
+  /// Every image in this text (for swiping in the viewer).
+  List<String> _imageUrls() => [
+        for (final m in RegExp(r'''<img[^>]+src=["']([^"']+)["']''', caseSensitive: false).allMatches(html))
+          if (!m.group(1)!.startsWith('data:') && !nxIsVideoUrl(m.group(1)!)) resolveHtmlUrl(m.group(1)!, baseUrl),
+      ];
+
   Widget _block(BuildContext context, _HtmlNode node) {
     switch (node.tag) {
       case 'ul':
@@ -195,12 +212,38 @@ class _HtmlBody extends StatelessWidget {
         final src = node.attrs['src'];
         if (src == null || src.isEmpty) return const SizedBox.shrink();
         final url = resolveHtmlUrl(src, baseUrl);
+        if (nxIsVideoUrl(url)) return Padding(padding: const EdgeInsets.only(bottom: 8), child: NxVideoTile(url: url));
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Image(image: ResizeImage(CachedNetworkImageProvider(url), height: 480, policy: ResizeImagePolicy.fit), height: 160, fit: BoxFit.contain, errorBuilder: (_, _, _) {
-            return Text(tr(node.attrs['alt'] ?? url), style: style);
-          }),
+          // Tap = full-screen viewer (zoom, swipe through this text's images, download).
+          child: GestureDetector(
+            key: ValueKey('html-img-$url'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              final all = _imageUrls();
+              openNxImageViewer(context, all, all.indexOf(url).clamp(0, all.length - 1));
+            },
+            // Tappable even while the picture is still loading.
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 120, minHeight: 48),
+              child: Image(image: ResizeImage(CachedNetworkImageProvider(url), height: 480, policy: ResizeImagePolicy.fit), height: 160, fit: BoxFit.contain, errorBuilder: (_, _, _) {
+                return Text(tr(node.attrs['alt'] ?? url), style: style);
+              }),
+            ),
+          ),
         );
+      case 'video':
+        var src = node.attrs['src'] ?? '';
+        if (src.isEmpty) {
+          for (final c in node.children) {
+            if (c.tag == 'source' && (c.attrs['src'] ?? '').isNotEmpty) {
+              src = c.attrs['src']!;
+              break;
+            }
+          }
+        }
+        if (src.isEmpty) return const SizedBox.shrink();
+        return Padding(padding: const EdgeInsets.only(bottom: 8), child: NxVideoTile(url: resolveHtmlUrl(src, baseUrl)));
       default:
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -305,11 +348,23 @@ List<_HtmlNode> _parseHtmlBlocks(String html) {
       } else if (n.tag == 'li') {
         blocks.add(_HtmlNode('p', children: n.children));
       } else {
-        blocks.add(_HtmlNode(n.tag == 'div' ? 'p' : n.tag, children: n.children, attrs: n.attrs));
+        // Images / videos inside a paragraph become their own (tappable) blocks.
+        final tag = n.tag == 'div' ? 'p' : n.tag;
+        var run = <_HtmlNode>[];
+        for (final c in n.children) {
+          if (c.tag == 'img' || c.tag == 'video') {
+            if (run.isNotEmpty) blocks.add(_HtmlNode(tag, children: run, attrs: n.attrs));
+            run = <_HtmlNode>[];
+            blocks.add(c);
+          } else {
+            run.add(c);
+          }
+        }
+        if (run.isNotEmpty || n.children.isEmpty) blocks.add(_HtmlNode(tag, children: run, attrs: n.attrs));
       }
       return;
     }
-    if (n.tag == 'img') {
+    if (n.tag == 'img' || n.tag == 'video') {
       _flushInline(inlineAcc, blocks);
       blocks.add(n);
       return;
@@ -368,7 +423,7 @@ _HtmlNode _parseFragment(String html) {
       final node = _HtmlNode(tag, attrs: parts.attrs, children: []);
       stack.last.children.add(node);
       final isVoid = voidTag ||
-          const {'br', 'img', 'hr', 'input', 'meta', 'link'}.contains(tag);
+          const {'br', 'img', 'hr', 'input', 'meta', 'link', 'source'}.contains(tag);
       if (!isVoid) stack.add(node);
     } else {
       final next = html.indexOf('<', i);

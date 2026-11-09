@@ -137,11 +137,31 @@ class CalBirthdays extends ChangeNotifier {
   final String? scope;
 
   /// Shared between Home and the calendar for a while (same API client).
-  static final Map<ApiClient, (DateTime, List<CalBirthday>)> _cache = {};
+  /// Keyed by server + business: another business never sees these.
+  static final Map<String, (DateTime, List<CalBirthday>)> _cache = {};
+
+  String get _cacheKey => '${_api.baseUrl}|${_api.businessId}';
   static const cacheFor = Duration(minutes: 30);
 
+  /// Business whose birthdays the phone's reminders were last set for.
+  static String? _syncedKey;
+
+  /// Tests: how many times reminders were (re)scheduled.
   @visibleForTesting
-  static void clearCache() => _cache.clear();
+  static int debugSyncCount = 0;
+
+  @visibleForTesting
+  static void clearCache() {
+    _cache.clear();
+    _syncedKey = null;
+  }
+
+  void _syncReminders(List<CalBirthday> out) {
+    if (scope == null) return;
+    _syncedKey = _cacheKey;
+    debugSyncCount++;
+    BirthdayReminders.instance.sync(out, scope: scope!);
+  }
 
   static const maxPerModule = 5000;
 
@@ -153,21 +173,37 @@ class CalBirthdays extends ChangeNotifier {
 
   List<CalBirthday> get all => _all;
 
+  /// Loads finish after the screen may be gone (e.g. business switched).
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   Future<void> load({bool force = false}) async {
     if (_loading || (loaded && !force)) return;
     _loading = true;
-    final hit = _cache[_api];
+    final hit = _cache[_cacheKey];
     final List<CalBirthday> out;
     if (!force && hit != null && DateTime.now().difference(hit.$1) < cacheFor) {
       out = hit.$2;
+      // Back in a business from the cache: reminders may still be another's.
+      if (_syncedKey != _cacheKey) _syncReminders(out);
     } else {
       out = <CalBirthday>[];
       await Future.wait([
         for (final m in CalBirthday.fields.keys) _loadModule(m, out),
       ]);
       out.sort((a, b) => a.name.compareTo(b.name));
-      _cache[_api] = (DateTime.now(), out);
-      if (scope != null) BirthdayReminders.instance.sync(out, scope: scope!);
+      _cache[_cacheKey] = (DateTime.now(), out);
+      _syncReminders(out);
     }
     _all = out;
     _byMonthDay.clear();

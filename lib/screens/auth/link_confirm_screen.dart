@@ -50,7 +50,8 @@ class _LinkConfirmScreenState extends State<LinkConfirmScreen> {
     final config = context.read<AppConfig>();
     try {
       widget.google ? await config.confirmGoogleMerge(widget.intentToken) : await config.confirmLink(widget.intentToken);
-      if (mounted) Navigator.of(context).pop(true);
+      // Signed in: the router may already have replaced this screen.
+      if (mounted) Navigator.of(context).maybePop(true);
     } catch (e) {
       if (mounted) {
         setState(() {

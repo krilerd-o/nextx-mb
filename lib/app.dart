@@ -14,6 +14,7 @@ import 'core/app_theme.dart';
 import 'core/navigation/app_router.dart';
 import 'widgets/nx_atmosphere.dart';
 import 'widgets/nx_language_switch.dart';
+import 'widgets/nx_ui_scale.dart';
 import 'core/i18n.dart';
 
 class NextXMobileApp extends StatefulWidget {
@@ -58,9 +59,15 @@ class _NextXMobileAppState extends State<NextXMobileApp>
   Widget build(BuildContext context) {
     // Rebuild the app shell only when what it shows changes — not on every
     // AppConfig notify (session refresh on resume, offline queue, …).
-    return Selector<AppConfig, (Color, ThemeMode, String, bool)>(
-      selector: (_, c) =>
-          (c.accentColor, c.themeMode, c.uiLocaleCode, c.isLoggedIn),
+    return Selector<AppConfig, (Color, ThemeMode, String, bool, String, double)>(
+      selector: (_, c) => (
+        c.accentColor,
+        c.themeMode,
+        c.uiLocaleCode,
+        c.isLoggedIn,
+        c.uiFontFamily,
+        c.uiScale,
+      ),
       builder: (context, sel, _) {
         final accent = sel.$1;
         return MaterialApp.router(
@@ -75,16 +82,23 @@ class _NextXMobileAppState extends State<NextXMobileApp>
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          theme: AppTheme.themed(brightness: Brightness.light, accent: accent),
+          theme: AppTheme.themed(
+            brightness: Brightness.light,
+            accent: accent,
+            family: sel.$5,
+          ),
           darkTheme: AppTheme.themed(
             brightness: Brightness.dark,
             accent: accent,
+            family: sel.$5,
           ),
           themeMode: sel.$2,
           // Theme/colour changes cross-fade instead of snapping.
           themeAnimationDuration: const Duration(milliseconds: 420),
           themeAnimationCurve: Curves.easeInOutCubic,
-          builder: (context, child) => BackdropGroup(
+          builder: (context, child) => NxUiScale(
+            scale: sel.$6,
+            child: BackdropGroup(
             child: NxKeyboardFollow(
             child: NxAtmosphere(
               child: NxLanguageSwitchLayer(
@@ -104,6 +118,7 @@ class _NextXMobileAppState extends State<NextXMobileApp>
               ),
             ),
             ),
+          ),
           ),
           routerConfig: _router,
         );

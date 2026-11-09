@@ -65,7 +65,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         _comments = comments;
       });
       RecentRecords.instance.add(
-        context.read<AppConfig>().prefsScope,
+        context.read<AppConfig>().businessScope,
         module: 'activity',
         id: _id,
         title: '${_row['subject'] ?? entityTitle(_row, module: 'activity')}',
