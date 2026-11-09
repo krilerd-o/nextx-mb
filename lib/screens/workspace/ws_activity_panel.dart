@@ -10,6 +10,7 @@ import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
 import '../../core/workspace_models.dart';
 import '../../services/api_client.dart';
+import '../../widgets/nx_timeline.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_attachments.dart';
@@ -678,66 +679,34 @@ class WsActivityPanelState extends State<WsActivityPanel> {
         child: Center(child: Text(tr('ยังไม่มีประวัติ'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant))),
       );
     }
-    return Column(
-      children: [
-        for (var i = 0; i < h.length; i++)
-          Builder(builder: (context) {
-            final a = h[i];
-            final d = wsDescribeActivity(a, widget.lookups);
-            return IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    width: 32,
-                    child: Column(children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
-                        child: Icon(d.icon, size: 14, color: cs.primary),
-                      ),
-                      if (i < h.length - 1) Expanded(child: Container(width: 2, color: cs.outlineVariant)),
-                    ]),
+    return NxTimeline(entries: [
+      for (final a in h)
+        () {
+          final d = wsDescribeActivity(a, widget.lookups);
+          final who = '${a['user_name'] ?? widget.lookups.user(a['user_id'])}';
+          return NxTimelineEntry(
+            at: parseThai(a['created_at']),
+            icon: d.icon,
+            title: Text.rich(TextSpan(children: [
+              TextSpan(text: '$who ', style: const TextStyle(fontWeight: FontWeight.w800)),
+              TextSpan(text: d.text, style: const TextStyle(fontWeight: FontWeight.w500)),
+            ])),
+            body: d.from == null && d.to == null
+                ? null
+                : Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      if (d.from != null) _valuePill(context, d.from!, old: true),
+                      if (d.from != null && d.to != null) Icon(NxI.arrowRight, size: 14, color: cs.onSurfaceVariant),
+                      if (d.to != null) _valuePill(context, d.to!),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text.rich(
-                            TextSpan(children: [
-                              TextSpan(text: '${a['user_name'] ?? widget.lookups.user(a['user_id'])} ', style: const TextStyle(fontWeight: FontWeight.w700)),
-                              TextSpan(text: d.text),
-                            ]),
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                          if (d.from != null || d.to != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Wrap(
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 6,
-                                runSpacing: 4,
-                                children: [
-                                  if (d.from != null) _valuePill(context, d.from!, old: true),
-                                  if (d.from != null && d.to != null) Icon(NxI.arrowRight, size: 14, color: cs.onSurfaceVariant),
-                                  if (d.to != null) _valuePill(context, d.to!),
-                                ],
-                              ),
-                            ),
-                          Text(wsDateTime(a['created_at']), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-      ],
-    );
+            who: who,
+          );
+        }(),
+    ]);
   }
 
   Widget _valuePill(BuildContext context, String text, {bool old = false}) {

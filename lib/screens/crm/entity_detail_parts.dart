@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_config.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/nx_avatar.dart';
+import '../../widgets/nx_timeline.dart';
 import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_attachments.dart';
 import '../../widgets/nx_icons.dart';
@@ -534,52 +535,23 @@ class EntityHistoryPanel extends StatelessWidget {
         child: Text(tr('ยังไม่มีประวัติ'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
       );
     }
-    return NxSurfaceCard(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-      child: Column(
-        children: [
-          for (var i = 0; i < events.length; i++)
-            () {
-              final d = describeTimelineEvent(events[i], valueLabel: valueLabel);
-              final who = events[i]['user_name']?.toString();
-              return IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Column(
-                      children: [
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
-                          child: Icon(d.icon, size: 15, color: cs.primary),
-                        ),
-                        if (i < events.length - 1) Expanded(child: Container(width: 2, color: cs.outlineVariant)),
-                      ],
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 14, top: 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(tr(d.title), style: theme.textTheme.titleSmall),
-                            if (d.detail != null) Text(tr(d.detail!), style: theme.textTheme.bodyMedium),
-                            Text(
-                              tr([if (who != null && who.isNotEmpty) who, relativeTime(events[i]['at'])].join(' · ')),
-                              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }(),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: NxTimeline(entries: [
+        for (final e in events)
+          () {
+            final d = describeTimelineEvent(e, valueLabel: valueLabel);
+            final who = e['user_name']?.toString();
+            return NxTimelineEntry(
+              at: parseThai(e['at'] ?? e['created_at'] ?? e['createdtime']),
+              icon: d.icon,
+              title: Text(tr(d.title)),
+              body: d.detail == null || d.detail!.trim().isEmpty ? null : Text(tr(d.detail!)),
+              who: who,
+              whoImage: e['user_avatar']?.toString() ?? e['avatar']?.toString(),
+            );
+          }(),
+      ]),
     );
   }
 }

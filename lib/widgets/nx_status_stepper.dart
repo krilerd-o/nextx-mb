@@ -53,11 +53,11 @@ class NxStatusStepper extends StatefulWidget {
   final String doneKeyPrefix;
   final EdgeInsets padding;
 
-  static const pillHeight = 44.0;
+  static const pillHeight = 32.0;
 
   /// Room above / below the pill for its shadow.
-  static const shadowTop = 6.0;
-  static const shadowBottom = 14.0;
+  static const shadowTop = 4.0;
+  static const shadowBottom = 10.0;
 
   @override
   State<NxStatusStepper> createState() => _NxStatusStepperState();
@@ -131,7 +131,7 @@ class _NxStatusStepperState extends State<NxStatusStepper> {
             for (var i = 0; i < widget.steps.length; i++) ...[
               if (i > 0)
                 Container(
-                  width: 14,
+                  width: 10,
                   height: 2,
                   color: at >= 0 && i - 1 < at
                       ? kNxStepPassedGreen.withValues(alpha: 0.7)
@@ -172,7 +172,7 @@ class _NxStatusStepperState extends State<NxStatusStepper> {
           key: ValueKey('${widget.stepKeyPrefix}${s.id}'),
           duration: const Duration(milliseconds: 240),
           curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 11),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: on
@@ -191,8 +191,8 @@ class _NxStatusStepperState extends State<NxStatusStepper> {
                 ? [
                     BoxShadow(
                       color: fill.withValues(alpha: 0.32),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
+                      blurRadius: 7,
+                      offset: const Offset(0, 2),
                     ),
                   ]
                 : null,
@@ -203,22 +203,22 @@ class _NxStatusStepperState extends State<NxStatusStepper> {
               if (passed)
                 Container(
                   key: ValueKey('${widget.doneKeyPrefix}${s.id}'),
-                  width: 16,
-                  height: 16,
-                  margin: const EdgeInsets.only(right: 6),
+                  width: 14,
+                  height: 14,
+                  margin: const EdgeInsets.only(right: 5),
                   decoration: const BoxDecoration(
                     color: kNxStepPassedGreen,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(NxI.check, size: 11, color: Colors.white),
+                  child: const Icon(NxI.check, size: 10, color: Colors.white),
                 )
               else if (on && s.isDone) ...[
-                Icon(NxI.check, size: 14, color: onFill),
-                const SizedBox(width: 4),
+                Icon(NxI.check, size: 12, color: onFill),
+                const SizedBox(width: 3),
               ],
               Text(
                 tr(s.label),
-                style: theme.textTheme.labelLarge?.copyWith(
+                style: theme.textTheme.labelMedium?.copyWith(
                   color: on
                       ? onFill
                       : (passed ? passedFg : cs.onSurfaceVariant),
