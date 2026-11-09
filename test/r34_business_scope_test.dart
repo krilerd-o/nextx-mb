@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nextx_mobile/core/app_config.dart';
+import 'package:nextx_mobile/core/card_layout.dart';
+import 'package:nextx_mobile/screens/calendar/cal/cal_birthdays.dart';
+import 'package:nextx_mobile/services/api_client.dart';
 import 'package:nextx_mobile/core/navigation/app_router.dart';
 import 'package:nextx_mobile/core/recent_records.dart';
 import 'package:nextx_mobile/core/session_state.dart';
@@ -80,5 +84,39 @@ void main() {
     RealtimeService.instance.disconnect();
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(minutes: 2));
+  });
+
+  test('card layout per business; a new business starts from the older per-user one', () async {
+    SharedPreferences.setMockInitialValues({});
+    const user = 'https://qa.example.com|2';
+    const user1 = '$user|b1', user2 = '$user|b2';
+    final old = CardLayout.defaults('lead', const [], statusKey: null);
+    await CardLayoutStore.save('lead', user, old);
+    expect(await CardLayoutStore.load('lead', user1, fallbackScope: user), isNotNull);
+    await CardLayoutStore.save('lead', user2, old);
+    await CardLayoutStore.reset('lead', user);
+    expect(await CardLayoutStore.load('lead', user1, fallbackScope: user), isNull);
+    expect(await CardLayoutStore.load('lead', user2, fallbackScope: user), isNotNull);
+  });
+
+  test('birthday reminders follow the business, also from the cache', () async {
+    SharedPreferences.setMockInitialValues({});
+    CalBirthdays.clearCache();
+    final api = ApiClient(dio: Dio(BaseOptions(baseUrl: 'https://qa.example.com')));
+    api.debugSetHttpAdapter(FakeNextxAdapter({}));
+    Future<void> open(String bid) async {
+      api.attachSession(baseUrl: 'https://qa.example.com', accessToken: 't', userId: '2', businessId: bid);
+      final b = CalBirthdays(api, scope: 'qa|2');
+      await b.load();
+      b.dispose();
+    }
+
+    final start = CalBirthdays.debugSyncCount;
+    await open('1');
+    await open('2');
+    await open('1'); // from the cache, but reminders were business 2's
+    expect(CalBirthdays.debugSyncCount - start, 3);
+    await open('1'); // same business again: nothing to redo
+    expect(CalBirthdays.debugSyncCount - start, 3);
   });
 }

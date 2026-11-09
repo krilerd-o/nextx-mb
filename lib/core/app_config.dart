@@ -26,6 +26,7 @@ import 'recent_accounts.dart';
 import 'qr_login.dart';
 import '../services/apple_auth.dart';
 import 'server_profile.dart';
+import '../services/birthday_reminders.dart';
 import 'session_state.dart';
 import 'ui_font.dart';
 import 'shell_tabs.dart';
@@ -1073,6 +1074,9 @@ class AppConfig extends ChangeNotifier {
     await prefs.setString(_keyBusinessName, businessName);
     // A different business means a different package list → pick again.
     _manualBusinessPick = false;
+    // Birthday reminders belong to the old business: drop them; Home sets the
+    // new business's when it loads its birthdays.
+    if (businessId != _session.businessId) unawaited(BirthdayReminders.instance.cancelAll().catchError((_) {}));
     await prefs.remove(_keyPackageId);
     if (packageCode != null) {
       await prefs.setString(_keyPackageCode, packageCode);

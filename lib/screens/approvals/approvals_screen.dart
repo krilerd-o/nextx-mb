@@ -39,7 +39,7 @@ class _Section {
 class _ApprovalsScreenState extends State<ApprovalsScreen> {
   var _revision = 0;
   NxListQuery _query = const NxListQuery();
-  late final NxListPrefs _prefs = NxListPrefs('approvals_${context.read<AppConfig>().prefsScope}');
+  late final NxListPrefs _prefs = NxListPrefs('approvals_${context.read<AppConfig>().businessScope}');
 
   @override
   void initState() {
