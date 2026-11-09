@@ -785,3 +785,15 @@ String _activityWhen(dynamic raw) {
   String two(int n) => n.toString().padLeft(2, '0');
   return '${d.day}/${d.month}/${uiYear(d.year)} ${two(d.hour)}:${two(d.minute)}';
 }
+
+
+/// Product / Service: "ฉบับร่าง" (Draft) first, then the rest in their own order.
+List<({String value, String label})> orderStatusOptions(String module, List<({String value, String label})> options) {
+  final m = module.toLowerCase();
+  if (m != 'product' && m != 'products' && m != 'service' && m != 'services') return options;
+  bool isDraft(({String value, String label}) o) {
+    final v = o.value.toLowerCase();
+    return v == 'draft' || o.label.contains('ร่าง') || o.label.toLowerCase().contains('draft');
+  }
+  return [...options.where(isDraft), ...options.where((o) => !isDraft(o))];
+}

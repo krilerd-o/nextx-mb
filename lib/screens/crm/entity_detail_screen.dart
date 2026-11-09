@@ -242,13 +242,13 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
 
   List<({String value, String label})> _statusOptions(String? key) {
     if (key == null) return const [];
-    return [
+    return orderStatusOptions(widget.module, [
       for (final o in _picklists[key] ?? const <Map<String, dynamic>>[])
         () {
           final p = NxPickOption.fromMap(o);
           return (value: p.value, label: p.label);
         }(),
-    ];
+    ]);
   }
 
   Future<void> _changeStatus(String key, String value) async {
