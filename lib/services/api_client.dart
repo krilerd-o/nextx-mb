@@ -1873,6 +1873,9 @@ class ApiClient {
     String roomId,
     String body, {
     List<Map<String, dynamic>>? attachments,
+    String? replyToId,
+    String? threadRootId,
+    List<int>? mentionIds,
   }) async {
     return _dataMap(await _send(
       'POST',
@@ -1880,8 +1883,61 @@ class ApiClient {
       data: {
         'body': body,
         if (attachments != null && attachments.isNotEmpty) 'attachments': attachments,
+        if (replyToId != null) 'reply_to_id': int.tryParse(replyToId) ?? replyToId,
+        if (threadRootId != null) 'thread_root_id': int.tryParse(threadRootId) ?? threadRootId,
+        if (mentionIds != null && mentionIds.isNotEmpty) 'mention_user_ids': mentionIds,
+        'source_ui': 'camp',
       },
     ));
+  }
+
+  /// Replies of a thread (root message included first).
+  Future<List<Map<String, dynamic>>> getChatThread(String roomId, String rootId, {int limit = 100}) async {
+    final env = await _send('GET', '/api/chat/rooms/$roomId/messages', query: {'thread_root': rootId, 'limit': '$limit'});
+    return extractMapList(env['data']);
+  }
+
+  /// Forward a message to rooms (`{sent: [{room_id, message_id}], skipped}`), optional note.
+  Future<Map<String, dynamic>> forwardChatMessage(String roomId, String messageId, List<String> roomIds, {String? comment}) async {
+    return _dataMap(await _send('POST', '/api/chat/rooms/$roomId/messages/$messageId/forward', data: {
+      'room_ids': roomIds.map((e) => int.tryParse(e) ?? e).toList(),
+      if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+    }));
+  }
+
+  /// Mute / unmute notifications of a room for me.
+  Future<void> setChatRoomMuted(String roomId, bool muted) async {
+    await _send('PATCH', '/api/chat/rooms/$roomId/me', data: {'muted': muted});
+  }
+
+  Future<void> setChatRoomStarred(String roomId, bool starred) async {
+    await _send(starred ? 'POST' : 'DELETE', '/api/chat/stars/$roomId');
+  }
+
+  Future<void> saveChatMessage(String roomId, String messageId) async {
+    await _send('POST', '/api/chat/rooms/$roomId/messages/$messageId/save');
+  }
+
+  Future<List<Map<String, dynamic>>> getChatRoomMembers(String roomId) async {
+    final env = await _send('GET', '/api/chat/rooms/$roomId/members');
+    final data = env['data'];
+    return extractMapList(data is Map ? (data['list'] ?? data) : data);
+  }
+
+  Future<void> addChatRoomMember(String roomId, String userId) async {
+    await _send('POST', '/api/chat/rooms/$roomId/members', data: {'user_id': int.tryParse(userId) ?? userId});
+  }
+
+  /// Files shared in a room, newest first.
+  Future<List<Map<String, dynamic>>> getChatRoomFiles(String roomId) async {
+    final env = await _send('GET', '/api/chat/rooms/$roomId/files');
+    final data = env['data'];
+    return extractMapList(data is Map ? (data['list'] ?? data) : data);
+  }
+
+  /// Open Graph preview `{url, title, description, image, siteName}` (cached by the server).
+  Future<Map<String, dynamic>> unfurlChatLink(String url) async {
+    return _dataMap(await _send('GET', '/api/chat/unfurl', query: {'url': url}));
   }
 
   Future<Map<String, dynamic>> editChatMessage(String roomId, String messageId, String body) async {

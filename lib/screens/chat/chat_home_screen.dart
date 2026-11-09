@@ -1,29 +1,32 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/chat_format.dart';
 import '../../core/entity_display.dart';
-import '../../core/html_display.dart';
+import '../../core/i18n.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../core/nx_page_route.dart';
 import '../../services/api_client.dart';
-import '../../widgets/dense_card_tile.dart';
+import '../../services/realtime_service.dart';
+import '../../widgets/app_bottom_sheet.dart' show nxSheetHeight;
 import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_cached_future.dart';
+import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_list_toolbar.dart';
+import '../../widgets/nx_overlay_panel.dart';
+import '../../widgets/nx_refresh.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
-import '../../services/realtime_service.dart';
 import 'chat_room_screen.dart';
 import 'chat_search_screen.dart';
-import '../../widgets/nx_icons.dart';
-import '../../core/i18n.dart';
-import '../../widgets/nx_list_toolbar.dart';
-import '../../widgets/nx_refresh.dart';
-import '../../widgets/app_bottom_sheet.dart' show nxSheetHeight;
 
+/// Chat list like LINE / Slack: avatar, name (the other person for DMs), last message with sender,
+/// time, unread badge, starred first, muted. Long press = mute / star / mark read.
 class ChatHomeScreen extends StatefulWidget {
   const ChatHomeScreen({super.key});
 
@@ -37,18 +40,19 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
   NxListQuery _lq = const NxListQuery();
   Map<String, dynamic>? _selected;
   List<Map<String, dynamic>> _rooms = const [];
+  final Map<String, Map<String, dynamic>> _overrides = {}; // local muted / starred / read until the next load
   StreamSubscription<RealtimeEvent>? _sub;
   Timer? _debounce;
+
+  ApiClient get _api => context.read<AppConfig>().apiClient;
 
   @override
   void initState() {
     super.initState();
-    // New messages anywhere → refresh unread counts (debounced for bursts).
+    // New messages anywhere → refresh the list (debounced for bursts).
     _sub = RealtimeService.instance.on('new_message').listen((_) {
       _debounce?.cancel();
-      _debounce = Timer(const Duration(milliseconds: 1500), () {
-        if (mounted) setState(() => _revision++);
-      });
+      _debounce = Timer(const Duration(milliseconds: 1200), _reload);
     });
   }
 
@@ -59,221 +63,204 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
     super.dispose();
   }
 
-  Future<void> _createGroup() async {
-    final api = context.read<AppConfig>().apiClient;
+  void _reload() {
+    if (!mounted) return;
+    setState(() {
+      _overrides.clear();
+      _revision++;
+    });
+  }
+
+  void _snack(String t) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(t))));
+
+  Future<List<Map<String, dynamic>>> _pickUsers({required bool multi}) async {
+    final me = context.read<AppConfig>().session.userId;
     List<Map<String, dynamic>> users;
     try {
-      users = await api.getUsers(limit: 200);
+      users = (await _api.getUsers(limit: 200)).where((u) => u['id']?.toString() != me).toList();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-      return;
+      _snack(formatApiError(e));
+      return const [];
     }
-    if (!mounted) return;
-    final me = context.read<AppConfig>().session.userId;
-    final result = await showModalBottomSheet<({String name, List<String> ids})>(
+    if (!mounted) return const [];
+    final picked = await showModalBottomSheet<List<Map<String, dynamic>>>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => _GroupCreateSheet(users: users.where((u) => u['id']?.toString() != me).toList()),
+      useRootNavigator: true,
+      showDragHandle: true,
+      builder: (ctx) => _UserPickerSheet(users: users, multi: multi),
     );
-    if (result == null || !mounted) return;
+    return picked ?? const [];
+  }
+
+  Future<void> _newDm() async {
+    final users = await _pickUsers(multi: false);
+    if (users.isEmpty || !mounted) return;
     try {
-      final room = await api.createChatRoom(name: result.name, memberIds: result.ids);
+      final room = await _api.createChatDm('${users.first['id']}');
       if (!mounted) return;
-      setState(() => _revision++);
+      await _openRoom(room.isEmpty ? {'id': users.first['id'], 'name': userDisplayName(users.first)} : {...room, 'room_type': 'dm', 'display_name': userDisplayName(users.first)});
+    } catch (e) {
+      _snack(formatApiError(e));
+    }
+  }
+
+  Future<void> _newGroup() async {
+    final users = await _pickUsers(multi: true);
+    if (users.isEmpty || !mounted) return;
+    final name = TextEditingController(text: users.take(3).map(userDisplayName).join(', '));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('ตั้งชื่อกลุ่ม')),
+        content: TextField(controller: name, autofocus: true, decoration: InputDecoration(labelText: tr('ชื่อกลุ่ม'))),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('สร้างกลุ่ม (${users.length} คน)'))),
+        ],
+      ),
+    );
+    if (ok != true || name.text.trim().isEmpty || !mounted) return;
+    try {
+      final room = await _api.createChatRoom(name: name.text.trim(), memberIds: [for (final u in users) '${u['id']}']);
+      if (!mounted) return;
+      _reload();
       if (room['id'] != null) await _openRoom(room);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      _snack(formatApiError(e));
+    }
+  }
+
+  Future<void> _newMenu() async {
+    final pick = await showNxBlurPanel<String>(
+      context: context,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(key: const ValueKey('chat-new-dm'), leading: const Icon(NxI.user), title: Text(tr('แชทส่วนตัว')), onTap: () => Navigator.pop(ctx, 'dm')),
+          ListTile(key: const ValueKey('chat-new-group'), leading: const Icon(NxI.users), title: Text(tr('สร้างกลุ่ม')), onTap: () => Navigator.pop(ctx, 'group')),
+          ListTile(key: const ValueKey('chat-search-messages'), leading: const Icon(NxI.magnifyingGlass), title: Text(tr('ค้นหาในข้อความ')), onTap: () => Navigator.pop(ctx, 'search')),
+        ]),
+      ),
+    );
+    if (!mounted || pick == null) return;
+    switch (pick) {
+      case 'dm':
+        await _newDm();
+      case 'group':
+        await _newGroup();
+      case 'search':
+        await nxPush<void>(context, ChatSearchScreen(rooms: _rooms));
     }
   }
 
   Future<void> _openRoom(Map<String, dynamic> room) async {
+    final id = '${room['id']}';
+    setState(() => _overrides[id] = {...?_overrides[id], 'unread_count': 0});
+    if (NxBreakpoint.of(context).twoPane) {
+      setState(() => _selected = room);
+      return;
+    }
     await nxPush<void>(context, ChatRoomScreen(room: room));
-    if (mounted) setState(() => _revision++);
+    _reload();
+  }
+
+  Future<void> _roomMenu(Map<String, dynamic> r) async {
+    final id = '${r['id']}';
+    final muted = r['muted'] == true, starred = r['starred'] == true;
+    final pick = await showNxBlurPanel<String>(
+      context: context,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8), child: Text(chatRoomTitle(r), style: Theme.of(ctx).textTheme.titleMedium)),
+          ListTile(leading: Icon(starred ? NxI.starFill : NxI.star), title: Text(tr(starred ? 'เลิกติดดาว' : 'ติดดาว (อยู่บนสุด)')), onTap: () => Navigator.pop(ctx, 'star')),
+          ListTile(leading: Icon(muted ? NxI.bell : NxI.bellSlash), title: Text(tr(muted ? 'เปิดเสียงแจ้งเตือน' : 'ปิดเสียงแจ้งเตือน')), onTap: () => Navigator.pop(ctx, 'mute')),
+          if (chatUnread(r) > 0) ListTile(leading: const Icon(NxI.checks), title: Text(tr('ทำเครื่องหมายว่าอ่านแล้ว')), onTap: () => Navigator.pop(ctx, 'read')),
+        ]),
+      ),
+    );
+    if (pick == null || !mounted) return;
+    try {
+      switch (pick) {
+        case 'star':
+          await _api.setChatRoomStarred(id, !starred);
+          setState(() => _overrides[id] = {...?_overrides[id], 'starred': !starred});
+        case 'mute':
+          await _api.setChatRoomMuted(id, !muted);
+          setState(() => _overrides[id] = {...?_overrides[id], 'muted': !muted});
+        case 'read':
+          final last = r['last_message'] is Map ? '${(r['last_message'] as Map)['id']}' : null;
+          if (last != null) await _api.markChatRead(id, last);
+          setState(() => _overrides[id] = {...?_overrides[id], 'unread_count': 0});
+      }
+    } catch (e) {
+      _snack(formatApiError(e));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final twoPane = NxBreakpoint.of(context).twoPane;
+    final me = context.read<AppConfig>().session.userId;
     return NxScrollScaffold(
       header: NxAppHeader(
         title: 'แชททีม',
         actions: [
-          IconButton(
-            tooltip: tr('ค้นหาข้อความ'),
-            icon: const Icon(NxI.magnifyingGlass),
-            onPressed: () => nxPush<void>(context, ChatSearchScreen(rooms: _rooms)),
-          ),
-          IconButton(tooltip: tr('สร้างห้องกลุ่ม'), icon: const Icon(NxI.users), onPressed: _createGroup),
-          IconButton(
-            tooltip: tr('แชทส่วนตัว'),
-            icon: const Icon(NxI.userPlus),
-            onPressed: () async {
-              final api = context.read<AppConfig>().apiClient;
-              List<Map<String, dynamic>> users = const [];
-              try {
-                users = await api.getUsers(limit: 80);
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-                }
-                return;
-              }
-              if (!mounted) return;
-              final selected = await showModalBottomSheet<Map<String, dynamic>>(
-                context: context,
-                isScrollControlled: true,
-                useRootNavigator: true,
-                builder: (ctx) {
-                  final q = TextEditingController();
-                  var filtered = users;
-                  return StatefulBuilder(
-                    builder: (ctx, setSheet) {
-                      return Padding(
-                        // Above the keyboard: the search field and results stay visible.
-                        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
-                        child: SafeArea(
-                          child: SizedBox(
-                            height: nxSheetHeight(ctx, 0.7),
-                            child: Column(
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: TextField(
-                                    controller: q,
-                                    decoration: InputDecoration(labelText: tr('ค้นหาผู้ใช้'), prefixIcon: Icon(NxI.magnifyingGlass)),
-                                    onChanged: (v) {
-                                      final needle = v.trim().toLowerCase();
-                                      setSheet(() {
-                                        filtered = users.where((u) {
-                                          final name = userDisplayName(u).toLowerCase();
-                                          final email = (userEmail(u) ?? '').toLowerCase();
-                                          final id = (u['id'] ?? '').toString();
-                                          return needle.isEmpty || name.contains(needle) || email.contains(needle) || id.contains(needle);
-                                        }).toList();
-                                      });
-                                    },
-                                  ),
-                                ),
-                                Expanded(
-                                  child: ListView.builder(
-                                    itemCount: filtered.length,
-                                    itemBuilder: (_, i) {
-                                      final u = filtered[i];
-                                      final name = userDisplayName(u);
-                                      return ListTile(
-                                        leading: const Icon(NxI.user),
-                                        title: Text(tr(name)),
-                                        subtitle: Text(tr(userEmail(u) ?? u['id']?.toString() ?? '')),
-                                        onTap: () => Navigator.pop(ctx, u),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              );
-              if (selected == null) return;
-              final userId = selected['id']?.toString() ?? '';
-              if (userId.isEmpty) return;
-              try {
-                final room = await api.createChatDm(userId);
-                if (!mounted) return;
-                final map = room.isEmpty ? {'id': userId, 'name': userDisplayName(selected)} : room;
-                await _openRoom(map);
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-                }
-              }
-            },
-          ),
+          IconButton(key: const ValueKey('chat-new'), tooltip: tr('แชทใหม่'), icon: const Icon(NxI.squarePen), onPressed: _newMenu),
         ],
       ),
       body: NxCachedFuture<List<Map<String, dynamic>>>(
         revision: _revision,
-        load: () => context.read<AppConfig>().apiClient.getChatRooms(),
+        load: () => _api.getChatRooms(),
         skeleton: const NxSkeletonList(),
         isEmpty: (list) => list.isEmpty,
         empty: Center(child: Text(tr('ยังไม่มีห้องแชท'))),
-        builder: (context, all) {
+        builder: (context, loaded) {
+          final all = [for (final r in loaded) {...r, ...?_overrides['${r['id']}']}];
           _rooms = all;
-          final theme = Theme.of(context);
-          int unreadOf(Map r) => int.tryParse('${r['unread_count'] ?? ''}') ?? 0;
-          String lastAt(Map r) => '${r['last_message_at'] ?? r['updated_at'] ?? r['created_at'] ?? ''}';
-          final rooms = nxApplyLocalQuery<Map<String, dynamic>>(
+          final rooms = chatSortRooms(nxApplyLocalQuery<Map<String, dynamic>>(
             all,
             _lq.copyWith(q: _query),
-            text: (r) => '${r['name'] ?? ''} ${r['last_message'] ?? ''}',
+            text: (r) => '${chatRoomTitle(r)} ${chatRoomPreview(r, me)}',
             filters: {
-              'kind': (r, v) => v.contains(r['room_type']?.toString() == 'dm' ? 'dm' : 'group'),
-              'state': (r, v) => !v.contains('unread') || unreadOf(r) > 0,
+              'kind': (r, v) => v.contains(chatRoomIsDm(r) ? 'dm' : 'group'),
+              'state': (r, v) => !v.contains('unread') || chatUnread(r) > 0,
             },
-            sorts: {
-              'recent': (a, b) => lastAt(b).compareTo(lastAt(a)),
-              'unread': (a, b) => unreadOf(b).compareTo(unreadOf(a)),
-              'name': (a, b) => '${a['name'] ?? ''}'.toLowerCase().compareTo('${b['name'] ?? ''}'.toLowerCase()),
-            },
-          );
+          ));
+          final totalUnread = all.fold<int>(0, (n, r) => n + (r['muted'] == true ? 0 : chatUnread(r)));
           final items = NxRefresh(
-            onRefresh: () async => setState(() => _revision++),
+            onRefresh: () async => _reload(),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
               children: [
-                NxListToolbar(
-                  query: _lq.copyWith(q: _query),
-                  liveSearch: true,
-                  padding: const EdgeInsets.only(bottom: 8),
-                  searchHint: 'ค้นหาห้อง',
-                  quickGroup: 'kind',
-                  groups: const [
-                    NxFilterGroup(key: 'kind', label: 'ประเภทห้อง', multi: false, options: [NxFilterOption('group', 'กลุ่ม'), NxFilterOption('dm', 'ส่วนตัว')]),
-                    NxFilterGroup(key: 'state', label: 'สถานะ', multi: false, options: [NxFilterOption('unread', 'ยังไม่อ่าน')]),
-                  ],
-                  sorts: const [NxSortOption('recent', 'ข้อความล่าสุด'), NxSortOption('unread', 'ยังไม่อ่านมากสุด'), NxSortOption('name', 'ชื่อ ก–ฮ')],
-                  onChanged: (q) => setState(() {
-                    _query = q.q;
-                    _lq = q.copyWith(q: '');
-                  }),
-                ),
-                if (rooms.isEmpty)
-                  Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: Text(tr('ไม่พบห้อง'))),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: NxListToolbar(
+                    query: _lq.copyWith(q: _query),
+                    liveSearch: true,
+                    padding: const EdgeInsets.only(bottom: 6),
+                    searchHint: 'ค้นหาแชท',
+                    quickGroup: 'kind',
+                    groups: [
+                      const NxFilterGroup(key: 'kind', label: 'ประเภท', multi: false, options: [NxFilterOption('dm', 'ส่วนตัว'), NxFilterOption('group', 'กลุ่ม')]),
+                      NxFilterGroup(key: 'state', label: 'สถานะ', multi: false, options: [NxFilterOption('unread', totalUnread > 0 ? 'ยังไม่อ่าน ($totalUnread)' : 'ยังไม่อ่าน')]),
+                    ],
+                    onChanged: (q) => setState(() {
+                      _query = q.q;
+                      _lq = q.copyWith(q: '');
+                    }),
                   ),
-                for (final ch in rooms)
-                  Builder(
-                    builder: (context) {
-                      final name = ch['name']?.toString() ?? 'ห้อง';
-                      final unread = int.tryParse(ch['unread_count']?.toString() ?? '') ?? 0;
-                      final emoji = ch['icon_emoji']?.toString();
-                      final isDm = ch['room_type']?.toString() == 'dm';
-                      final preview = stripHtmlPreview(ch['last_message']?.toString() ?? ch['description']?.toString() ?? ch['topic']?.toString() ?? '');
-                      return DenseCardTile(
-                        title: name,
-                        subtitle: [if (preview.isNotEmpty) preview, if (!isDm && ch['member_count'] != null) '${ch['member_count']} สมาชิก'].join(' · '),
-                        leading: CircleAvatar(
-                          backgroundColor: theme.colorScheme.primaryContainer,
-                          child: emoji != null && emoji.isNotEmpty
-                              ? Text(tr(emoji))
-                              : Icon(isDm ? NxI.user : NxI.chatCircle, color: theme.colorScheme.onPrimaryContainer),
-                        ),
-                        trailing: unread > 0 ? Badge(label: Text(tr(unread > 99 ? '99+' : '$unread')), backgroundColor: theme.colorScheme.primary) : null,
-                        onTap: () {
-                          if (twoPane) {
-                            setState(() => _selected = ch);
-                            return;
-                          }
-                          _openRoom(ch);
-                        },
-                      );
-                    },
+                ),
+                if (rooms.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(tr('ไม่พบห้อง')))),
+                for (final r in rooms)
+                  ChatRoomTile(
+                    key: ValueKey('chat-room-${r['id']}'),
+                    room: r,
+                    me: me,
+                    selected: _selected != null && '${_selected!['id']}' == '${r['id']}',
+                    onTap: () => _openRoom(r),
+                    onLongPress: () => _roomMenu(r),
                   ),
               ],
             ),
@@ -289,24 +276,112 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
   }
 }
 
-class _GroupCreateSheet extends StatefulWidget {
-  const _GroupCreateSheet({required this.users});
-  final List<Map<String, dynamic>> users;
+/// One row of the chat list.
+class ChatRoomTile extends StatelessWidget {
+  const ChatRoomTile({super.key, required this.room, required this.me, required this.onTap, this.onLongPress, this.selected = false});
+  final Map<String, dynamic> room;
+  final String? me;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final bool selected;
 
   @override
-  State<_GroupCreateSheet> createState() => _GroupCreateSheetState();
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final title = chatRoomTitle(room);
+    final unread = chatUnread(room);
+    final muted = room['muted'] == true;
+    final starred = room['starred'] == true;
+    final preview = chatRoomPreview(room, me);
+    final time = chatRoomTime(room['last_message_at'] ?? room['created_at']);
+    final emoji = room['icon_emoji']?.toString() ?? '';
+    final dm = chatRoomIsDm(room);
+    final last = room['last_message'] is Map ? room['last_message'] as Map : null;
+    final missedCall = last?['kind'] == 'call' && preview.contains('ไม่ได้รับ');
+    final bold = unread > 0;
+    return Material(
+      color: selected ? cs.primary.withValues(alpha: 0.1) : Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(children: [
+            Stack(clipBehavior: Clip.none, children: [
+              dm || emoji.isEmpty
+                  ? NxAvatar(label: title, size: 50, imageUrl: (room['peer'] is Map) ? (room['peer'] as Map)['avatar']?.toString() : null)
+                  : CircleAvatar(radius: 25, backgroundColor: cs.primaryContainer, child: Text(emoji, style: const TextStyle(fontSize: 22))),
+              if (!dm && emoji.isEmpty)
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(color: cs.surface, shape: BoxShape.circle),
+                    child: Icon(NxI.users, size: 12, color: cs.onSurfaceVariant),
+                  ),
+                ),
+            ]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  if (starred) Padding(padding: const EdgeInsets.only(right: 4), child: Icon(NxI.starFill, size: 14, color: Colors.amber.shade600)),
+                  Expanded(
+                    child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall?.copyWith(fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
+                  ),
+                  if (muted) Padding(padding: const EdgeInsets.only(left: 4), child: Icon(NxI.bellSlash, size: 14, color: cs.onSurfaceVariant)),
+                  const SizedBox(width: 6),
+                  Text(tr(time), style: theme.textTheme.labelSmall?.copyWith(color: bold ? cs.primary : cs.onSurfaceVariant, fontWeight: bold ? FontWeight.w700 : null)),
+                ]),
+                const SizedBox(height: 3),
+                Row(children: [
+                  Expanded(
+                    child: Text(
+                      tr(preview.isEmpty ? (dm ? 'เริ่มแชทได้เลย' : '${room['member_count'] ?? ''} สมาชิก') : preview),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: missedCall ? cs.error : (bold ? cs.onSurface : cs.onSurfaceVariant),
+                        fontWeight: bold ? FontWeight.w600 : null,
+                      ),
+                    ),
+                  ),
+                  if (unread > 0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      key: ValueKey('chat-unread-${room['id']}'),
+                      constraints: const BoxConstraints(minWidth: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: muted ? cs.outline : cs.primary, borderRadius: BorderRadius.circular(10)),
+                      child: Text(unread > 99 ? '99+' : '$unread', textAlign: TextAlign.center, style: TextStyle(color: cs.onPrimary, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ]),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
 }
 
-class _GroupCreateSheetState extends State<_GroupCreateSheet> {
-  final _name = TextEditingController();
-  final Set<String> _picked = {};
-  var _needle = '';
+class _UserPickerSheet extends StatefulWidget {
+  const _UserPickerSheet({required this.users, required this.multi});
+  final List<Map<String, dynamic>> users;
+  final bool multi;
 
   @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
+  State<_UserPickerSheet> createState() => _UserPickerSheetState();
+}
+
+class _UserPickerSheetState extends State<_UserPickerSheet> {
+  final Set<String> _picked = {};
+  var _needle = '';
 
   @override
   Widget build(BuildContext context) {
@@ -314,54 +389,59 @@ class _GroupCreateSheetState extends State<_GroupCreateSheet> {
       if (_needle.isEmpty) return true;
       return userDisplayName(u).toLowerCase().contains(_needle) || (userEmail(u) ?? '').toLowerCase().contains(_needle);
     }).toList();
-    final canCreate = _name.text.trim().isNotEmpty && _picked.isNotEmpty;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SafeArea(
         child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.8,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: TextField(
-                  controller: _name,
-                  autofocus: true,
-                  decoration: InputDecoration(labelText: tr('ชื่อห้อง'), border: OutlineInputBorder()),
-                  onChanged: (_) => setState(() {}),
-                ),
+          height: nxSheetHeight(context, 0.8),
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                autofocus: !widget.multi,
+                decoration: InputDecoration(hintText: tr(widget.multi ? 'ค้นหาสมาชิก' : 'ค้นหาคนที่จะแชท'), prefixIcon: const Icon(NxI.magnifyingGlass), isDense: true),
+                onChanged: (v) => setState(() => _needle = v.trim().toLowerCase()),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  decoration: InputDecoration(hintText: tr('ค้นหาสมาชิก'), prefixIcon: Icon(NxI.magnifyingGlass), isDense: true),
-                  onChanged: (v) => setState(() => _needle = v.trim().toLowerCase()),
-                ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: filtered.length,
-                  itemBuilder: (_, i) {
-                    final u = filtered[i];
-                    final id = u['id']?.toString() ?? '';
-                    return CheckboxListTile(
-                      value: _picked.contains(id),
-                      title: Text(tr(userDisplayName(u))),
-                      subtitle: userEmail(u) == null ? null : Text(tr(userEmail(u)!)),
-                      onChanged: id.isEmpty ? null : (v) => setState(() => v == true ? _picked.add(id) : _picked.remove(id)),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final u = filtered[i];
+                  final id = '${u['id']}';
+                  final leading = NxAvatar(label: userDisplayName(u), size: 38);
+                  if (!widget.multi) {
+                    return ListTile(
+                      key: ValueKey('chat-user-$id'),
+                      leading: leading,
+                      title: Text(userDisplayName(u)),
+                      subtitle: Text(userEmail(u) ?? ''),
+                      onTap: () => Navigator.pop(context, [u]),
                     );
-                  },
-                ),
+                  }
+                  return CheckboxListTile(
+                    key: ValueKey('chat-user-$id'),
+                    value: _picked.contains(id),
+                    secondary: leading,
+                    title: Text(userDisplayName(u)),
+                    subtitle: Text(userEmail(u) ?? ''),
+                    onChanged: (v) => setState(() => v == true ? _picked.add(id) : _picked.remove(id)),
+                  );
+                },
               ),
+            ),
+            if (widget.multi)
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: FilledButton(
-                  onPressed: canCreate ? () => Navigator.pop(context, (name: _name.text.trim(), ids: _picked.toList())) : null,
-                  child: Text(tr('สร้างห้อง (${_picked.length} คน)')),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _picked.isEmpty ? null : () => Navigator.pop(context, [for (final u in widget.users) if (_picked.contains('${u['id']}')) u]),
+                    child: Text(tr('ถัดไป (${_picked.length} คน)')),
+                  ),
                 ),
               ),
-            ],
-          ),
+          ]),
         ),
       ),
     );

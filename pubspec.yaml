@@ -53,6 +53,7 @@ dependencies:
   speech_to_text: ^7.5.0
   video_player: ^2.14.1
   gal: ^2.3.3
+  record: ^7.1.2
 
 dev_dependencies:
   flutter_test:

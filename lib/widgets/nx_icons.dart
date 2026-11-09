@@ -210,6 +210,28 @@ class NxI {
   static const IconData brandInstagram = SimpleIcons.instagram;
   static const IconData brandWhatsapp = SimpleIcons.whatsapp;
   static const IconData brandYoutube = SimpleIcons.youtube;
+
+  // Chat & calls
+  static const fileXls = LucideIcons300.fileSpreadsheet;
+  static const fileDoc = LucideIcons300.fileText;
+  static const fileZip = LucideIcons300.fileArchive;
+  static const smiley = LucideIcons300.smile;
+  static const at = LucideIcons300.atSign;
+  static const code = LucideIcons300.code;
+  static const thread = LucideIcons300.messagesSquare;
+  static const checks = LucideIcons300.checkCheck;
+  static const microphoneSlash = LucideIcons300.micOff;
+  static const videoCameraSlash = LucideIcons300.videoOff;
+  static const cameraRotate = LucideIcons300.switchCamera;
+  static const speakerHigh = LucideIcons300.volume2;
+  static const speakerLow = LucideIcons300.volume1;
+  static const phoneX = LucideIcons500.phoneOff;
+  static const phoneIncoming = LucideIcons300.phoneIncoming;
+  static const phoneMissed = LucideIcons300.phoneMissed;
+  static const screencast = LucideIcons300.screenShare;
+  static const minimize = LucideIcons300.minimize2;
+  static const textItalic = LucideIcons300.italic;
+  static const quote = LucideIcons300.quote;
 }
 
 /// Official brand colours for [NxI] brand icons (Simple Icons palette).
