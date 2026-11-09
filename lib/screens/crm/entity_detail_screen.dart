@@ -248,7 +248,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
           final p = NxPickOption.fromMap(o);
           return (value: p.value, label: p.label);
         }(),
-    ]);
+    ], current: _row[key]?.toString());
   }
 
   Future<void> _changeStatus(String key, String value) async {
@@ -505,9 +505,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   options: statusOptions,
                   current: statusKey == null
                       ? null
-                      : _row[statusKey]?.toString(),
+                      : statusCurrent(widget.module, _row[statusKey]?.toString()),
                   onSelect: canEdit
-                      ? (v) => _changeStatus(statusKey!, v)
+                      ? (v) => widget.module == 'lead' && isLeadConvertedStatus(v)
+                          // Converted only through the convert window (creates Account / Contact).
+                          ? _convertLead()
+                          : _changeStatus(statusKey!, v)
                       : null,
                 ),
               ],

@@ -14,6 +14,6 @@ void main() {
     }
   });
   test('other modules unchanged', () {
-    expect(orderStatusOptions('lead', opts).map((o) => o.value), ['Active', 'Inactive', 'Draft', 'Discontinued']);
+    expect(orderStatusOptions('deal', opts).map((o) => o.value), ['Active', 'Inactive', 'Draft', 'Discontinued']);
   });
 }

@@ -94,33 +94,32 @@ class _PlacePanelState extends State<_PlacePanel> {
             ),
           if (coords != null) ...[
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    key: const ValueKey('place-copy'),
-                    icon: const Icon(NxI.copySimple, size: 18),
-                    label: Text(tr('คัดลอก'), maxLines: 1),
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: '${widget.lat},${widget.lng}'));
-                      HapticFeedback.selectionClick();
-                      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, content: Text(tr('คัดลอกพิกัดแล้ว'))));
-                    },
-                  ),
+            // One button per line: full labels, easy to tap.
+            SizedBox(
+              height: 48,
+              child: FilledButton.icon(
+                key: const ValueKey('place-maps'),
+                icon: const Icon(NxI.mapTrifold, size: 18),
+                label: Text(tr('เปิดแผนที่')),
+                onPressed: () => launchUrl(
+                  Uri.parse('https://www.google.com/maps/search/?api=1&query=${widget.lat},${widget.lng}'),
+                  mode: LaunchMode.externalApplication,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton.icon(
-                    key: const ValueKey('place-maps'),
-                    icon: const Icon(NxI.mapTrifold, size: 18),
-                    label: Text(tr('แผนที่'), maxLines: 1),
-                    onPressed: () => launchUrl(
-                      Uri.parse('https://www.google.com/maps/search/?api=1&query=${widget.lat},${widget.lng}'),
-                      mode: LaunchMode.externalApplication,
-                    ),
-                  ),
-                ),
-              ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 48,
+              child: OutlinedButton.icon(
+                key: const ValueKey('place-copy'),
+                icon: const Icon(NxI.copySimple, size: 18),
+                label: Text(tr('คัดลอกพิกัด')),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: '${widget.lat},${widget.lng}'));
+                  HapticFeedback.selectionClick();
+                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, content: Text(tr('คัดลอกพิกัดแล้ว'))));
+                },
+              ),
             ),
           ],
         ],

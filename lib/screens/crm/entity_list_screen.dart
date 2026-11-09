@@ -109,8 +109,9 @@ class _EntityListScreenState extends State<EntityListScreen> {
     final picklists = _cardCtx?.picklists ?? const <String, List<Map<String, dynamic>>>{};
     final key = _statusKey ?? EntityRecordActions.statusKey(widget.module, picklists, row);
     final raw = key == null ? null : row[key]?.toString();
-    final opt = EntityRecordActions.statusOptions(widget.module, key, picklists)
-        .where((o) => o.value == raw || o.label == raw)
+    final cur = statusCurrent(widget.module, raw);
+    final opt = EntityRecordActions.statusOptions(widget.module, key, picklists, current: raw)
+        .where((o) => o.value == cur || o.label == raw)
         .firstOrNull;
     final act = await showEntityRowActionSheet(
       context,
@@ -507,6 +508,17 @@ class _EntityListScreenState extends State<EntityListScreen> {
     );
   }
 
+  /// Bulk status choices in the real order; a lead can't be set to
+  /// "Converted" in bulk (only through the convert window).
+  List<NxFilterOption> _bulkStatusOptions(NxFilterGroup group) {
+    final ordered = orderStatusOptions(widget.module, [for (final o in group.options) (value: o.value, label: o.label)]);
+    return [
+      for (final o in ordered)
+        if (!(widget.module == 'lead' && isLeadConvertedStatus(o.value)))
+          if (group.options.any((g) => g.value == o.value)) NxFilterOption(o.value, o.label),
+    ];
+  }
+
   /// Multi-select → one status for all picked records (`bulk-update`).
   Future<void> _bulkStatus() async {
     final group = _pickGroups.firstWhere((g) => g.key == 'pl:$_statusKey');
@@ -518,7 +530,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final o in group.options)
+          for (final o in _bulkStatusOptions(group))
             ListTile(
               leading: Icon(NxI.flag, color: cs.primary),
               title: Text(tr(o.label)),

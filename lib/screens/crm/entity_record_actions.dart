@@ -17,6 +17,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../deep_link_loaders.dart';
 import 'entity_create_screen.dart';
 import 'entity_detail_parts.dart';
+import 'lead_convert_sheet.dart';
 
 /// What the current user may do with one record (same rules as the web list:
 /// `_shared_permission` read_only = view only, edit = edit/duplicate, full =
@@ -89,8 +90,9 @@ class EntityRecordActions {
   static List<({String value, String label, String? color})> statusOptions(
     String module,
     String? key,
-    Map<String, List<Map<String, dynamic>>> picklists,
-  ) {
+    Map<String, List<Map<String, dynamic>>> picklists, {
+    String? current,
+  }) {
     if (key == null) return const [];
     final raw = picklists[key] ?? const <Map<String, dynamic>>[];
     final colors = <String, String?>{};
@@ -98,10 +100,12 @@ class EntityRecordActions {
     for (final o in raw) {
       final p = NxPickOption.fromMap(o);
       colors[p.value] = o['color']?.toString();
+      final canon = statusCurrent(module, p.value);
+      if (canon != null) colors.putIfAbsent(canon, () => o['color']?.toString());
       opts.add((value: p.value, label: p.label));
     }
     return [
-      for (final o in orderStatusOptions(module, opts)) (value: o.value, label: o.label, color: colors[o.value]),
+      for (final o in orderStatusOptions(module, opts, current: current)) (value: o.value, label: o.label, color: colors[o.value]),
     ];
   }
 
@@ -191,7 +195,7 @@ class EntityRecordActions {
     }
     if (!context.mounted) return null;
     final key = statusKey(module, lists, row);
-    final options = statusOptions(module, key, lists);
+    final options = statusOptions(module, key, lists, current: key == null ? null : row[key]?.toString());
     if (key == null || options.isEmpty) {
       _snack(messenger, 'เมนูนี้ไม่มีสถานะให้เปลี่ยน');
       return null;
@@ -200,9 +204,16 @@ class EntityRecordActions {
     final picked = await showAppBottomSheet<String>(
       context: context,
       title: tr('ปรับสถานะ'),
-      child: EntityStatusPickList(options: options, current: before),
+      child: EntityStatusPickList(options: options, current: statusCurrent(module, before)),
     );
-    if (picked == null || picked == before || !context.mounted) return null;
+    if (picked == null || picked == before || picked == statusCurrent(module, before) || !context.mounted) return null;
+    // A lead becomes "Converted" only through the convert window (creates Account / Contact).
+    if (module == 'lead' && isLeadConvertedStatus(picked)) {
+      final r = await showLeadConvertSheet(context, leadId: '${row['id']}');
+      if (r == null) return null;
+      onChanged?.call(key, 'Converted');
+      return 'Converted';
+    }
     final id = '${row['id'] ?? ''}';
     final label = options.firstWhere((o) => o.value == picked).label;
     onChanged?.call(key, picked);

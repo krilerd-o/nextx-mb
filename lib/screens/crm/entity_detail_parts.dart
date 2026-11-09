@@ -787,9 +787,78 @@ String _activityWhen(dynamic raw) {
 }
 
 
-/// Product / Service: "ฉบับร่าง" (Draft) first, then the rest in their own order.
-List<({String value, String label})> orderStatusOptions(String module, List<({String value, String label})> options) {
+/// Lead status funnel, same as the web (`constants/leadStatus.js`):
+/// New → Contacted → Qualified → Unqualified → Converted (always last).
+const kLeadStatusFunnel = ['New', 'Contacted', 'Qualified', 'Unqualified', 'Converted'];
+
+const _leadAliases = {
+  'new': 'New',
+  'ใหม่': 'New',
+  'contacted': 'Contacted',
+  'wait for convert': 'Contacted',
+  'qualified': 'Qualified',
+  'potentials': 'Qualified',
+  'มีโอกาส': 'Qualified',
+  'มีศักยภาพ': 'Qualified',
+  'unqualified': 'Unqualified',
+  'no potentials': 'Unqualified',
+  'ไม่มีโอกาส': 'Unqualified',
+  'ไม่มีศักยภาพ': 'Unqualified',
+  'lost': 'Unqualified',
+  'converted': 'Converted',
+  'แปลงแล้ว': 'Converted',
+  'แปลงเป็นลูกค้าแล้ว': 'Converted',
+};
+
+/// Legacy / Thai lead status → the standard value (`Potentials` → `Qualified`).
+String? canonicalLeadStatus(String? raw) {
+  final s = (raw ?? '').trim();
+  if (s.isEmpty) return null;
+  return _leadAliases[s.toLowerCase()] ?? _leadAliases[s] ?? s;
+}
+
+bool isLeadConvertedStatus(String? raw) => canonicalLeadStatus(raw) == 'Converted';
+
+/// Value to compare with the options for the current status of [module].
+String? statusCurrent(String module, String? raw) => module == 'lead' ? canonicalLeadStatus(raw) : raw;
+
+/// Status steps in their real order.
+/// - Lead: the web funnel, aliases merged, "Case" hidden, Converted last.
+/// - Product / Service: "ฉบับร่าง" (Draft) first, then the rest in their own order.
+List<({String value, String label})> orderStatusOptions(String module, List<({String value, String label})> options, {String? current}) {
   final m = module.toLowerCase();
+  if (m == 'lead' || m == 'leads') return _leadStatusOptions(options, current);
+  return _draftFirst(m, options);
+}
+
+List<({String value, String label})> _leadStatusOptions(List<({String value, String label})> options, String? current) {
+  final cur = canonicalLeadStatus(current);
+  final byValue = <String, ({String value, String label})>{};
+  for (final o in options) {
+    final v = o.value.trim();
+    if (v.isEmpty || v.toLowerCase() == 'case' || v == 'เคส') continue;
+    final canon = canonicalLeadStatus(v)!;
+    final standard = kLeadStatusFunnel.contains(canon);
+    // Non-standard values only when the record has one (like the web).
+    if (!standard && canon != cur) continue;
+    final exact = v == canon;
+    final have = byValue[canon];
+    // Prefer the option whose own value is the standard one (its label).
+    if (have == null || exact) byValue[canon] = (value: canon, label: exact || have == null ? o.label : have.label);
+  }
+  if (byValue.isEmpty) return const [];
+  // Converted is the final step even when the picklist lacks it.
+  byValue.putIfAbsent('Converted', () => (value: 'Converted', label: 'แปลงเป็นลูกค้าแล้ว'));
+  final out = byValue.values.toList();
+  int rank(String v) {
+    final i = kLeadStatusFunnel.indexOf(v);
+    return i < 0 ? 99 : i;
+  }
+  out.sort((a, b) => rank(a.value).compareTo(rank(b.value)));
+  return out;
+}
+
+List<({String value, String label})> _draftFirst(String m, List<({String value, String label})> options) {
   if (m != 'product' && m != 'products' && m != 'service' && m != 'services') return options;
   bool isDraft(({String value, String label}) o) {
     final v = o.value.toLowerCase();
