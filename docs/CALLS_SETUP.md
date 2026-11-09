@@ -48,11 +48,31 @@
    ```bash
    sudo systemctl enable --now coturn
    ```
-5. ทดสอบที่ https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/
-   - ใส่ URL และ username/credential จาก `GET /api/calls/ice-servers`
-   - ต้องเห็น candidate ชนิด `relay`
+5. ทดสอบด้วยปุ่ม "ทดสอบการเชื่อมต่อ" ในหน้าตั้งค่า (ข้อ 2) ซึ่งตรวจ relay จริงทั้งจากเซิร์ฟเวอร์และเบราว์เซอร์
 
-## 2. ตัวแปร env ของ backend (NEXTX)
+## 2. ตั้งค่าในเว็บ NEXTX (แนะนำ ไม่ต้องแก้ .env และไม่ต้องรีสตาร์ท)
+
+เว็บ NEXTX → **ตั้งค่า → การโทร / วิดีโอคอล** (แก้ได้เฉพาะ superadmin; คนอื่นเห็นแค่สถานะ)
+
+1. **โทรผ่าน 4G (TURN)** เลือกแบบใดแบบหนึ่ง:
+   - **Cloudflare TURN (แนะนำ เร็วสุด):** Cloudflare Dashboard → Realtime → TURN Server → Create → ได้ *TURN Key ID* และ *API Token* → วางในหน้านี้
+   - **coturn ของเราเอง:** ทำตามข้อ 1 แล้วใส่ TURN URL (บรรทัดละ 1) และ shared secret
+   - **ชื่อผู้ใช้/รหัสคงที่:** สำหรับผู้ให้บริการอื่น เช่น Metered, Twilio
+2. **สายเข้า iPhone (APNs VoIP):** เปิดสวิตช์ → ใส่ Key ID, Team ID, เลือกไฟล์ `AuthKey_XXXX.p8`, Bundle ID, Production/Sandbox
+3. **ตัวเลือกการโทร:** จำนวนคนต่อสาย (2–4), เวลาเรียกก่อนเป็นสายที่ไม่ได้รับ, เวลารอเน็ตหลุดกลับมา
+4. กด **ทดสอบการเชื่อมต่อ** — ระบบทดสอบจริงทีละข้อ:
+   - จากเซิร์ฟเวอร์: DNS → เซิร์ฟเวอร์ตอบ (STUN) → ขอช่อง relay ด้วยรหัสจริง (TURN Allocate) ทุก URL
+   - จากเบราว์เซอร์ที่เปิดอยู่: ต้องได้ candidate ชนิด `relay`
+   - APNs: ตรวจกุญแจกับ Apple โดยตรง (ไม่ต้องมี iPhone)
+5. กด **Activate** — ทดสอบซ้ำ ผ่านแล้วจึงเปิดใช้ **สายถัดไปใช้ค่าใหม่ทันที** ถ้าไม่ผ่าน ค่าที่ใช้อยู่เดิมไม่เปลี่ยน
+   - "บันทึกร่าง" ยังไม่มีผลกับการโทรจนกว่าจะ Activate
+   - "ปิดใช้งาน" = กลับไปใช้ค่าจาก .env
+   - ขั้นสูง → "ผ่าน TURN เสมอ" ใช้ตรวจปัญหา (บังคับเสียง/วิดีโอวิ่งผ่าน TURN)
+
+ค่าลับ (secret, token, .p8) เก็บในฐานข้อมูลแบบเข้ารหัส (ตาราง `aicrm_call_settings`, สร้างให้อัตโนมัติ หรือ `npm run migrate-call-settings`) และไม่ส่งกลับมาที่หน้าเว็บ
+ถ้าเซิร์ฟเวอร์รันหลาย instance ค่าใหม่มีผลภายใน 30 วินาที
+
+## 2.1 ตัวแปร env ของ backend (ค่าสำรอง ใช้เฉพาะส่วนที่ยังไม่ได้ตั้งในเว็บ)
 
 | ตัวแปร | ตัวอย่าง | ความหมาย |
 |---|---|---|
@@ -127,13 +147,17 @@ FCM (Android) และ HMS (Huawei) ใช้ค่าที่ตั้งไ�
 
 - **Backend:**
   - `src/services/callSignaling.js` (rtc:*, สถานะสาย, ประวัติการโทร)
-  - `src/services/callIce.js` (STUN / TURN)
+  - `src/services/callIce.js` (STUN / TURN, Cloudflare)
+  - `src/services/callSettings.js` (ค่าจากหน้าตั้งค่า, ร่าง/Activate, cache 30 วิ)
+  - `src/services/callTurnProbe.js` (ทดสอบ STUN/TURN Allocate จริง)
+  - `src/routes/callSettings.js` (`/api/settings/calls`)
   - `src/services/callPush.js` (FCM / VoIP / HMS)
   - `src/services/apnsVoip.js`
   - `src/routes/calls.js`
 - **เว็บ:**
   - `frontend/src/hooks/useCall.js` (mesh + perfect negotiation)
   - `frontend/src/components/CallUI.jsx`
+  - `frontend/src/pages/settings/CallSettingsPage.jsx` (หน้าตั้งค่าการโทร)
 - **แอป:**
   - `lib/services/calls/call_service.dart` (logic เดียวกับเว็บ)
   - `call_media_webrtc.dart`

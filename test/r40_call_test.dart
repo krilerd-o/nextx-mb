@@ -98,8 +98,10 @@ class FakeMedia implements CallMedia {
   Future<void> switchCamera() async {}
   @override
   Future<void> setSpeaker(bool on) async {}
+  bool? lastRelayOnly;
   @override
-  Future<CallPeer> createPeer(List<Map<String, dynamic>> iceServers) async {
+  Future<CallPeer> createPeer(List<Map<String, dynamic>> iceServers, {bool relayOnly = false}) async {
+    lastRelayOnly = relayOnly;
     final p = FakePeer();
     peers.add(p);
     return p;
@@ -143,7 +145,7 @@ void main() {
     sig.acks['rtc:start'] = {
       'ok': true,
       'call': _call(),
-      'ice': {'ice_servers': [{'urls': ['turn:t.qa:3478'], 'username': 'u', 'credential': 'c'}]},
+      'ice': {'ice_servers': [{'urls': ['turn:t.qa:3478'], 'username': 'u', 'credential': 'c'}], 'turn': true, 'ice_transport_policy': 'relay'},
     };
     final code = await svc.start(roomId: '1', roomTitle: '[QA] Second', video: true);
     expect(code, isNull);
@@ -157,6 +159,7 @@ void main() {
     expect(svc.phase, CallPhase.active);
     expect(svc.participants.keys, ['sB']);
     expect(media.peers.single.log, isEmpty); // existing side waits for the newcomer's offer
+    expect(media.lastRelayOnly, isTrue); // Settings → การโทร "ผ่าน TURN เสมอ"
 
     sig.push('rtc:signal', {'call_id': _callId, 'from_socket_id': 'sB', 'from_user_id': 2, 'data': {'type': 'offer', 'sdp': 'o'}});
     await _flush();

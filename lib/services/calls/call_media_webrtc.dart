@@ -79,9 +79,10 @@ class WebRtcCallMedia implements CallMedia {
   Future<void> setSpeaker(bool on) => Helper.setSpeakerphoneOn(on);
 
   @override
-  Future<CallPeer> createPeer(List<Map<String, dynamic>> iceServers) async {
+  Future<CallPeer> createPeer(List<Map<String, dynamic>> iceServers, {bool relayOnly = false}) async {
     final pc = await createPeerConnection({
       'iceServers': iceServers,
+      'iceTransportPolicy': relayOnly ? 'relay' : 'all',
       'sdpSemantics': 'unified-plan',
       'bundlePolicy': 'max-bundle',
     });

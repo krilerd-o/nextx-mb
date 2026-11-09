@@ -157,7 +157,11 @@ class CallService extends ChangeNotifier {
   void _loadIce(dynamic ice) {
     final list = ice is Map ? ice['ice_servers'] : null;
     if (list is List && list.isNotEmpty) _ice = [for (final s in list) if (s is Map) Map<String, dynamic>.from(s)];
+    if (ice is Map) _relayOnly = ice['ice_transport_policy'] == 'relay' && ice['turn'] == true;
   }
+
+  /// Settings → การโทร "ผ่าน TURN เสมอ".
+  bool _relayOnly = false;
 
   Future<bool> _openMedia({required bool video}) async {
     final f = _mediaFactory;
@@ -194,7 +198,7 @@ class CallService extends ChangeNotifier {
     }
     final m = media;
     if (m == null) return null;
-    final peer = await m.createPeer(_ice);
+    final peer = await m.createPeer(_ice, relayOnly: _relayOnly);
     final p = CallParticipant(socketId: sid, peer: peer)
       ..answerer = answerer
       ..polite = (_signal.socketId ?? '').compareTo(sid) < 0;

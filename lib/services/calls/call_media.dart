@@ -49,6 +49,7 @@ abstract class CallMedia {
   Future<bool> setVideo(bool on);
   Future<void> switchCamera();
   Future<void> setSpeaker(bool on);
-  Future<CallPeer> createPeer(List<Map<String, dynamic>> iceServers);
+  /// [relayOnly]: Settings → การโทร "ผ่าน TURN เสมอ" (iceTransportPolicy relay).
+  Future<CallPeer> createPeer(List<Map<String, dynamic>> iceServers, {bool relayOnly = false});
   Future<void> closeLocal();
 }
