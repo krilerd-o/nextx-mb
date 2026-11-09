@@ -243,6 +243,14 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                   subtitle: 'ตัวอักษร ปุ่ม และไอคอนทั้งแอป',
                   below: const NxUiScaleControl(),
                 ),
+                SettingsTile(
+                  key: const ValueKey('profile-nav-dock'),
+                  icon: NxI.squaresFour,
+                  tint: const Color(0xFF8B5CF6),
+                  title: 'ตำแหน่งเมนู (แท็บเล็ต)',
+                  subtitle: config.navDock.label,
+                  onTap: () => showNavDockPicker(context),
+                ),
               ]),
             ),
 

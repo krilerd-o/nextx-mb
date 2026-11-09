@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'nav_dock.dart';
 import 'i18n.dart';
 
 import '../services/api_client.dart';
@@ -48,6 +49,7 @@ const String _keyAccentKey = 'accent_key';
 const String _keyUiLocale = 'ui_locale';
 const String _keyUiFont = 'ui_font';
 const String _keyUiScale = 'ui_scale';
+const String _keyNavDock = 'nav_dock';
 const String _keyDateFormat = 'date_format_pattern';
 const String _keyProfileAvatarB64 = 'profile_avatar_base64';
 const String _keyServerConfirmed = 'server_confirmed';
@@ -136,6 +138,7 @@ class AppConfig extends ChangeNotifier {
   String _uiLocaleCode = 'th';
   String _uiFontId = kDefaultUiFontId;
   double _uiScale = kDefaultUiScale;
+  NxNavDock _navDock = kDefaultNavDock;
   String _dateFormatPattern = 'dd/MM/yyyy HH:mm';
   String? _profileAvatarBase64;
   bool _loggingOut = false;
@@ -166,6 +169,9 @@ class AppConfig extends ChangeNotifier {
 
   /// Whole-app screen scale (text, spacing, icons). Default 95%.
   double get uiScale => _uiScale;
+
+  /// Where the tab menu sits on a tablet / wide screen (this device only).
+  NxNavDock get navDock => _navDock;
   String get dateFormatPattern => _dateFormatPattern;
   String? get profileAvatarBase64 => _profileAvatarBase64;
 
@@ -496,6 +502,7 @@ class AppConfig extends ChangeNotifier {
     _uiLocaleCode = prefs.getString(_keyUiLocale) == 'en' ? 'en' : 'th';
     _uiFontId = resolveUiFontId(prefs.getString(_keyUiFont));
     _uiScale = resolveUiScale(prefs.getDouble(_keyUiScale));
+    _navDock = resolveNavDock(prefs.getString(_keyNavDock));
     L10n.set(_uiLocaleCode);
     _dateFormatPattern = prefs.getString(_keyDateFormat) ?? 'dd/MM/yyyy HH:mm';
     _recentServers = prefs.getStringList(_keyRecentServers) ?? const [];
@@ -704,6 +711,14 @@ class AppConfig extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_keyUiScale, x);
+  }
+
+  Future<void> setNavDock(NxNavDock d) async {
+    if (d == _navDock) return;
+    _navDock = d;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyNavDock, d.id);
   }
 
   /// Switches the whole app's language at once. When the app's switch layer

@@ -1755,6 +1755,17 @@ const Map<String, String> enStrings = {
   'เฉพาะที่จำเป็น': 'Required only',
   'จำเป็นครบแล้ว': 'All required filled',
   'ล้างทั้งหมด': 'Clear all',
+  'ตำแหน่งเมนู': 'Menu position',
+  'ตำแหน่งเมนู (แท็บเล็ต)': 'Menu position (tablet)',
+  'ใช้เมื่อเปิดบนแท็บเล็ตหรือจอกว้าง (มือถือแสดงแถบล่างเสมอ)': 'Used on tablets and wide screens (phones always show the bottom bar)',
+  'ซ้าย': 'Left',
+  'ขวา': 'Right',
+  'บนซ้าย': 'Top left',
+  'บนกลาง': 'Top center',
+  'บนขวา': 'Top right',
+  'ล่างซ้าย': 'Bottom left',
+  'ล่างกลาง': 'Bottom center',
+  'ล่างขวา': 'Bottom right',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

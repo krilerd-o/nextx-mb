@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../core/app_config.dart';
 import '../core/nx_breakpoint.dart';
+import '../core/nav_dock.dart';
+import '../core/nx_motion.dart';
 import '../services/offline_queue.dart';
 import '../services/unread_service.dart';
 import '../widgets/nx_scroll_scaffold.dart';
@@ -113,7 +115,7 @@ class _AppShellState extends State<AppShell> {
     final bp = NxBreakpoint.of(context);
     // Only the tab list and invite matter here; a full watch rebuilt every
     // open tab on each AppConfig notify (session refresh, unread, queue…).
-    context.select((AppConfig c) => (c.shellTabs.join(','), c.pendingInvite, c.hasPendingQr));
+    context.select((AppConfig c) => (c.shellTabs.join(','), c.pendingInvite, c.hasPendingQr, c.navDock));
     final config = context.read<AppConfig>();
     if (config.pendingInvite != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -148,6 +150,11 @@ class _AppShellState extends State<AppShell> {
         else
           NxTabDestination(icon: shellTabById(id)!.icon, selectedIcon: shellTabById(id)!.selectedIcon, label: shellTabById(id)!.label),
     ];
+    // The dock moves only while this page is on screen, so coming back from
+    // settings shows the menu gliding to its new place.
+    final routeVisible = ModalRoute.of(context)?.isCurrent ?? true;
+    if (routeVisible || _shownDock == null) _shownDock = config.navDock;
+    final dock = _shownDock!;
     final nav = ListenableBuilder(
       listenable: UnreadNotifications.instance,
       builder: (context, _) {
@@ -161,7 +168,8 @@ class _AppShellState extends State<AppShell> {
             setState(() => _current = ids[i]);
             config.setLastTab(ids[i]);
           },
-          rail: bp.useRail,
+          rail: bp.useRail && dock.vertical,
+          docked: bp.useRail,
           badges: {if (notifIndex >= 0 && unread > 0) notifIndex: unread},
         );
       },
@@ -187,14 +195,7 @@ class _AppShellState extends State<AppShell> {
 
     final Widget page;
     if (bp.useRail) {
-      page = Scaffold(
-        body: Row(
-          children: [
-            nav,
-            Expanded(child: stack),
-          ],
-        ),
-      );
+      page = Scaffold(body: _DockedShell(dock: dock, nav: nav, body: stack));
     }
     // Every tab scrolls under the floating glass bar; content dissolves into a
     // progressive blur toward the bottom edge (pages pad via MediaQuery).
@@ -250,6 +251,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   DateTime? _lastBack;
+  NxNavDock? _shownDock;
 
   void _onBack(List<String> ids) {
     if (NxShellBack.instance.handle(_current)) return;
@@ -270,6 +272,75 @@ class _AppShellState extends State<AppShell> {
       ..showSnackBar(
         SnackBar(key: const ValueKey('shell-exit-hint'), content: Text(tr('กดย้อนกลับอีกครั้งเพื่อออกจากแอป')), duration: const Duration(seconds: 2)),
       );
+  }
+}
+
+/// Tablet layout: the menu card sits at [dock] (left/right rail or a
+/// top/bottom bar) and glides there with the content making room alongside.
+class _DockedShell extends StatelessWidget {
+  const _DockedShell({required this.dock, required this.nav, required this.body});
+  final NxNavDock dock;
+  final Widget nav;
+  final Widget body;
+
+  /// Edge margin + card + gap to the content.
+  static const double extent = 10 + NxTabNav.railWidth + 8;
+
+  @override
+  Widget build(BuildContext context) {
+    final pad = MediaQuery.paddingOf(context);
+    final d = NxMotion.duration(context, 520);
+    const curve = Curves.easeInOutCubic;
+    final insets = EdgeInsets.only(
+      left: dock == NxNavDock.left ? extent + pad.left : 0,
+      right: dock == NxNavDock.right ? extent + pad.right : 0,
+      top: dock.isTop ? extent + pad.top : 0,
+      bottom: dock.isBottom ? extent + pad.bottom : 0,
+    );
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: AnimatedPadding(
+            key: const ValueKey('shell-dock-body'),
+            padding: insets,
+            duration: d,
+            curve: curve,
+            child: MediaQuery.removePadding(
+              context: context,
+              removeLeft: dock == NxNavDock.left,
+              removeRight: dock == NxNavDock.right,
+              removeTop: dock.isTop,
+              removeBottom: dock.isBottom,
+              child: body,
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: AnimatedAlign(
+                key: const ValueKey('shell-dock-nav'),
+                alignment: dock.alignment,
+                duration: d,
+                curve: curve,
+                child: AnimatedSwitcher(
+                  duration: NxMotion.duration(context, 320),
+                  switchInCurve: Curves.easeOutBack,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, a) => FadeTransition(
+                    opacity: a,
+                    child: ScaleTransition(scale: Tween(begin: 0.8, end: 1.0).animate(a), child: child),
+                  ),
+                  // Rail ↔ bar swaps shape while it moves.
+                  child: KeyedSubtree(key: ValueKey('dock-${dock.vertical}'), child: nav),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

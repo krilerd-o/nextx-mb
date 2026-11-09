@@ -25,6 +25,7 @@ class NxTabNav extends StatelessWidget {
     required this.selectedIndex,
     required this.onSelect,
     this.rail = false,
+    this.docked = false,
     this.badges = const {},
   });
 
@@ -39,11 +40,22 @@ class NxTabNav extends StatelessWidget {
   final ValueChanged<int>? onSelect;
   final bool rail;
 
+  /// Tablet: only the glass card (rail column or compact bar) — the shell
+  /// places it at the chosen dock position.
+  final bool docked;
+
   /// Unread counts per destination index (0 / missing = no badge).
   final Map<int, int> badges;
 
   @override
   Widget build(BuildContext context) {
+    if (docked) {
+      if (rail) return _RailCard(nav: this);
+      return ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: destinations.length * 84.0 + 12),
+        child: NxTabBarCard(destinations: destinations, selectedIndex: selectedIndex, onSelect: onSelect, badges: badges),
+      );
+    }
     return rail ? _Rail(nav: this) : _Bar(nav: this);
   }
 }
@@ -120,40 +132,50 @@ class _Rail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final n = nav.destinations.length;
     return SafeArea(
       right: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 12, 6, 12),
         child: Align(
           alignment: Alignment.centerLeft,
-          child: SizedBox(
-            width: NxTabNav.railWidth,
-            child: NxGlass(
-              radius: 26,
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < n; i++)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: _Item(
-                        dest: nav.destinations[i],
-                        selected: i == nav.selectedIndex,
-                        badge: nav.badges[i] ?? 0,
-                        onTap: nav.onSelect == null
-                            ? null
-                            : () {
-                                HapticFeedback.selectionClick();
-                                nav.onSelect!(i);
-                              },
-                      ),
-                    ),
-                ],
+          child: _RailCard(nav: nav),
+        ),
+      ),
+    );
+  }
+}
+
+class _RailCard extends StatelessWidget {
+  const _RailCard({required this.nav});
+  final NxTabNav nav;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = nav.destinations.length;
+    return SizedBox(
+      width: NxTabNav.railWidth,
+      child: NxGlass(
+        radius: 26,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < n; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: _Item(
+                  dest: nav.destinations[i],
+                  selected: i == nav.selectedIndex,
+                  badge: nav.badges[i] ?? 0,
+                  onTap: nav.onSelect == null
+                      ? null
+                      : () {
+                          HapticFeedback.selectionClick();
+                          nav.onSelect!(i);
+                        },
+                ),
               ),
-            ),
-          ),
+          ],
         ),
       ),
     );
