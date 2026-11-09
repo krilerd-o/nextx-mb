@@ -94,7 +94,7 @@ void main() {
     await pumpList(tester, module: 'lead', row: lead);
     await longPressRow(tester, '[QA] ลูกค้าทดสอบ R43');
     expect(platformCalls.any((c) => c.method == 'HapticFeedback.vibrate'), isTrue);
-    for (final k in ['status', 'comment', 'edit', 'duplicate', 'delete', 'select']) {
+    for (final k in ['convert', 'status', 'comment', 'edit', 'duplicate', 'delete', 'select']) {
       expect(find.byKey(ValueKey('row-act-$k')), findsOneWidget, reason: k);
     }
     expect(find.text('ปรับสถานะ'), findsOneWidget);

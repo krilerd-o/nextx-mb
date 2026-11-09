@@ -41,6 +41,8 @@ bool isWallClockField(String? field, {String? module}) {
   final f = (field ?? '').toLowerCase();
   if (f.isEmpty) return false;
   if (f == 'date_start' || f == 'date_end' || f.endsWith('_datetime')) return true;
+  // Activity visit stamps are written as Bangkok wall clock (same as the web visit panel).
+  if (f == 'checkindate' || f == 'checkoutdate') return true;
   if (module == 'case' && const {'createdtime', 'modifiedtime', 'created_at', 'updated_at'}.contains(f)) return true;
   return false;
 }

@@ -8,7 +8,7 @@ import '../../widgets/nx_icons.dart';
 import 'entity_record_actions.dart';
 
 /// Commands offered when a list row is long-pressed.
-enum EntityRowAction { status, comment, edit, duplicate, delete, select }
+enum EntityRowAction { convert, status, comment, edit, duplicate, delete, select }
 
 /// Long-press menu for a record: a big-icon grid (status, comment, edit,
 /// duplicate, delete, multi-select) like the web row menu. Returns the pick.
@@ -69,6 +69,14 @@ class EntityRowActionGrid extends StatelessWidget {
     final sc = EntityRecordActions.statusColor(cs, status ?? '', statusColor);
     final caseLocked = module == 'case' && hasStatus;
     final tiles = <Widget>[
+      if (module == 'lead' && perms.canEdit && !EntityRowPerms.leadLocked(row))
+        _ActionTile(
+          key: const ValueKey('row-act-convert'),
+          icon: NxI.userCheck,
+          label: 'แปลงเป็นลูกค้า',
+          color: const Color(0xFF16A34A),
+          onTap: () => Navigator.pop(context, EntityRowAction.convert),
+        ),
       if (hasStatus && (perms.canStatus || caseLocked))
         _ActionTile(
           key: const ValueKey('row-act-status'),

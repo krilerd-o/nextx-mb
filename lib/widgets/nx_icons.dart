@@ -111,6 +111,12 @@ class NxI {
   static const circle = LucideIcons300.circle;
   static const x = LucideIcons300.x;
   static const mapPin = LucideIcons300.mapPin;
+  static const mapTrifold = LucideIcons300.map;
+  static const mapPinned = LucideIcons300.mapPinned;
+  static const userCheck = LucideIcons300.userCheck;
+  static const aperture = LucideIcons300.aperture;
+  static const flashOff = LucideIcons300.zapOff;
+  static const stamp = LucideIcons300.stamp;
   static const star = LucideIcons300.star;
   static const funnel = LucideIcons300.listFilter;
   static const heart = LucideIcons300.heart;

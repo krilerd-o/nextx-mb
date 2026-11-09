@@ -25,6 +25,7 @@ import 'entity_detail_parts.dart';
 import 'entity_detail_screen.dart';
 import 'entity_record_actions.dart';
 import 'entity_row_action_sheet.dart';
+import 'lead_convert_sheet.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/entity_display.dart';
@@ -123,6 +124,9 @@ class _EntityListScreenState extends State<EntityListScreen> {
     if (act == null || !mounted) return;
     final id = row['id']?.toString() ?? '';
     switch (act) {
+      case EntityRowAction.convert:
+        final r = await showLeadConvertSheet(context, leadId: id);
+        if (r != null && mounted) _load(reset: true);
       case EntityRowAction.status:
         await EntityRecordActions.changeStatus(
           context,

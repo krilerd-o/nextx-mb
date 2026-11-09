@@ -8,10 +8,8 @@ import '../../services/api_client.dart';
 import '../../services/location_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
-import '../../widgets/nx_map_view.dart';
-import '../../widgets/nx_overlay_panel.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
-import '../calendar/visit_check_sheet.dart' show CheckInfoRow, thaiDateTime, stayDuration;
+import '../../widgets/nx_place_panel.dart';
+import '../calendar/visit_check_sheet.dart' show thaiDateTime, stayDuration;
 import 'attendance_punch_sheet.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
@@ -110,24 +108,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   /// Where a punch was made: small map + coordinates + address.
   void _showPlace(String title, DateTime? at, Object? lat, Object? lng, Object? address) {
-    final la = double.tryParse('$lat'), lo = double.tryParse('$lng');
-    showNxBlurPanel<void>(
-      context: context,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        return Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(tr(title), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 10),
-            if (la != null && lo != null) NxMapView(me: LatLng(la, lo), height: 180),
-            if (at != null) CheckInfoRow(icon: NxI.clock, label: 'เวลา', value: thaiDateTime(at), strong: true),
-            if (la != null && lo != null) CheckInfoRow(icon: NxI.crosshair, label: 'พิกัด', value: '${la.toStringAsFixed(6)}, ${lo.toStringAsFixed(6)}'),
-            if ((address?.toString() ?? '').isNotEmpty) CheckInfoRow(icon: NxI.mapPin, label: 'สถานที่', value: address.toString()),
-          ]),
-        );
-      },
-    );
+    showNxPlacePanel(context, title: title, at: at, lat: lat, lng: lng, address: address);
   }
 
   @override

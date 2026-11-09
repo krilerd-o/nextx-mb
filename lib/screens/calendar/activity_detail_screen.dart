@@ -1,7 +1,5 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -19,6 +17,9 @@ import '../crm/entity_detail_parts.dart';
 import 'activity_form_screen.dart';
 import 'cal/cal_model.dart' show hm;
 import 'visit_check_sheet.dart';
+import 'visit_photo_flow.dart';
+import '../../widgets/nx_place_panel.dart';
+import 'package:flutter/services.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
 import '../../core/recent_records.dart';
@@ -174,7 +175,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   }
 
   Future<void> _check({required bool inn}) async {
-    final checkedAt = parseThai(_visit?['checkindate']);
+    final checkedAt = parseWall(_visit?['checkindate']);
     final r = await showVisitCheckSheet(
       context,
       activityId: _id,
@@ -185,54 +186,91 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     );
     if (r == null || !mounted) return;
     await _loadVisit();
+    // Checked in = attending: answer the invite for the user when not done yet.
+    if (inn && _myRsvp != 'accepted') _rsvp('accepted', auto: true);
   }
 
-  Future<void> _pickPhotos({required bool camera}) async {
-    final api = context.read<AppConfig>().apiClient;
-    final picker = ImagePicker();
-    final files = <XFile>[];
-    if (camera) {
-      final shot = await picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 80,
-        maxWidth: 1600,
+  PhotoRunProgress? _photoProgress;
+  VisitPhotoFlow? _photoFlow;
+
+  VisitPhotoFlow _flow() => _photoFlow ??= VisitPhotoFlow(
+        upload: (files) => context.read<AppConfig>().apiClient.uploadActivityPhotos(_id, files),
+        location: _location,
+        onProgress: (p) {
+          if (mounted) setState(() => _photoProgress = p);
+        },
       );
-      if (shot != null) files.add(shot);
-    } else {
-      files.addAll(
-        await picker.pickMultiImage(imageQuality: 80, maxWidth: 1600),
-      );
-    }
-    if (!mounted || files.isEmpty) return;
-    setState(() => _busy = true);
+
+  /// Camera / gallery / Fast Take → (location watermark?) → batched upload.
+  Future<void> _pickPhotos(PhotoSource source) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
-      final parts = <MultipartFile>[];
-      for (final f in files) {
-        final bytes = await f.readAsBytes();
-        parts.add(MultipartFile.fromBytes(bytes, filename: f.name));
+      final n = await _flow().run(context, source);
+      if (n > 0) {
+        HapticFeedback.mediumImpact();
+        messenger.showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, content: Text(tr('อัปโหลด $n รูปแล้ว'))));
       }
-      await api.uploadActivityPhotos(_id, parts);
-      await _loadVisit();
+    } on PhotoUploadIncomplete catch (e) {
+      messenger.showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, content: Text(tr(e.toString()))));
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
+      await _loadVisit();
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _rsvp(String response) async {
+  Future<void> _retryPhotos() async {
     setState(() => _busy = true);
+    try {
+      final n = await _flow().retryPending();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('อัปโหลด $n รูปแล้ว'))));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(e.toString()))));
+    } finally {
+      await _loadVisit();
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// My answer to the invite, from `attendees` (kind user = me).
+  String? _rsvpLocal;
+  String? get _myRsvp {
+    if (_rsvpLocal != null) return _rsvpLocal;
+    final me = context.read<AppConfig>().session.userId;
+    final raw = _row['attendees'];
+    final list = raw is List ? raw : const [];
+    for (final g in list) {
+      if (g is Map && '${g['user_id'] ?? ''}' == me && me != null) {
+        final r = '${g['response'] ?? ''}';
+        return r.isEmpty || r == 'needsAction' ? null : r;
+      }
+    }
+    return null;
+  }
+
+  /// Answer the invite: selected at once (optimistic), Thai snackbar, rolls back on error.
+  Future<void> _rsvp(String response, {bool auto = false}) async {
+    final before = _myRsvp;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _rsvpLocal = response);
+    if (!auto) HapticFeedback.selectionClick();
     try {
       await context.read<AppConfig>().apiClient.activityRsvp(_id, response);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(tr('RSVP: $response'))));
-      }
+      final label = tr(_rsvpLabels[response] ?? response);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(auto ? tr('เช็คอินแล้ว — ตอบรับนัด "$label" ให้อัตโนมัติ') : tr('ตอบรับนัด: $label')),
+      ));
     } catch (e) {
-      if (mounted) setState(() => _error = e);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      if (!mounted) return;
+      setState(() => _rsvpLocal = before);
+      if (!auto) messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -240,6 +278,16 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     'accepted': 'เข้าร่วม',
     'tentative': 'ไม่แน่ใจ',
     'declined': 'ไม่เข้าร่วม',
+  };
+  static const _rsvpColors = {
+    'accepted': Color(0xFF16A34A),
+    'tentative': Color(0xFFF59E0B),
+    'declined': Color(0xFFDC2626),
+  };
+  static const _rsvpIcons = {
+    'accepted': NxI.checkCircle,
+    'tentative': NxI.question,
+    'declined': NxI.xCircle,
   };
 
   String _when(dynamic raw, [String? field]) {
@@ -391,20 +439,43 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   children: [
                     _stepRow(
                       context,
+                      key: const ValueKey('visit-step-in'),
                       done: checkedIn,
                       title: 'เช็คอิน',
                       value: checkedIn
-                          ? _when(_visit?['checkindate'])
+                          ? _when(_visit?['checkindate'], 'checkindate')
                           : 'ยังไม่เช็คอิน',
+                      onTap: checkedIn
+                          ? () => showNxPlacePanel(
+                                context,
+                                title: 'เช็คอิน',
+                                at: parseWall(_visit?['checkindate']),
+                                lat: _visit?['checkin_lat'],
+                                lng: _visit?['checkin_lng'],
+                              )
+                          : null,
                     ),
                     _stepRow(
                       context,
+                      key: const ValueKey('visit-step-out'),
                       done: checkedOut,
                       title: 'เช็คเอาท์',
                       value: checkedOut
-                          ? _when(_visit?['checkoutdate'])
+                          ? _when(_visit?['checkoutdate'], 'checkoutdate')
                           : 'ยังไม่เช็คเอาท์',
                       last: true,
+                      onTap: checkedOut
+                          ? () {
+                              final p = parseLatLngText(_visit?['location_chkout']);
+                              showNxPlacePanel(
+                                context,
+                                title: 'เช็คเอาท์',
+                                at: parseWall(_visit?['checkoutdate']),
+                                lat: p?.$1,
+                                lng: p?.$2,
+                              );
+                            }
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     if (!checkedIn)
@@ -441,17 +512,59 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                     ),
                   ),
                   IconButton(
+                    key: const ValueKey('visit-photo-camera'),
                     tooltip: tr('ถ่ายรูป'),
                     icon: const Icon(NxI.camera),
-                    onPressed: _busy ? null : () => _pickPhotos(camera: true),
+                    onPressed: _busy ? null : () => _pickPhotos(PhotoSource.camera),
                   ),
                   IconButton(
-                    tooltip: tr('แนบรูป'),
+                    key: const ValueKey('visit-photo-fast'),
+                    tooltip: tr('ถ่ายต่อเนื่อง (Fast Take)'),
+                    icon: const Icon(NxI.aperture),
+                    onPressed: _busy ? null : () => _pickPhotos(PhotoSource.fastTake),
+                  ),
+                  IconButton(
+                    key: const ValueKey('visit-photo-gallery'),
+                    tooltip: tr('อัปโหลดรูป'),
                     icon: const Icon(NxI.images),
-                    onPressed: _busy ? null : () => _pickPhotos(camera: false),
+                    onPressed: _busy ? null : () => _pickPhotos(PhotoSource.gallery),
                   ),
                 ],
               ),
+              if (_photoProgress != null)
+                Padding(
+                  key: const ValueKey('visit-photo-progress'),
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tr(_photoProgress!.total > 0
+                            ? '${_photoProgress!.label} ${_photoProgress!.done}/${_photoProgress!.total}'
+                            : _photoProgress!.label),
+                        style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(99),
+                        child: LinearProgressIndicator(
+                          minHeight: 6,
+                          value: _photoProgress!.total == 0 ? null : _photoProgress!.done / _photoProgress!.total,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (_photoFlow != null && _photoFlow!.pending.isNotEmpty && !_busy)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: OutlinedButton.icon(
+                    key: const ValueKey('visit-photo-retry'),
+                    icon: const Icon(NxI.arrowClockwise, size: 18),
+                    label: Text(tr('ลองอัปโหลดใหม่ (${_photoFlow!.pending.length} รูปที่ค้าง)')),
+                    onPressed: _retryPhotos,
+                  ),
+                ),
               if (photos.isEmpty)
                 Text(
                   tr('ยังไม่มีรูป'),
@@ -487,14 +600,35 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: [
                   for (final e in _rsvpLabels.entries)
-                    ActionChip(
-                      label: Text(tr(e.value)),
-                      onPressed: _busy ? null : () => _rsvp(e.key),
-                    ),
+                    () {
+                      final sel = _myRsvp == e.key;
+                      final color = _rsvpColors[e.key]!;
+                      return ChoiceChip(
+                        key: ValueKey('rsvp-${e.key}'),
+                        selected: sel,
+                        showCheckmark: false,
+                        avatar: Icon(_rsvpIcons[e.key], size: 18, color: sel ? Colors.white : color),
+                        label: Text(tr(e.value)),
+                        labelStyle: TextStyle(color: sel ? Colors.white : cs.onSurface, fontWeight: sel ? FontWeight.w700 : FontWeight.w500),
+                        selectedColor: color,
+                        side: BorderSide(color: sel ? color : cs.outlineVariant),
+                        onSelected: (_) => sel ? null : _rsvp(e.key),
+                      );
+                    }(),
                 ],
               ),
+              if (_myRsvp != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    tr('คุณตอบรับแล้ว: ${_rsvpLabels[_myRsvp] ?? _myRsvp}'),
+                    key: const ValueKey('rsvp-current'),
+                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ),
             ],
           ],
         ),
@@ -519,10 +653,28 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
 
   Widget _stepRow(
     BuildContext context, {
+    Key? key,
     required bool done,
     required String title,
     required String value,
     bool last = false,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      key: key,
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: _stepRowBody(context, done: done, title: title, value: value, last: last, tappable: onTap != null),
+    );
+  }
+
+  Widget _stepRowBody(
+    BuildContext context, {
+    required bool done,
+    required String title,
+    required String value,
+    required bool last,
+    required bool tappable,
   }) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -573,6 +725,20 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               ),
             ),
           ),
+          if (tappable)
+            Padding(
+              padding: const EdgeInsets.only(left: 8, top: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(NxI.mapPin, size: 16, color: cs.primary),
+                  const SizedBox(width: 2),
+                  Text(tr('ดูพิกัด'), style: theme.textTheme.labelMedium?.copyWith(color: cs.primary)),
+                  Icon(NxI.caretRight, size: 16, color: cs.primary),
+                ],
+              ),
+            ),
         ],
       ),
     );

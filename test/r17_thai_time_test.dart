@@ -11,13 +11,17 @@ void main() {
       expect(isWallClockField('plan_datetime'), isTrue);
       expect(isWallClockField('created_at'), isFalse);
       expect(isWallClockField('created_at', module: 'case'), isTrue);
-      expect(isWallClockField('checkindate'), isFalse);
+      expect(isWallClockField('checkindate'), isTrue);
+      expect(isWallClockField('modifiedtime'), isFalse);
 
       // Activity saved at 14:00 Thai comes back as …T14:00:00.000Z: still 14:00.
       final w = parseThaiField('2026-11-07T14:00:00.000Z', 'date_start')!;
       expect((w.hour, w.minute, w.day), (14, 0, 7));
-      // A real instant (check-in at 02:54 UTC) is 09:54 in Thailand.
-      final t = parseThaiField('2026-11-07T02:54:51.000Z', 'checkindate')!;
+      // Check-in is written as Bangkok wall clock (nowSqlLocal) too: 23:55 stays 23:55.
+      final c = parseThaiField('2026-11-09T23:55:00.000Z', 'checkindate')!;
+      expect((c.day, c.hour, c.minute), (9, 23, 55));
+      // A real instant (modified at 02:54 UTC) is 09:54 in Thailand.
+      final t = parseThaiField('2026-11-07T02:54:51.000Z', 'modifiedtime')!;
       expect((t.hour, t.minute), (9, 54));
     });
 

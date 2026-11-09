@@ -24,6 +24,7 @@ import '../deep_link_loaders.dart';
 import '../jobs/job_inspection_screen.dart';
 import 'entity_detail_parts.dart';
 import 'entity_record_actions.dart';
+import 'lead_convert_sheet.dart';
 import 'entity_ops.dart';
 import '../../core/error_reporting.dart';
 import '../../core/i18n.dart';
@@ -268,6 +269,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     }
   }
 
+  /// Lead → Account / Contact (+ Deal), same Config as the web.
+  Future<void> _convertLead() async {
+    final r = await showLeadConvertSheet(context, leadId: _id);
+    if (r != null && mounted) _reload();
+  }
+
   Future<void> _duplicate() => EntityRecordActions.duplicate(
         context,
         module: widget.module,
@@ -332,6 +339,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
 
     final perms = EntityRowPerms.of(widget.module, _row);
     final canEdit = (_editableFields().isNotEmpty || _fields.isEmpty) && perms.canEdit;
+    final canConvert = widget.module == 'lead' && perms.canEdit && !EntityRowPerms.leadLocked(_row) && !_loading;
     final statusKey = entityStatusKey(_row, widget.module);
     final statusOptions = _statusOptions(statusKey);
     return NxScrollScaffold(
@@ -363,6 +371,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         ],
         menu: canEdit && context.select((AppConfig c) => c.isLoggedIn)
             ? [
+                if (canConvert)
+                  NxHeaderMenuItem(
+                    label: 'แปลงเป็นลูกค้า',
+                    icon: NxI.userCheck,
+                    onTap: _convertLead,
+                  ),
                 NxHeaderMenuItem(
                   label: 'ทำซ้ำ',
                   icon: NxI.copySimple,
@@ -468,6 +482,20 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                       row: _row,
                       onDuplicate: canEdit ? _duplicate : null,
                     ),
+                    if (canConvert) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton.icon(
+                          key: const ValueKey('lead-convert-cta'),
+                          icon: const Icon(NxI.userCheck),
+                          label: Text(tr('แปลงเป็นลูกค้า')),
+                          style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                          onPressed: _convertLead,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
