@@ -7,3 +7,5 @@
 "NSPhotoLibraryAddUsageDescription" = "Save files you download in the app.";
 "NSMicrophoneUsageDescription" = "Uses the microphone to record meetings in AI Minute Auto and voice messages to the AI assistant";
 "NSSpeechRecognitionUsageDescription" = "Turns your speech into text when you ask the AI assistant";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Your location is used to check in on site and to clock in or out (only while you use the app).";
+"NSLocationAlwaysUsageDescription" = "Your location is used to check in on site and to clock in or out (only while you use the app).";
