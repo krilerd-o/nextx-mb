@@ -57,6 +57,12 @@ class NxListQuery {
   NxListQuery copyWith({String? q, Map<String, Set<String>>? filters, String? sort, bool clearSort = false}) =>
       NxListQuery(q: q ?? this.q, filters: filters ?? this.filters, sort: clearSort ? null : (sort ?? this.sort));
 
+  /// Same query without any choice in group [key].
+  NxListQuery cleared(String key) => copyWith(filters: {
+        for (final e in filters.entries)
+          if (e.key != key) e.key: {...e.value},
+      });
+
   NxListQuery toggle(NxFilterGroup g, String value) {
     final next = {
       for (final e in filters.entries) e.key: {...e.value},
@@ -708,17 +714,58 @@ class _FilterSheetState extends State<_FilterSheet> {
         g.options.any((o) => tr(o.label).toLowerCase().contains(f));
   }
 
+  /// One rounded card per part of the sheet (sort, each filter group, views).
+  Widget _card(BuildContext context, {required Widget title, required Widget child, Key? key}) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      key: key,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [title, const SizedBox(height: 10), child]),
+    );
+  }
+
+  Widget _chip(BuildContext context, {required String label, required bool on, required VoidCallback onTap, Key? key}) {
+    final cs = Theme.of(context).colorScheme;
+    return FilterChip(
+      key: key,
+      label: Text(tr(label)),
+      selected: on,
+      showCheckmark: on,
+      onSelected: (_) {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      shape: const StadiumBorder(),
+      selectedColor: cs.primary,
+      checkmarkColor: cs.onPrimary,
+      side: BorderSide(color: on ? cs.primary : cs.outlineVariant),
+      labelStyle: TextStyle(color: on ? cs.onPrimary : null, fontWeight: on ? FontWeight.w600 : null),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final groups = widget.groups.where(_groupMatches).toList();
+    // Everything chosen, as removable chips at the top.
+    final active = <(NxFilterGroup, NxFilterOption)>[
+      for (final g in widget.groups)
+        for (final o in g.options)
+          if (_q.has(g.key, o.value)) (g, o),
+    ];
     return Column(
       children: [
         Expanded(
           child: ListView(
             controller: widget.controller,
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             children: [
               if (widget.groups.length > 3)
                 Padding(
@@ -732,61 +779,58 @@ class _FilterSheetState extends State<_FilterSheet> {
                     ),
                   ),
                 ),
-              if (_views.isNotEmpty) ...[
-                Text(tr('มุมมองที่บันทึกไว้'), style: theme.textTheme.titleSmall),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
+              if (active.isNotEmpty && _find.isEmpty)
+                Padding(
+                  key: const ValueKey('filter-active'),
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Wrap(spacing: 6, runSpacing: 6, children: [
+                    for (final (g, o) in active)
+                      InputChip(
+                        label: Text('${tr(g.label)}: ${tr(o.label)}'),
+                        deleteIcon: const Icon(NxI.x, size: 14),
+                        onDeleted: () => setState(() => _q = _q.toggle(g, o.value)),
+                        shape: const StadiumBorder(),
+                        backgroundColor: cs.primary.withValues(alpha: 0.10),
+                        side: BorderSide.none,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                  ]),
+                ),
+              if (_views.isNotEmpty && _find.isEmpty)
+                _card(
+                  context,
+                  title: Text(tr('มุมมองที่บันทึกไว้'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  child: Wrap(spacing: 8, runSpacing: 8, children: [
                     for (final v in _views)
                       InputChip(
                         deleteIcon: const Icon(NxI.x, size: 16),
                         avatar: const Icon(NxI.star, size: 16),
                         label: Text(v.name),
+                        shape: const StadiumBorder(),
                         onPressed: () => Navigator.pop(context, v.query.copyWith(q: widget.query.q)),
                         onDeleted: () => _deleteView(v),
                       ),
-                  ],
+                  ]),
                 ),
-                const SizedBox(height: 16),
-              ],
-              if (widget.sorts.isNotEmpty && _find.isEmpty) ...[
-                Text(tr('เรียงตาม'), style: theme.textTheme.titleSmall),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
+              if (widget.sorts.isNotEmpty && _find.isEmpty)
+                _card(
+                  context,
+                  title: Row(children: [
+                    Icon(NxI.sortAscending, size: 16, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Text(tr('เรียงตาม'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  ]),
+                  child: Wrap(spacing: 8, runSpacing: 8, children: [
                     for (final o in widget.sorts)
-                      ChoiceChip(
-                        label: Text(tr(o.label)),
-                        selected: (_q.sort ?? widget.sorts.first.key) == o.key,
-                        onSelected: (_) {
-                          HapticFeedback.selectionClick();
-                          setState(() => _q = _q.copyWith(sort: o.key));
-                        },
-                        selectedColor: cs.primary,
-                        labelStyle: TextStyle(
-                          color: (_q.sort ?? widget.sorts.first.key) == o.key ? cs.onPrimary : null,
-                        ),
+                      _chip(
+                        context,
+                        label: o.label,
+                        on: (_q.sort ?? widget.sorts.first.key) == o.key,
+                        onTap: () => setState(() => _q = _q.copyWith(sort: o.key)),
                       ),
-                  ],
+                  ]),
                 ),
-                const SizedBox(height: 18),
-              ],
-              for (final g in groups) ...[
-                Row(
-                  children: [
-                    Expanded(child: Text(tr(g.label), style: theme.textTheme.titleSmall)),
-                    if (_q.values(g.key).isNotEmpty)
-                      Text(
-                        '${_q.values(g.key).length}',
-                        style: theme.textTheme.labelMedium?.copyWith(color: cs.primary),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
+              for (final g in groups)
                 () {
                   final f = _find.toLowerCase();
                   var opts = g.options;
@@ -795,57 +839,70 @@ class _FilterSheetState extends State<_FilterSheet> {
                   }
                   final fold = opts.length > _foldAt && !_expanded.contains(g.key) && _find.isEmpty;
                   // Keep selected choices visible even when folded.
-                  final shown = fold
-                      ? [...opts.take(_foldAt), ...opts.skip(_foldAt).where((o) => _q.has(g.key, o.value))]
-                      : opts;
-                  return Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final o in shown)
-                        FilterChip(
-                          label: Text(tr(o.label)),
-                          selected: _q.has(g.key, o.value),
-                          onSelected: (_) {
-                            HapticFeedback.selectionClick();
-                            setState(() => _q = _q.toggle(g, o.value));
-                          },
-                          selectedColor: cs.primary,
-                          checkmarkColor: cs.onPrimary,
-                          labelStyle: TextStyle(color: _q.has(g.key, o.value) ? cs.onPrimary : null),
+                  final shown = fold ? [...opts.take(_foldAt), ...opts.skip(_foldAt).where((o) => _q.has(g.key, o.value))] : opts;
+                  final n = _q.values(g.key).length;
+                  return _card(
+                    context,
+                    key: ValueKey('filter-group-${g.key}'),
+                    title: Row(children: [
+                      Expanded(child: Text(tr(g.label), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+                      if (n > 0) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(10)),
+                          child: Text('$n', style: theme.textTheme.labelSmall?.copyWith(color: cs.onPrimary, fontWeight: FontWeight.w700)),
                         ),
+                        TextButton(
+                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                          onPressed: () => setState(() => _q = _q.cleared(g.key)),
+                          child: Text(tr('ล้าง')),
+                        ),
+                      ],
+                    ]),
+                    child: Wrap(spacing: 8, runSpacing: 8, children: [
+                      for (final o in shown)
+                        _chip(context, label: o.label, on: _q.has(g.key, o.value), onTap: () => setState(() => _q = _q.toggle(g, o.value))),
                       if (fold)
                         ActionChip(
+                          shape: const StadiumBorder(),
                           label: Text(tr('ดูทั้งหมด (${opts.length})')),
                           onPressed: () => setState(() => _expanded.add(g.key)),
                         ),
-                    ],
+                    ]),
                   );
                 }(),
-                const SizedBox(height: 18),
-              ],
             ],
           ),
         ),
         Container(
           padding: EdgeInsets.fromLTRB(16, 10, 16, 10 + MediaQuery.paddingOf(context).bottom),
           decoration: BoxDecoration(
-            color: cs.surface,
+            color: theme.bottomSheetTheme.backgroundColor ?? cs.surface,
             border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5), width: 0.5)),
           ),
           child: Row(
             children: [
               if (widget.prefs != null && _q.activeFilterCount > 0)
                 IconButton(tooltip: tr('บันทึกมุมมอง'), onPressed: _saveView, icon: const Icon(NxI.star)),
-              TextButton(
-                onPressed: () => setState(() => _q = NxListQuery(q: _q.q, sort: _q.sort)),
-                child: Text(tr('ล้าง')),
+              SizedBox(
+                height: 48,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(shape: const StadiumBorder()),
+                  onPressed: _q.activeFilterCount == 0 && _q.sort == widget.query.sort
+                      ? null
+                      : () => setState(() => _q = NxListQuery(q: _q.q, sort: _q.sort)),
+                  child: Text(tr('ล้างทั้งหมด')),
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(context, _q),
-                  child: Text(_q.activeFilterCount > 0 ? tr('ใช้ตัวกรอง (${_q.activeFilterCount})') : tr('ใช้ตัวกรอง')),
+                child: SizedBox(
+                  height: 48,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(shape: const StadiumBorder()),
+                    onPressed: () => Navigator.pop(context, _q),
+                    child: Text(_q.activeFilterCount > 0 ? tr('ใช้ตัวกรอง (${_q.activeFilterCount})') : tr('ใช้ตัวกรอง')),
+                  ),
                 ),
               ),
             ],

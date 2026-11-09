@@ -1752,6 +1752,9 @@ const Map<String, String> enStrings = {
   'ดาวน์โหลดไม่สำเร็จ': 'Download failed',
   'เล่นวิดีโอนี้ไม่ได้': 'This video cannot be played',
   'ค้นหา…': 'Search…',
+  'เฉพาะที่จำเป็น': 'Required only',
+  'จำเป็นครบแล้ว': 'All required filled',
+  'ล้างทั้งหมด': 'Clear all',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

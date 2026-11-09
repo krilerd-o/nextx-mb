@@ -31,12 +31,17 @@ class NxEntityForm extends StatefulWidget {
     this.sectionOf,
     this.sections = const {},
     this.sectionOrder = const [],
+    this.requiredOnly = false,
   });
 
   /// Groups fields into titled cards (web "modern form" sections) when set.
   final String Function(String name)? sectionOf;
   final Map<String, ({String title, IconData icon, Color color})> sections;
   final List<String> sectionOrder;
+
+  /// Show only required fields (and anything already filled in): a short,
+  /// easy form; the rest is one tap away.
+  final bool requiredOnly;
 
   final List<Map<String, dynamic>> fields;
   final Map<String, dynamic> values;
@@ -55,6 +60,21 @@ class NxEntityFormState extends State<NxEntityForm> {
   late final NxFieldHost _host;
   final _keys = <String, GlobalKey>{};
   final _shakers = <String, GlobalKey<NxShakeState>>{};
+
+  /// Folded section cards (tap the header); a section opens again by itself
+  /// when one of its fields needs attention.
+  final Set<String> _collapsed = {};
+  final _sectionKeys = <String, GlobalKey>{};
+
+  void jumpToSection(String key) {
+    setState(() => _collapsed.remove(key));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _sectionKeys[key]?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx, alignment: 0.02, duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -182,6 +202,8 @@ class NxEntityFormState extends State<NxEntityForm> {
   }
 
   bool ensureVisible(String name) {
+    final sec = widget.sectionOf?.call(name);
+    if (sec != null && _collapsed.remove(sec)) setState(() {});
     final ctx = _keys[name]?.currentContext;
     if (ctx == null) return false;
     Scrollable.ensureVisible(
@@ -196,6 +218,15 @@ class NxEntityFormState extends State<NxEntityForm> {
   /// Scrolls to [first] (the first missing/invalid field), then shakes every
   /// field in [names] with a short vibration so the user sees what's left.
   Future<void> revealErrors(String first, Iterable<String> names) async {
+    var opened = false;
+    for (final n in names) {
+      final sec = widget.sectionOf?.call(n);
+      if (sec != null && _collapsed.remove(sec)) opened = true;
+    }
+    if (opened) {
+      setState(() {});
+      await WidgetsBinding.instance.endOfFrame;
+    }
     ensureVisible(first);
     await Future<void>.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
@@ -240,9 +271,12 @@ class NxEntityFormState extends State<NxEntityForm> {
     return true;
   }
 
+  bool _shown(Map<String, dynamic> f) =>
+      !widget.requiredOnly || fieldIsRequired(f) || _filled(f) || widget.errors.containsKey(fieldName(f));
+
   @override
   Widget build(BuildContext context) {
-    final all = _orderedFields();
+    final all = _orderedFields().where(_shown).toList();
     final sectionOf = widget.sectionOf;
     if (sectionOf == null) return _buildFields(context, all);
     final theme = Theme.of(context);
@@ -251,76 +285,150 @@ class NxEntityFormState extends State<NxEntityForm> {
     for (final f in all) {
       buckets.putIfAbsent(sectionOf(fieldName(f)), () => []).add(f);
     }
-    final order = [...widget.sectionOrder, ...buckets.keys.where((k) => !widget.sectionOrder.contains(k))];
+    final order = [
+      for (final k in [...widget.sectionOrder, ...buckets.keys.where((k) => !widget.sectionOrder.contains(k))])
+        if (buckets[k]?.isNotEmpty ?? false) k,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final key in order)
-          if (buckets[key]?.isNotEmpty ?? false)
-            () {
-              final list = buckets[key]!;
-              final meta = widget.sections[key];
-              final req = list.where(fieldIsRequired).toList();
-              final done = req.where(_filled).length;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(22),
-                  // Only the missing field is marked red (not the whole group).
-                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: (meta?.color ?? cs.primary).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(meta?.icon ?? NxI.note, size: 18, color: meta?.color ?? cs.primary),
+        // Long forms: jump straight to a section (dot = still missing).
+        if (order.length > 2)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                for (final key in order)
+                  () {
+                    final meta = widget.sections[key];
+                    final req = buckets[key]!.where(fieldIsRequired).toList();
+                    final missing = req.where((f) => !_filled(f)).length;
+                    final color = meta?.color ?? cs.primary;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ActionChip(
+                        key: ValueKey('form-jump-$key'),
+                        avatar: Icon(meta?.icon ?? NxI.note, size: 16, color: color),
+                        label: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Text(tr(meta?.title ?? key)),
+                          if (missing > 0) ...[
+                            const SizedBox(width: 6),
+                            Container(width: 7, height: 7, decoration: BoxDecoration(color: cs.error, shape: BoxShape.circle)),
+                          ],
+                        ]),
+                        shape: const StadiumBorder(),
+                        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)),
+                        backgroundColor: cs.surface,
+                        onPressed: () => jumpToSection(key),
+                      ),
+                    );
+                  }(),
+              ]),
+            ),
+          ),
+        for (final key in order) _sectionCard(context, key, buckets[key]!),
+      ],
+    );
+  }
+
+  Widget _sectionCard(BuildContext context, String key, List<Map<String, dynamic>> list) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final meta = widget.sections[key];
+    final color = meta?.color ?? cs.primary;
+    final req = list.where(fieldIsRequired).toList();
+    final done = req.where(_filled).length;
+    final filled = list.where(_filled).length;
+    final open = !_collapsed.contains(key);
+    final complete = done == req.length;
+    return Container(
+      key: _sectionKeys.putIfAbsent(key, GlobalKey.new),
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: theme.brightness == Brightness.dark ? cs.surfaceContainerHigh : cs.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+        boxShadow: theme.brightness == Brightness.dark
+            ? null
+            : [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 16, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            key: ValueKey('form-section-$key'),
+            borderRadius: BorderRadius.circular(22),
+            onTap: () => setState(() => open ? _collapsed.add(key) : _collapsed.remove(key)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(11)),
+                    child: Icon(meta?.icon ?? NxI.note, size: 18, color: color),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(tr(meta?.title ?? key), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                      if (!open)
+                        Text(
+                          tr('กรอกแล้ว $filled/${list.length} ช่อง'),
+                          style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            tr(meta?.title ?? key),
-                            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                          ),
+                    ]),
+                  ),
+                  if (req.isNotEmpty)
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: Container(
+                        key: ValueKey('$done/${req.length}'),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (complete ? const Color(0xFF10B981) : cs.error).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        if (req.isNotEmpty)
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 200),
-                            child: Container(
-                              key: ValueKey('$done/${req.length}'),
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: (done == req.length ? const Color(0xFF10B981) : cs.error).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                done == req.length ? tr('ครบแล้ว') : tr('จำเป็น $done/${req.length}'),
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: done == req.length ? const Color(0xFF10B981) : cs.error,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          if (complete) ...[
+                            const Icon(NxI.check, size: 12, color: Color(0xFF10B981)),
+                            const SizedBox(width: 3),
+                          ],
+                          Text(
+                            complete ? tr('ครบแล้ว') : tr('จำเป็น $done/${req.length}'),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: complete ? const Color(0xFF10B981) : cs.error,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                      ],
+                        ]),
+                      ),
                     ),
-                    const SizedBox(height: 14),
-                    _buildFields(context, list),
-                  ],
-                ),
-              );
-            }(),
-      ],
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: open ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 220),
+                    child: Icon(NxI.caretDown, size: 18, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: open
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 2, 14, 0),
+                    child: _buildFields(context, list),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
     );
   }
 

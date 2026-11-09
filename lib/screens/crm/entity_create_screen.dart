@@ -54,6 +54,9 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
   Map<String, String> _errors = {};
   bool _loading = true;
   bool _saving = false;
+
+  /// "เฉพาะช่องจำเป็น": a short form with just what must be filled.
+  bool _requiredOnly = false;
   Object? _error;
 
   @override
@@ -260,7 +263,12 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
           : Column(
               children: [
                 if (_fields.isNotEmpty && _requiredCount > 0)
-                  _RequiredProgress(done: _requiredDone, total: _requiredCount),
+                  _RequiredProgress(
+                    done: _requiredDone,
+                    total: _requiredCount,
+                    requiredOnly: _requiredOnly,
+                    onRequiredOnly: (v) => setState(() => _requiredOnly = v),
+                  ),
                 Expanded(
                   child: NxContentWidth(
                     child: ListView(
@@ -292,6 +300,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
                             sectionOf: (name) => formSectionOf(widget.module, name),
                             sections: kFormSections,
                             sectionOrder: kFormSectionOrder,
+                            requiredOnly: _requiredOnly,
                             onChanged: _onField,
                           ),
                       ],
@@ -303,19 +312,33 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
                   top: false,
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(pad, 8, pad, 10),
-                    child: KeyedSubtree(
-                      key: const ValueKey('entity-save'),
-                      child: NxHeroCta(
-                        label: widget.isEdit ? 'บันทึก' : 'สร้าง',
-                        busy: _saving,
-                        onPressed: _saving
-                            ? null
-                            : () {
-                                Feedback.forTap(context);
-                                _save();
-                              },
+                    child: Row(children: [
+                      SizedBox(
+                        height: 52,
+                        child: OutlinedButton(
+                          key: const ValueKey('entity-cancel'),
+                          style: OutlinedButton.styleFrom(shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(horizontal: 22)),
+                          onPressed: _saving ? null : () => _finish(false),
+                          child: Text(tr('ยกเลิก')),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: KeyedSubtree(
+                          key: const ValueKey('entity-save'),
+                          child: NxHeroCta(
+                            label: widget.isEdit ? 'บันทึก' : 'สร้าง',
+                            busy: _saving,
+                            onPressed: _saving
+                                ? null
+                                : () {
+                                    Feedback.forTap(context);
+                                    _save();
+                                  },
+                          ),
+                        ),
+                      ),
+                    ]),
                   ),
                 ),
               ],
@@ -326,9 +349,11 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
 
 /// Thin bar under the header: how many required fields are filled.
 class _RequiredProgress extends StatelessWidget {
-  const _RequiredProgress({required this.done, required this.total});
+  const _RequiredProgress({required this.done, required this.total, required this.requiredOnly, required this.onRequiredOnly});
   final int done;
   final int total;
+  final bool requiredOnly;
+  final ValueChanged<bool> onRequiredOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -337,28 +362,43 @@ class _RequiredProgress extends StatelessWidget {
     final complete = done >= total;
     final color = complete ? const Color(0xFF10B981) : cs.primary;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(end: total == 0 ? 1 : done / total),
-                duration: const Duration(milliseconds: 300),
-                builder: (context, v, _) => LinearProgressIndicator(
-                  value: v,
-                  minHeight: 5,
-                  color: color,
-                  backgroundColor: cs.surfaceContainerHighest,
-                ),
+          Row(children: [
+            Expanded(
+              child: Text(
+                complete ? tr('กรอกช่องจำเป็นครบแล้ว') : tr('ช่องจำเป็น $done/$total'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(color: complete ? color : cs.onSurfaceVariant, fontWeight: FontWeight.w600),
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            complete ? tr('กรอกช่องจำเป็นครบแล้ว') : tr('ช่องจำเป็น $done/$total'),
-            style: theme.textTheme.labelMedium?.copyWith(color: complete ? color : cs.onSurfaceVariant),
+            // Short form: only required fields (+ what is already filled).
+            FilterChip(
+              key: const ValueKey('form-required-only'),
+              label: Text(tr('เฉพาะที่จำเป็น')),
+              selected: requiredOnly,
+              showCheckmark: true,
+              shape: const StadiumBorder(),
+              visualDensity: VisualDensity.compact,
+              onSelected: onRequiredOnly,
+            ),
+          ]),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(end: total == 0 ? 1 : done / total),
+              duration: const Duration(milliseconds: 300),
+              builder: (context, v, _) => LinearProgressIndicator(
+                value: v,
+                minHeight: 5,
+                color: color,
+                backgroundColor: cs.surfaceContainerHighest,
+              ),
+            ),
           ),
         ],
       ),
