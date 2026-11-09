@@ -113,6 +113,11 @@ class NxI {
   static const star = LucideIcons300.star;
   static const funnel = LucideIcons300.listFilter;
   static const heart = LucideIcons300.heart;
+  static const heartbeat = LucideIcons300.heartPulse;
+  static const baby = LucideIcons300.baby;
+  static const flower = LucideIcons300.flower2;
+  static const shield = LucideIcons300.shield;
+  static const warning = LucideIcons300.triangleAlert;
   static const arrowsLeftRight = LucideIcons300.arrowLeftRight;
   static const prohibit = LucideIcons300.ban;
   static const repeat = LucideIcons300.repeat;

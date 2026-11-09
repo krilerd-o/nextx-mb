@@ -15,6 +15,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
+import '../../core/leave_suggest.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
 import '../../widgets/nx_shake.dart';
@@ -86,7 +87,14 @@ class _LeaveBalanceTab extends StatelessWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: NxBreakpoint.of(context).scrollPadding(context),
           children: [
-            for (final b in list) _BalanceCard(row: b),
+            LayoutBuilder(builder: (context, c) {
+              const gap = 10.0;
+              final cols = c.maxWidth >= 640 ? 3 : 2;
+              final w = (c.maxWidth - gap * (cols - 1)) / cols;
+              return Wrap(spacing: gap, runSpacing: gap, children: [
+                for (final b in list) SizedBox(width: w, child: _BalanceCard(row: b)),
+              ]);
+            }),
           ],
         );
       },
@@ -104,11 +112,15 @@ class _LeaveRequestTab extends StatefulWidget {
 
 class _LeaveRequestTabState extends State<_LeaveRequestTab> {
   List<Map<String, dynamic>> _types = [];
+  Map<int, num> _remaining = {};
+  List<Map<String, dynamic>> _mine = [];
   int? _typeId;
+  int? _suggestedTypeId;
   final _typeShake = GlobalKey<NxShakeState>();
   final _rangeShake = GlobalKey<NxShakeState>();
   final _reason = TextEditingController();
   DateTimeRange? _range;
+  bool _rangeTouched = false;
   List<({List<int> bytes, String name})> _files = [];
   bool _loading = true;
   bool _saving = false;
@@ -117,20 +129,32 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
   @override
   void initState() {
     super.initState();
+    _reason.addListener(() => setState(() {}));
     _loadTypes();
   }
 
   Future<void> _loadTypes() async {
+    final api = context.read<AppConfig>().apiClient;
     try {
-      final types = await context.read<AppConfig>().apiClient.getLeaveTypes();
-      if (mounted) {
-        setState(() {
-          _types = types;
-          _typeId = types.isNotEmpty ? int.tryParse(types.first['id']?.toString() ?? '') : null;
-          _loading = false;
-          _error = null;
-        });
-      }
+      final types = await api.getLeaveTypes();
+      // Balance + my requests only sharpen the suggestion; the form works without them.
+      final extra = await Future.wait<List<Map<String, dynamic>>>([
+        api.getLeaveBalance().catchError((_) => <Map<String, dynamic>>[]),
+        api.getLeaveRequests().catchError((_) => <Map<String, dynamic>>[]),
+      ]);
+      if (!mounted) return;
+      final remaining = leaveRemainingByType(extra[0]);
+      final suggested = suggestLeaveTypeId(types, remaining, extra[1]);
+      setState(() {
+        _types = types;
+        _remaining = remaining;
+        _mine = extra[1];
+        _suggestedTypeId = suggested;
+        _typeId = suggested;
+        _range = defaultLeaveRange(leaveKindOf(_typeById(suggested)));
+        _loading = false;
+        _error = null;
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -139,6 +163,23 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
         });
       }
     }
+  }
+
+  Map<String, dynamic>? _typeById(int? id) {
+    for (final t in _types) {
+      if (int.tryParse(t['id']?.toString() ?? '') == id) return t;
+    }
+    return null;
+  }
+
+  LeaveKind get _kind => leaveKindOf(_typeById(_typeId));
+
+  void _pickType(int id) {
+    setState(() {
+      _typeId = id;
+      // Untouched dates follow the type (sick = today, others = next working day).
+      if (!_rangeTouched) _range = defaultLeaveRange(leaveKindOf(_typeById(id)));
+    });
   }
 
   @override
@@ -153,14 +194,19 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
   Future<void> _pickRange() async {
     final now = thaiNow();
     final r = await showDateRangePicker(
-        switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
-        switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
+      switchToInputEntryModeIcon: const Icon(NxI.pencilSimple),
+      switchToCalendarEntryModeIcon: const Icon(NxI.calendarBlank),
       context: context,
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year + 2),
-      initialDateRange: _range ?? DateTimeRange(start: now, end: now.add(const Duration(days: 1))),
+      initialDateRange: _range ?? defaultLeaveRange(_kind),
     );
-    if (r != null) setState(() => _range = r);
+    if (r != null) {
+      setState(() {
+        _range = r;
+        _rangeTouched = true;
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -192,8 +238,12 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(note))));
         _reason.clear();
-        setState(() => _files = []);
+        setState(() {
+          _files = [];
+          _rangeTouched = false;
+        });
         widget.onSubmitted();
+        _loadTypes();
       }
     } catch (e) {
       if (mounted) {
@@ -204,97 +254,330 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
     }
   }
 
+  String _n(num v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+
+  Widget _section(BuildContext context, String title, {Widget? trailing}) => Padding(
+        padding: const EdgeInsets.only(bottom: 8, top: 4),
+        child: Row(children: [
+          Expanded(child: nxRequiredLabel(context, tr(title))),
+          ?trailing,
+        ]),
+      );
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const NxSkeletonForm(fields: 5);
     if (_error != null && _types.isEmpty) {
       return NxErrorRetry(error: _error!, onRetry: _loadTypes);
     }
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final kind = _kind;
+    final range = _range;
+    final days = range == null ? 0 : leaveDays(range);
+    final left = _typeId == null ? null : _remaining[_typeId!];
+    final after = left == null ? null : left - days;
+    final overlap = range == null ? null : overlappingLeave(range, _mine);
+    final presets = leaveDatePresets();
+    String dShort(DateTime d) => thaiDate(d, year: uiYear);
     return ListView(
+      key: const ValueKey('leave-request-form'),
       padding: NxBreakpoint.of(context).scrollPadding(context),
       children: [
+        // ── Leave type: cards with days left, suggested one marked.
+        NxShake(
+          key: _typeShake,
+          child: _section(context, 'ประเภทการลา'),
+        ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final t in _types)
+              if (int.tryParse(t['id']?.toString() ?? '') case final int id)
+                _LeaveTypeChip(
+                  key: ValueKey('leave-type-$id'),
+                  label: t['name']?.toString() ?? '',
+                  kind: leaveKindOf(t),
+                  remaining: _remaining[id],
+                  selected: id == _typeId,
+                  suggested: id == _suggestedTypeId,
+                  onTap: () => _pickType(id),
+                ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        // ── Dates: quick picks + the chosen range.
+        NxShake(key: _rangeShake, child: _section(context, 'วันที่ลา')),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final p in presets)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  key: ValueKey('leave-date-${p.id}'),
+                  label: Text(tr(p.label)),
+                  selected: range != null && leaveDays(range) == leaveDays(p.range) && DateUtils.isSameDay(range.start, p.range.start),
+                  onSelected: (_) => setState(() {
+                    _range = p.range;
+                    _rangeTouched = true;
+                  }),
+                ),
+              ),
+          ]),
+        ),
+        const SizedBox(height: 8),
         NxSurfaceCard(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-          child: Column(
-            children: [
-              NxShake(
-                key: _typeShake,
-                child: DropdownButtonFormField<int>(
-        icon: const Icon(NxI.caretDown, size: 18),
-                value: _typeId,
-                decoration: InputDecoration(label: nxRequiredLabel(context, tr('ประเภท'))),
-                items: _types
-                    .map(
-                      (e) => DropdownMenuItem(
-                        value: int.tryParse(e['id']?.toString() ?? ''),
-                        child: Text(tr(e['name']?.toString() ?? '')),
-                      ),
-                    )
-                    .where((e) => e.value != null)
-                    .toList(),
-                onChanged: (v) => setState(() => _typeId = v),
+          key: const ValueKey('leave-range-card'),
+          onTap: _pickRange,
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Row(children: [
+            _DateBlock(date: range?.start, label: 'เริ่ม'),
+            Expanded(
+              child: Column(children: [
+                Text(tr(days > 0 ? '$days วัน' : '—'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: cs.primary)),
+                Icon(NxI.arrowRight, size: 16, color: cs.onSurfaceVariant),
+              ]),
+            ),
+            _DateBlock(date: range?.end, label: 'ถึง'),
+            const SizedBox(width: 8),
+            Icon(NxI.calendarBlank, color: cs.onSurfaceVariant),
+          ]),
+        ),
+        const SizedBox(height: 18),
+        // ── Reason with suggestions for this kind.
+        Text(tr('เหตุผล'), style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final r in leaveReasonSuggestions(kind))
+              ActionChip(
+                key: ValueKey('leave-reason-$r'),
+                avatar: const Icon(NxI.sparkle, size: 14),
+                label: Text(tr(r)),
+                onPressed: () {
+                  _reason.text = r;
+                  _reason.selection = TextSelection.collapsed(offset: r.length);
+                },
               ),
-              ),
-              const SizedBox(height: 12),
-              NxShake(
-                key: _rangeShake,
-                child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: nxRequiredLabel(context, tr('ช่วงวันที่')),
-                subtitle: Text(
-                  tr(_range == null
-                      ? 'แตะเพื่อเลือก'
-                      : '${_range!.start.day}/${_range!.start.month} – ${_range!.end.day}/${_range!.end.month}'),
-                ),
-                trailing: const Icon(NxI.calendarBlank),
-                onTap: _pickRange,
-              ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _reason,
-                decoration: InputDecoration(labelText: tr('เหตุผล')),
-                maxLines: 3,
-              ),
-              if (context.select((AppConfig c) => c.serverInfo)?.has('leave_attachments') ?? false) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _saving || _files.length >= 5
-                        ? null
-                        : () async {
-                            final picked = await pickLeaveFiles(max: 5 - _files.length);
-                            if (picked.isNotEmpty && mounted) setState(() => _files = [..._files, ...picked]);
-                          },
-                    icon: const Icon(NxI.paperclip, size: 18),
-                    label: Text(tr('แนบไฟล์ (เช่น ใบรับรองแพทย์)')),
-                  ),
-                ),
-                if (_files.isNotEmpty)
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final f in _files)
-                        InputChip(
-        deleteIcon: const Icon(NxI.x, size: 16),
-                          label: Text(tr(f.name), overflow: TextOverflow.ellipsis),
-                          onDeleted: () => setState(() => _files = _files.where((x) => !identical(x, f)).toList()),
-                        ),
-                    ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _reason,
+          decoration: InputDecoration(hintText: tr('เพิ่มรายละเอียด (ไม่บังคับ)')),
+          minLines: 2,
+          maxLines: 4,
+        ),
+        if (context.select((AppConfig c) => c.serverInfo)?.has('leave_attachments') ?? false) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _saving || _files.length >= 5
+                  ? null
+                  : () async {
+                      final picked = await pickLeaveFiles(max: 5 - _files.length);
+                      if (picked.isNotEmpty && mounted) setState(() => _files = [..._files, ...picked]);
+                    },
+              icon: const Icon(NxI.paperclip, size: 18),
+              label: Text(tr(kind == LeaveKind.sick ? 'แนบใบรับรองแพทย์' : 'แนบไฟล์')),
+            ),
+          ),
+          if (_files.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final f in _files)
+                  InputChip(
+                    deleteIcon: const Icon(NxI.x, size: 16),
+                    label: Text(tr(f.name), overflow: TextOverflow.ellipsis),
+                    onDeleted: () => setState(() => _files = _files.where((x) => !identical(x, f)).toList()),
                   ),
               ],
-              const SizedBox(height: 16),
-              NxHeroCta(
-                label: 'ส่งคำขอ',
-                busy: _saving,
-                onPressed: _saving ? null : _submit,
-              ),
-            ],
+            ),
+        ],
+        const SizedBox(height: 14),
+        // ── Summary before sending.
+        if (range != null && _typeId != null)
+          _LeaveSummary(
+            key: const ValueKey('leave-summary'),
+            typeName: _typeById(_typeId)?['name']?.toString() ?? '',
+            rangeText: days == 1 ? dShort(range.start) : '${dShort(range.start)} – ${dShort(range.end)}',
+            days: days,
+            leftAfter: after == null ? null : _n(after),
+            overBalance: after != null && after < 0,
+            overlap: overlap == null
+                ? null
+                : 'ซ้อนกับคำขอ${overlap['leave_type_name'] ?? 'ลา'} ${thaiDate(overlap['start_date'], year: uiYear)} (${leaveStatusStyle(overlap['status']?.toString(), cs).$1})',
+            certificateHint: leaveNeedsCertificateHint(kind, days) && _files.isEmpty,
           ),
+        const SizedBox(height: 16),
+        NxHeroCta(
+          label: 'ส่งคำขอ',
+          busy: _saving,
+          onPressed: _saving ? null : _submit,
         ),
       ],
+    );
+  }
+}
+
+IconData _leaveKindIcon(LeaveKind k) => switch (k) {
+      LeaveKind.sick => NxI.heartbeat,
+      LeaveKind.personal => NxI.briefcase,
+      LeaveKind.vacation => NxI.sun,
+      LeaveKind.maternity => NxI.baby,
+      LeaveKind.ordination => NxI.flower,
+      LeaveKind.military => NxI.shield,
+      LeaveKind.other => NxI.calendarCheck,
+    };
+
+Color _leaveKindColor(LeaveKind k) => switch (k) {
+      LeaveKind.sick => const Color(0xFFEF4444),
+      LeaveKind.personal => const Color(0xFF6366F1),
+      LeaveKind.vacation => const Color(0xFFF59E0B),
+      LeaveKind.maternity => const Color(0xFFEC4899),
+      LeaveKind.ordination => const Color(0xFFF97316),
+      LeaveKind.military => const Color(0xFF16A34A),
+      LeaveKind.other => const Color(0xFF0EA5E9),
+    };
+
+class _LeaveTypeChip extends StatelessWidget {
+  const _LeaveTypeChip({
+    super.key,
+    required this.label,
+    required this.kind,
+    required this.remaining,
+    required this.selected,
+    required this.suggested,
+    required this.onTap,
+  });
+  final String label;
+  final LeaveKind kind;
+  final num? remaining;
+  final bool selected;
+  final bool suggested;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final color = _leaveKindColor(kind);
+    String n(num v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+    final none = remaining != null && remaining! <= 0;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: selected ? color.withValues(alpha: 0.12) : cs.onSurface.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: selected ? color : cs.outlineVariant, width: selected ? 1.6 : 1),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            CircleAvatar(radius: 14, backgroundColor: color.withValues(alpha: 0.16), child: Icon(_leaveKindIcon(kind), size: 15, color: color)),
+            const SizedBox(width: 8),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(tr(label), style: theme.textTheme.labelLarge?.copyWith(fontWeight: selected ? FontWeight.w800 : FontWeight.w600)),
+                if (suggested) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(6)),
+                    child: Text(tr('แนะนำ'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onPrimary, fontSize: 10, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ]),
+              if (remaining != null)
+                Text(
+                  tr(none ? 'สิทธิ์หมดแล้ว' : 'เหลือ ${n(remaining!)} วัน'),
+                  style: theme.textTheme.labelSmall?.copyWith(color: none ? cs.error : cs.onSurfaceVariant),
+                ),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _DateBlock extends StatelessWidget {
+  const _DateBlock({required this.date, required this.label});
+  final DateTime? date;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    const th = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'];
+    final d = date;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(tr(label), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+      Text(d == null ? '—' : '${d.day}', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, height: 1.1)),
+      Text(
+        d == null ? '' : tr('${th[d.weekday - 1]} ${thaiDate(d, year: uiYear).replaceFirst(RegExp(r'^\d+\s*'), '')}'),
+        style: theme.textTheme.labelSmall,
+      ),
+    ]);
+  }
+}
+
+class _LeaveSummary extends StatelessWidget {
+  const _LeaveSummary({
+    super.key,
+    required this.typeName,
+    required this.rangeText,
+    required this.days,
+    required this.leftAfter,
+    required this.overBalance,
+    required this.overlap,
+    required this.certificateHint,
+  });
+  final String typeName;
+  final String rangeText;
+  final int days;
+  final String? leftAfter;
+  final bool overBalance;
+  final String? overlap;
+  final bool certificateHint;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    Widget note(IconData icon, String text, Color color) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 6),
+            Expanded(child: Text(tr(text), style: theme.textTheme.bodySmall?.copyWith(color: color))),
+          ]),
+        );
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.07), borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(tr('สรุปคำขอ'), style: theme.textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(tr('$typeName · $days วัน'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+        Text(tr(rangeText), style: theme.textTheme.bodySmall),
+        if (leftAfter != null)
+          note(overBalance ? NxI.warning : NxI.checkCircle, overBalance ? 'เกินสิทธิ์คงเหลือ (คงเหลือหลังลา $leftAfter วัน)' : 'คงเหลือหลังลา $leftAfter วัน',
+              overBalance ? cs.error : const Color(0xFF16A34A)),
+        if (overlap != null) note(NxI.warning, overlap!, const Color(0xFFF59E0B)),
+        if (certificateHint) note(NxI.paperclip, 'ลาป่วยตั้งแต่ 3 วันขึ้นไป ควรแนบใบรับรองแพทย์', cs.onSurfaceVariant),
+      ]),
     );
   }
 }
@@ -443,13 +726,26 @@ class _LeaveRequestCard extends StatelessWidget {
     final reason = row['reason']?.toString() ?? '';
     final reject = row['reject_reason']?.toString() ?? '';
     String d(dynamic v) => thaiDate(v, year: uiYear);
+    final start = parseThaiDate(row['start_date']);
+    const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Date badge (start day) tinted by status.
+            Container(
+              width: 46,
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+              child: Column(children: [
+                Text(start == null ? '—' : '${start.day}', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: color, height: 1.1)),
+                Text(start == null ? '' : tr(months[start.month - 1]), style: theme.textTheme.labelSmall?.copyWith(color: color)),
+              ]),
+            ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,34 +799,48 @@ class _BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final used = num.tryParse(row['used_days']?.toString() ?? '') ?? 0;
     final total = num.tryParse(row['total_days']?.toString() ?? '') ?? 0;
-    final left = total - used;
-    final ratio = total <= 0 ? 0.0 : (used / total).clamp(0, 1).toDouble();
+    final left = (total - used) < 0 ? 0 : total - used;
+    final ratio = total <= 0 ? 0.0 : (left / total).clamp(0, 1).toDouble();
+    final kind = leaveKindOf(row);
+    final color = _leaveKindColor(kind);
     String n(num v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text(tr(row['leave_type_name']?.toString() ?? ''), style: theme.textTheme.titleSmall)),
-                Text(tr('คงเหลือ ${n(left < 0 ? 0 : left)} วัน'), style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(value: ratio, minHeight: 8),
-            ),
-            const SizedBox(height: 4),
-            Text(tr('ใช้ไป ${n(used)} จาก ${n(total)} วัน'), style: theme.textTheme.bodySmall),
-          ],
+    return NxSurfaceCard(
+      key: ValueKey('leave-balance-${row['leave_type_id']}'),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(_leaveKindIcon(kind), size: 16, color: color),
+          const SizedBox(width: 6),
+          Expanded(child: Text(tr(row['leave_type_name']?.toString() ?? ''), style: theme.textTheme.titleSmall, overflow: TextOverflow.ellipsis)),
+        ]),
+        const SizedBox(height: 12),
+        Center(
+          child: SizedBox(
+            width: 84,
+            height: 84,
+            child: Stack(alignment: Alignment.center, children: [
+              SizedBox.expand(
+                child: CircularProgressIndicator(
+                  value: ratio,
+                  strokeWidth: 8,
+                  strokeCap: StrokeCap.round,
+                  color: color,
+                  backgroundColor: color.withValues(alpha: 0.14),
+                ),
+              ),
+              Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(n(left), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, height: 1)),
+                Text(tr('วันคงเหลือ'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+              ]),
+            ]),
+          ),
         ),
-      ),
+        const SizedBox(height: 10),
+        Center(child: Text(tr('ใช้ไป ${n(used)} จาก ${n(total)} วัน'), style: theme.textTheme.bodySmall)),
+      ]),
     );
   }
 }
