@@ -44,7 +44,7 @@ String chatPlainText(String? body) {
   var s = body ?? '';
   s = s.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n').replaceAll(RegExp(r'</p>', caseSensitive: false), '\n');
   s = s.replaceAll(RegExp(r'<[^>]+>'), '');
-  s = s.replaceAllMapped(RegExp(r'@\[(\d+):([^\]]+)\]'), (m) => '@${m[2]}');
+  s = s.replaceAllMapped(RegExp(r'@\[(\d+):((?:[^\[\]]|\[[^\[\]]*\])+)\]'), (m) => '@${m[2]}');
   s = s.replaceAll('&nbsp;', ' ').replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"');
   return s.trim();
 }

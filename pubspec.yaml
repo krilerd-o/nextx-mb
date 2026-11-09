@@ -54,6 +54,8 @@ dependencies:
   video_player: ^2.14.1
   gal: ^2.3.3
   record: ^7.1.2
+  flutter_webrtc: ^1.6.3
+  flutter_callkit_incoming: ^3.1.6
 
 dev_dependencies:
   flutter_test:

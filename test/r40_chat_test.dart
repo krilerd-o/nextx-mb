@@ -154,6 +154,7 @@ void main() {
       expect(enc.body, 'สวัสดี @[2:[QA] Second] และ @[9:Ann]');
       expect(enc.ids..sort(), [2, 9]);
       expect(chatPlainText('<p>a</p>@[2:Bo] <b>x</b>'), 'a\n@Bo x');
+      expect(chatPlainText('ขอบคุณ @[3:[QA] Google Tester] ok'), 'ขอบคุณ @[QA] Google Tester ok');
       expect(chatMarkdownToHtml('**b** _i_ `c` <x>'), '<b>b</b> <i>i</i> <b>c</b> &lt;x&gt;');
       expect(chatLinks('ดู https://moai.co.th/a. ด้วย'), ['https://moai.co.th/a']);
       expect(chatAttachmentKind('audio/webm'), 'audio');

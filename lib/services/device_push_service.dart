@@ -9,6 +9,7 @@ import '../core/app_config.dart';
 import 'api_client.dart';
 import '../core/navigation/notification_deep_link.dart';
 import '../core/push_navigation.dart';
+import 'calls/call_system_ui.dart';
 import 'hms_push.dart';
 
 const _tokenKey = 'staff_device_push_token';
@@ -25,7 +26,13 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       await Firebase.initializeApp();
     }
   } catch (_) {}
-  final loc = notificationDeepLinkFromData(Map<String, dynamic>.from(message.data));
+  final data = Map<String, dynamic>.from(message.data);
+  if (isCallPush(data)) {
+    // Incoming call while closed / in the background → phone's full-screen call UI.
+    await handleCallPush(data);
+    return;
+  }
+  final loc = notificationDeepLinkFromData(data);
   PushNavigation.instance.remember(loc);
 }
 
@@ -96,6 +103,8 @@ Future<void> initFirebasePush() async {
       );
     });
     FirebaseMessaging.onMessage.listen((message) {
+      // Calls in the foreground come over the socket (in-app call screen) — no notification.
+      if (isCallPush(Map<String, dynamic>.from(message.data))) return;
       _showForegroundNotification(message);
     });
     FirebaseMessaging.instance.onTokenRefresh.listen((value) {

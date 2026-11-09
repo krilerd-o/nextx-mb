@@ -8,7 +8,9 @@ import 'package:provider/provider.dart';
 import 'core/alice_debug_layer.dart';
 import 'core/app_config.dart';
 import 'screens/auth/app_lock_screen.dart';
+import 'screens/calls/call_overlay.dart';
 import 'services/app_lock.dart';
+import 'services/calls/call_service.dart';
 import 'services/unread_service.dart';
 import 'core/app_theme.dart';
 import 'core/navigation/app_router.dart';
@@ -108,6 +110,8 @@ class _NextXMobileAppState extends State<NextXMobileApp>
                     builder: (context, _) => Stack(
                       children: [
                         ?child,
+                        // Incoming / ongoing call above every screen.
+                        if (sel.$4 && CallService.instance != null) Positioned.fill(child: CallOverlay(service: CallService.instance!)),
                         if (AppLock.instance.locked && sel.$4)
                           const Positioned.fill(child: AppLockScreen()),
                         if (!sel.$4) const _AddSpaceCancelPill(),

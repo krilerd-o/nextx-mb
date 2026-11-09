@@ -37,7 +37,20 @@ class RealtimeService extends ChangeNotifier {
     'workspace:item_restored',
     'workspace:comment_added',
     'workspace:worklog_added',
+    // calls (see services/call_service.dart)
+    'rtc:ring',
+    'rtc:ring_stop',
+    'rtc:joined',
+    'rtc:left',
+    'rtc:declined',
+    'rtc:updated',
+    'rtc:media',
+    'rtc:signal',
+    'rtc:ended',
   ];
+
+  /// Synthetic event sent on every (re)connect.
+  static const connectedEvent = '__connected';
 
   io.Socket? _socket;
   final _events = StreamController<RealtimeEvent>.broadcast();
@@ -79,6 +92,7 @@ class RealtimeService extends ChangeNotifier {
       final room = _currentRoomId;
       if (room != null) socket.emit('join_room', room);
       notifyListeners();
+      if (!_events.isClosed) _events.add(RealtimeEvent(connectedEvent, const {}));
     });
     socket.onDisconnect((_) {
       connected = false;
@@ -138,6 +152,24 @@ class RealtimeService extends ChangeNotifier {
       'room_id': int.tryParse(roomId) ?? roomId,
       'message_id': int.tryParse(messageId) ?? messageId,
     });
+  }
+
+  /// Socket id of this connection (calls address peers by socket).
+  String? get socketId => _socket?.id;
+
+  void emit(String event, Map<String, dynamic> data) => _socket?.emit(event, data);
+
+  /// Emit and wait for the server's acknowledgement (`{ok, ...}`); `{ok: false, error: 'timeout'}` after [timeout].
+  Future<Map<String, dynamic>> emitAck(String event, Map<String, dynamic> data, {Duration timeout = const Duration(seconds: 10)}) {
+    final socket = _socket;
+    if (socket == null || !connected) return Future.value({'ok': false, 'error': 'no_socket'});
+    final c = Completer<Map<String, dynamic>>();
+    socket.emitWithAck(event, data, ack: (dynamic res) {
+      if (c.isCompleted) return;
+      final v = res is List && res.isNotEmpty ? res.first : res;
+      c.complete(v is Map ? Map<String, dynamic>.from(v) : {'ok': false, 'error': 'server_error'});
+    });
+    return c.future.timeout(timeout, onTimeout: () => {'ok': false, 'error': 'timeout'});
   }
 
   void disconnect() {

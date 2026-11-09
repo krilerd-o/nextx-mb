@@ -13,6 +13,7 @@ import 'core/error_reporting.dart';
 import 'services/api_client.dart';
 import 'services/device_push_service.dart';
 import 'app.dart';
+import 'services/calls/call_setup.dart';
 import 'services/hms_push.dart';
 import 'widgets/nx_overlay_panel.dart' show NxTapTracker;
 
@@ -26,6 +27,8 @@ void main() {
     await initFirebasePush();
     await HmsPush.init();
     initAppAlice();
+    // Voice / video calls (WebRTC + CallKit / full-screen incoming call).
+    initCalls();
     // Menus grow out of the button that opened them (see showNxBlurPanel).
     NxTapTracker.ensure();
     runApp(

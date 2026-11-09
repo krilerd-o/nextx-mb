@@ -1935,6 +1935,14 @@ class ApiClient {
     return extractMapList(data is Map ? (data['list'] ?? data) : data);
   }
 
+  /// Decline a ringing call without a socket (phone call screen while the app was closed).
+  Future<void> declineCall(String callId) async {
+    await _send('POST', '/api/calls/${Uri.encodeComponent(callId)}/decline');
+  }
+
+  /// STUN / TURN for calls (`{ice_servers: [...], turn, max_participants}`).
+  Future<Map<String, dynamic>> getIceServers() async => _dataMap(await _send('GET', '/api/calls/ice-servers'));
+
   /// Open Graph preview `{url, title, description, image, siteName}` (cached by the server).
   Future<Map<String, dynamic>> unfurlChatLink(String url) async {
     return _dataMap(await _send('GET', '/api/chat/unfurl', query: {'url': url}));

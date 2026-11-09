@@ -1,3 +1,4 @@
+import '../services/calls/call_setup.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -662,6 +663,7 @@ class AppConfig extends ChangeNotifier {
       businessId: _session.businessId,
     );
     UnreadNotifications.instance.refresh(apiClient);
+    bindCalls(this);
   }
 
   Future<void> setApiBaseUrl(String url) async {

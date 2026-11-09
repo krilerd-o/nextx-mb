@@ -290,7 +290,7 @@ class ChatMessageBubble extends StatelessWidget {
 
   /// `@[12:Name]` → bold @Name.
   static String _mentionsToHtml(String body) =>
-      body.replaceAllMapped(RegExp(r'@\[(\d+):([^\]]+)\]'), (m) => '<b>@${m[2]}</b>');
+      body.replaceAllMapped(RegExp(r'@\[(\d+):((?:[^\[\]]|\[[^\[\]]*\])+)\]'), (m) => '<b>@${m[2]}</b>');
 }
 
 class _SwipeToReply extends StatefulWidget {
