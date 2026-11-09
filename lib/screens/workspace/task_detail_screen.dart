@@ -32,7 +32,10 @@ import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
 import 'smart_checklist_section.dart';
 import 'workspace_item_form.dart';
 import 'ws_activity_panel.dart';
+import 'ws_bulk_dock.dart';
 import 'ws_detail_parts.dart';
+import '../../core/workspace_child_sort.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/nx_refresh.dart';
 
 /// NEXTX board priorities (backend/src/routes/boards.js).
@@ -91,6 +94,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   bool _editingTitle = false;
   final _titleCtrl = TextEditingController();
   final _subtaskCtrl = TextEditingController();
+
+  /// Task list in an Epic / Subtasks in a Task: sort (default item no. ↑, remembered per business) and
+  /// long-press multi-select → floating bulk dock.
+  String _childSort = 'no';
+  bool _childSortAsc = true;
+  final Set<String> _picked = {};
   final _activity = GlobalKey<WsActivityPanelState>();
   static const _bleed = ValueKey('ws-full-bleed');
   StreamSubscription<RealtimeEvent>? _live;
@@ -112,6 +121,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     super.initState();
     if (!_online) return;
     _load();
+    _loadChildSort();
     _businessId = context.read<AppConfig>().session.businessId;
     RealtimeService.instance.joinWorkspaceBoard(_boardId, businessId: _businessId);
     _live = RealtimeService.instance.events.where((e) => e.type.startsWith('workspace:')).listen((e) {
@@ -141,6 +151,73 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   ApiClient get _api => context.read<AppConfig>().apiClient;
+
+  String get _childSortPrefKey => 'ws_child_sort_${_isEpic ? 'epic' : 'subtask'}|${context.read<AppConfig>().businessScope}';
+
+  Future<void> _loadChildSort() async {
+    try {
+      final key = _childSortPrefKey;
+      final v = (await SharedPreferences.getInstance()).getString(key);
+      if (v == null || !mounted) return;
+      final parts = v.split(':');
+      if (kWsChildSortKeys.contains(parts.first)) {
+        setState(() {
+          _childSort = parts.first;
+          _childSortAsc = parts.length < 2 || parts[1] != 'desc';
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _pickChildSort() async {
+    final picked = await showNxPickerSheet(
+      context: context,
+      title: 'เรียงตาม',
+      options: [
+        for (final k in kWsChildSortKeys)
+          if (k == 'manual')
+            NxPickOption(value: 'manual:asc', label: tr(kWsChildSortLabels[k]!), subtitle: tr('ลากเพื่อจัดลำดับ'))
+          else ...[
+            NxPickOption(value: '$k:asc', label: '${tr(kWsChildSortLabels[k]!)} ↑'),
+            NxPickOption(value: '$k:desc', label: '${tr(kWsChildSortLabels[k]!)} ↓'),
+          ],
+      ],
+      value: '$_childSort:${_childSortAsc ? 'asc' : 'desc'}',
+      radio: true,
+    );
+    if (picked == null || !mounted) return;
+    final parts = picked.split(':');
+    final key = _childSortPrefKey;
+    setState(() {
+      _childSort = parts.first;
+      _childSortAsc = parts[1] != 'desc';
+    });
+    try {
+      await (await SharedPreferences.getInstance()).setString(key, picked);
+    } catch (_) {}
+  }
+
+  void _togglePick(Map<String, dynamic> row) {
+    HapticFeedback.selectionClick();
+    final id = '${row['id']}';
+    setState(() => _picked.contains(id) ? _picked.remove(id) : _picked.add(id));
+  }
+
+  Future<void> _reorderChildren(List<Map<String, dynamic>> rows, int from, int to) async {
+    if (to > from) to -= 1;
+    final next = [...rows];
+    final moved = next.removeAt(from);
+    next.insert(to, moved);
+    final order = {for (var i = 0; i < next.length; i++) '${next[i]['id']}': i};
+    final prevTasks = _tasks;
+    setState(() => _tasks = [for (final t in _tasks) order.containsKey('${t['id']}') ? {...t, 'sort_order': order['${t['id']}']} : t]);
+    try {
+      await _api.reorderBoardTasks(_boardId, [for (final r in next) '${r['id']}']);
+    } catch (e) {
+      if (mounted) setState(() => _tasks = prevTasks);
+      _snack(formatApiError(e));
+    }
+  }
 
   Future<void> _load() async {
     final api = _api;
@@ -755,7 +832,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final desc = _item['description']?.toString() ?? '';
     final children = _children;
 
-    return NxScrollScaffold(
+    final pickedRows = [for (final c in children) if (_picked.contains('${c['id']}')) c];
+    final scaffold = NxScrollScaffold(
       // Board in the header; the key shows once, in the path below.
       header: NxAppHeader(
         title: '${_item['board_name'] ?? wsDisplayCode(_code ?? '')}',
@@ -909,8 +987,44 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               ),
             ])
               c.key == _bleed ? c : Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: c),
+            if (_picked.isNotEmpty) const SizedBox(height: 90),
           ],
         ),
+      ),
+    );
+    if (pickedRows.isEmpty) return scaffold;
+    return PopScope(
+      // Back clears the selection first.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(_picked.clear);
+      },
+      child: Stack(
+        children: [
+          scaffold,
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: MediaQuery.paddingOf(context).bottom + 12,
+            child: WsBulkDock(
+              items: [for (final r in pickedRows) _withBoard(r)],
+              api: _api,
+              boardId: _boardId,
+              boardCode: _code,
+              totalCount: children.length,
+              onSelectAll: () => setState(() => _picked.addAll([for (final c in children) '${c['id']}'])),
+              onClear: () => setState(_picked.clear),
+              onChanged: () async {
+                await _reloadTasks();
+                if (mounted) setState(() => _picked.removeWhere((id) => !_children.any((c) => '${c['id']}' == id)));
+              },
+              statuses: _statuses,
+              users: _users,
+              epics: _epics,
+              parentOptions: [for (final t in _tasks) if (!['subtask', 'checklist'].contains(wsType(t))) _withBoard(t)],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1172,11 +1286,123 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final done = children.where(_done).length;
+    final rows = wsSortChildren(children, _childSort, _childSortAsc, statuses: _statuses, users: _users);
+    final picking = _picked.isNotEmpty;
+    final manual = _childSort == 'manual';
+    final sortLabel = manual ? tr('เรียงเอง') : '${tr(kWsChildSortLabels[_childSort] ?? 'เลขที่')} ${_childSortAsc ? '↑' : '↓'}';
+
+    Widget row(Map<String, dynamic> c, int index) {
+      final id = '${c['id']}';
+      final picked = _picked.contains(id);
+      final s = _statuses.where((s) => s.id == '${c['status_id']}').firstOrNull;
+      final assignee = c['assignee_id'] == null ? null : _users['${c['assignee_id']}'];
+      final due = '${c['due_date'] ?? ''}';
+      return Material(
+        key: ValueKey('ws-child-$id'),
+        color: picked ? cs.primary.withValues(alpha: 0.08) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => picking ? _togglePick(c) : _open(c),
+          onLongPress: () => _togglePick(c),
+          child: Row(
+            children: [
+              if (picking)
+                Checkbox(key: ValueKey('ws-child-pick-$id'), value: picked, onChanged: (_) => _togglePick(c), visualDensity: VisualDensity.compact)
+              else if (!_isEpic)
+                Checkbox(value: _done(c), onChanged: (_) => _toggleChild(c), visualDensity: VisualDensity.compact)
+              else
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Icon(wsTypeStyle(wsType(c)).icon, size: 16, color: wsTypeStyle(wsType(c)).color),
+                ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${wsKey(c, boardCode: _code)}  ',
+                              style: TextStyle(color: cs.primary, fontSize: 12, fontWeight: FontWeight.w700),
+                            ),
+                            TextSpan(text: wsTitle(c)),
+                          ],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          decoration: _done(c) ? TextDecoration.lineThrough : null,
+                          color: _done(c) ? cs.onSurfaceVariant : null,
+                        ),
+                      ),
+                      if (assignee != null || due.length >= 10)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Row(
+                            children: [
+                              if (assignee != null) ...[
+                                NxAvatar(label: assignee, size: 16),
+                                const SizedBox(width: 4),
+                                Flexible(child: Text(assignee, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
+                                const SizedBox(width: 10),
+                              ],
+                              if (due.length >= 10) ...[
+                                Icon(NxI.calendarBlank, size: 12, color: cs.onSurfaceVariant),
+                                const SizedBox(width: 3),
+                                Text(thaiDate(due), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                              ],
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              if (s != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: s.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
+                  child: Text(s.label, style: theme.textTheme.labelSmall?.copyWith(color: s.color, fontWeight: FontWeight.w700)),
+                ),
+              if (manual && !picking)
+                ReorderableDragStartListener(
+                  index: index,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(NxI.dotsSixVertical, size: 18, color: cs.onSurfaceVariant),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return WsSection(
       title: _isEpic ? 'งานใน Epic' : 'งานย่อย',
       icon: _isEpic ? NxI.lightning : NxI.subtask,
       color: _isEpic ? const Color(0xFF8B5CF6) : const Color(0xFF0EA5E9),
-      trailing: children.isEmpty ? null : Text('$done/${children.length}', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+      trailing: children.isEmpty
+          ? null
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (children.length > 1)
+                  ActionChip(
+                    key: const ValueKey('ws-child-sort'),
+                    avatar: const Icon(NxI.sortAscending, size: 14),
+                    label: Text(sortLabel),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _pickChildSort,
+                  ),
+                const SizedBox(width: 6),
+                Text('$done/${children.length}', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+              ],
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1192,57 +1418,22 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 ),
               ),
             ),
-          for (final c in children)
-            Row(
-              children: [
-                if (!_isEpic)
-                  Checkbox(value: _done(c), onChanged: (_) => _toggleChild(c), visualDensity: VisualDensity.compact)
-                else
-                  Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Icon(wsTypeStyle(wsType(c)).icon, size: 16, color: wsTypeStyle(wsType(c)).color),
-                  ),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _open(c),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: '${wsKey(c, boardCode: _code)}  ',
-                              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-                            ),
-                            TextSpan(text: wsTitle(c)),
-                          ],
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          decoration: _done(c) ? TextDecoration.lineThrough : null,
-                          color: _done(c) ? cs.onSurfaceVariant : null,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Builder(
-                  builder: (_) {
-                    final s = _statuses.where((s) => s.id == '${c['status_id']}').firstOrNull;
-                    if (s == null) return const SizedBox.shrink();
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: s.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
-                      child: Text(
-                        s.label,
-                        style: theme.textTheme.labelSmall?.copyWith(color: s.color, fontWeight: FontWeight.w700),
-                      ),
-                    );
-                  },
-                ),
-              ],
+          if (children.length > 1 && !picking)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(tr('กดค้างที่รายการเพื่อเลือกหลายรายการ'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
             ),
+          if (manual && !picking)
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: rows.length,
+              onReorder: (from, to) => _reorderChildren(rows, from, to),
+              itemBuilder: (_, i) => row(rows[i], i),
+            )
+          else
+            for (var i = 0; i < rows.length; i++) row(rows[i], i),
           if (!_isEpic)
             TextField(
               key: const ValueKey('ws-subtask-add'),

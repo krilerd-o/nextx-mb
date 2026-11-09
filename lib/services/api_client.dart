@@ -1182,9 +1182,29 @@ class ApiClient {
     });
   }
 
-  Future<void> bulkDeleteWorkspaceItems(String boardId, List<(String, String)> items) async {
-    await _send('POST', '/api/boards/$boardId/bulk-delete', data: {
+  /// Moves the items to the trash; returns the trash ids (for undo with [restoreWorkspaceTrashBulk]).
+  Future<List<String>> bulkDeleteWorkspaceItems(String boardId, List<(String, String)> items) async {
+    final res = await _send('POST', '/api/boards/$boardId/bulk-delete', data: {
       'item_ids': [for (final (k, id) in items) {'type': k, 'id': int.tryParse(id) ?? id}],
+    });
+    final data = res['data'] is Map ? res['data'] as Map : res;
+    final ids = data['trash_ids'];
+    return ids is List ? [for (final i in ids) '$i'] : const [];
+  }
+
+  /// Copies Task / Subtask rows (title + " (สำเนา)"); returns the new rows. Epics are skipped by the server.
+  Future<List<Map<String, dynamic>>> bulkDuplicateWorkspaceItems(String boardId, List<(String, String)> items) async {
+    final res = await _send('POST', '/api/boards/$boardId/bulk-duplicate', data: {
+      'item_ids': [for (final (k, id) in items) {'type': k, 'id': int.tryParse(id) ?? id}],
+    });
+    final data = res['data'] is Map ? res['data'] as Map : res;
+    return extractMapList(data['items']);
+  }
+
+  /// Undo for a bulk delete.
+  Future<void> restoreWorkspaceTrashBulk(List<String> trashIds) async {
+    await _send('POST', '/api/workspace/trash/bulk-restore', data: {
+      'ids': [for (final id in trashIds) int.tryParse(id) ?? id],
     });
   }
 
