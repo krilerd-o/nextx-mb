@@ -1,7 +1,7 @@
 name: nextx_mobile
 description: MOAI NEXT Mobile App - Flutter native app for App Store & Play Store.
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.4.0+4
 
 environment:
   sdk: '>=3.8.0 <4.0.0'
