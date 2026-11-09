@@ -16,6 +16,7 @@ import '../../core/navigation/app_routes.dart';
 import '../../core/nx_page_route.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
+import '../../widgets/nx_search_debounce.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
@@ -102,7 +103,6 @@ class GlobalSearchScreen extends StatefulWidget {
 class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   static const perSource = 4;
   static const minChars = 2;
-  static const debounce = Duration(milliseconds: 280);
   static final Map<String, Map<String, List<SearchHit>>> _cache = {};
 
   /// Cached results belong to one business + package.
@@ -113,7 +113,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
 
   late final _controller = TextEditingController(text: widget.initialQuery ?? '');
   final _focus = FocusNode();
-  Timer? _timer;
+  final _debounce = NxSearchDebounce();
   CancelToken? _cancel;
   int _gen = 0;
   String _query = '';
@@ -129,7 +129,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _debounce.dispose();
     _cancel?.cancel();
     _controller.dispose();
     _focus.dispose();
@@ -137,7 +137,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   }
 
   void _schedule(String text, {bool now = false}) {
-    _timer?.cancel();
+    _debounce.cancel();
     final q = text.trim();
     if (q == _query && !now) return;
     if (q.length < minChars && !_isCode(q)) {
@@ -153,7 +153,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
     if (now) {
       _run(q);
     } else {
-      _timer = Timer(debounce, () => _run(q));
+      _debounce.schedule(() => _run(q));
     }
   }
 
@@ -362,14 +362,17 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
         prefixIcon: const Icon(NxI.magnifyingGlass, size: 20),
         suffixIcon: _controller.text.isEmpty
             ? null
-            : IconButton(
-                icon: const Icon(NxI.x, size: 18),
-                onPressed: () {
-                  _controller.clear();
-                  _schedule('');
-                  _focus.requestFocus();
-                },
-              ),
+            : Row(mainAxisSize: MainAxisSize.min, children: [
+                NxSearchCountdown(debounce: _debounce),
+                IconButton(
+                  icon: const Icon(NxI.x, size: 18),
+                  onPressed: () {
+                    _controller.clear();
+                    _schedule('');
+                    _focus.requestFocus();
+                  },
+                ),
+              ]),
         filled: true,
         fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.7),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),

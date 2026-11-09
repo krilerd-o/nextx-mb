@@ -9,6 +9,7 @@ import '../core/i18n.dart';
 import 'app_bottom_sheet.dart';
 import 'nx_chrome.dart';
 import 'nx_icons.dart';
+import 'nx_search_debounce.dart';
 import 'nx_back_handler.dart';
 
 /// One choice inside a filter group.
@@ -20,12 +21,7 @@ class NxFilterOption {
 
 /// A filter section (สถานะ, ประเภท, …). [multi] = several values may be on.
 class NxFilterGroup {
-  const NxFilterGroup({
-    required this.key,
-    required this.label,
-    required this.options,
-    this.multi = true,
-  });
+  const NxFilterGroup({required this.key, required this.label, required this.options, this.multi = true});
   final String key;
   final String label;
   final List<NxFilterOption> options;
@@ -48,8 +44,7 @@ class NxListQuery {
   final Map<String, Set<String>> filters;
   final String? sort;
 
-  bool has(String group, String value) =>
-      filters[group]?.contains(value) ?? false;
+  bool has(String group, String value) => filters[group]?.contains(value) ?? false;
   Set<String> values(String group) => filters[group] ?? const {};
   String? single(String group) {
     final v = filters[group];
@@ -59,16 +54,8 @@ class NxListQuery {
   int get activeFilterCount => filters.values.fold(0, (n, s) => n + s.length);
   bool get isEmpty => q.isEmpty && activeFilterCount == 0;
 
-  NxListQuery copyWith({
-    String? q,
-    Map<String, Set<String>>? filters,
-    String? sort,
-    bool clearSort = false,
-  }) => NxListQuery(
-    q: q ?? this.q,
-    filters: filters ?? this.filters,
-    sort: clearSort ? null : (sort ?? this.sort),
-  );
+  NxListQuery copyWith({String? q, Map<String, Set<String>>? filters, String? sort, bool clearSort = false}) =>
+      NxListQuery(q: q ?? this.q, filters: filters ?? this.filters, sort: clearSort ? null : (sort ?? this.sort));
 
   NxListQuery toggle(NxFilterGroup g, String value) {
     final next = {
@@ -95,8 +82,7 @@ class NxListQuery {
     final raw = j['filters'];
     if (raw is Map) {
       raw.forEach((k, v) {
-        if (v is List && v.isNotEmpty)
-          f[k.toString()] = {for (final x in v) x.toString()};
+        if (v is List && v.isNotEmpty) f[k.toString()] = {for (final x in v) x.toString()};
       });
     }
     return NxListQuery(filters: f, sort: j['sort']?.toString());
@@ -104,10 +90,7 @@ class NxListQuery {
 
   @override
   bool operator ==(Object other) =>
-      other is NxListQuery &&
-      other.q == q &&
-      other.sort == sort &&
-      jsonEncode(other.toJson()) == jsonEncode(toJson());
+      other is NxListQuery && other.q == q && other.sort == sort && jsonEncode(other.toJson()) == jsonEncode(toJson());
 
   @override
   int get hashCode => Object.hash(q, sort, jsonEncode(toJson()));
@@ -144,10 +127,7 @@ class NxListPrefs {
 
   Future<void> saveQuery(NxListQuery q) async {
     try {
-      await (await SharedPreferences.getInstance()).setString(
-        _q,
-        jsonEncode(q.toJson()),
-      );
+      await (await SharedPreferences.getInstance()).setString(_q, jsonEncode(q.toJson()));
     } catch (e, s) {
       ErrorReporting.report(e, s);
     }
@@ -155,8 +135,7 @@ class NxListPrefs {
 
   Future<List<String>> recents() async {
     try {
-      return (await SharedPreferences.getInstance()).getStringList(_r) ??
-          const [];
+      return (await SharedPreferences.getInstance()).getStringList(_r) ?? const [];
     } catch (_) {
       return const [];
     }
@@ -165,10 +144,7 @@ class NxListPrefs {
   Future<void> addRecent(String q) async {
     final t = q.trim();
     if (t.isEmpty) return;
-    final list = [
-      t,
-      ...(await recents()).where((e) => e != t),
-    ].take(8).toList();
+    final list = [t, ...(await recents()).where((e) => e != t)].take(8).toList();
     try {
       await (await SharedPreferences.getInstance()).setStringList(_r, list);
     } catch (_) {}
@@ -186,11 +162,7 @@ class NxListPrefs {
       if (raw == null) return const [];
       return [
         for (final e in (jsonDecode(raw) as List))
-          if (e is Map)
-            NxSavedView(
-              e['name'].toString(),
-              NxListQuery.fromJson(Map<String, dynamic>.from(e)),
-            ),
+          if (e is Map) NxSavedView(e['name'].toString(), NxListQuery.fromJson(Map<String, dynamic>.from(e))),
       ];
     } catch (_) {
       return const [];
@@ -276,10 +248,12 @@ class NxListToolbar extends StatefulWidget {
 }
 
 class _NxListToolbarState extends State<NxListToolbar> {
-  late final TextEditingController _c = TextEditingController(
-    text: widget.query.q,
-  );
+  late final TextEditingController _c = TextEditingController(text: widget.query.q);
   final _focus = FocusNode();
+
+  /// Server searches run 2.5 s after the last keystroke (or on the keyboard's
+  /// Search key); local filters ([liveSearch]) stay instant.
+  final _debounce = NxSearchDebounce();
   List<String> _recents = const [];
   bool _showRecents = false;
 
@@ -294,6 +268,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
   }
 
   void _closeSearch() {
+    _debounce.cancel();
     _focus.unfocus();
     final had = _c.text.isNotEmpty;
     _c.clear();
@@ -309,8 +284,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
         final r = await widget.prefs!.recents();
         if (mounted) setState(() => _recents = r);
       }
-      if (mounted)
-        setState(() => _showRecents = _focus.hasFocus && _c.text.isEmpty);
+      if (mounted) setState(() => _showRecents = _focus.hasFocus && _c.text.isEmpty);
     });
   }
 
@@ -335,6 +309,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
   @override
   void dispose() {
     _chrome?.removeActions(this);
+    _debounce.dispose();
     _c.dispose();
     _focus.dispose();
     super.dispose();
@@ -397,7 +372,16 @@ class _NxListToolbarState extends State<NxListToolbar> {
     ]);
   }
 
+  /// Countdown finished: search, keep the keyboard up for more typing.
+  void _searchNow(String v) {
+    final t = v.trim();
+    if (!mounted || t == widget.query.q) return;
+    if (t.isNotEmpty) widget.prefs?.addRecent(t);
+    widget.onChanged(widget.query.copyWith(q: t));
+  }
+
   void _submit(String v) {
+    _debounce.cancel();
     final t = v.trim();
     widget.prefs?.addRecent(t);
     _focus.unfocus();
@@ -405,9 +389,8 @@ class _NxListToolbarState extends State<NxListToolbar> {
     widget.onChanged(widget.query.copyWith(q: t));
   }
 
-  NxFilterGroup? get _quick => widget.quickGroup == null
-      ? null
-      : widget.groups.where((g) => g.key == widget.quickGroup).firstOrNull;
+  NxFilterGroup? get _quick =>
+      widget.quickGroup == null ? null : widget.groups.where((g) => g.key == widget.quickGroup).firstOrNull;
 
   String? get _sortLabel {
     final s = widget.query.sort;
@@ -419,7 +402,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
     final next = await showNxSnapSheet<NxListQuery>(
       context: context,
       title: 'ตัวกรอง',
-      snaps: const [0.6, 0.92],
+      snaps: const [0.6, 0.85],
       builder: (ctx, controller) => _FilterSheet(
         query: widget.query,
         groups: widget.groups,
@@ -459,30 +442,14 @@ class _NxListToolbarState extends State<NxListToolbar> {
     final cs = theme.colorScheme;
     final q = widget.query;
     final quick = _quick;
-    final sheetGroups = widget.groups
-        .where((g) => g.key != widget.quickGroup)
-        .toList();
-    final sheetCount = [
-      for (final g in sheetGroups) q.values(g.key).length,
-    ].fold(0, (a, b) => a + b);
+    final sheetGroups = widget.groups.where((g) => g.key != widget.quickGroup).toList();
+    final sheetCount = [for (final g in sheetGroups) q.values(g.key).length].fold(0, (a, b) => a + b);
 
-    Widget chip({
-      required String label,
-      required bool on,
-      required VoidCallback onTap,
-      IconData? icon,
-      int badge = 0,
-    }) {
+    Widget chip({required String label, required bool on, required VoidCallback onTap, IconData? icon, int badge = 0}) {
       return Padding(
         padding: const EdgeInsets.only(right: 8),
         child: FilterChip(
-          avatar: icon == null
-              ? null
-              : Icon(
-                  icon,
-                  size: 16,
-                  color: on ? cs.onPrimary : cs.onSurfaceVariant,
-                ),
+          avatar: icon == null ? null : Icon(icon, size: 16, color: on ? cs.onPrimary : cs.onSurfaceVariant),
           label: Text(badge > 0 ? '${tr(label)} · $badge' : tr(label)),
           selected: on,
           showCheckmark: false,
@@ -490,20 +457,16 @@ class _NxListToolbarState extends State<NxListToolbar> {
             HapticFeedback.selectionClick();
             onTap();
           },
-          labelStyle: TextStyle(
-            color: on ? cs.onPrimary : cs.onSurface,
-            fontWeight: FontWeight.w500,
-          ),
+          labelStyle: TextStyle(color: on ? cs.onPrimary : cs.onSurface, fontWeight: FontWeight.w500),
           selectedColor: cs.primary,
-          side: BorderSide(
-            color: on ? cs.primary : cs.outlineVariant.withValues(alpha: 0.7),
-          ),
+          side: BorderSide(color: on ? cs.primary : cs.outlineVariant.withValues(alpha: 0.7)),
           visualDensity: VisualDensity.compact,
         ),
       );
     }
 
-    final hasChips = quick != null ||
+    final hasChips =
+        quick != null ||
         widget.leading.isNotEmpty ||
         (!_iconMode && (sheetGroups.isNotEmpty || widget.sorts.isNotEmpty));
     final sortOn = q.sort != null && widget.sorts.isNotEmpty && q.sort != widget.sorts.first.key;
@@ -529,7 +492,8 @@ class _NxListToolbarState extends State<NxListToolbar> {
     NxFilterGroup? quick,
     List<NxFilterGroup> sheetGroups,
     int sheetCount,
-    Widget Function({required String label, required bool on, required VoidCallback onTap, IconData? icon, int badge}) chip,
+    Widget Function({required String label, required bool on, required VoidCallback onTap, IconData? icon, int badge})
+    chip,
     bool hasChips,
   ) {
     final theme = Theme.of(context);
@@ -549,8 +513,11 @@ class _NxListToolbarState extends State<NxListToolbar> {
               onSubmitted: _submit,
               onChanged: (v) {
                 setState(() => _showRecents = _focus.hasFocus && v.isEmpty);
-                if (widget.liveSearch)
+                if (widget.liveSearch) {
                   widget.onChanged(q.copyWith(q: v.trim()));
+                } else {
+                  _debounce.schedule(() => _searchNow(_c.text));
+                }
               },
               decoration: InputDecoration(
                 hintText: tr(widget.searchHint),
@@ -558,18 +525,25 @@ class _NxListToolbarState extends State<NxListToolbar> {
                 isDense: true,
                 suffixIcon: _c.text.isEmpty && !_iconMode
                     ? null
-                    : IconButton(
-                        tooltip: tr(_iconMode ? 'ปิดค้นหา' : 'ล้าง'),
-                        icon: const Icon(NxI.x, size: 18),
-                        onPressed: () {
-                          if (_iconMode) {
-                            _closeSearch();
-                            return;
-                          }
-                          _c.clear();
-                          setState(() {});
-                          widget.onChanged(q.copyWith(q: ''));
-                        },
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          NxSearchCountdown(debounce: _debounce),
+                          IconButton(
+                            tooltip: tr(_iconMode ? 'ปิดค้นหา' : 'ล้าง'),
+                            icon: const Icon(NxI.x, size: 18),
+                            onPressed: () {
+                              if (_iconMode) {
+                                _closeSearch();
+                                return;
+                              }
+                              _debounce.cancel();
+                              _c.clear();
+                              setState(() {});
+                              widget.onChanged(q.copyWith(q: ''));
+                            },
+                          ),
+                        ],
                       ),
               ),
             ),
@@ -582,11 +556,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
               child: _showRecents && _recents.isNotEmpty
                   ? Row(
                       children: [
-                        Icon(
-                          NxI.clockCounterClockwise,
-                          size: 16,
-                          color: cs.onSurfaceVariant,
-                        ),
+                        Icon(NxI.clockCounterClockwise, size: 16, color: cs.onSurfaceVariant),
                         const SizedBox(width: 6),
                         for (final r in _recents)
                           Padding(
@@ -624,9 +594,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
                           chip(
                             label: _sortLabel ?? 'เรียง',
                             icon: NxI.sortAscending,
-                            on:
-                                q.sort != null &&
-                                q.sort != widget.sorts.first.key,
+                            on: q.sort != null && q.sort != widget.sorts.first.key,
                             onTap: _openSort,
                           ),
                         if (quick != null)
@@ -634,8 +602,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
                             chip(
                               label: o.label,
                               on: q.has(quick.key, o.value),
-                              onTap: () =>
-                                  widget.onChanged(q.toggle(quick, o.value)),
+                              onTap: () => widget.onChanged(q.toggle(quick, o.value)),
                             ),
                       ],
                     ),
@@ -649,16 +616,12 @@ class _NxListToolbarState extends State<NxListToolbar> {
                   if (widget.resultCount != null)
                     Text(
                       tr('${widget.resultCount} รายการ'),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
+                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                     ),
                   const Spacer(),
                   if (!q.isEmpty)
                     TextButton.icon(
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                      ),
+                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
                       onPressed: () {
                         _c.clear();
                         widget.onChanged(NxListQuery(sort: q.sort));
@@ -778,7 +741,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                   children: [
                     for (final v in _views)
                       InputChip(
-        deleteIcon: const Icon(NxI.x, size: 16),
+                        deleteIcon: const Icon(NxI.x, size: 16),
                         avatar: const Icon(NxI.star, size: 16),
                         label: Text(v.name),
                         onPressed: () => Navigator.pop(context, v.query.copyWith(q: widget.query.q)),
@@ -804,7 +767,9 @@ class _FilterSheetState extends State<_FilterSheet> {
                           setState(() => _q = _q.copyWith(sort: o.key));
                         },
                         selectedColor: cs.primary,
-                        labelStyle: TextStyle(color: (_q.sort ?? widget.sorts.first.key) == o.key ? cs.onPrimary : null),
+                        labelStyle: TextStyle(
+                          color: (_q.sort ?? widget.sorts.first.key) == o.key ? cs.onPrimary : null,
+                        ),
                       ),
                   ],
                 ),
@@ -871,11 +836,7 @@ class _FilterSheetState extends State<_FilterSheet> {
           child: Row(
             children: [
               if (widget.prefs != null && _q.activeFilterCount > 0)
-                IconButton(
-                  tooltip: tr('บันทึกมุมมอง'),
-                  onPressed: _saveView,
-                  icon: const Icon(NxI.star),
-                ),
+                IconButton(tooltip: tr('บันทึกมุมมอง'), onPressed: _saveView, icon: const Icon(NxI.star)),
               TextButton(
                 onPressed: () => setState(() => _q = NxListQuery(q: _q.q, sort: _q.sort)),
                 child: Text(tr('ล้าง')),
@@ -925,10 +886,9 @@ Future<NxListQuery?> showNxFilterSheet(
   required NxListQuery query,
   required List<NxFilterGroup> groups,
   List<NxSortOption> sorts = const [],
-}) =>
-    showNxSnapSheet<NxListQuery>(
-      context: context,
-      title: 'ตัวกรอง',
-      snaps: const [0.6, 0.92],
-      builder: (ctx, controller) => _FilterSheet(query: query, groups: groups, sorts: sorts, controller: controller),
-    );
+}) => showNxSnapSheet<NxListQuery>(
+  context: context,
+  title: 'ตัวกรอง',
+  snaps: const [0.6, 0.92],
+  builder: (ctx, controller) => _FilterSheet(query: query, groups: groups, sorts: sorts, controller: controller),
+);

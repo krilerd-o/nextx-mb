@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/thai_time.dart';
+import '../../widgets/nx_search_debounce.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -25,12 +26,14 @@ class ChatSearchScreen extends StatefulWidget {
 
 class _ChatSearchScreenState extends State<ChatSearchScreen> {
   final _q = TextEditingController();
+  final _wait = NxSearchDebounce();
   List<Map<String, dynamic>>? _hits;
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
+    _wait.dispose();
     _q.dispose();
     super.dispose();
   }
@@ -74,7 +77,13 @@ class _ChatSearchScreenState extends State<ChatSearchScreen> {
             controller: _q,
             autofocus: true,
             textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _run(),
+            onChanged: (_) => _wait.schedule(() {
+              if (mounted) _run();
+            }),
+            onSubmitted: (_) {
+              _wait.cancel();
+              _run();
+            },
             decoration: InputDecoration(
               hintText: tr('ค้นหาในทุกห้อง'),
               prefixIcon: const Icon(NxI.magnifyingGlass),

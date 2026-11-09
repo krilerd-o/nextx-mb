@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../widgets/nx_search_debounce.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -69,6 +70,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
   String _query = '';
   StreamSubscription<RealtimeEvent>? _live;
   Timer? _debounce;
+  final _searchWait = NxSearchDebounce();
 
   List<MailAccount> _accounts = const [];
   MailAccount? _account;
@@ -108,6 +110,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
   void dispose() {
     _live?.cancel();
     _debounce?.cancel();
+    _searchWait.dispose();
     _search.dispose();
     _scroll.dispose();
     super.dispose();
@@ -433,6 +436,8 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
                 decoration: InputDecoration(
                   hintText: tr('ค้นหาหัวข้อ เนื้อหา หรือผู้ส่ง'),
                   prefixIcon: const Icon(NxI.magnifyingGlass),
+                  suffixIcon: NxSearchCountdown(debounce: _searchWait),
+                  suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
                   filled: true,
                   isDense: true,
                   border: OutlineInputBorder(
@@ -440,7 +445,13 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
                     borderSide: BorderSide.none,
                   ),
                 ),
+                onChanged: (v) => _searchWait.schedule(() {
+                  if (!mounted || v.trim() == _query) return;
+                  setState(() => _query = v.trim());
+                  _reload();
+                }),
                 onSubmitted: (v) {
+                  _searchWait.cancel();
                   setState(() => _query = v.trim());
                   _reload();
                 },

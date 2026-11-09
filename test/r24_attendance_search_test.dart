@@ -108,6 +108,10 @@ void main() {
       menus: ['lead', 'leave-request'],
     );
     await tester.enterText(find.byKey(const ValueKey('search-all-field')), 'ลา');
+    await tester.pump(const Duration(milliseconds: 100));
+    // Records wait for the 2.5 s countdown (ring shown in the box).
+    expect(find.byKey(const ValueKey('nx-search-countdown')), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 2500));
     await _settle(tester, 8);
     // Menu "ขอลา" from the device + the lead from the server.
     expect(find.textContaining('ขอลา'), findsWidgets);
@@ -123,10 +127,20 @@ void main() {
       await tester.enterText(find.byKey(const ValueKey('search-all-field')), t);
       await tester.pump(const Duration(milliseconds: 60));
     }
+    await tester.pump(const Duration(milliseconds: 2500));
     await _settle(tester, 8);
     final leadCalls = adapter.calls.where((c) => c.path == '/api/entity/lead').toList();
     expect(leadCalls.length, 1);
     expect(leadCalls.single.queryParameters['q'], 'siam');
+  });
+
+  testWidgets('keyboard Search runs at once, without the countdown', (tester) async {
+    final (_, adapter) = await _pump(tester, const GlobalSearchScreen(), {'GET /api/entity/lead': {'list': []}, 'GET /api/users': {'list': []}}, menus: ['lead']);
+    await tester.enterText(find.byKey(const ValueKey('search-all-field')), 'bangna');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await _settle(tester, 4);
+    expect(adapter.calls.where((c) => c.path == '/api/entity/lead').length, 1);
+    await tester.pump(const Duration(seconds: 3));
   });
 
   test('no screen header has a refresh button (pull down to refresh instead)', () {

@@ -1751,6 +1751,7 @@ const Map<String, String> enStrings = {
   'บันทึกรูปลงคลังภาพแล้ว': 'Photo saved to your gallery',
   'ดาวน์โหลดไม่สำเร็จ': 'Download failed',
   'เล่นวิดีโอนี้ไม่ได้': 'This video cannot be played',
+  'ค้นหา…': 'Search…',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
