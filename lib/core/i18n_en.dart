@@ -1882,6 +1882,12 @@ const Map<String, String> enStrings = {
   'รายการจะย้ายไปถังขยะ กู้คืนได้ หรือกดเลิกทำ': 'Items go to the trash — restore them there or press Undo',
   'คัดลอกรหัสและชื่อ': 'Copy keys & titles',
   'ล้างการเลือก': 'Clear selection',
+  'ปรับสถานะ': 'Change status',
+  'อัปเดตคอมเมนต์': 'Update comment',
+  'เลือกหลายรายการ': 'Select multiple',
+  'เปลี่ยนสถานะเคสได้ในหน้าเคส': 'Change a case\'s status on the case screen',
+  'เมนูนี้ไม่มีสถานะให้เปลี่ยน': 'This menu has no status to change',
+  'กดค้างที่รายการเพื่อดูคำสั่ง (ปรับสถานะ, คอมเมนต์, แก้ไข, ทำซ้ำ, ลบ)': 'Long-press a row for commands (status, comment, edit, duplicate, delete)',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -2099,4 +2105,5 @@ const Map<String, String> enPatterns = {
   'เลือก {} ห้อง': '{} selected',
   'ส่งต่อจาก {}': 'Forwarded from {}',
   '{} การตอบกลับ': '{} replies',
+  'เปลี่ยนสถานะเป็น {} แล้ว': 'Status changed to {}',
 };

@@ -23,6 +23,8 @@ import 'entity_create_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'entity_detail_parts.dart';
 import 'entity_detail_screen.dart';
+import 'entity_record_actions.dart';
+import 'entity_row_action_sheet.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/entity_display.dart';
@@ -95,6 +97,121 @@ class _EntityListScreenState extends State<EntityListScreen> {
     setState(() => _picked.contains(id) ? _picked.remove(id) : _picked.add(id));
   }
 
+  /// Long-press a row: haptic + icon sheet (status, comment, edit, duplicate,
+  /// delete, multi-select); each command opens its own window.
+  Future<void> _rowActions(Map<String, dynamic> row) async {
+    if (_picked.isNotEmpty) {
+      _togglePick(row);
+      return;
+    }
+    _hintSeen();
+    final picklists = _cardCtx?.picklists ?? const <String, List<Map<String, dynamic>>>{};
+    final key = _statusKey ?? EntityRecordActions.statusKey(widget.module, picklists, row);
+    final raw = key == null ? null : row[key]?.toString();
+    final opt = EntityRecordActions.statusOptions(widget.module, key, picklists)
+        .where((o) => o.value == raw || o.label == raw)
+        .firstOrNull;
+    final act = await showEntityRowActionSheet(
+      context,
+      module: widget.module,
+      moduleLabel: _title,
+      row: row,
+      statusKey: key != null && (picklists[key] ?? const []).isNotEmpty ? key : null,
+      statusLabel: opt?.label ?? raw,
+      statusColor: opt?.color,
+    );
+    if (act == null || !mounted) return;
+    final id = row['id']?.toString() ?? '';
+    switch (act) {
+      case EntityRowAction.status:
+        await EntityRecordActions.changeStatus(
+          context,
+          module: widget.module,
+          row: row,
+          picklists: picklists.isEmpty ? null : picklists,
+          onChanged: (k, v) {
+            if (!mounted) return;
+            setState(() {
+              final i = _items.indexWhere((r) => r['id']?.toString() == id);
+              if (i >= 0) _items[i] = {..._items[i], k: v};
+              if (_selected?['id']?.toString() == id) _selected = {..._selected!, k: v};
+            });
+          },
+        );
+      case EntityRowAction.comment:
+        await EntityRecordActions.openComments(context, module: widget.module, row: row);
+      case EntityRowAction.edit:
+        if (await EntityRecordActions.edit(context, module: widget.module, row: row, root: true) && mounted) {
+          _load(reset: true);
+        }
+      case EntityRowAction.duplicate:
+        if (await EntityRecordActions.duplicate(context, module: widget.module, row: row, root: true) && mounted) {
+          _load(reset: true);
+        }
+      case EntityRowAction.delete:
+        final ok = await EntityRecordActions.delete(
+          context,
+          module: widget.module,
+          row: row,
+          onCommitted: () {
+            if (mounted) _load(reset: true);
+          },
+        );
+        if (ok && mounted && _selected?['id']?.toString() == id) setState(() => _selected = null);
+      case EntityRowAction.select:
+        _togglePick(row);
+    }
+  }
+
+  /// One-time tip under the toolbar: "long-press a row for commands".
+  bool _showHint = false;
+  static const _hintKey = 'nx_crm_row_actions_hint_v1';
+
+  Future<void> _loadHint() async {
+    try {
+      final seen = (await SharedPreferences.getInstance()).getBool(_hintKey) ?? false;
+      if (!seen && mounted) setState(() => _showHint = true);
+    } catch (_) {}
+  }
+
+  void _hintSeen() {
+    if (_showHint) setState(() => _showHint = false);
+    SharedPreferences.getInstance().then((p) => p.setBool(_hintKey, true)).catchError((_) => false);
+  }
+
+  Widget _hintBanner(ThemeData theme) {
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Material(
+        key: const ValueKey('crm-row-hint'),
+        color: cs.primaryContainer.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+          child: Row(
+            children: [
+              Icon(NxI.handPointing, size: 18, color: cs.onPrimaryContainer),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  tr('กดค้างที่รายการเพื่อดูคำสั่ง (ปรับสถานะ, คอมเมนต์, แก้ไข, ทำซ้ำ, ลบ)'),
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onPrimaryContainer),
+                ),
+              ),
+              IconButton(
+                tooltip: tr('ปิด'),
+                visualDensity: VisualDensity.compact,
+                icon: Icon(NxI.x, size: 16, color: cs.onPrimaryContainer),
+                onPressed: _hintSeen,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   bool _loading = true;
   bool _refreshing = false;
   bool _loadingMore = false;
@@ -151,7 +268,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
 
   static const _statusCandidates = [
     'status', 'leadstatus', 'lead_status', 'deal_stage', 'sales_stage', 'case_status', 'quotation_status',
-    'job_status', 'inspection_status', 'account_status', 'contact_status', 'activity_status',
+    'job_status', 'inspection_status', 'account_status', 'contact_status', 'activity_status', 'contract_status',
   ];
   static const _nameCandidates = [
     'lead_name', 'deal_name', 'account_name', 'contact_firstname', 'customer_name', 'case_name', 'subject',
@@ -434,6 +551,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     PendingEntityDeletes.instance.addListener(_onPendingChanged);
     _scroll.addListener(_onScroll);
     _init();
+    _loadHint();
   }
 
   /// Menu name as configured on NEXTX (aicrm_tab), e.g. "ลีด" instead of the
@@ -878,8 +996,12 @@ class _EntityListScreenState extends State<EntityListScreen> {
           final p = bp.scrollPadding(context, hasFab: !twoPane);
           return p.copyWith(top: p.top + top);
         }(),
-        itemCount: items.length + (_loadingMore ? 1 : 0),
+        itemCount: items.length + (_loadingMore ? 1 : 0) + (_showHint ? 1 : 0),
         itemBuilder: (context, i) {
+          if (_showHint) {
+            if (i == 0) return _hintBanner(theme);
+            i -= 1;
+          }
           if (i >= items.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
@@ -918,12 +1040,12 @@ class _EntityListScreenState extends State<EntityListScreen> {
                   fields: _cardCtx!,
                   module: widget.module,
                   onTap: open,
-                  onLongPress: () => _togglePick(row),
+                  onLongPress: () => _rowActions(row),
                 )
               : NxEntityRow.fromRow(
                   row,
                   module: widget.module,
-                  onLongPress: () => _togglePick(row),
+                  onLongPress: () => _rowActions(row),
                   onTap: open,
                 );
           final decorated = picked

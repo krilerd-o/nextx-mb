@@ -69,6 +69,7 @@ class NxI {
   static const flag = LucideIcons300.flag;
   static const addressBook = LucideIcons300.contact;
   static const handshake = LucideIcons300.handshake;
+  static const handPointing = LucideIcons300.pointer;
   static const headset = LucideIcons300.headset;
   static const headsetFill = LucideIcons500.headset;
   static const receipt = LucideIcons300.receiptText;
