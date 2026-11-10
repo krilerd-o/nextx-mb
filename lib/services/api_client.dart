@@ -1470,6 +1470,35 @@ class ApiClient {
       _dataMap(await _send('GET', '/api/service-dashboard/case-performance',
           query: {'dateFrom': dateFrom, 'dateTo': dateTo, if (owner != null) 'owners': owner}));
 
+  /// `GET /api/dashboard/customer` — lead/contact/account by status, source, funnel, kpis.
+  Future<Map<String, dynamic>> getCustomerDashboard({String? dateFrom, String? dateTo, String? userId}) async => _dataMap(await _send(
+        'GET',
+        '/api/dashboard/customer',
+        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo, if (userId != null) 'userId': userId},
+      ));
+
+  /// `GET /api/dashboard/activity` — activities by type / status + monthly trend.
+  Future<Map<String, dynamic>> getActivityDashboard({String? dateFrom, String? dateTo, String? userId}) async => _dataMap(await _send(
+        'GET',
+        '/api/dashboard/activity',
+        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo, if (userId != null) 'userId': userId},
+      ));
+
+  /// Sales dashboard pipeline (menu `sales-dash-pipeline`): kpis, funnel, close_window …
+  /// [owner] = only that owner's deals; none = everyone the user may see.
+  Future<Map<String, dynamic>> getSalesPipeline({required String dateFrom, required String dateTo, String? owner}) async =>
+      _dataMap(await _send('GET', '/api/sales-dashboard/pipeline',
+          query: {'dateFrom': dateFrom, 'dateTo': dateTo, if (owner != null) 'owners': owner}));
+
+  /// Sales dashboard activities (menu `sales-dash-activity`): kpis + trend of done / missed / upcoming.
+  Future<Map<String, dynamic>> getSalesActivity({required String dateFrom, required String dateTo, String? owner}) async =>
+      _dataMap(await _send('GET', '/api/sales-dashboard/activity',
+          query: {'dateFrom': dateFrom, 'dateTo': dateTo, if (owner != null) 'owners': owner}));
+
+  /// My Workspace insights: `work_weeks [{week, created, cleared}]`, `case_weeks`.
+  Future<Map<String, dynamic>> getHomeWorkInsights({int days = 30}) async =>
+      _dataMap(await _send('GET', '/api/home/work', query: {'scope': 'insights', 'days': '$days'}));
+
   /// Light SLA summary for Home (any user with cases): `counts{open_ok, open_overdue, met, missed}`.
   Future<Map<String, dynamic>> getCaseSlaSummary({int days = 30}) async =>
       _dataMap(await _send('GET', '/api/home/case-sla-summary', query: {'period': '$days'}));
