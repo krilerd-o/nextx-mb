@@ -143,6 +143,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: 'ตัวอักษร ปุ่ม และไอคอนทั้งแอป',
         below: const NxUiScaleControl(),
       )),
+      _Entry('รูปลักษณ์', ['เมนู', 'แท็บเล็ต', 'ตำแหน่ง', 'tablet', 'rail', 'dock'], SettingsTile(
+        key: const ValueKey('settings-nav-dock'),
+        icon: NxI.squaresFour,
+        tint: const Color(0xFF8B5CF6),
+        title: 'ตำแหน่งเมนู (แท็บเล็ต)',
+        subtitle: config.navDock.label,
+        onTap: () => showNavDockPicker(context),
+      )),
       _Entry('รูปลักษณ์', ['วันที่', 'เวลา', 'รูปแบบ', 'date'], SettingsTile(
         icon: NxI.calendarClock,
         tint: const Color(0xFF14B8A6),

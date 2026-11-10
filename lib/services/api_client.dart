@@ -1047,6 +1047,27 @@ class ApiClient {
 
   /// `POST /api/activity/:id/photos` — multer field is `files` (not `files[]`).
   /// Returns the stored photos (`{id, name, path, url?, mime, size}`).
+  /// `POST /api/crm/business-card/scan` — read a business card into Lead /
+  /// Contact / Account fields (nothing is saved). [ocrText] is the phone's own
+  /// OCR, used by the server only when it has no AI vision key.
+  Future<Map<String, dynamic>> scanBusinessCard(
+    String module, {
+    List<int>? front,
+    List<int>? back,
+    String? ocrText,
+  }) async {
+    final form = FormData();
+    form.fields.add(MapEntry('module', module));
+    if (ocrText != null && ocrText.trim().isNotEmpty) form.fields.add(MapEntry('ocr_text', ocrText));
+    if (front != null) {
+      form.files.add(MapEntry('front', MultipartFile.fromBytes(front, filename: 'card_front.jpg', contentType: DioMediaType('image', 'jpeg'))));
+    }
+    if (back != null) {
+      form.files.add(MapEntry('back', MultipartFile.fromBytes(back, filename: 'card_back.jpg', contentType: DioMediaType('image', 'jpeg'))));
+    }
+    return _dataMap(await _send('POST', '/api/crm/business-card/scan', data: form));
+  }
+
   Future<List<Map<String, dynamic>>> uploadActivityPhotos(String id, List<MultipartFile> files) async {
     final form = FormData();
     for (final f in files) {
@@ -1182,9 +1203,29 @@ class ApiClient {
     });
   }
 
-  Future<void> bulkDeleteWorkspaceItems(String boardId, List<(String, String)> items) async {
-    await _send('POST', '/api/boards/$boardId/bulk-delete', data: {
+  /// Moves the items to the trash; returns the trash ids (for undo with [restoreWorkspaceTrashBulk]).
+  Future<List<String>> bulkDeleteWorkspaceItems(String boardId, List<(String, String)> items) async {
+    final res = await _send('POST', '/api/boards/$boardId/bulk-delete', data: {
       'item_ids': [for (final (k, id) in items) {'type': k, 'id': int.tryParse(id) ?? id}],
+    });
+    final data = res['data'] is Map ? res['data'] as Map : res;
+    final ids = data['trash_ids'];
+    return ids is List ? [for (final i in ids) '$i'] : const [];
+  }
+
+  /// Copies Task / Subtask rows (title + " (สำเนา)"); returns the new rows. Epics are skipped by the server.
+  Future<List<Map<String, dynamic>>> bulkDuplicateWorkspaceItems(String boardId, List<(String, String)> items) async {
+    final res = await _send('POST', '/api/boards/$boardId/bulk-duplicate', data: {
+      'item_ids': [for (final (k, id) in items) {'type': k, 'id': int.tryParse(id) ?? id}],
+    });
+    final data = res['data'] is Map ? res['data'] as Map : res;
+    return extractMapList(data['items']);
+  }
+
+  /// Undo for a bulk delete.
+  Future<void> restoreWorkspaceTrashBulk(List<String> trashIds) async {
+    await _send('POST', '/api/workspace/trash/bulk-restore', data: {
+      'ids': [for (final id in trashIds) int.tryParse(id) ?? id],
     });
   }
 
@@ -1428,6 +1469,35 @@ class ApiClient {
   Future<Map<String, dynamic>> getCasePerformance({required String dateFrom, required String dateTo, String? owner}) async =>
       _dataMap(await _send('GET', '/api/service-dashboard/case-performance',
           query: {'dateFrom': dateFrom, 'dateTo': dateTo, if (owner != null) 'owners': owner}));
+
+  /// `GET /api/dashboard/customer` — lead/contact/account by status, source, funnel, kpis.
+  Future<Map<String, dynamic>> getCustomerDashboard({String? dateFrom, String? dateTo, String? userId}) async => _dataMap(await _send(
+        'GET',
+        '/api/dashboard/customer',
+        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo, if (userId != null) 'userId': userId},
+      ));
+
+  /// `GET /api/dashboard/activity` — activities by type / status + monthly trend.
+  Future<Map<String, dynamic>> getActivityDashboard({String? dateFrom, String? dateTo, String? userId}) async => _dataMap(await _send(
+        'GET',
+        '/api/dashboard/activity',
+        query: {if (dateFrom != null) 'dateFrom': dateFrom, if (dateTo != null) 'dateTo': dateTo, if (userId != null) 'userId': userId},
+      ));
+
+  /// Sales dashboard pipeline (menu `sales-dash-pipeline`): kpis, funnel, close_window …
+  /// [owner] = only that owner's deals; none = everyone the user may see.
+  Future<Map<String, dynamic>> getSalesPipeline({required String dateFrom, required String dateTo, String? owner}) async =>
+      _dataMap(await _send('GET', '/api/sales-dashboard/pipeline',
+          query: {'dateFrom': dateFrom, 'dateTo': dateTo, if (owner != null) 'owners': owner}));
+
+  /// Sales dashboard activities (menu `sales-dash-activity`): kpis + trend of done / missed / upcoming.
+  Future<Map<String, dynamic>> getSalesActivity({required String dateFrom, required String dateTo, String? owner}) async =>
+      _dataMap(await _send('GET', '/api/sales-dashboard/activity',
+          query: {'dateFrom': dateFrom, 'dateTo': dateTo, if (owner != null) 'owners': owner}));
+
+  /// My Workspace insights: `work_weeks [{week, created, cleared}]`, `case_weeks`.
+  Future<Map<String, dynamic>> getHomeWorkInsights({int days = 30}) async =>
+      _dataMap(await _send('GET', '/api/home/work', query: {'scope': 'insights', 'days': '$days'}));
 
   /// Light SLA summary for Home (any user with cases): `counts{open_ok, open_overdue, met, missed}`.
   Future<Map<String, dynamic>> getCaseSlaSummary({int days = 30}) async =>
@@ -1873,6 +1943,9 @@ class ApiClient {
     String roomId,
     String body, {
     List<Map<String, dynamic>>? attachments,
+    String? replyToId,
+    String? threadRootId,
+    List<int>? mentionIds,
   }) async {
     return _dataMap(await _send(
       'POST',
@@ -1880,8 +1953,69 @@ class ApiClient {
       data: {
         'body': body,
         if (attachments != null && attachments.isNotEmpty) 'attachments': attachments,
+        if (replyToId != null) 'reply_to_id': int.tryParse(replyToId) ?? replyToId,
+        if (threadRootId != null) 'thread_root_id': int.tryParse(threadRootId) ?? threadRootId,
+        if (mentionIds != null && mentionIds.isNotEmpty) 'mention_user_ids': mentionIds,
+        'source_ui': 'camp',
       },
     ));
+  }
+
+  /// Replies of a thread (root message included first).
+  Future<List<Map<String, dynamic>>> getChatThread(String roomId, String rootId, {int limit = 100}) async {
+    final env = await _send('GET', '/api/chat/rooms/$roomId/messages', query: {'thread_root': rootId, 'limit': '$limit'});
+    return extractMapList(env['data']);
+  }
+
+  /// Forward a message to rooms (`{sent: [{room_id, message_id}], skipped}`), optional note.
+  Future<Map<String, dynamic>> forwardChatMessage(String roomId, String messageId, List<String> roomIds, {String? comment}) async {
+    return _dataMap(await _send('POST', '/api/chat/rooms/$roomId/messages/$messageId/forward', data: {
+      'room_ids': roomIds.map((e) => int.tryParse(e) ?? e).toList(),
+      if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+    }));
+  }
+
+  /// Mute / unmute notifications of a room for me.
+  Future<void> setChatRoomMuted(String roomId, bool muted) async {
+    await _send('PATCH', '/api/chat/rooms/$roomId/me', data: {'muted': muted});
+  }
+
+  Future<void> setChatRoomStarred(String roomId, bool starred) async {
+    await _send(starred ? 'POST' : 'DELETE', '/api/chat/stars/$roomId');
+  }
+
+  Future<void> saveChatMessage(String roomId, String messageId) async {
+    await _send('POST', '/api/chat/rooms/$roomId/messages/$messageId/save');
+  }
+
+  Future<List<Map<String, dynamic>>> getChatRoomMembers(String roomId) async {
+    final env = await _send('GET', '/api/chat/rooms/$roomId/members');
+    final data = env['data'];
+    return extractMapList(data is Map ? (data['list'] ?? data) : data);
+  }
+
+  Future<void> addChatRoomMember(String roomId, String userId) async {
+    await _send('POST', '/api/chat/rooms/$roomId/members', data: {'user_id': int.tryParse(userId) ?? userId});
+  }
+
+  /// Files shared in a room, newest first.
+  Future<List<Map<String, dynamic>>> getChatRoomFiles(String roomId) async {
+    final env = await _send('GET', '/api/chat/rooms/$roomId/files');
+    final data = env['data'];
+    return extractMapList(data is Map ? (data['list'] ?? data) : data);
+  }
+
+  /// Decline a ringing call without a socket (phone call screen while the app was closed).
+  Future<void> declineCall(String callId) async {
+    await _send('POST', '/api/calls/${Uri.encodeComponent(callId)}/decline');
+  }
+
+  /// STUN / TURN for calls (`{ice_servers: [...], turn, max_participants}`).
+  Future<Map<String, dynamic>> getIceServers() async => _dataMap(await _send('GET', '/api/calls/ice-servers'));
+
+  /// Open Graph preview `{url, title, description, image, siteName}` (cached by the server).
+  Future<Map<String, dynamic>> unfurlChatLink(String url) async {
+    return _dataMap(await _send('GET', '/api/chat/unfurl', query: {'url': url}));
   }
 
   Future<Map<String, dynamic>> editChatMessage(String roomId, String messageId, String body) async {

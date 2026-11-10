@@ -73,6 +73,33 @@ void main() {
     expect(searchField(), findsNothing);
   });
 
+  testWidgets('search box keeps the keyboard up after opening (no reopen/close flicker)', (tester) async {
+    await pumpPage(tester);
+    await tester.tap(find.byTooltip('ค้นหา'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    final first = tester.state<EditableTextState>(find.byType(EditableText));
+    await tester.pumpAndSettle();
+    // Same field (not rebuilt), still focused, keyboard still shown.
+    expect(tester.state<EditableTextState>(find.byType(EditableText)), same(first));
+    expect(tester.widget<TextField>(searchField()).focusNode?.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+  });
+
+  testWidgets('typing searches 2.5 s later by itself; keyboard Search runs at once', (tester) async {
+    await pumpPage(tester);
+    await tester.tap(find.byTooltip('ค้นหา'));
+    await tester.pumpAndSettle();
+    await tester.enterText(searchField(), '[QA] ลูกค้า');
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const ValueKey('nx-search-countdown')), findsOneWidget);
+    expect(find.text('[QA] แถว 3'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 2500));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('nx-search-countdown')), findsNothing);
+    expect(tester.widget<TextField>(searchField()).focusNode?.hasFocus, isTrue, reason: 'keep typing after an auto search');
+  });
+
   testWidgets('header filter icon opens one sheet with sort and filters, badge counts them', (tester) async {
     await pumpPage(tester);
     await tester.drag(find.text('[QA] แถว 3'), const Offset(0, -300));

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:nextx_mobile/core/i18n.dart';
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/core/thai_time.dart';
@@ -89,7 +90,9 @@ void main() {
     expect(find.text('สุขสันต์วันเกิดวันนี้'), findsOneWidget);
     expect(find.text('ผู้ติดต่อ'), findsOneWidget);
     expect(find.text('Contact'), findsWidgets, reason: 'record type shown on the card and the row');
-    expect(find.text('ครบ ${today.year - 1990} ปี'), findsWidgets);
+    // No age and no birth year anywhere on the card / row.
+    expect(find.textContaining('ครบ'), findsNothing);
+    expect(find.textContaining('${uiYear(1990)}'), findsNothing);
     expect(find.text('[QA] บริษัททดสอบ'), findsWidgets);
     expect(find.text('0811111111'), findsOneWidget);
     expect(find.byKey(const ValueKey('cal-bday-plan')), findsOneWidget);
@@ -110,7 +113,8 @@ void main() {
     expect(find.byKey(const ValueKey('cal-bday-lead-72')), findsOneWidget);
     expect(find.byKey(const ValueKey('cal-bday-type-lead-72')), findsOneWidget);
     expect(find.descendant(of: find.byKey(const ValueKey('cal-bday-type-lead-72')), matching: find.text('Lead')), findsOneWidget);
-    expect(find.textContaining('· พรุ่งนี้'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('cal-bday-lead-72')), matching: find.text('พรุ่งนี้')), findsOneWidget);
+    expect(find.textContaining('ครบ'), findsNothing);
   });
 
   testWidgets('switched off in the menu: no marks', (tester) async {

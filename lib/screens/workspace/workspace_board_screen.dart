@@ -11,7 +11,6 @@ import '../../core/workspace_models.dart';
 import '../../services/api_client.dart';
 import '../../services/realtime_service.dart';
 import '../../widgets/nx_avatar.dart';
-import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_create_fab.dart';
 import '../../widgets/nx_icons.dart';
@@ -21,6 +20,7 @@ import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_skeleton.dart';
 import 'task_detail_screen.dart';
 import 'workspace_item_form.dart';
+import 'ws_bulk_dock.dart';
 import 'ws_kanban.dart';
 import '../../widgets/nx_refresh.dart';
 
@@ -297,65 +297,6 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
     setState(() => _selected.contains(id) ? _selected.remove(id) : _selected.add(id));
   }
 
-  Future<void> _bulk(String what) async {
-    final api = context.read<AppConfig>().apiClient;
-    final items = [for (final id in _selected) ('task', id)];
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      if (what == 'delete') {
-        final ok = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text(tr('ลบ ${items.length} รายการ?')),
-            content: Text(tr('รายการจะย้ายไปถังขยะ กู้คืนได้')),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ลบ'))),
-            ],
-          ),
-        );
-        if (ok != true) return;
-        await api.bulkDeleteWorkspaceItems(_boardId, items);
-      } else {
-        final pick = await showAppBottomSheet<String>(
-          context: context,
-          title: what == 'status' ? 'เปลี่ยนสถานะ' : (what == 'priority' ? 'เปลี่ยนความสำคัญ' : 'มอบหมายให้'),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (what == 'status')
-                for (final s in _statuses)
-                  ListTile(
-                    leading: CircleAvatar(radius: 6, backgroundColor: s.color),
-                    title: Text(s.label),
-                    onTap: () => Navigator.pop(context, s.id),
-                  ),
-              if (what == 'priority')
-                for (final p in kWsPriorities)
-                  ListTile(
-                    leading: Icon(wsPriorityStyle(p).icon, color: wsPriorityStyle(p).color),
-                    title: Text(tr(wsPriorityStyle(p).label)),
-                    onTap: () => Navigator.pop(context, p),
-                  ),
-              if (what == 'assignee')
-                for (final u in _users.entries)
-                  ListTile(leading: const Icon(NxI.user), title: Text(u.value), onTap: () => Navigator.pop(context, u.key)),
-            ],
-          ),
-        );
-        if (pick == null) return;
-        final key = switch (what) { 'status' => 'status_id', 'priority' => 'priority', _ => 'assignee_id' };
-        await api.bulkUpdateWorkspaceItems(_boardId, items, {key: what == 'priority' ? pick : (int.tryParse(pick) ?? pick)});
-      }
-      HapticFeedback.mediumImpact();
-      messenger.showSnackBar(SnackBar(content: Text(tr('อัปเดต ${items.length} รายการแล้ว'))));
-      setState(_selected.clear);
-      _load();
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-    }
-  }
-
   /// View menu behind the folded header icon.
   void _pickView() {
     HapticFeedback.selectionClick();
@@ -392,18 +333,7 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
     final name = '${_board['name'] ?? 'บอร์ด'}';
     final theme = Theme.of(context);
     final tasks = _loading ? const <Map<String, dynamic>>[] : _visibleTasks;
-    final PreferredSizeWidget header = _selected.isNotEmpty
-        ? AppBar(
-            leading: IconButton(icon: const Icon(NxI.x), onPressed: () => setState(_selected.clear)),
-            title: Text(tr('เลือก ${_selected.length} รายการ')),
-            actions: [
-              IconButton(tooltip: tr('เปลี่ยนสถานะ'), icon: const Icon(NxI.flag), onPressed: () => _bulk('status')),
-              IconButton(tooltip: tr('มอบหมายให้'), icon: const Icon(NxI.user), onPressed: () => _bulk('assignee')),
-              IconButton(tooltip: tr('ความสำคัญ'), icon: const Icon(NxI.chevronsUp), onPressed: () => _bulk('priority')),
-              IconButton(tooltip: tr('ลบ'), icon: const Icon(NxI.trash), onPressed: () => _bulk('delete')),
-            ],
-          )
-        : NxAppHeader(
+    final PreferredSizeWidget header = NxAppHeader(
             title: name,
             // Automatic deal codes (D26…) mean nothing to people.
             subtitle: _code.isEmpty || RegExp(r'^D\d{8,}$').hasMatch(_code) || _code.toUpperCase() == name.toUpperCase() ? null : _code,
@@ -475,13 +405,48 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
       );
     }
 
-    return NxScrollScaffold(
+    final scaffold = NxScrollScaffold(
       header: header,
       floatingActionButton: _selected.isEmpty ? NxCreateFab(onPressed: () => _create(), onLongPress: _createChoice) : null,
       body: Column(
         children: [
           toolbar,
           Expanded(child: body),
+        ],
+      ),
+    );
+    if (_selected.isEmpty) return scaffold;
+    final picked = [for (final t in _tasks) if (_selected.contains('${t['id']}')) {...t, 'board_code': _code}];
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(_selected.clear);
+      },
+      child: Stack(
+        children: [
+          scaffold,
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: MediaQuery.paddingOf(context).bottom + 12,
+            child: WsBulkDock(
+              items: picked,
+              api: context.read<AppConfig>().apiClient,
+              boardId: _boardId,
+              boardCode: _code,
+              totalCount: tasks.length,
+              onSelectAll: () => setState(() => _selected.addAll([for (final t in tasks) '${t['id']}'])),
+              onClear: () => setState(_selected.clear),
+              onChanged: () async {
+                await _load();
+                if (mounted) setState(() => _selected.removeWhere((id) => !_tasks.any((t) => '${t['id']}' == id)));
+              },
+              statuses: _statuses,
+              users: _users,
+              epics: _epics,
+              parentOptions: [for (final t in _tasks) if (!['subtask', 'checklist'].contains(wsType(t))) {...t, 'board_code': _code}],
+            ),
+          ),
         ],
       ),
     );

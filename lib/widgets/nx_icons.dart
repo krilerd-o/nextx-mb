@@ -69,6 +69,7 @@ class NxI {
   static const flag = LucideIcons300.flag;
   static const addressBook = LucideIcons300.contact;
   static const handshake = LucideIcons300.handshake;
+  static const handPointing = LucideIcons300.pointer;
   static const headset = LucideIcons300.headset;
   static const headsetFill = LucideIcons500.headset;
   static const receipt = LucideIcons300.receiptText;
@@ -110,9 +111,20 @@ class NxI {
   static const circle = LucideIcons300.circle;
   static const x = LucideIcons300.x;
   static const mapPin = LucideIcons300.mapPin;
+  static const mapTrifold = LucideIcons300.map;
+  static const mapPinned = LucideIcons300.mapPinned;
+  static const userCheck = LucideIcons300.userCheck;
+  static const aperture = LucideIcons300.aperture;
+  static const flashOff = LucideIcons300.zapOff;
+  static const stamp = LucideIcons300.stamp;
   static const star = LucideIcons300.star;
   static const funnel = LucideIcons300.listFilter;
   static const heart = LucideIcons300.heart;
+  static const heartbeat = LucideIcons300.heartPulse;
+  static const baby = LucideIcons300.baby;
+  static const flower = LucideIcons300.flower2;
+  static const shield = LucideIcons300.shield;
+  static const warning = LucideIcons300.triangleAlert;
   static const arrowsLeftRight = LucideIcons300.arrowLeftRight;
   static const prohibit = LucideIcons300.ban;
   static const repeat = LucideIcons300.repeat;
@@ -192,6 +204,8 @@ class NxI {
   static const bookOpen = LucideIcons300.bookOpen;
   static const microphone = LucideIcons300.mic;
   static const scanLine = LucideIcons300.scanLine;
+  static const idCard = LucideIcons300.idCard;
+  static const contactCard = LucideIcons300.contactRound;
 
   // Brands (Simple Icons). Outlook / Lazada are not in Simple Icons → generic.
   static const IconData brandGmail = SimpleIcons.gmail;
@@ -205,6 +219,28 @@ class NxI {
   static const IconData brandInstagram = SimpleIcons.instagram;
   static const IconData brandWhatsapp = SimpleIcons.whatsapp;
   static const IconData brandYoutube = SimpleIcons.youtube;
+
+  // Chat & calls
+  static const fileXls = LucideIcons300.fileSpreadsheet;
+  static const fileDoc = LucideIcons300.fileText;
+  static const fileZip = LucideIcons300.fileArchive;
+  static const smiley = LucideIcons300.smile;
+  static const at = LucideIcons300.atSign;
+  static const code = LucideIcons300.code;
+  static const thread = LucideIcons300.messagesSquare;
+  static const checks = LucideIcons300.checkCheck;
+  static const microphoneSlash = LucideIcons300.micOff;
+  static const videoCameraSlash = LucideIcons300.videoOff;
+  static const cameraRotate = LucideIcons300.switchCamera;
+  static const speakerHigh = LucideIcons300.volume2;
+  static const speakerLow = LucideIcons300.volume1;
+  static const phoneX = LucideIcons500.phoneOff;
+  static const phoneIncoming = LucideIcons300.phoneIncoming;
+  static const phoneMissed = LucideIcons300.phoneMissed;
+  static const screencast = LucideIcons300.screenShare;
+  static const minimize = LucideIcons300.minimize2;
+  static const textItalic = LucideIcons300.italic;
+  static const quote = LucideIcons300.quote;
 }
 
 /// Official brand colours for [NxI] brand icons (Simple Icons palette).

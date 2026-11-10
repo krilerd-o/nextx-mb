@@ -18,12 +18,16 @@ class NxHtmlView extends StatelessWidget {
     this.style,
     this.baseUrl,
     this.onOpenUrl,
+    this.selectable = true,
   });
 
   final String html;
   final TextStyle? style;
   final String? baseUrl;
   final Future<void> Function(String url)? onOpenUrl;
+
+  /// false = plain text (chat bubbles: long press opens the message menu instead of selecting).
+  final bool selectable;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +46,7 @@ class NxHtmlView extends StatelessWidget {
       if (plain.trim().isEmpty) {
         return Text(tr('—'), style: bodyStyle?.copyWith(color: theme.colorScheme.onSurfaceVariant));
       }
-      return SelectableText(tr(plain), style: bodyStyle);
+      return selectable ? SelectableText(tr(plain), style: bodyStyle) : Text(tr(plain), style: bodyStyle);
     }
     final prepared = prepareHtml(html);
     // Links to videos / images open in the app's player / viewer.
@@ -63,6 +67,7 @@ class NxHtmlView extends StatelessWidget {
             style: bodyStyle,
             baseUrl: resolvedBase,
             onOpenUrl: open,
+            selectable: selectable,
           ),
         for (final file in prepared.files) ...[
           const SizedBox(height: 8),
@@ -150,12 +155,14 @@ class _HtmlBody extends StatelessWidget {
     required this.style,
     this.baseUrl,
     this.onOpenUrl,
+    this.selectable = true,
   });
 
   final String html;
   final TextStyle? style;
   final String? baseUrl;
   final Future<void> Function(String url)? onOpenUrl;
+  final bool selectable;
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +170,7 @@ class _HtmlBody extends StatelessWidget {
     if (nodes.isEmpty) {
       final preview = stripHtmlPreview(html);
       if (preview.isEmpty) return const SizedBox.shrink();
-      return SelectableText(tr(preview), style: style);
+      return selectable ? SelectableText(tr(preview), style: style) : Text(tr(preview), style: style);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,7 +267,7 @@ class _HtmlBody extends StatelessWidget {
     final spans = <InlineSpan>[];
     _spans(node, base, spans, const _InlineStyle(), theme.colorScheme.primary);
     if (spans.isEmpty) return const SizedBox.shrink();
-    return SelectableText.rich(TextSpan(style: base, children: spans));
+    return selectable ? SelectableText.rich(TextSpan(style: base, children: spans)) : Text.rich(TextSpan(style: base, children: spans));
   }
 
   void _spans(_HtmlNode node, TextStyle? base, List<InlineSpan> out, _InlineStyle st, Color linkColor) {

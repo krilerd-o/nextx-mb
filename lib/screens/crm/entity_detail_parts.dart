@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_config.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/nx_avatar.dart';
+import '../../widgets/nx_timeline.dart';
 import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_attachments.dart';
 import '../../widgets/nx_icons.dart';
@@ -534,52 +535,23 @@ class EntityHistoryPanel extends StatelessWidget {
         child: Text(tr('ยังไม่มีประวัติ'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
       );
     }
-    return NxSurfaceCard(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-      child: Column(
-        children: [
-          for (var i = 0; i < events.length; i++)
-            () {
-              final d = describeTimelineEvent(events[i], valueLabel: valueLabel);
-              final who = events[i]['user_name']?.toString();
-              return IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Column(
-                      children: [
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
-                          child: Icon(d.icon, size: 15, color: cs.primary),
-                        ),
-                        if (i < events.length - 1) Expanded(child: Container(width: 2, color: cs.outlineVariant)),
-                      ],
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 14, top: 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(tr(d.title), style: theme.textTheme.titleSmall),
-                            if (d.detail != null) Text(tr(d.detail!), style: theme.textTheme.bodyMedium),
-                            Text(
-                              tr([if (who != null && who.isNotEmpty) who, relativeTime(events[i]['at'])].join(' · ')),
-                              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }(),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: NxTimeline(entries: [
+        for (final e in events)
+          () {
+            final d = describeTimelineEvent(e, valueLabel: valueLabel);
+            final who = e['user_name']?.toString();
+            return NxTimelineEntry(
+              at: parseThai(e['at'] ?? e['created_at'] ?? e['createdtime']),
+              icon: d.icon,
+              title: Text(tr(d.title)),
+              body: d.detail == null || d.detail!.trim().isEmpty ? null : Text(tr(d.detail!)),
+              who: who,
+              whoImage: e['user_avatar']?.toString() ?? e['avatar']?.toString(),
+            );
+          }(),
+      ]),
     );
   }
 }
@@ -812,4 +784,85 @@ String _activityWhen(dynamic raw) {
   if (d == null) return '';
   String two(int n) => n.toString().padLeft(2, '0');
   return '${d.day}/${d.month}/${uiYear(d.year)} ${two(d.hour)}:${two(d.minute)}';
+}
+
+
+/// Lead status funnel, same as the web (`constants/leadStatus.js`):
+/// New → Contacted → Qualified → Unqualified → Converted (always last).
+const kLeadStatusFunnel = ['New', 'Contacted', 'Qualified', 'Unqualified', 'Converted'];
+
+const _leadAliases = {
+  'new': 'New',
+  'ใหม่': 'New',
+  'contacted': 'Contacted',
+  'wait for convert': 'Contacted',
+  'qualified': 'Qualified',
+  'potentials': 'Qualified',
+  'มีโอกาส': 'Qualified',
+  'มีศักยภาพ': 'Qualified',
+  'unqualified': 'Unqualified',
+  'no potentials': 'Unqualified',
+  'ไม่มีโอกาส': 'Unqualified',
+  'ไม่มีศักยภาพ': 'Unqualified',
+  'lost': 'Unqualified',
+  'converted': 'Converted',
+  'แปลงแล้ว': 'Converted',
+  'แปลงเป็นลูกค้าแล้ว': 'Converted',
+};
+
+/// Legacy / Thai lead status → the standard value (`Potentials` → `Qualified`).
+String? canonicalLeadStatus(String? raw) {
+  final s = (raw ?? '').trim();
+  if (s.isEmpty) return null;
+  return _leadAliases[s.toLowerCase()] ?? _leadAliases[s] ?? s;
+}
+
+bool isLeadConvertedStatus(String? raw) => canonicalLeadStatus(raw) == 'Converted';
+
+/// Value to compare with the options for the current status of [module].
+String? statusCurrent(String module, String? raw) => module == 'lead' ? canonicalLeadStatus(raw) : raw;
+
+/// Status steps in their real order.
+/// - Lead: the web funnel, aliases merged, "Case" hidden, Converted last.
+/// - Product / Service: "ฉบับร่าง" (Draft) first, then the rest in their own order.
+List<({String value, String label})> orderStatusOptions(String module, List<({String value, String label})> options, {String? current}) {
+  final m = module.toLowerCase();
+  if (m == 'lead' || m == 'leads') return _leadStatusOptions(options, current);
+  return _draftFirst(m, options);
+}
+
+List<({String value, String label})> _leadStatusOptions(List<({String value, String label})> options, String? current) {
+  final cur = canonicalLeadStatus(current);
+  final byValue = <String, ({String value, String label})>{};
+  for (final o in options) {
+    final v = o.value.trim();
+    if (v.isEmpty || v.toLowerCase() == 'case' || v == 'เคส') continue;
+    final canon = canonicalLeadStatus(v)!;
+    final standard = kLeadStatusFunnel.contains(canon);
+    // Non-standard values only when the record has one (like the web).
+    if (!standard && canon != cur) continue;
+    final exact = v == canon;
+    final have = byValue[canon];
+    // Prefer the option whose own value is the standard one (its label).
+    if (have == null || exact) byValue[canon] = (value: canon, label: exact || have == null ? o.label : have.label);
+  }
+  if (byValue.isEmpty) return const [];
+  // Converted is the final step even when the picklist lacks it.
+  byValue.putIfAbsent('Converted', () => (value: 'Converted', label: 'แปลงเป็นลูกค้าแล้ว'));
+  final out = byValue.values.toList();
+  int rank(String v) {
+    final i = kLeadStatusFunnel.indexOf(v);
+    return i < 0 ? 99 : i;
+  }
+  out.sort((a, b) => rank(a.value).compareTo(rank(b.value)));
+  return out;
+}
+
+List<({String value, String label})> _draftFirst(String m, List<({String value, String label})> options) {
+  if (m != 'product' && m != 'products' && m != 'service' && m != 'services') return options;
+  bool isDraft(({String value, String label}) o) {
+    final v = o.value.toLowerCase();
+    return v == 'draft' || o.label.contains('ร่าง') || o.label.toLowerCase().contains('draft');
+  }
+  return [...options.where(isDraft), ...options.where((o) => !isDraft(o))];
 }

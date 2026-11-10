@@ -22,13 +22,13 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../deep_link_loaders.dart';
 import '../jobs/job_inspection_screen.dart';
-import 'entity_create_screen.dart';
 import 'entity_detail_parts.dart';
+import 'entity_record_actions.dart';
+import 'lead_convert_sheet.dart';
 import 'entity_ops.dart';
 import '../../core/error_reporting.dart';
 import '../../core/i18n.dart';
 import '../../core/effects.dart';
-import '../../core/entity_form_rules.dart';
 import '../../core/recent_records.dart';
 import '../../core/detail_fields_pref.dart';
 import '../calendar/activity_detail_screen.dart';
@@ -242,13 +242,13 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
 
   List<({String value, String label})> _statusOptions(String? key) {
     if (key == null) return const [];
-    return [
+    return orderStatusOptions(widget.module, [
       for (final o in _picklists[key] ?? const <Map<String, dynamic>>[])
         () {
           final p = NxPickOption.fromMap(o);
           return (value: p.value, label: p.label);
         }(),
-    ];
+    ], current: _row[key]?.toString());
   }
 
   Future<void> _changeStatus(String key, String value) async {
@@ -269,76 +269,19 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     }
   }
 
-  Future<void> _duplicate() async {
-    // Like the web: most modules open a pre-filled form to review the copy;
-    // documents (quotation / job) are copied on the server with their lines.
-    if (!kServerDuplicateModules.contains(widget.module) && _fields.isNotEmpty) {
-      final config = context.read<AppConfig>();
-      final values = duplicateFormValues(
-        widget.module,
-        _row,
-        userId: config.session.userId,
+  /// Lead → Account / Contact (+ Deal), same Config as the web.
+  Future<void> _convertLead() async {
+    final r = await showLeadConvertSheet(context, leadId: _id);
+    if (r != null && mounted) _reload();
+  }
+
+  Future<void> _duplicate() => EntityRecordActions.duplicate(
+        context,
+        module: widget.module,
+        row: _row,
+        fields: _fields,
         picklists: _picklists,
       );
-      if (values['smownerid'] != null) {
-        values['smownerid'] = {
-          'id': '${values['smownerid']}',
-          'label': config.session.displayName ?? config.session.email ?? '${values['smownerid']}',
-        };
-      }
-      final saved = await nxPush<bool>(
-        context,
-        EntityCreateScreen(
-          module: widget.module,
-          title: 'ทำซ้ำ ${entityTitle(_row, module: widget.module)}',
-          initialValues: values,
-          fields: _editableFields(),
-          picklists: _picklists,
-        ),
-        root: true,
-      );
-      if (saved == true && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ทำซ้ำแล้ว'))));
-      }
-      return;
-    }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('ทำซ้ำรายการนี้?')),
-        content: Text(
-          tr('สร้างสำเนาของ ${entityTitle(_row, module: widget.module)}'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('ยกเลิก')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ทำซ้ำ')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    try {
-      final newId = await context.read<AppConfig>().apiClient.duplicateEntity(
-        widget.module,
-        _id,
-      );
-      if (!mounted || newId.isEmpty) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('ทำซ้ำแล้ว — เปิดรายการใหม่'))),
-      );
-      nxPush<void>(context, EntityByIdLoader(module: widget.module, id: newId));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-    }
-  }
 
   /// Camera / gallery / file → posted as a comment with attachments.
   Future<void> _quickAttach() async {
@@ -394,7 +337,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final people = entityPeopleLine(_row);
     final status = entityStatus(_row);
 
-    final canEdit = _editableFields().isNotEmpty || _fields.isEmpty;
+    final perms = EntityRowPerms.of(widget.module, _row);
+    final canEdit = (_editableFields().isNotEmpty || _fields.isEmpty) && perms.canEdit;
+    final canConvert = widget.module == 'lead' && perms.canEdit && !EntityRowPerms.leadLocked(_row) && !_loading;
     final statusKey = entityStatusKey(_row, widget.module);
     final statusOptions = _statusOptions(statusKey);
     return NxScrollScaffold(
@@ -426,6 +371,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         ],
         menu: canEdit && context.select((AppConfig c) => c.isLoggedIn)
             ? [
+                if (canConvert)
+                  NxHeaderMenuItem(
+                    label: 'แปลงเป็นลูกค้า',
+                    icon: NxI.userCheck,
+                    onTap: _convertLead,
+                  ),
                 NxHeaderMenuItem(
                   label: 'ทำซ้ำ',
                   icon: NxI.copySimple,
@@ -452,11 +403,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   icon: NxI.camera,
                   onTap: _quickAttach,
                 ),
-                NxHeaderMenuItem(
-                  label: 'ลบ',
-                  icon: NxI.trash,
-                  onTap: _confirmDelete,
-                ),
+                if (perms.canDelete)
+                  NxHeaderMenuItem(
+                    label: 'ลบ',
+                    icon: NxI.trash,
+                    onTap: _confirmDelete,
+                  ),
               ]
             : null,
       ),
@@ -530,6 +482,20 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                       row: _row,
                       onDuplicate: canEdit ? _duplicate : null,
                     ),
+                    if (canConvert) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton.icon(
+                          key: const ValueKey('lead-convert-cta'),
+                          icon: const Icon(NxI.userCheck),
+                          label: Text(tr('แปลงเป็นลูกค้า')),
+                          style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                          onPressed: _convertLead,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -539,9 +505,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   options: statusOptions,
                   current: statusKey == null
                       ? null
-                      : _row[statusKey]?.toString(),
+                      : statusCurrent(widget.module, _row[statusKey]?.toString()),
                   onSelect: canEdit
-                      ? (v) => _changeStatus(statusKey!, v)
+                      ? (v) => widget.module == 'lead' && isLeadConvertedStatus(v)
+                          // Converted only through the convert window (creates Account / Contact).
+                          ? _convertLead()
+                          : _changeStatus(statusKey!, v)
                       : null,
                 ),
               ],
@@ -856,26 +825,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     ];
   }
 
-  List<Map<String, dynamic>> _editableFields() {
-    if (_fields.isNotEmpty) {
-      return _fields.where((f) {
-        final name = fieldName(f);
-        if (name.isEmpty || name == 'id' || name == 'business_id') return false;
-        return !fieldIsReadonly(f);
-      }).toList();
-    }
-    return _row.keys
-        .where((k) {
-          final lower = k.toLowerCase();
-          return k != 'id' &&
-              k != 'business_id' &&
-              !lower.startsWith('_') &&
-              lower != 'created_at' &&
-              lower != 'updated_at';
-        })
-        .map((k) => {'name': k, 'label_th': _labelFor(k)})
-        .toList();
-  }
+  List<Map<String, dynamic>> _editableFields() => EntityRecordActions.editableFields(_fields, _row);
 
   String? _relatedModuleForField(String name) {
     switch (name) {
@@ -998,32 +948,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   }
 
   Future<void> _confirmDelete() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('ลบรายการนี้?')),
-        content: Text(tr('ลบ ${entityTitle(_row, module: widget.module)}')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('ยกเลิก')),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ลบ')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    final api = context.read<AppConfig>().apiClient;
-    PendingEntityDeletes.instance.schedule(
-      messenger: ScaffoldMessenger.of(context),
-      module: widget.module,
-      ids: [_id],
-      label: entityTitle(_row, module: widget.module),
-      commit: () => api.deleteEntity(widget.module, _id),
-    );
+    final ok = await EntityRecordActions.delete(context, module: widget.module, row: _row);
+    if (!ok || !mounted) return;
     if (widget.embedded) {
       widget.onDeleted?.call();
     } else {
@@ -1032,24 +958,13 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   }
 
   Future<void> _openEdit(BuildContext context) async {
-    final fields = _editableFields();
-    if (!context.mounted) return;
-    final saved = await nxPush<bool>(
+    final saved = await EntityRecordActions.edit(
       context,
-      EntityCreateScreen(
-        module: widget.module,
-        title: 'แก้ไข',
-        recordId: _id,
-        initialValues: Map<String, dynamic>.from(_row),
-        fields: fields,
-        picklists: _picklists,
-      ),
+      module: widget.module,
+      row: _row,
+      fields: _fields,
+      picklists: _picklists,
     );
-    if (saved == true && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(tr('บันทึกแล้ว'))));
-      _reload();
-    }
+    if (saved && context.mounted) _reload();
   }
 }

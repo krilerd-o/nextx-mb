@@ -118,6 +118,33 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
+            Builder(builder: (context) {
+              // Quick days: today, yesterday, the last working day before today.
+              final now = thaiNow();
+              final t0 = DateTime(now.year, now.month, now.day);
+              var prev = t0.subtract(const Duration(days: 1));
+              while (prev.weekday == DateTime.saturday || prev.weekday == DateTime.sunday) {
+                prev = prev.subtract(const Duration(days: 1));
+              }
+              final picks = <(String, DateTime)>[
+                ('วันนี้', t0),
+                ('เมื่อวาน', t0.subtract(const Duration(days: 1))),
+                if (!DateUtils.isSameDay(prev, t0.subtract(const Duration(days: 1)))) ('วันทำงานก่อนหน้า', prev),
+              ];
+              return Wrap(spacing: 6, children: [
+                for (final (label, d) in picks)
+                  ChoiceChip(
+                    key: ValueKey('att-report-$label'),
+                    label: Text(tr(label)),
+                    selected: DateUtils.isSameDay(_day, d),
+                    onSelected: (_) {
+                      setState(() => _day = d);
+                      _load();
+                    },
+                  ),
+              ]);
+            }),
+            const SizedBox(height: 4),
             Row(
               children: [
                 IconButton(

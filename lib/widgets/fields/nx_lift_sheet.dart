@@ -25,7 +25,7 @@ Future<T?> showNxLiftSheet<T>({
           expand: false,
           initialChildSize: inset > 0 ? 0.85 : 0.55,
           minChildSize: 0.4,
-          maxChildSize: 0.95,
+          maxChildSize: 0.85,
           builder: (context, scroll) {
             return Material(
               color: Theme.of(context).colorScheme.surface,

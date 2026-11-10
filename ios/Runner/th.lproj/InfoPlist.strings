@@ -7,3 +7,5 @@
 "NSPhotoLibraryAddUsageDescription" = "บันทึกไฟล์ที่ดาวน์โหลดจากแอป";
 "NSMicrophoneUsageDescription" = "ใช้ไมโครโฟนอัดเสียงประชุมใน AI Minute Auto และข้อความเสียงถึงผู้ช่วย AI";
 "NSSpeechRecognitionUsageDescription" = "แปลงเสียงพูดเป็นข้อความเมื่อถามผู้ช่วย AI";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "ใช้ตำแหน่งเพื่อเช็คอินหน้างานและลงเวลา (แอปใช้ตำแหน่งเฉพาะตอนเปิดใช้งาน)";
+"NSLocationAlwaysUsageDescription" = "ใช้ตำแหน่งเพื่อเช็คอินหน้างานและลงเวลา (แอปใช้ตำแหน่งเฉพาะตอนเปิดใช้งาน)";

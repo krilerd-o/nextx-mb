@@ -59,9 +59,27 @@ class NxSheetBody extends StatelessWidget {
   final String? title;
   final EdgeInsetsGeometry? padding;
 
+  /// Tallest a sheet may be: 85% of the screen and always clear of the
+  /// status bar, like the other sheets (long lists scroll inside instead of
+  /// pushing the sheet up to the top edge).
+  static double maxHeightOf(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final h = mq.size.height;
+    final belowBar = h - mq.padding.top - 24;
+    final cap = h * 0.85;
+    return cap < belowBar ? cap : belowBar;
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeightOf(context)),
+      child: _body(context, cs),
+    );
+  }
+
+  Widget _body(BuildContext context, ColorScheme cs) {
     return Material(
       color: Theme.of(context).bottomSheetTheme.backgroundColor ?? cs.surface,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -122,7 +140,7 @@ Future<T?> showNxSnapSheet<T>({
   required BuildContext context,
   required Widget Function(BuildContext context, ScrollController controller) builder,
   String? title,
-  List<double> snaps = const [0.5, 0.92],
+  List<double> snaps = const [0.5, 0.85],
   double? initial,
 }) {
   final sizes = [...snaps]..sort();

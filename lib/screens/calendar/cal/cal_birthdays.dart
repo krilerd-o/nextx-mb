@@ -320,9 +320,8 @@ class CalBirthdayTypeBadge extends StatelessWidget {
   }
 }
 
-/// "ครบ 36 ปี · วันนี้" style line for [b] on [day].
+/// "วันนี้" / "อีก 6 วัน" for [b] on [day] (no age — it is not shown anywhere).
 String calBirthdayLine(CalBirthday b, DateTime day) {
-  final age = b.ageIn(day.year);
   final today = calDay(thaiNow());
   final at = calDay(b.inYear(day.year));
   final diff = at.difference(today).inDays;
@@ -333,10 +332,10 @@ String calBirthdayLine(CalBirthday b, DateTime day) {
           : diff > 1
               ? tr('อีก $diff วัน')
               : tr('ผ่านมา ${-diff} วัน');
-  return [if (age != null) tr('ครบ $age ปี'), when].join(' · ');
+  return when;
 }
 
-/// One row: avatar, name, kind · company, age.
+/// One row: avatar, name, kind · company, when.
 class CalBirthdayTile extends StatelessWidget {
   const CalBirthdayTile({super.key, required this.b, required this.day, required this.onTap});
   final CalBirthday b;
@@ -405,10 +404,8 @@ Future<void> showCalBirthdayCard(
     builder: (ctx) {
       final theme = Theme.of(ctx);
       final cs = theme.colorScheme;
-      final age = b.ageIn(day.year);
-      final bornLabel = b.born.year < 1900
-          ? '${b.born.day} ${monthShort(b.born.month)}'
-          : '${b.born.day} ${monthShort(b.born.month)} ${uiYear(b.born.year)}';
+      // Day and month only — no birth year (it would give the age away).
+      final bornLabel = '${b.born.day} ${monthShort(b.born.month)}';
       final isToday = sameDay(calDay(thaiNow()), calDay(b.inYear(day.year)));
       Widget info(IconData icon, String label, String value, {VoidCallback? onTap}) => InkWell(
             onTap: onTap,
@@ -494,12 +491,6 @@ Future<void> showCalBirthdayCard(
                       decoration: BoxDecoration(color: cs.surface.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(20)),
                       child: Text(b.kindLabel, style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700)),
                     ),
-                    if (age != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: calBirthdayColor, borderRadius: BorderRadius.circular(20)),
-                        child: Text(tr('ครบ $age ปี'), style: theme.textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
-                      ),
                   ]),
                 ]),
               ),

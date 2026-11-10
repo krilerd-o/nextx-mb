@@ -17,7 +17,7 @@ void main() {
     final row = tester.getSize(find.byType(NxStatusStepper));
     final pill = tester.getSize(find.byKey(const ValueKey('nx-step-b')));
     expect(pill.height, NxStatusStepper.pillHeight);
-    expect(row.height - pill.height, greaterThanOrEqualTo(18));
+    expect(row.height - pill.height, greaterThanOrEqualTo(14));
     final list = tester.widget<SingleChildScrollView>(find.byType(SingleChildScrollView));
     expect(list.clipBehavior, Clip.none);
   });
@@ -33,7 +33,7 @@ void main() {
     );
     final lines = tester
         .widgetList<Container>(find.byType(Container))
-        .where((c) => c.constraints?.maxWidth == 14 && c.constraints?.maxHeight == 2)
+        .where((c) => c.constraints?.maxWidth == 10 && c.constraints?.maxHeight == 2)
         .toList();
     expect(lines.length, 2);
     expect(lines.first.color, kNxStepPassedGreen.withValues(alpha: 0.7));

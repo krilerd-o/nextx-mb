@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/thai_time.dart';
+import '../../widgets/nx_search_debounce.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -298,6 +299,7 @@ class _StockTab extends StatefulWidget {
 
 class _StockTabState extends State<_StockTab> {
   final _q = TextEditingController();
+  final _wait = NxSearchDebounce();
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   Object? _error;
@@ -310,6 +312,7 @@ class _StockTabState extends State<_StockTab> {
 
   @override
   void dispose() {
+    _wait.dispose();
     _q.dispose();
     super.dispose();
   }
@@ -413,7 +416,13 @@ class _StockTabState extends State<_StockTab> {
           TextField(
             controller: _q,
             textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _load(),
+            onChanged: (_) => _wait.schedule(() {
+              if (mounted) _load();
+            }),
+            onSubmitted: (_) {
+              _wait.cancel();
+              _load();
+            },
             decoration: InputDecoration(
               hintText: tr('ค้นหาชื่อหรือรหัสสินค้า'),
               prefixIcon: const Icon(NxI.magnifyingGlass),

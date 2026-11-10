@@ -38,11 +38,11 @@ void main() {
       expect(p[DateTime(2026, 11, 9)]!.map((b) => b.id), ['2', '3']);
     });
 
-    test('message says who, which type and the age', () {
+    test('message says who and which type (no age)', () {
       final one = BirthdayReminders.message([bd('lead', 2, '[QA] B', DateTime(2026, 11, 9), year: 1995, org: 'ACME')], DateTime(2026, 11, 9));
       expect(one.$1, 'พรุ่งนี้วันเกิด [QA] B');
       expect(one.$2, contains('(Lead · ACME)'));
-      expect(one.$2, contains('ครบ 31 ปี'));
+      expect(one.$2, isNot(contains('ครบ')));
       final many = BirthdayReminders.message([for (var i = 0; i < 7; i++) bd('contact', i, 'P$i', DateTime(2026, 11, 9))], DateTime(2026, 11, 9));
       expect(many.$1, 'พรุ่งนี้วันเกิดลูกค้า 7 คน');
       expect(many.$2, contains('และอีก 2 คน'));

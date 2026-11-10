@@ -144,10 +144,13 @@ class NxChromeCollapse extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chrome = NxChrome.of(context);
-    if (!enabled || chrome == null) return child;
+    if (chrome == null) return child;
     final reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    // Same widget tree whether enabled or not: switching trees when a search
+    // box inside gains focus (enabled → false) rebuilt the TextField, dropped
+    // its focus and closed the keyboard right after it opened.
     return TweenAnimationBuilder<double>(
-      tween: Tween(end: chrome.collapsed ? 0 : 1),
+      tween: Tween(end: !enabled || !chrome.collapsed ? 1 : 0),
       duration: reduced ? Duration.zero : const Duration(milliseconds: 240),
       curve: Curves.easeOutCubic,
       child: child,

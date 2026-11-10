@@ -84,12 +84,7 @@ class AppTheme {
       card: cardColor,
       cta: primaryColor,
       onCta: Colors.white,
-      atmosphere: NxAtmosphereTokens(
-        top: scaffold,
-        mid: scaffold,
-        bottom: scaffold,
-        cardElevated: cardColor,
-      ),
+      atmosphere: NxAtmosphereTokens(top: scaffold, mid: scaffold, bottom: scaffold, cardElevated: cardColor),
     );
   }
 
@@ -105,6 +100,9 @@ class AppTheme {
   }) {
     final isDark = brightness == Brightness.dark;
     final text = _uiText(scheme, family);
+    // Component styles (chips, snack bars, field labels) name the chosen font
+    // too — otherwise they fall back to the system font.
+    final fallback = uiFontFallback(family);
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
@@ -121,9 +119,7 @@ class AppTheme {
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: card,
         elevation: 0,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-        ),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       ),
       appBarTheme: AppBarTheme(
         centerTitle: true,
@@ -142,9 +138,7 @@ class AppTheme {
         elevation: 0,
         color: card,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(cardRadius),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardRadius)),
         clipBehavior: Clip.antiAlias,
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -170,7 +164,12 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: isDark ? const Color(0xFF2C2C34) : const Color(0xFF1F2937),
-        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+        contentTextStyle: TextStyle(
+          fontFamily: family,
+          fontFamilyFallback: fallback,
+          color: Colors.white,
+          fontSize: 14,
+        ),
         actionTextColor: Color.lerp(scheme.primary, Colors.white, isDark ? 0.45 : 0.55),
         closeIconColor: Colors.white70,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -186,10 +185,14 @@ class AppTheme {
         selectedColor: scheme.primary,
         checkmarkColor: Colors.white,
         labelStyle: TextStyle(
+          fontFamily: family,
+          fontFamilyFallback: fallback,
           fontWeight: FontWeight.w500,
           color: isDark ? _darkOn : ink,
         ),
-        secondaryLabelStyle: const TextStyle(
+        secondaryLabelStyle: TextStyle(
+          fontFamily: family,
+          fontFamilyFallback: fallback,
           fontWeight: FontWeight.w500,
           color: Colors.white,
         ),
@@ -201,6 +204,8 @@ class AppTheme {
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return TextStyle(
+            fontFamily: family,
+            fontFamilyFallback: fallback,
             fontSize: 11,
             fontWeight: FontWeight.w500,
             color: selected ? scheme.primary : scheme.onSurfaceVariant,
@@ -223,16 +228,22 @@ class AppTheme {
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         hintStyle: TextStyle(
+          fontFamily: family,
+          fontFamilyFallback: fallback,
           color: scheme.onSurfaceVariant,
           fontSize: 15,
           fontWeight: FontWeight.w400,
         ),
         labelStyle: TextStyle(
+          fontFamily: family,
+          fontFamilyFallback: fallback,
           color: scheme.onSurfaceVariant,
           fontSize: 15,
           fontWeight: FontWeight.w400,
         ),
         floatingLabelStyle: TextStyle(
+          fontFamily: family,
+          fontFamilyFallback: fallback,
           color: scheme.primary,
           fontSize: 12,
           fontWeight: FontWeight.w500,
@@ -274,18 +285,18 @@ class AppTheme {
       labelSmall: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
     );
     // The chosen font everywhere (bundled in assets/fonts — no network, no flicker).
-    return base.apply(fontFamily: family, fontFamilyFallback: uiFontFallback(family), bodyColor: scheme.onSurface, displayColor: scheme.onSurface);
+    return base.apply(
+      fontFamily: family,
+      fontFamilyFallback: uiFontFallback(family),
+      bodyColor: scheme.onSurface,
+      displayColor: scheme.onSurface,
+    );
   }
 }
 
 @immutable
 class NxAtmosphereTokens extends ThemeExtension<NxAtmosphereTokens> {
-  const NxAtmosphereTokens({
-    required this.top,
-    required this.mid,
-    required this.bottom,
-    required this.cardElevated,
-  });
+  const NxAtmosphereTokens({required this.top, required this.mid, required this.bottom, required this.cardElevated});
 
   final Color top;
   final Color mid;
@@ -305,12 +316,7 @@ class NxAtmosphereTokens extends ThemeExtension<NxAtmosphereTokens> {
   }
 
   @override
-  NxAtmosphereTokens copyWith({
-    Color? top,
-    Color? mid,
-    Color? bottom,
-    Color? cardElevated,
-  }) {
+  NxAtmosphereTokens copyWith({Color? top, Color? mid, Color? bottom, Color? cardElevated}) {
     return NxAtmosphereTokens(
       top: top ?? this.top,
       mid: mid ?? this.mid,

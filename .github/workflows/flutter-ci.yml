@@ -332,7 +332,8 @@ jobs:
           retention-days: 14
 
       - name: Upload to TestFlight
-        if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' && env.ASC_KEY_ID != '' && (github.ref == 'refs/heads/main' || inputs.testflight) }}
+      # Only when asked: Actions → Run workflow → tick "testflight" (merges to main no longer upload).
+        if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' && env.ASC_KEY_ID != '' && inputs.testflight }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
           python3 .github/scripts/secret_file.py ASC_KEY_P8_B64 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8 pem
