@@ -1047,6 +1047,25 @@ class ApiClient {
 
   /// `POST /api/activity/:id/photos` — multer field is `files` (not `files[]`).
   /// Returns the stored photos (`{id, name, path, url?, mime, size}`).
+  /// `POST /api/crm/business-card/scan` — read a business card into Lead /
+  /// Contact / Account fields (nothing is saved). [ocrText] is the phone's own
+  /// OCR, used by the server only when it has no AI vision key.
+  Future<Map<String, dynamic>> scanBusinessCard(
+    String module, {
+    required List<int> front,
+    List<int>? back,
+    String? ocrText,
+  }) async {
+    final form = FormData();
+    form.fields.add(MapEntry('module', module));
+    if (ocrText != null && ocrText.trim().isNotEmpty) form.fields.add(MapEntry('ocr_text', ocrText));
+    form.files.add(MapEntry('front', MultipartFile.fromBytes(front, filename: 'card_front.jpg', contentType: DioMediaType('image', 'jpeg'))));
+    if (back != null) {
+      form.files.add(MapEntry('back', MultipartFile.fromBytes(back, filename: 'card_back.jpg', contentType: DioMediaType('image', 'jpeg'))));
+    }
+    return _dataMap(await _send('POST', '/api/crm/business-card/scan', data: form));
+  }
+
   Future<List<Map<String, dynamic>>> uploadActivityPhotos(String id, List<MultipartFile> files) async {
     final form = FormData();
     for (final f in files) {

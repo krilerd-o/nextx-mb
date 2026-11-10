@@ -26,6 +26,7 @@ import 'entity_detail_screen.dart';
 import 'entity_record_actions.dart';
 import 'entity_row_action_sheet.dart';
 import 'lead_convert_sheet.dart';
+import 'card_scan/card_scan_models.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/entity_display.dart';
@@ -768,18 +769,64 @@ class _EntityListScreenState extends State<EntityListScreen> {
     }
   }
 
+  /// Lead / Contact / Account: "สร้างเอง" or "สแกนนามบัตร" first (like Zoho).
   Future<void> _openCreate() async {
+    if (!kCardScanModules.contains(widget.module)) return _create();
+    final scan = await showAppBottomSheet<bool>(
+      context: context,
+      title: tr('ตัวเลือก$_title ใหม่'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _createOption(
+            key: const ValueKey('create-manual'),
+            icon: NxI.plus,
+            title: '$_title ใหม่',
+            subtitle: 'สร้างด้วยตนเอง',
+            onTap: () => Navigator.pop(context, false),
+          ),
+          const Divider(height: 1),
+          _createOption(
+            key: const ValueKey('create-scan'),
+            icon: NxI.idCard,
+            title: 'สแกนนามบัตร',
+            subtitle: 'ถ่ายหรือเลือกรูปนามบัตร แล้วกรอกให้อัตโนมัติ — ตรวจสอบก่อนกดบันทึก',
+            onTap: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+    if (scan == null || !mounted) return;
+    return _create(scan: scan);
+  }
+
+  Widget _createOption({required Key key, required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) {
+    final cs = Theme.of(context).colorScheme;
+    return ListTile(
+      key: key,
+      contentPadding: const EdgeInsets.symmetric(vertical: 6),
+      leading: CircleAvatar(radius: 22, backgroundColor: const Color(0xFF16A34A).withValues(alpha: 0.12), child: Icon(icon, color: const Color(0xFF16A34A))),
+      title: Text(tr(title), style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Text(tr(subtitle), style: TextStyle(color: cs.onSurfaceVariant)),
+      onTap: onTap,
+    );
+  }
+
+  bool _scanOnCreate = false;
+
+  Future<void> _create({bool scan = false}) async {
     final twoPane = NxBreakpoint.of(context).twoPane;
     if (twoPane) {
       setState(() {
         _creating = true;
+        _scanOnCreate = scan;
         _selected = null;
       });
       return;
     }
     final created = await nxPush<bool>(
       context,
-      EntityCreateScreen(module: widget.module, title: 'สร้าง$_title'),
+      EntityCreateScreen(module: widget.module, title: 'สร้าง$_title', autoScan: scan),
       root: true,
     );
     if (created == true) _load(reset: true);
@@ -788,9 +835,11 @@ class _EntityListScreenState extends State<EntityListScreen> {
   Widget _detail() {
     if (_creating) {
       return EntityCreateScreen(
+        key: ValueKey('create-$_scanOnCreate'),
         module: widget.module,
         title: 'สร้าง$_title',
         embedded: true,
+        autoScan: _scanOnCreate,
         onFinished: (ok) {
           setState(() => _creating = false);
           if (ok) _load(reset: true);
@@ -913,7 +962,11 @@ class _EntityListScreenState extends State<EntityListScreen> {
         ),
       ),
       headerBottomHeight: _toolbarHeight,
-      floatingActionButton: NxCreateFab(onPressed: _openCreate),
+      floatingActionButton: NxCreateFab(
+        onPressed: _openCreate,
+        // Long-press: straight to the card scanner.
+        onLongPress: kCardScanModules.contains(widget.module) ? () => _create(scan: true) : null,
+      ),
       body: Builder(
         builder: (context) {
           _inset = NxScrollScaffold.topInset(context);

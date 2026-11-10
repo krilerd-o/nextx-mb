@@ -204,6 +204,8 @@ class NxI {
   static const bookOpen = LucideIcons300.bookOpen;
   static const microphone = LucideIcons300.mic;
   static const scanLine = LucideIcons300.scanLine;
+  static const idCard = LucideIcons300.idCard;
+  static const contactCard = LucideIcons300.contactRound;
 
   // Brands (Simple Icons). Outlook / Lazada are not in Simple Icons → generic.
   static const IconData brandGmail = SimpleIcons.gmail;

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'card_scan/card_scan_flow.dart';
+import 'card_scan/card_scan_models.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -29,6 +31,7 @@ class EntityCreateScreen extends StatefulWidget {
     this.picklists,
     this.embedded = false,
     this.onFinished,
+    this.autoScan = false,
   });
 
   final String module;
@@ -39,6 +42,9 @@ class EntityCreateScreen extends StatefulWidget {
   final Map<String, List<Map<String, dynamic>>>? picklists;
   final bool embedded;
   final ValueChanged<bool>? onFinished;
+
+  /// Opened from "สแกนนามบัตร": start the card scan once the form is ready.
+  final bool autoScan;
 
   bool get isEdit => recordId != null && recordId!.isNotEmpty;
 
@@ -55,6 +61,34 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
   bool _loading = true;
   bool _saving = false;
 
+  /// Card scan (Lead / Contact / Account): fields filled from the card and
+  /// the photo(s) to attach after saving.
+  bool get _canScan => kCardScanModules.contains(widget.module) && _fields.isNotEmpty;
+  List<String> _scannedLabels = const [];
+  CardImages? _attachCard;
+  bool _autoScanDone = false;
+
+  Future<void> _scanCard() async {
+    final formFields = <String, String>{
+      for (final f in _fields)
+        if (!fieldIsReadonly(f) && fieldName(f).isNotEmpty) fieldName(f): (f['label_th'] ?? f['label'] ?? fieldName(f)).toString(),
+    };
+    final r = await CardScanFlow.run(context, module: widget.module, formFields: formFields, currentValues: Map.of(_values));
+    if (r == null || !mounted) return;
+    setState(() {
+      r.values.forEach((k, v) => _values[k] = v);
+      if (r.note != null && formFields.containsKey('description')) {
+        final cur = '${_values['description'] ?? ''}'.trim();
+        _values['description'] = cur.isEmpty ? r.note : '$cur\n${r.note}';
+      }
+      _scannedLabels = [for (final k in r.values.keys) formFields[k] ?? k];
+      _attachCard = r.attach ? r.images : null;
+      _errors = {};
+    });
+    // The green "เติมจากนามบัตร" banner says what was filled (no snackbar over the Save button).
+    HapticFeedback.lightImpact();
+  }
+
   /// "เฉพาะช่องจำเป็น": a short form with just what must be filled.
   bool _requiredOnly = false;
   Object? _error;
@@ -70,9 +104,18 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
       _picklists = widget.picklists ?? {};
       _applyDefaults();
       _loading = false;
+      _maybeAutoScan();
     } else {
       _load();
     }
+  }
+
+  void _maybeAutoScan() {
+    if (!widget.autoScan || _autoScanDone || !_canScan) return;
+    _autoScanDone = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scanCard();
+    });
   }
 
   /// Drops system columns and marks the fields the web always requires.
@@ -157,6 +200,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
           _applyDefaults();
           _loading = false;
         });
+        _maybeAutoScan();
       }
     } catch (e) {
       if (mounted) {
@@ -210,10 +254,20 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
     }
     try {
       final api = context.read<AppConfig>().apiClient;
+      String? id = widget.recordId;
       if (widget.isEdit) {
         await api.putEntity(widget.module, widget.recordId!, payload);
       } else {
-        await api.postEntity(widget.module, payload);
+        final res = await api.postEntity(widget.module, payload);
+        id = '${res['id'] ?? res['insertId'] ?? res['record']?['id'] ?? ''}';
+      }
+      // Card photo goes with the saved record (a failure never undoes the save).
+      final card = _attachCard;
+      if (card != null && id != null && id.isNotEmpty && id != 'null') {
+        final messenger = ScaffoldMessenger.of(context);
+        CardScanFlow.attachToRecord(api, module: widget.module, id: id, images: card).catchError((Object e) {
+          messenger.showSnackBar(SnackBar(content: Text(tr('บันทึกแล้ว แต่แนบรูปนามบัตรไม่สำเร็จ: ${formatApiError(e)}'))));
+        });
       }
       if (mounted) _finish(true);
     } catch (e) {
@@ -249,6 +303,15 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
       resizeToAvoidBottomInset: true,
       appBar: NxAppHeader(
         title: widget.title,
+        actions: [
+          if (_canScan)
+            IconButton(
+              key: const ValueKey('form-scan-card'),
+              tooltip: tr('สแกนนามบัตร'),
+              icon: const Icon(NxI.idCard),
+              onPressed: _scanCard,
+            ),
+        ],
         automaticallyImplyLeading: !widget.embedded,
         leading: widget.embedded
             ? IconButton(
@@ -277,6 +340,10 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
                       children: [
                         if (_error != null)
                           Text(tr(formatApiError(_error!)), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                        if (_canScan && _scannedLabels.isEmpty && !widget.isEdit)
+                          _ScanBanner(onTap: _scanCard),
+                        if (_scannedLabels.isNotEmpty)
+                          _ScannedBanner(labels: _scannedLabels, attach: _attachCard != null, onRescan: _scanCard),
                         if (!widget.isEdit && kFormInsight[widget.module] != null)
                           _InsightBanner(text: kFormInsight[widget.module]!),
                         if (_fields.isEmpty)
@@ -400,6 +467,96 @@ class _RequiredProgress extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "สแกนนามบัตร" call-to-action on a new Lead / Contact / Account.
+class _ScanBanner extends StatelessWidget {
+  const _ScanBanner({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        color: cs.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          key: const ValueKey('form-scan-banner'),
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                CircleAvatar(radius: 20, backgroundColor: cs.primary.withValues(alpha: 0.15), child: Icon(NxI.idCard, color: cs.primary)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(tr('สแกนนามบัตร'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(tr('ถ่ายหรือเลือกรูปนามบัตร แล้วกรอกให้อัตโนมัติ'), style: theme.textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                Icon(NxI.caretRight, color: cs.primary),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Which fields came from the card (the user still checks and saves).
+class _ScannedBanner extends StatelessWidget {
+  const _ScannedBanner({required this.labels, required this.attach, required this.onRescan});
+  final List<String> labels;
+  final bool attach;
+  final VoidCallback onRescan;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const green = Color(0xFF16A34A);
+    return Container(
+      key: const ValueKey('form-scanned'),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: green.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: green.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(padding: EdgeInsets.only(top: 2), child: Icon(NxI.idCard, size: 18, color: green)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr('เติมจากนามบัตร ${labels.length} ช่อง — ตรวจสอบแล้วกดบันทึก'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(labels.map(tr).join(' · '), style: theme.textTheme.bodySmall),
+                if (attach)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(tr('จะแนบรูปนามบัตรให้หลังบันทึก'), style: theme.textTheme.bodySmall?.copyWith(color: green)),
+                  ),
+              ],
+            ),
+          ),
+          TextButton(onPressed: onRescan, child: Text(tr('สแกนใหม่'))),
         ],
       ),
     );
