@@ -12,6 +12,18 @@ on:
         description: 'Upload the iOS build to TestFlight'
         type: boolean
         default: false
+      testflight_external:
+        description: 'TestFlight External: submit for Beta App Review + public link (needs TF_* secrets)'
+        type: boolean
+        default: false
+      whats_new:
+        description: 'TestFlight "What to Test" text (optional)'
+        type: string
+        default: ''
+      tf_build_number:
+        description: 'Only submit an already uploaded iOS build (its build number) for External review — skips all builds'
+        type: string
+        default: ''
       firebase:
         description: 'Upload the Android APK to Firebase App Distribution'
         type: boolean
@@ -40,6 +52,7 @@ concurrency:
 
 jobs:
   analyze-test:
+    if: ${{ !inputs.tf_build_number }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -243,7 +256,8 @@ jobs:
   build-ios:
     needs: analyze-test
     runs-on: macos-latest
-    timeout-minutes: 60
+    # extra time: TestFlight External waits for Apple to process the build before submitting it for review
+    timeout-minutes: 120
     env:
       IOS_GOOGLE_CLIENT_ID: ${{ secrets.IOS_GOOGLE_CLIENT_ID }}
       GSI_B64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
@@ -338,3 +352,62 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           python3 .github/scripts/secret_file.py ASC_KEY_P8_B64 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8 pem
           xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      # External testing: waits for processing, fills test info, adds the build to "External Testers"
+      # (public link on) and submits it for Beta App Review. Secrets (Settings → Secrets → Actions):
+      # TF_REVIEW_SERVER, TF_REVIEW_USER, TF_REVIEW_PASSWORD, TF_CONTACT_FIRST, TF_CONTACT_LAST,
+      # TF_CONTACT_EMAIL, TF_CONTACT_PHONE (optional TF_FEEDBACK_EMAIL, TF_PRIVACY_URL).
+      - name: TestFlight External (review + public link)
+        if: ${{ env.CERT_B64 != '' && env.PROFILE_B64 != '' && env.ASC_KEY_ID != '' && inputs.testflight && inputs.testflight_external }}
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          TF_WHATS_NEW: ${{ inputs.whats_new || inputs.release_notes }}
+          TF_REVIEW_SERVER: ${{ secrets.TF_REVIEW_SERVER }}
+          TF_REVIEW_USER: ${{ secrets.TF_REVIEW_USER }}
+          TF_REVIEW_PASSWORD: ${{ secrets.TF_REVIEW_PASSWORD }}
+          TF_CONTACT_FIRST: ${{ secrets.TF_CONTACT_FIRST }}
+          TF_CONTACT_LAST: ${{ secrets.TF_CONTACT_LAST }}
+          TF_CONTACT_EMAIL: ${{ secrets.TF_CONTACT_EMAIL }}
+          TF_CONTACT_PHONE: ${{ secrets.TF_CONTACT_PHONE }}
+          TF_FEEDBACK_EMAIL: ${{ secrets.TF_FEEDBACK_EMAIL }}
+          TF_PRIVACY_URL: ${{ secrets.TF_PRIVACY_URL }}
+        run: |
+          if [ -z "$TF_REVIEW_SERVER" ] || [ -z "$TF_REVIEW_USER" ] || [ -z "$TF_REVIEW_PASSWORD" ] || [ -z "$TF_CONTACT_EMAIL" ] || [ -z "$TF_CONTACT_PHONE" ] || [ -z "$TF_CONTACT_FIRST" ] || [ -z "$TF_CONTACT_LAST" ]; then
+            MSG="Build ${BUILD_NUMBER} อัปโหลดแล้ว แต่ยังไม่ได้ส่งรีวิว External เพราะยังไม่มี GitHub Secrets TF_REVIEW_* / TF_CONTACT_* — ใส่แล้วสั่ง Run workflow ด้วย tf_build_number=${BUILD_NUMBER}"
+            echo "::warning::$MSG"; echo "### TestFlight External: ยังไม่ได้ส่ง" >> "$GITHUB_STEP_SUMMARY"; echo "$MSG" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          export APP_VERSION=$(grep -E '^version:' pubspec.yaml | sed -E 's/version: *([^+]+).*/\1/')
+          export ASC_KEY_P8="$(cat ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8)"
+          python3 -m venv "$RUNNER_TEMP/asc" && "$RUNNER_TEMP/asc/bin/pip" install -q 'pyjwt[crypto]'
+          "$RUNNER_TEMP/asc/bin/python" .github/scripts/testflight_external.py
+
+  # Submit an already uploaded build for TestFlight External review (Run workflow → tf_build_number).
+  testflight-external:
+    if: ${{ inputs.tf_build_number }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+      BUILD_NUMBER: ${{ inputs.tf_build_number }}
+      TF_WHATS_NEW: ${{ inputs.whats_new || inputs.release_notes }}
+      TF_REVIEW_SERVER: ${{ secrets.TF_REVIEW_SERVER }}
+      TF_REVIEW_USER: ${{ secrets.TF_REVIEW_USER }}
+      TF_REVIEW_PASSWORD: ${{ secrets.TF_REVIEW_PASSWORD }}
+      TF_CONTACT_FIRST: ${{ secrets.TF_CONTACT_FIRST }}
+      TF_CONTACT_LAST: ${{ secrets.TF_CONTACT_LAST }}
+      TF_CONTACT_EMAIL: ${{ secrets.TF_CONTACT_EMAIL }}
+      TF_CONTACT_PHONE: ${{ secrets.TF_CONTACT_PHONE }}
+      TF_FEEDBACK_EMAIL: ${{ secrets.TF_FEEDBACK_EMAIL }}
+      TF_PRIVACY_URL: ${{ secrets.TF_PRIVACY_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Submit for Beta App Review + public link
+        run: |
+          python3 .github/scripts/secret_file.py ASC_KEY_P8_B64 "$RUNNER_TEMP/AuthKey.p8" pem
+          export ASC_KEY_P8="$(cat "$RUNNER_TEMP/AuthKey.p8")"
+          export APP_VERSION=$(grep -E '^version:' pubspec.yaml | sed -E 's/version: *([^+]+).*/\1/')
+          python3 -m venv "$RUNNER_TEMP/asc" && "$RUNNER_TEMP/asc/bin/pip" install -q 'pyjwt[crypto]'
+          "$RUNNER_TEMP/asc/bin/python" .github/scripts/testflight_external.py
