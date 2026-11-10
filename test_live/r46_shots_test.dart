@@ -2,6 +2,7 @@
 // ignore_for_file: invalid_use_of_visible_for_testing_member
 
 // Screenshots of the R46 business card scan (manual): SHOTS_DIR=… flutter test test_live/r46_shots_test.dart
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -82,6 +83,14 @@ void main() {
       'duplicates': [
         {'module': 'lead', 'id': 7, 'name': '[QA] สมชาย ใจดี', 'reason': 'อีเมล'},
       ],
+      'isaac': {'provider': 'gemini', 'model': 'gemini-3.8-flash', 'ms': 1840},
+      'timing_ms': 1960,
+      'insights': [
+        {'type': 'duplicate', 'level': 'warn', 'text': 'พบรายการที่อาจซ้ำ 1 รายการ — ตรวจก่อนสร้างใหม่'},
+        {'type': 'domain_match', 'level': 'ok', 'text': 'อีเมลกับเว็บไซต์เป็นโดเมนเดียวกัน — ข้อมูลบริษัทน่าเชื่อถือ'},
+        {'type': 'address_verified', 'level': 'ok', 'text': 'ที่อยู่ตรงกับรหัสไปรษณีย์ในฐานข้อมูลที่อยู่ไทย'},
+        {'type': 'unsure', 'level': 'warn', 'text': '1 ช่องอ่านได้ไม่ชัด — ทำเครื่องหมายให้ตรวจแล้ว'},
+      ],
     };
     final fields = [
       for (final e in {
@@ -136,6 +145,18 @@ void main() {
       await tester.tap(find.byType(NxCreateFab));
       await frames();
       await shot('options');
+      await tester.pumpWidget(const SizedBox());
+      await frames(4);
+
+      // Isaac reading (answer still on its way).
+      await tester.pumpWidget(app(Builder(builder: (ctx) {
+        return Scaffold(body: IsaacReadingDialog(image: jpeg, read: () => Completer<CardScanResult>().future));
+      })));
+      await tester.runAsync(() => precacheImage(MemoryImage(jpeg), tester.element(find.byType(IsaacReadingDialog))));
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await shot('reading');
       await tester.pumpWidget(const SizedBox());
       await frames(4);
 

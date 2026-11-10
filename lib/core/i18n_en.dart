@@ -1978,6 +1978,15 @@ const Map<String, String> enStrings = {
   'ใช้แล้ว': 'Used',
   'ชัดเจน': 'Clear',
   'ตรวจสอบ': 'Check',
+  'ส่งรูปนามบัตรให้ Isaac': 'Sending the card to Isaac',
+  'Isaac กำลังอ่านข้อความบนบัตร': 'Isaac is reading the card',
+  'วิเคราะห์ชื่อ ตำแหน่ง บริษัท เบอร์ อีเมล': 'Working out name, title, company, phone, email',
+  'ตรวจกับข้อมูลบนบัตร + หารายการซ้ำ': 'Checking against the card + looking for duplicates',
+  'Isaac อ่านบัตรนี้ไม่ได้': 'Isaac couldn\'t read this card',
+  'Isaac กำลังอ่านนามบัตร…': 'Isaac is reading the card…',
+  'อีเมลบนบัตรเป็นอีเมลส่วนตัว ไม่ใช่อีเมลบริษัท': 'The email on the card is personal, not a company email',
+  'อีเมลกับเว็บไซต์เป็นโดเมนเดียวกัน — ข้อมูลบริษัทน่าเชื่อถือ': 'Email and website share a domain — company details look reliable',
+  'ที่อยู่ตรงกับรหัสไปรษณีย์ในฐานข้อมูลที่อยู่ไทย': 'Address matches the postal code in the Thai address list',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -2223,4 +2232,13 @@ const Map<String, String> enPatterns = {
   'ใช้ข้อมูลนี้ ({} ช่อง)': 'Use this ({} fields)',
   'มีค่าเดิม: {}': 'Current: {}',
   'ค่าเดิมในฟอร์ม: {}': 'In the form now: {}',
+  'Isaac อ่านเสร็จใน {} วินาที · พบ {} ช่อง': 'Isaac done in {} s · {} fields',
+  'Isaac อ่านได้ {} ช่องใน {} วินาที': 'Isaac read {} fields in {} s',
+  'Isaac อ่านได้ {} ช่อง': 'Isaac read {} fields',
+  'อ่านด้วยเครื่อง (เฉพาะภาษาอังกฤษ) ได้ {} ช่อง — ช่วยตรวจอีกนิดนะครับ': 'Read on the phone (English only): {} fields — please double-check',
+  'พบรายการที่อาจซ้ำ {} รายการ — ตรวจก่อนสร้างใหม่': '{} possible duplicates — check before creating',
+  'มีบัญชีลูกค้า {} อยู่แล้ว — ผูกกับผู้ติดต่อนี้ได้': 'Account {} already exists — you can link this contact',
+  'ยังไม่มีบัญชีลูกค้า {} ในระบบ': 'No account for {} yet',
+  '{} ช่องอ่านได้ไม่ชัด — ทำเครื่องหมายให้ตรวจแล้ว': '{} fields were unclear — marked for checking',
+  'ตัดข้อมูล {} รายการที่ไม่พบบนบัตรออก เพื่อไม่ให้เดา': 'Dropped {} values not found on the card, so nothing is guessed',
 };

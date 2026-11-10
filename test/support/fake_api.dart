@@ -20,11 +20,15 @@ class FakeNextxAdapter implements HttpClientAdapter {
   final Map<String, String> sseFor;
   final calls = <RequestOptions>[];
 
+  /// Optional: runs before each reply (tests can change [replies] per call).
+  void Function(RequestOptions options)? onRequest;
+
   List<String> get callKeys => [for (final c in calls) '${c.method.toUpperCase()} ${c.path}'];
 
   @override
   Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
     calls.add(options);
+    onRequest?.call(options);
     final key = '${options.method.toUpperCase()} ${options.path}';
     if (offline.contains(key)) {
       throw DioException(requestOptions: options, type: DioExceptionType.connectionError, message: 'offline');

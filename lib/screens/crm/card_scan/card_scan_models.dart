@@ -58,8 +58,22 @@ class CardDuplicate {
   final String reason;
 }
 
+/// One of Isaac's notes about the card (built from checked data only).
+class CardInsight {
+  const CardInsight({required this.type, required this.level, required this.text});
+  final String type;
+
+  /// ok | info | warn
+  final String level;
+  final String text;
+}
+
 class CardScanResult {
   CardScanResult({
+    this.insights = const [],
+    this.isaacMs,
+    this.totalMs,
+    this.model,
     required this.status,
     required this.engine,
     required this.rawText,
@@ -81,6 +95,12 @@ class CardScanResult {
   final List<CardDuplicate> duplicates;
   final ({String id, String name})? accountSuggestion;
   final int dropped;
+  final List<CardInsight> insights;
+
+  /// How long the AI read took / the whole server call (ms).
+  final int? isaacMs;
+  final int? totalMs;
+  final String? model;
 
   bool get offline => engine == 'device_ocr';
 
@@ -105,6 +125,13 @@ class CardScanResult {
       ],
       accountSuggestion: acc is Map && acc['id'] != null ? (id: '${acc['id']}', name: '${acc['name'] ?? ''}') : null,
       dropped: (d['dropped'] as num?)?.toInt() ?? 0,
+      insights: [
+        for (final i in (d['insights'] as List? ?? const []))
+          if (i is Map) CardInsight(type: '${i['type']}', level: '${i['level'] ?? 'info'}', text: '${i['text'] ?? ''}'),
+      ],
+      isaacMs: (d['isaac'] is Map ? (d['isaac']['ms'] as num?) : null)?.toInt(),
+      model: d['isaac'] is Map ? d['isaac']['model']?.toString() : null,
+      totalMs: (d['timing_ms'] as num?)?.toInt(),
     );
   }
 }

@@ -1052,14 +1052,16 @@ class ApiClient {
   /// OCR, used by the server only when it has no AI vision key.
   Future<Map<String, dynamic>> scanBusinessCard(
     String module, {
-    required List<int> front,
+    List<int>? front,
     List<int>? back,
     String? ocrText,
   }) async {
     final form = FormData();
     form.fields.add(MapEntry('module', module));
     if (ocrText != null && ocrText.trim().isNotEmpty) form.fields.add(MapEntry('ocr_text', ocrText));
-    form.files.add(MapEntry('front', MultipartFile.fromBytes(front, filename: 'card_front.jpg', contentType: DioMediaType('image', 'jpeg'))));
+    if (front != null) {
+      form.files.add(MapEntry('front', MultipartFile.fromBytes(front, filename: 'card_front.jpg', contentType: DioMediaType('image', 'jpeg'))));
+    }
     if (back != null) {
       form.files.add(MapEntry('back', MultipartFile.fromBytes(back, filename: 'card_back.jpg', contentType: DioMediaType('image', 'jpeg'))));
     }

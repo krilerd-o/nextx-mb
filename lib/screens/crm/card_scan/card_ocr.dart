@@ -41,7 +41,7 @@ class CardOcr {
 
 /// Upright JPEG, longest side ≤ [maxSide]. [cropToCard] keeps the centre
 /// band the camera frame shows (card ratio 90×55 mm, 92% of the width).
-Future<Uint8List> prepareCardJpeg(Uint8List bytes, {bool cropToCard = false, int turns = 0, int maxSide = 1600}) {
+Future<Uint8List> prepareCardJpeg(Uint8List bytes, {bool cropToCard = false, int turns = 0, int maxSide = 1280}) {
   return compute(_prepare, (bytes, cropToCard, turns, maxSide));
 }
 
@@ -61,5 +61,6 @@ Uint8List _prepare((Uint8List, bool, int, int) a) {
   if (long > a.$4) {
     im = im.width >= im.height ? img.copyResize(im, width: a.$4) : img.copyResize(im, height: a.$4);
   }
-  return Uint8List.fromList(img.encodeJpg(im, quality: 85));
+  // 1280 px / q82 ≈ 150–250 KB: sharp enough for text, quick to send on 4G.
+  return Uint8List.fromList(img.encodeJpg(im, quality: 82));
 }

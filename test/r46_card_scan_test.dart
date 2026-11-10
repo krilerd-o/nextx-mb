@@ -215,16 +215,60 @@ void main() {
     expect(adapter.calls.where((c) => c.method == 'POST' && c.path == '/api/entity/lead'), isEmpty);
   });
 
-  testWidgets('phone OCR text is sent along for the server fallback', (tester) async {
-    CardOcr.debugRead = (_) async => 'ACME Co., Ltd.\nJohn Smith';
+  testWidgets('fast path: photo goes first; phone OCR only after "no_ai", then just its text', (tester) async {
+    var ocrRuns = 0;
+    CardOcr.debugRead = (_) async {
+      ocrRuns++;
+      return 'ACME Co., Ltd.\nJohn Smith';
+    };
+    final adapter = await _pump(tester, const EntityCreateScreen(module: 'lead', title: 'สร้างผู้มุ่งหวัง'), {});
+    final queue = [
+      {'status': 'no_ai', 'engine': 'none', 'fields': {}, 'unmapped': [], 'duplicates': []},
+      _scan(engine: 'device_ocr'),
+    ];
+    adapter.onRequest = (o) {
+      if (o.path == '/api/crm/business-card/scan' && queue.isNotEmpty) adapter.replies['POST /api/crm/business-card/scan'] = queue.removeAt(0);
+    };
+    await tester.tap(find.byKey(const ValueKey('form-scan-banner')));
+    await _frames(tester, 40);
+    final calls = adapter.calls.where((c) => c.path == '/api/crm/business-card/scan').toList();
+    expect(calls, hasLength(2));
+    expect((calls[0].data as dynamic).files.length, 1, reason: 'first call: the photo, no OCR text');
+    expect('${(calls[0].data as dynamic).fields}', isNot(contains('John Smith')));
+    expect((calls[1].data as dynamic).files.length, 0, reason: 'second call: text only, no re-upload');
+    expect('${(calls[1].data as dynamic).fields}', contains('John Smith'));
+    expect(ocrRuns, 1);
+    expect(find.textContaining('อ่านด้วยเครื่อง'), findsOneWidget);
+  });
+
+  testWidgets('AI path: OCR never runs; Isaac shows time, model and notes', (tester) async {
+    var ocrRuns = 0;
+    CardOcr.debugRead = (_) async {
+      ocrRuns++;
+      return null;
+    };
     final adapter = await _pump(tester, const EntityCreateScreen(module: 'lead', title: 'สร้างผู้มุ่งหวัง'), {
-      'POST /api/crm/business-card/scan': _scan(engine: 'device_ocr'),
+      'POST /api/crm/business-card/scan': {
+        ..._scan(),
+        'isaac': {'provider': 'gemini', 'model': 'gemini-3.8-flash', 'ms': 1840},
+        'timing_ms': 1950,
+        'insights': [
+          {'type': 'duplicate', 'level': 'warn', 'text': 'พบรายการที่อาจซ้ำ 1 รายการ — ตรวจก่อนสร้างใหม่'},
+          {'type': 'domain_match', 'level': 'ok', 'text': 'อีเมลกับเว็บไซต์เป็นโดเมนเดียวกัน — ข้อมูลบริษัทน่าเชื่อถือ'},
+        ],
+      },
     });
     await tester.tap(find.byKey(const ValueKey('form-scan-banner')));
-    await _frames(tester, 30);
-    final call = adapter.calls.firstWhere((c) => c.path == '/api/crm/business-card/scan');
-    expect('${(call.data as dynamic).fields}', contains('John Smith'));
-    expect(find.textContaining('อ่านด้วยเครื่อง'), findsOneWidget);
+    await _frames(tester, 6);
+    expect(find.byKey(const ValueKey('card-reading')), findsOneWidget);
+    expect(find.text('Isaac กำลังอ่านนามบัตร…'), findsOneWidget);
+    await _frames(tester, 40);
+    expect(ocrRuns, 0);
+    expect(adapter.calls.where((c) => c.path == '/api/crm/business-card/scan'), hasLength(1));
+    expect(find.byKey(const ValueKey('card-isaac')), findsOneWidget);
+    expect(find.text('Isaac อ่านได้ 7 ช่องใน 1.8 วินาที'), findsOneWidget);
+    expect(find.text('gemini-3.8-flash'), findsOneWidget);
+    expect(find.textContaining('โดเมนเดียวกัน'), findsOneWidget);
   });
 
   testWidgets('opened from "สแกนนามบัตร": the scan starts by itself', (tester) async {

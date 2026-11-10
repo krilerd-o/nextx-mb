@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../core/i18n.dart';
 import '../../../core/nx_page_route.dart';
 import '../../../widgets/app_bottom_sheet.dart';
+import '../../../widgets/isaac_sticker.dart';
 import '../../../widgets/nx_icons.dart';
 import '../../deep_link_loaders.dart';
 import 'card_scan_models.dart';
@@ -156,21 +157,8 @@ class _CardScanReviewScreenState extends State<CardScanReviewScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(r.offline ? NxI.info : NxI.sparkle, size: 16, color: r.offline ? const Color(0xFFF59E0B) : cs.primary),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  tr(r.offline
-                      ? 'อ่านด้วยเครื่อง (เฉพาะภาษาอังกฤษ) — ตรวจสอบก่อนใช้'
-                      : 'อ่านด้วย AI แล้ว ${r.fields.length} ช่อง — ตรวจสอบก่อนกดใช้'),
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ),
-            ],
-          ),
+          const SizedBox(height: 12),
+          IsaacSummary(result: r),
           if (r.duplicates.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
@@ -212,7 +200,7 @@ class _CardScanReviewScreenState extends State<CardScanReviewScreen> {
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(tr('ไม่พบข้อมูลที่ใส่ในฟอร์มนี้ได้'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
             ),
-          for (final row in _rows) _fieldRow(theme, row),
+          for (final (i, row) in _rows.indexed) _Stagger(index: i, child: _fieldRow(theme, row)),
           if (widget.result.accountSuggestion != null && widget.formFields.containsKey('account_id'))
             CheckboxListTile(
               key: const ValueKey('card-link-account'),
@@ -370,6 +358,114 @@ class _CardScanReviewScreenState extends State<CardScanReviewScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Rows slide up and fade in one after another.
+class _Stagger extends StatelessWidget {
+  const _Stagger({required this.index, required this.child});
+  final int index;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final delay = (index * 45).clamp(0, 450);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: 280 + delay),
+      curve: Interval(delay / (280 + delay), 1, curve: Curves.easeOutCubic),
+      builder: (_, v, c) => Opacity(opacity: v, child: Transform.translate(offset: Offset(0, 14 * (1 - v)), child: c)),
+      child: child,
+    );
+  }
+}
+
+/// Isaac's speech bubble: what he read, how fast, and his notes
+/// (duplicates, personal email, unsure fields…) — all from checked data.
+class IsaacSummary extends StatelessWidget {
+  const IsaacSummary({super.key, required this.result});
+  final CardScanResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final r = result;
+    final warn = r.insights.any((i) => i.level == 'warn') || r.offline;
+    final secs = r.isaacMs != null ? (r.isaacMs! / 1000).toStringAsFixed(1) : null;
+    final headline = r.offline
+        ? 'อ่านด้วยเครื่อง (เฉพาะภาษาอังกฤษ) ได้ ${r.fields.length} ช่อง — ช่วยตรวจอีกนิดนะครับ'
+        : secs != null
+            ? 'Isaac อ่านได้ ${r.fields.length} ช่องใน $secs วินาที'
+            : 'Isaac อ่านได้ ${r.fields.length} ช่อง';
+    Color levelColor(String l) => switch (l) {
+          'ok' => const Color(0xFF16A34A),
+          'warn' => const Color(0xFFF59E0B),
+          _ => cs.primary,
+        };
+    IconData levelIcon(String l) => switch (l) {
+          'ok' => NxI.checkCircle,
+          'warn' => NxI.warning,
+          _ => NxI.info,
+        };
+    return Row(
+      key: const ValueKey('card-isaac'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.6, end: 1),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.elasticOut,
+          builder: (_, v, c) => Transform.scale(scale: v, child: c),
+          child: IsaacSticker(state: warn ? 'curious' : 'answer_ready', size: 56),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: cs.primary.withValues(alpha: 0.07),
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(18),
+                bottomLeft: Radius.circular(18),
+                bottomRight: Radius.circular(18),
+                topLeft: Radius.circular(6),
+              ),
+              border: Border.all(color: cs.primary.withValues(alpha: 0.18)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr(headline), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                if (r.model != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(r.model!, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                  ),
+                for (final (i, ins) in r.insights.indexed)
+                  _Stagger(
+                    index: i + 1,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 1),
+                            child: Icon(levelIcon(ins.level), size: 16, color: levelColor(ins.level)),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text(tr(ins.text), style: theme.textTheme.bodySmall)),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
