@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../services/api_client.dart';
-import '../../services/file_open.dart';
 import '../../widgets/nx_icons.dart';
 import '../docs/document_preview.dart';
 

@@ -10,7 +10,6 @@ import '../../core/menu_access.dart';
 import '../../core/session_state.dart';
 import '../../core/nx_page_route.dart';
 import '../../services/api_client.dart';
-import '../../services/file_open.dart';
 import '../../widgets/fields/field_ui_type.dart';
 import '../../widgets/fields/nx_field_value.dart';
 import '../../widgets/fields/nx_lift_sheet.dart';

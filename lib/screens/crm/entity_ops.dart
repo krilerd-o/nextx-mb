@@ -10,7 +10,6 @@ import '../../core/entity_modules.dart';
 import '../../core/menu_access.dart';
 import '../../core/nx_page_route.dart';
 import '../../services/api_client.dart';
-import '../../services/file_open.dart';
 import '../../widgets/dense_card_tile.dart';
 import '../dashboard/home_boxes.dart' show RecentStrip;
 import '../../widgets/fields/nx_entity_picker_sheet.dart';
