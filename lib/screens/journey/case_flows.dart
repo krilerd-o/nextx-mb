@@ -360,19 +360,61 @@ class CaseFlows {
     );
   }
 
-  static final _timeRe = RegExp(r'^\s*(\d+(\.\d+)?\s*[hm]\s*)+$', caseSensitive: false);
+  static final _timeRe = RegExp(r'^\s*(\d+(\.\d+)?\s*[wdhm]\s*)+$', caseSensitive: false);
+
+  /// "1w 2d 3h 30m" → minutes (1d = 24h, 1w = 7d — same as the web).
+  static int? parseCaseMinutes(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+    if (RegExp(r'^\d+$').hasMatch(t)) return int.parse(t) == 0 ? 0 : null;
+    if (!_timeRe.hasMatch(t)) return null;
+    var m = 0.0;
+    for (final x in RegExp(r'(\d+(?:\.\d+)?)\s*([wdhm])', caseSensitive: false).allMatches(t)) {
+      final v = double.parse(x.group(1)!);
+      m += switch (x.group(2)!.toLowerCase()) { 'w' => v * 7 * 24 * 60, 'd' => v * 24 * 60, 'h' => v * 60, _ => v };
+    }
+    return m.round();
+  }
+
+  /// Case estimate in minutes: `estimate_workday` (minutes) first, else
+  /// `original_estimate_minutes` — same order as the web.
+  static int caseEstimateMinutes(Map<String, dynamic> row) {
+    final a = num.tryParse('${row['estimate_workday'] ?? ''}') ?? 0;
+    if (a > 0) return a.round();
+    final b = num.tryParse('${row['original_estimate_minutes'] ?? ''}') ?? 0;
+    return b > 0 ? b.round() : 0;
+  }
+
+  static String _plain(Object? html) => '${html ?? ''}'
+      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'</p>\s*<p[^>]*>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'<[^>]+>'), '')
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .trim();
 
   static Future<Map<String, dynamic>?> _close(BuildContext context, String id, Map<String, dynamic> row) async {
+    final api = context.read<AppConfig>().apiClient;
     final summary = await _preview(context, id, 'close');
     if (!context.mounted) return null;
     final contacts = await _contacts(context, row);
     if (!context.mounted) return null;
+    // Approved Manday of this case → what can go back to the contract.
+    var approved = <Map<String, dynamic>>[];
+    var contracts = <Map<String, dynamic>>[];
+    try {
+      final sum = await api.getCaseMandaySummary(id);
+      contracts = extractMapList(sum['case_contracts']);
+      approved = [for (final r in await api.getCaseMandayRequests(id)) if ('${r['status']}' == 'Approved') r];
+    } catch (_) {}
+    if (!context.mounted) return null;
     String? contactId;
-    final est = num.tryParse('${row['original_estimate_minutes'] ?? ''}') ?? 0;
-    final estDays = num.tryParse('${row['estimate_workday'] ?? ''}') ?? 0;
-    final hasEstimate = est > 0 || estDays > 0;
-    final time = TextEditingController(text: est > 0 ? _fmtMinutes(est.round()) : '');
-    final desc = TextEditingController();
+    final est = caseEstimateMinutes(row);
+    final hasEstimate = est > 0;
+    final time = TextEditingController(text: hasEstimate ? _fmtMinutes(est) : '');
+    final desc = TextEditingController(text: _plain(row['case_description_closed']));
     final email = TextEditingController(text: '${row['customer_email'] ?? ''}');
     final cc = TextEditingController(text: '${row['email_cc'] ?? ''}');
     var skip = true;
@@ -381,21 +423,35 @@ class CaseFlows {
       context: context,
       title: tr('ปิดเคส'),
       child: StatefulBuilder(builder: (ctx, setS) {
-        final badTime = hasEstimate && time.text.trim().isNotEmpty && !_timeRe.hasMatch(time.text);
+        final mins = parseCaseMinutes(time.text);
+        final badTime = time.text.trim().isNotEmpty && mins == null;
+        final used = (mins ?? 0) / 60;
+        final rows = [
+          for (final r in approved)
+            () {
+              final req = num.tryParse('${r['requested_hours'] ?? ''}') ?? 0;
+              final c = contracts.where((x) => '${x['id']}' == '${r['contract_id']}').firstOrNull;
+              final release = (req - used) < 0 ? 0 : req - used;
+              return (label: '${c?['contract_no'] ?? 'SC #${r['contract_id']}'}${c?['contract_name'] == null ? '' : ' · ${c!['contract_name']}'}', req: req, release: release);
+            }(),
+        ];
+        final canReturn = rows.any((r) => r.release > 0);
+        String h(num v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
             _hint(ctx, summary),
-            if (hasEstimate) ...[
+            if (hasEstimate || time.text.isNotEmpty) ...[
               TextField(
                 key: const ValueKey('case-time-spent'),
                 controller: time,
-                decoration: InputDecoration(labelText: tr('เวลาที่ใช้'), helperText: tr('เช่น 30m, 1h, 2h 30m'), errorText: badTime ? tr('ระบุเวลา เช่น 0h, 30m หรือ 1h') : null),
+                decoration: InputDecoration(labelText: tr('เวลาที่ใช้'), helperText: tr('เช่น 30m, 2h 30m, 1d (1 วัน = 24 ชม.)'), errorText: badTime ? tr('ระบุเวลา เช่น 0h, 30m หรือ 1h') : null),
                 onChanged: (_) => setS(() {}),
               ),
               _gap(),
-            ],
+            ] else if (est > 0)
+              Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: () => setS(() => time.text = _fmtMinutes(est)), child: Text(tr('เติมจากเวลาประมาณของเคส')))),
             TextField(
               key: const ValueKey('case-close-desc'),
               controller: desc,
@@ -404,12 +460,28 @@ class CaseFlows {
               decoration: InputDecoration(labelText: tr('รายละเอียดปิดเคส'), alignLabelWithHint: true),
             ),
             _gap(),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: returnManday,
-              title: Text(tr('คืนชั่วโมง Manday ที่เหลือเข้าสัญญา')),
-              onChanged: (v) => setS(() => returnManday = v),
-            ),
+            if (rows.isNotEmpty) ...[
+              Text(tr('Manday ที่อนุมัติแล้ว'), style: Theme.of(ctx).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+              for (final r in rows)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${r.label}: ${tr('ขอ')} ${h(r.req)} ${tr('ชม.')} · ${tr('ใช้')} ${h(used)} ${tr('ชม.')} · '
+                    '${r.release <= 0 ? tr('ใช้ครบ') : returnManday ? '${tr('คืน')} ${h(r.release)} ${tr('ชม.')}' : '${h(r.release)} ${tr('ชม. จะไม่ถูกคืน')}'}',
+                    key: const ValueKey('case-close-manday-row'),
+                    style: Theme.of(ctx).textTheme.bodySmall,
+                  ),
+                ),
+              if (canReturn)
+                SwitchListTile(
+                  key: const ValueKey('case-close-return'),
+                  contentPadding: EdgeInsets.zero,
+                  value: returnManday,
+                  title: Text(tr('คืนชั่วโมง Manday ที่เหลือเข้าสัญญา')),
+                  onChanged: (v) => setS(() => returnManday = v),
+                ),
+              _gap(),
+            ],
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               value: !skip,
@@ -435,9 +507,9 @@ class CaseFlows {
                   : () => Navigator.pop(ctx, {
                         'action': 'close',
                         'skip_email': skip,
-                        'return_unused_manday': returnManday,
+                        'return_unused_manday': canReturn && returnManday,
                         if (desc.text.trim().isNotEmpty) 'case_description_closed': '<p>${_esc(desc.text.trim()).replaceAll('\n', '<br>')}</p>',
-                        if (hasEstimate && time.text.trim().isNotEmpty) 'time_spent': time.text.trim(),
+                        'time_spent_minutes': ?mins,
                         if (!skip && email.text.trim().isNotEmpty) 'email': email.text.trim(),
                         if (!skip && cc.text.trim().isNotEmpty) 'cc': cc.text.trim(),
                       }),
@@ -448,10 +520,18 @@ class CaseFlows {
     );
   }
 
+  /// Minutes → "1d 2h 30m" (1d = 24h, 1w = 7d) like the web.
   static String _fmtMinutes(int m) {
-    final h = m ~/ 60, r = m % 60;
-    if (h == 0) return '${r}m';
-    return r == 0 ? '${h}h' : '${h}h ${r}m';
+    if (m <= 0) return '0m';
+    final parts = <String>[];
+    var r = m;
+    for (final (u, v) in const [('w', 7 * 24 * 60), ('d', 24 * 60), ('h', 60), ('m', 1)]) {
+      if (r >= v) {
+        parts.add('${r ~/ v}$u');
+        r %= v;
+      }
+    }
+    return parts.join(' ');
   }
 
   static Future<Map<String, dynamic>?> _wait(BuildContext context) {

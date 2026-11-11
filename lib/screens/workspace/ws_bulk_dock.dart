@@ -7,6 +7,7 @@ import '../../core/workspace_models.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
+import 'ws_bulk_change.dart';
 
 /// Floating bulk-edit dock for Workspace items (Task list in an Epic, Subtasks in a Task, the board).
 ///
@@ -375,12 +376,28 @@ class _WsBulkDockState extends State<WsBulkDock> {
 
   Future<void> _more() async {
     final what = await _sheet<String>(tr('เพิ่มเติม'), (ctx) => Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            key: const ValueKey('bulk-change-open'),
+            leading: const Icon(NxI.stack),
+            title: Text(tr('Bulk Change (ย้ายบอร์ด / ทำซ้ำพร้อมงานย่อย / ติดตาม)')),
+            subtitle: Text(tr('ดูตัวอย่างก่อนทำ และเลิกทำทั้งชุดได้')),
+            onTap: () => Navigator.pop(ctx, 'bulk'),
+          ),
           ListTile(leading: const Icon(NxI.clipboard), title: Text(tr('คัดลอกรหัสและชื่อ')), onTap: () => Navigator.pop(ctx, 'copy')),
           ListTile(leading: const Icon(NxI.user), title: Text(tr('ผู้รายงาน')), onTap: () => Navigator.pop(ctx, 'reporter')),
           if (widget.onSelectAll != null && widget.totalCount > _count)
             ListTile(leading: const Icon(NxI.checks), title: Text(tr('เลือกทั้งหมด (${widget.totalCount})')), onTap: () => Navigator.pop(ctx, 'all')),
         ]));
     switch (what) {
+      case 'bulk':
+        if (!mounted) return;
+        final reload = widget.onChanged;
+        final clear = widget.onClear;
+        final changed = await openWorkspaceBulkChange(context, items: [for (final r in widget.items) _ref(r)], boardId: widget.boardId);
+        if (changed) {
+          clear();
+          await reload();
+        }
       case 'copy':
         await _copy();
       case 'reporter':

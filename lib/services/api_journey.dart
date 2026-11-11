@@ -230,6 +230,45 @@ extension JourneyApi on ApiClient {
   // ------------------------------------------------------------------ Case
 
   /// accept | forward | wait | resume | cancel | close (NEXTX case workflow).
+  // --- Service contract extras ------------------------------------------
+  /// Renew: preview (`commit=false`) or create the Draft on the server.
+  Future<Map<String, dynamic>> renewServiceContract(String id, {bool commit = false}) async =>
+      _dataMap(await _send('POST', '/api/entity/service_contract/$id/renew', data: {if (commit) 'commit': 1}));
+  Future<Map<String, dynamic>> getContractRenewalSeries(String id) async =>
+      _dataMap(await _send('GET', '/api/entity/service_contract/$id/renewal-series'));
+  Future<Map<String, dynamic>> resendServiceContractSign(String id, Map<String, dynamic> body) async =>
+      _dataMap(await _send('POST', '/api/entity/service_contract/$id/resend-sign', data: body));
+  Future<Map<String, dynamic>> getContractMandayTransferPreview(String id) async =>
+      _dataMap(await _send('GET', '/api/entity/service_contract/$id/manday/transfer-preview'));
+  Future<Map<String, dynamic>> transferContractMandayToAccount(String id, Map<String, dynamic> body) async =>
+      _dataMap(await _send('POST', '/api/entity/service_contract/$id/manday/transfer-to-account', data: body));
+
+  // --- Case / Job → Workspace --------------------------------------------
+  Future<List<Map<String, dynamic>>> getCaseWorkTemplates() async {
+    final env = await _send('GET', '/api/case-work-templates', query: {'active': '1'});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['list'] : d);
+  }
+  Future<Map<String, dynamic>> generateCaseWork(String caseId, Map<String, dynamic> body) async =>
+      _dataMap(await _send('POST', '/api/entity/case/$caseId/generate-work', data: body));
+  Future<Map<String, dynamic>> createCaseWorkspaceTask(String caseId, {required int boardId, String? title}) async =>
+      _dataMap(await _send('POST', '/api/field-service/cases/$caseId/workspace-task', data: {'board_id': boardId, if (title != null && title.isNotEmpty) 'title': title}));
+  Future<Map<String, dynamic>> createJobWorkspace(String jobId, {required int boardId, required String mode, String? title}) async =>
+      _dataMap(await _send('POST', '/api/field-service/jobs/$jobId/workspace', data: {'board_id': boardId, 'mode': mode, if (title != null && title.isNotEmpty) 'title': title}));
+
+  // --- Deal → Workspace ---------------------------------------------------
+  Future<Map<String, dynamic>> getDealWorkspace(String dealId) async => _dataMap(await _send('GET', '/api/entity/deal/$dealId/workspace'));
+  Future<Map<String, dynamic>> linkDealWorkspace(String dealId, Map<String, dynamic> body) async =>
+      _dataMap(await _send('POST', '/api/entity/deal/$dealId/workspace', data: body));
+  Future<void> unlinkDealWorkspace(String dealId) async => _send('DELETE', '/api/entity/deal/$dealId/workspace');
+
+  // --- Workspace bulk change (preview → job → undo) -----------------------
+  Future<Map<String, dynamic>> previewWorkspaceBulk(Map<String, dynamic> body) async => _dataMap(await _send('POST', '/api/workspace/bulk/preview', data: body));
+  Future<Map<String, dynamic>> startWorkspaceBulk(Map<String, dynamic> body) async => _dataMap(await _send('POST', '/api/workspace/bulk/jobs', data: body));
+  Future<Map<String, dynamic>> getWorkspaceBulkJob(String jobId) async => _dataMap(await _send('GET', '/api/workspace/bulk/jobs/$jobId'));
+  Future<Map<String, dynamic>> cancelWorkspaceBulkJob(String jobId) async => _dataMap(await _send('POST', '/api/workspace/bulk/jobs/$jobId/cancel'));
+  Future<Map<String, dynamic>> undoWorkspaceBulkJob(String jobId) async => _dataMap(await _send('POST', '/api/workspace/bulk/jobs/$jobId/undo'));
+
   /// Save a job's activities as a template (`{name, category?}`).
   Future<Map<String, dynamic>> saveJobActivitiesAsTemplate(String jobId, {required String name, String? category}) async =>
       _dataMap(await _send('POST', '/api/field-service/jobs/$jobId/activity-template', data: {'name': name, if (category != null && category.isNotEmpty) 'category': category}));

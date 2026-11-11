@@ -170,6 +170,8 @@ void main() {
     expect(find.text('สร้างใบสั่งงานจากเคส'), findsOneWidget);
     expect(find.text('สร้างนัดหมายจากเคส'), findsOneWidget);
     expect(find.text('สัญญาและ Manday'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 2));
   });
 
   testWidgets('JobByIdLoader opens job entity not inspection-only', (tester) async {

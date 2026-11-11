@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../docs/document_preview.dart';
 import '../fsm/case_manday.dart';
+import '../fsm/service_more.dart';
 import 'lead_convert_sheet.dart';
 import '../journey/job_parts.dart';
 import '../fsm/inspection_lines.dart';
@@ -117,9 +118,13 @@ class EntityOpsSection extends StatelessWidget {
           DealQuoteBar(id: id, onOpen: onOpen),
           const SizedBox(height: 12),
           DealPrimaryQuoteBar(id: id, onOpen: onOpen, canEdit: canEdit),
+          DealWorkspacePanel(dealId: id, canEdit: canEdit),
         ],
         if (module == 'lead') LeadConvertBar(id: id, row: row, onOpen: onOpen),
-        if (module == 'job' && !journey) JobExtrasPanel(id: id, row: row, canEdit: canEdit, onOpen: onOpen),
+        if (module == 'job' && !journey) ...[
+          JobExtrasPanel(id: id, row: row, canEdit: canEdit, onOpen: onOpen),
+          if (canEdit) ...[const SizedBox(height: 8), JobWorkspaceButton(jobId: id)],
+        ],
         if (module == 'asset') ...[
           AssetGenerateJobsBar(id: id, onOpen: onOpen),
           if (canEdit) ...[
@@ -148,6 +153,7 @@ class EntityOpsSection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           ContractMandayPanel(id: id, canEdit: canEdit),
+          ContractExtrasPanel(id: id, row: row, canEdit: canEdit),
         ],
         if (module == 'case') ...[
           CreateJobFromParentBar(
@@ -159,6 +165,7 @@ class EntityOpsSection extends StatelessWidget {
           CreateActivityFromCaseBar(id: id, onOpen: onOpen),
           const SizedBox(height: 12),
           CaseMandayPanel(id: id, row: row, canEdit: canEdit),
+          if (canEdit) CaseWorkspacePanel(caseId: id, row: row),
         ],
         if (module == 'account') ...[
           const SizedBox(height: 12),

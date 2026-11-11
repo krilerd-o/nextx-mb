@@ -126,7 +126,8 @@ void main() {
     await settle(tester);
     final b = lastBody(a);
     expect(b['action'], 'close');
-    expect(b['time_spent'], '1h');
+    expect(b['time_spent_minutes'], 60);
+    expect(b['return_unused_manday'], isFalse);
     expect(b['case_description_closed'], contains('[QA] แก้ไขเรียบร้อย'));
   });
 

@@ -22,6 +22,7 @@ import '../../core/journey_rules.dart';
 import '../../core/service_journey.dart';
 import '../../core/deal_stage.dart';
 import '../fsm/contract_flows.dart';
+import '../fsm/service_more.dart';
 import '../journey/case_flows.dart';
 import '../journey/quotation_journey.dart' show duplicateQuotation;
 import '../journey/status_followups.dart';
@@ -273,6 +274,9 @@ class EntityRecordActions {
     onChanged?.call(key, picked);
     try {
       await api.putEntity(module, id, payload);
+      if (module == 'deal' && picked == kDealClosedWon && '${row['related_board_id'] ?? ''}'.isEmpty && context.mounted) {
+        showDealWorkspaceHandoff(context, id, afterWon: true);
+      }
       HapticFeedback.mediumImpact();
       messenger?.hideCurrentSnackBar();
       messenger?.showSnackBar(SnackBar(

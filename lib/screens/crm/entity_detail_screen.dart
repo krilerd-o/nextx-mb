@@ -37,6 +37,7 @@ import '../journey/case_flows.dart';
 import '../docs/document_preview.dart';
 import '../../core/deal_stage.dart';
 import '../fsm/contract_flows.dart';
+import '../fsm/service_more.dart';
 import 'entity_share_sheet.dart';
 import '../fsm/inspection_lines.dart';
 import '../fsm/inspection_summary.dart';
@@ -437,6 +438,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     setState(() => _row = {..._row, ...payload});
     try {
       await context.read<AppConfig>().apiClient.putEntity(widget.module, _id, payload);
+      if (widget.module == 'deal' && value == kDealClosedWon && '${_row['related_board_id'] ?? ''}'.isEmpty && mounted) {
+        // Like the web: offer a delivery board right after winning.
+        showDealWorkspaceHandoff(context, _id, afterWon: true);
+      }
       _timelineLoaded = false;
       if (_tabId == 'history') _loadTimeline(force: true);
     } catch (e) {
@@ -1045,6 +1050,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         JobExtrasPanel(id: _id, row: _row, canEdit: canEdit, onOpen: (module, id, {row}) => _openRecord(module, id)),
+        if (canEdit) ...[const SizedBox(height: 12), JobWorkspaceButton(jobId: _id)],
         if (MenuAccess.allow(session, MenuAccess.inspection)) ...[
           const SizedBox(height: 16),
           NxHeroCta(
