@@ -15,6 +15,7 @@ import 'job_journey.dart' show showPublicLinkSheet;
 import 'journey_controller.dart';
 import 'journey_photos.dart';
 import 'journey_widgets.dart';
+import 'quotation_versions.dart';
 import 'status_followups.dart';
 
 String _fmtDate(Object? v) {
@@ -275,6 +276,12 @@ class QuotationSummaryTab extends StatelessWidget {
           JourneySection(
             title: tr('เวอร์ชัน'),
             icon: NxI.arrowsLeftRight,
+            trailing: TextButton.icon(
+              key: const ValueKey('rev-compare'),
+              onPressed: () => openQuotationCompare(context, currentId: '${row['id']}', revisions: ctrl.revisions),
+              icon: const Icon(NxI.arrowsLeftRight, size: 16),
+              label: Text(tr('เทียบฉบับ')),
+            ),
             child: Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -594,7 +601,9 @@ Future<bool> runQuotationAction(
         if (jobs.isNotEmpty) open('job', '${jobs.first['id']}');
         return false;
       case 'revise':
-        final r = await api.reviseQuotation(id);
+        // Edit first (new servers take the edited header + lines), then create -R n.
+        final r = await openQuotationRevise(context, row);
+        if (r == null) return false;
         snack('สร้างฉบับแก้ไข ${r['quotation_no'] ?? ''} แล้ว');
         if (r['id'] != null) open('quotation', '${r['id']}');
         return true;
@@ -603,7 +612,7 @@ Future<bool> runQuotationAction(
         if (cur.isNotEmpty) open('quotation', '${cur.first['id']}');
         return false;
       case 'compare_versions':
-        goTab('summary');
+        if (context.mounted) await openQuotationCompare(context, currentId: id, revisions: ctrl.revisions);
         return false;
       case 'duplicate':
         final newId = await duplicateQuotation(api, row);

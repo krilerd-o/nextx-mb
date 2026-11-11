@@ -265,7 +265,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
   }
 
   Future<void> _open(CalEvent e) async {
-    await nxPush<void>(context, ActivityDetailScreen(row: e.raw));
+    await nxOpenDetail<void>(context, ActivityDetailScreen(row: e.raw));
     if (mounted) _reload();
   }
 
@@ -332,7 +332,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
         final newId = await api.duplicateEntity('activity', id);
         if (!mounted) return;
         _reload();
-        if (newId.isNotEmpty) nxPush<void>(context, ActivityDetailScreen(row: {'id': newId}));
+        if (newId.isNotEmpty) nxOpenDetail<void>(context, ActivityDetailScreen(row: {'id': newId}));
       } catch (err) {
         messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(err)))));
       }

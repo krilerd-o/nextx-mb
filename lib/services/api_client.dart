@@ -1878,6 +1878,21 @@ class ApiClient {
     return _dataMap(await _send('POST', '/api/entity/case/$caseId/manday-requests', data: body));
   }
 
+  /// Quotation PDF in a language (th / en) and colour (color / bw), like the
+  /// web menu: BIRT template first, then the built-in PDF.
+  Future<List<int>> getQuotationPdfVariant(String id, {String lang = 'th', String color = 'color', String? template}) async {
+    final q = 'lang=$lang&color=$color${template == null || template.isEmpty ? '' : '&template=${Uri.encodeQueryComponent(template)}'}';
+    try {
+      return await _downloadBytes('/api/quotation/$id/birt-pdf?$q');
+    } catch (_) {
+      try {
+        return await _downloadBytes('/api/quotation/$id/pdf?lang=$lang&color=$color');
+      } catch (_) {
+        return getQuotationPdf(id); // older servers: the default PDF
+      }
+    }
+  }
+
   Future<List<int>> getQuotationPdf(String id) async {
     try {
       return await _downloadBytes('/api/quotation/$id/pdf');

@@ -138,10 +138,9 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
   }
 
   Future<void> _openItem(Map<String, dynamic> it) async {
-    await nxPush<void>(
+    await nxOpenDetail<void>(
       context,
       TaskDetailScreen(task: {...it, if (it['item_type'] == 'epic') '_kind': 'epic'}),
-      root: true,
     );
     if (mounted) _load();
   }
