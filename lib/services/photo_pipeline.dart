@@ -12,6 +12,7 @@ import '../core/thai_time.dart';
 import 'api_client.dart';
 import 'geo_address.dart';
 import 'location_service.dart';
+import 'photo_upload_center.dart';
 import 'photo_watermark.dart';
 
 /// Where a batch of photos goes.
@@ -83,10 +84,20 @@ class PhotoBatch extends ValueNotifier<PhotoBatchState> {
     this.quality = 85,
     this.onPhotoUploaded,
     this.onFinished,
+    this.persist = true,
   })  : _uploader = uploader,
         super(const PhotoBatchState()) {
     if (withLocation) _fix = _locate(location ?? LocationService());
+    PhotoUploadCenter.instance.register(this);
   }
+
+  /// Keep each prepared photo on disk until the server has it (survives app
+  /// close / no signal; sent later by [PhotoUploadCenter.drain]).
+  final bool persist;
+
+  /// Photos of this batch that are prepared but not yet confirmed.
+  final Set<String> _inFlight = {};
+  Iterable<String> get clientIds => _inFlight;
 
   final PhotoTarget target;
   final bool withLocation;
@@ -124,6 +135,9 @@ class PhotoBatch extends ValueNotifier<PhotoBatchState> {
     if (_closed && !_finishedFired && _uploaded + _failed >= _total) {
       _finishedFired = true;
       onFinished?.call(this);
+      // Failed ones are left to the saved queue (sent later / "ลองใหม่").
+      _inFlight.removeAll([for (final p in failed) p.clientId]);
+      PhotoUploadCenter.instance.unregister(this);
     }
   }
 
@@ -187,6 +201,8 @@ class PhotoBatch extends ValueNotifier<PhotoBatchState> {
         );
       });
       _prepared++;
+      _inFlight.add(p!.clientId);
+      if (persist) await PhotoUploadCenter.instance.keep(target, p!);
       _emit();
     } catch (e) {
       lastError = e;
@@ -205,6 +221,8 @@ class PhotoBatch extends ValueNotifier<PhotoBatchState> {
           final r = await _uploader(target, p);
           if (r != null && target.module != 'job' && target.module != 'activity') commentAttachments.add(r);
           _uploaded++;
+          _inFlight.remove(p.clientId);
+          if (persist) unawaited(PhotoUploadCenter.instance.done(p.clientId));
           onPhotoUploaded?.call(r);
           return;
         } catch (e) {
@@ -212,6 +230,9 @@ class PhotoBatch extends ValueNotifier<PhotoBatchState> {
           if (p.attempts >= 3 || !_retryable(e)) {
             failed.add(p);
             _failed++;
+            // No signal / server down: the saved copy is sent later by the
+            // background queue; refused photos stay marked for "ลองใหม่".
+            if (persist && !_retryable(e)) unawaited(PhotoUploadCenter.instance.markFailed(p.clientId));
             return;
           }
           await Future<void>.delayed(Duration(milliseconds: 800 * p.attempts * p.attempts));
@@ -228,7 +249,9 @@ class PhotoBatch extends ValueNotifier<PhotoBatchState> {
 
   /// Sends the failed photos again (same client id → no duplicates on the server).
   Future<void> retryFailed() async {
+    PhotoUploadCenter.instance.register(this);
     final again = List.of(failed);
+    _inFlight.addAll([for (final p in again) p.clientId]);
     failed.clear();
     _failed -= again.length;
     _finishedFired = false;

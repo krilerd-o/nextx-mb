@@ -14,6 +14,9 @@ import 'services/calls/call_service.dart';
 import 'services/unread_service.dart';
 import 'core/app_theme.dart';
 import 'core/navigation/app_router.dart';
+import 'widgets/nx_upload_pill.dart';
+import 'core/nx_network.dart';
+import 'services/photo_upload_center.dart';
 import 'widgets/nx_atmosphere.dart';
 import 'widgets/nx_language_switch.dart';
 import 'widgets/nx_ui_scale.dart';
@@ -35,10 +38,21 @@ class _NextXMobileAppState extends State<NextXMobileApp>
     super.initState();
     _router = createAppRouter(context.read<AppConfig>());
     WidgetsBinding.instance.addObserver(this);
+    // Back online → resend saved photos / punches.
+    NxNetwork.instance.ensureStarted();
+    NxNetwork.instance.online.addListener(_onNetwork);
+  }
+
+  void _onNetwork() {
+    if (!mounted) return;
+    final online = NxNetwork.instance.online.value;
+    PhotoUploadCenter.instance.offline = !online;
+    if (online) context.read<AppConfig>().flushOfflineQueue();
   }
 
   @override
   void dispose() {
+    NxNetwork.instance.online.removeListener(_onNetwork);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -111,6 +125,8 @@ class _NextXMobileAppState extends State<NextXMobileApp>
                       children: [
                         ?child,
                         // Incoming / ongoing call above every screen.
+                        // Photo uploads (sending / waiting for signal / failed) on every screen.
+                        if (sel.$4) NxUploadPill(navigatorKey: _router.routerDelegate.navigatorKey),
                         if (sel.$4 && CallService.instance != null) Positioned.fill(child: CallOverlay(service: CallService.instance!)),
                         if (AppLock.instance.locked && sel.$4)
                           const Positioned.fill(child: AppLockScreen()),

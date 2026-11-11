@@ -11,6 +11,14 @@ class NxNetwork {
 
   /// true on mobile data only (unknown = false, so nothing is hidden by mistake).
   final ValueNotifier<bool> metered = ValueNotifier(false);
+
+  /// false when the phone has no network at all (used to resend saved work).
+  final ValueNotifier<bool> online = ValueNotifier(true);
+
+  void _apply(List<ConnectivityResult> r) {
+    metered.value = isMetered(r);
+    online.value = r.isNotEmpty && !(r.length == 1 && r.first == ConnectivityResult.none);
+  }
   StreamSubscription<List<ConnectivityResult>>? _sub;
   bool _started = false;
 
@@ -22,8 +30,8 @@ class NxNetwork {
     _started = true;
     try {
       final c = Connectivity();
-      c.checkConnectivity().then<void>((r) => metered.value = isMetered(r)).catchError((Object _) {});
-      _sub = c.onConnectivityChanged.listen((r) => metered.value = isMetered(r), onError: (_) {});
+      c.checkConnectivity().then<void>(_apply).catchError((Object _) {});
+      _sub = c.onConnectivityChanged.listen(_apply, onError: (_) {});
     } catch (_) {
       // No plugin (tests / unsupported platform): treat as unmetered.
     }

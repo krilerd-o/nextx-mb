@@ -2116,6 +2116,14 @@ const Map<String, String> enStrings = {
   'สูงสุด 30 รูป': 'Up to 30',
   'เลือกหลายรูป': 'Pick many',
   'ยังไม่มีรูป — ถ่ายหรือเลือกจากคลังภาพ': 'No photos yet — take one or pick from your gallery',
+  'รูปที่รออัปโหลด': 'Photos waiting to upload',
+  'รูปเก็บไว้ในเครื่องแล้ว ปิดแอปหรือเน็ตหลุดก็ไม่หาย — ระบบจะส่งให้เองเมื่อมีสัญญาณ': 'Photos are saved on this phone — closing the app or losing signal won\'t lose them. They\'re sent automatically when you\'re back online',
+  'ไม่มีรูปค้างส่ง': 'No photos waiting',
+  'เซิร์ฟเวอร์ไม่รับรูปนี้ — ลองใหม่หรือลบ': 'The server refused this photo — retry or delete it',
+  'รอส่ง': 'Waiting to send',
+  'ลบรูปนี้': 'Delete this photo',
+  'ลบรูปที่ยังไม่ได้ส่ง?': 'Delete an unsent photo?',
+  'รูปนี้ยังไม่ถึงเซิร์ฟเวอร์ ลบแล้วจะกู้คืนไม่ได้': 'This photo hasn\'t reached the server; deleting it can\'t be undone',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -2377,4 +2385,9 @@ const Map<String, String> enPatterns = {
   'ส่งต่อเคสให้ {}': 'Forward case to {}',
   'เคสจะเป็น "รอการตอบรับ" จนกว่า {} จะกดรับเคส และระบบจะแจ้งผู้รับทันที': 'The case stays "Waiting" until {} accepts it; they\'ll be notified right away',
   'ยกเลิกใบสั่งงานที่ยังเปิดของเคสนี้ด้วย ({} ใบ)': 'Also cancel this case\'s open jobs ({})',
+  'กำลังอัปโหลด {}/{} รูป': 'Uploading {}/{} photos',
+  'ส่งไม่สำเร็จ {} รูป · แตะเพื่อจัดการ': '{} photos failed · tap to manage',
+  'รอสัญญาณ · ค้างส่ง {} รูป': 'Waiting for signal · {} photos to send',
+  'รอส่ง {} รูป': '{} photos waiting',
+  'มีรูปของ Space อื่น {} รูป — จะส่งเมื่อสลับไป Space นั้น': '{} photos belong to another Space — they\'ll be sent when you switch to it',
 };
