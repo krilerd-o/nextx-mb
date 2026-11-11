@@ -80,6 +80,7 @@ class EntityOpsSection extends StatelessWidget {
     required this.row,
     required this.onOpen,
     this.canEdit = true,
+    this.journey = false,
   });
 
   final String module;
@@ -88,13 +89,16 @@ class EntityOpsSection extends StatelessWidget {
   final OpenEntityFn onOpen;
   final bool canEdit;
 
+  /// Service Journey page: lines / approval / job tools live in their own tabs.
+  final bool journey;
+
   @override
   Widget build(BuildContext context) {
     final session = context.select((AppConfig c) => c.session);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (module == 'quotation') ...[
+        if (module == 'quotation' && !journey) ...[
           QuotationLinesPanel(id: id, canEdit: canEdit),
           const SizedBox(height: 12),
           QuotationConvertBar(id: id, onOpen: onOpen),
@@ -112,7 +116,7 @@ class EntityOpsSection extends StatelessWidget {
         ],
         if (module == 'lead') LeadConvertBar(id: id, row: row, onOpen: onOpen),
         if (module == 'inspection') InspectionLinesPanel(id: id, canEdit: canEdit),
-        if (module == 'job') JobExtrasPanel(id: id, row: row, canEdit: canEdit, onOpen: onOpen),
+        if (module == 'job' && !journey) JobExtrasPanel(id: id, row: row, canEdit: canEdit, onOpen: onOpen),
         if (module == 'asset') AssetGenerateJobsBar(id: id, onOpen: onOpen),
         if (module == 'service_contract') ...[
           CreateJobFromParentBar(

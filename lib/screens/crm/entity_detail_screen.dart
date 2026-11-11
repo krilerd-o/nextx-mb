@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
 import '../../core/menu_access.dart';
+import '../../core/session_state.dart';
 import '../../core/nx_page_route.dart';
 import '../../services/api_client.dart';
 import '../../services/file_open.dart';
@@ -31,6 +32,12 @@ import '../../core/i18n.dart';
 import '../../core/effects.dart';
 import '../../core/recent_records.dart';
 import '../../core/detail_fields_pref.dart';
+import '../../core/journey_rules.dart';
+import '../../core/service_journey.dart';
+import '../journey/job_journey.dart';
+import '../journey/journey_controller.dart';
+import '../journey/journey_widgets.dart';
+import '../journey/quotation_journey.dart';
 import '../calendar/activity_detail_screen.dart';
 import '../calendar/activity_form_screen.dart';
 import 'package:share_plus/share_plus.dart';
@@ -65,18 +72,26 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   bool _loading = true;
   Object? _error;
   late Map<String, dynamic> _row;
-  int _tab = 0;
   List<Map<String, dynamic>> _timeline = [];
   bool _timelineLoading = false;
   bool _timelineLoaded = false;
 
   String get _id => strId(widget.row['id']);
 
+  /// Service Journey page (job / quotation on servers that support it).
+  bool _journey = false;
+  JourneyController? _jc;
+  bool _jBusy = false;
+
+  /// Current tab id (tabs differ per module / journey).
+  String _tabId = 'info';
+
   @override
   void initState() {
     super.initState();
     _row = Map<String, dynamic>.from(widget.row);
     _reload();
+    _probeJourney();
     if (widget.module == 'case') _loadFollow();
     if (context.read<AppConfig>().isLoggedIn) {
       context.read<AppConfig>().apiClient.getUsersCached().then((u) {
@@ -93,7 +108,94 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   @override
   void dispose() {
     _heroScroll.dispose();
+    _jc?.dispose();
     super.dispose();
+  }
+
+  Future<void> _probeJourney() async {
+    if (!ServiceJourney.handles(widget.module)) return;
+    final config = context.read<AppConfig>();
+    if (!config.isLoggedIn) return;
+    final ok = await ServiceJourney.supported(config.apiClient);
+    if (!ok || !mounted) return;
+    final jc = JourneyController(api: config.apiClient, module: widget.module, id: _id)..addListener(_onJourney);
+    setState(() {
+      _journey = true;
+      _jc = jc;
+      _tabId = 'summary';
+    });
+    jc.load();
+  }
+
+  void _onJourney() {
+    if (mounted) setState(() {});
+  }
+
+  void _goTab(String id) {
+    setState(() => _tabId = id);
+    if (id == 'history') _loadTimeline();
+  }
+
+  void _openRecord(String module, String id) {
+    nxPush<void>(context, EntityByIdLoader(module: module, id: id));
+  }
+
+  List<({String value, String label})> _pickOptions(String key) => [
+        for (final o in _picklists[key] ?? const <Map<String, dynamic>>[])
+          () {
+            final p = NxPickOption.fromMap(o);
+            return (value: p.value, label: p.label);
+          }(),
+      ];
+
+  /// Next-step / stage / bar action on a journey page.
+  Future<void> _journeyAction(String action) async {
+    final jc = _jc;
+    if (jc == null || _jBusy) return;
+    setState(() => _jBusy = true);
+    var changed = false;
+    try {
+      if (widget.module == 'job') {
+        changed = await runJobAction(context, action: action, row: _row, ctrl: jc, goTab: _goTab);
+      } else {
+        changed = await runQuotationAction(
+          context,
+          action: action,
+          row: _row,
+          ctrl: jc,
+          goTab: _goTab,
+          open: _openRecord,
+          edit: () => _openEdit(context),
+          followUp: () => _createLinkedActivity(),
+          winReasons: _pickOptions('quotation_win_reason'),
+          lostReasons: _pickOptions('quotation_lost_reason'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _jBusy = false);
+    }
+    if (changed && mounted) {
+      _timelineLoaded = false;
+      await _reload();
+    }
+  }
+
+  /// Tabs: (id, label). Journey pages are shorter and start at "สรุป".
+  List<(String, String)> _tabs() {
+    final comments = _comments.isEmpty ? 'คอมเม้นท์' : 'คอมเม้นท์ ${_comments.length}';
+    if (_journey && widget.module == 'job') {
+      return [('summary', 'สรุป'), ('ops', 'ปฏิบัติงาน'), ('activities', 'กิจกรรม'), ('signatures', 'ลายเซ็น'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
+    }
+    if (_journey && widget.module == 'quotation') {
+      return [('summary', 'สรุป'), ('lines', 'รายการ'), ('approval', 'อนุมัติ'), ('activities', 'กิจกรรม'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
+    }
+    return [
+      ('info', 'ข้อมูล'),
+      ('comments', comments),
+      ('files', 'ไฟล์'),
+      ('history', 'ประวัติ'),
+      if (widget.module != 'activity') ('activities', 'กิจกรรม'),
+    ];
   }
 
   /// Case watchers: whether I follow this case (server supports cases only).
@@ -193,6 +295,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         ErrorReporting.report(e, s);
       }
       if (!mounted) return;
+      _jc?.load();
       setState(() {
         if (record.isNotEmpty) _row = {..._row, ...record};
         _comments = comments;
@@ -259,7 +362,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         key: value,
       });
       _timelineLoaded = false;
-      if (_tab == 3) _loadTimeline(force: true);
+      if (_tabId == 'history') _loadTimeline(force: true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _row = {..._row, key: before});
@@ -499,7 +602,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   ],
                 ),
               ),
-              if (statusOptions.isNotEmpty) ...[
+              if (_journey) ...[
+                const SizedBox(height: 12),
+                _journeyStrip(canEdit),
+              ] else if (statusOptions.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 EntityStatusStepper(
                   options: statusOptions,
@@ -515,22 +621,15 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 ),
               ],
               const SizedBox(height: 14),
-              NxSegmented(
-                labels: [
-                  'ข้อมูล',
-                  _comments.isEmpty
-                      ? 'คอมเม้นท์'
-                      : 'คอมเม้นท์ ${_comments.length}',
-                  'ไฟล์',
-                  'ประวัติ',
-                  if (widget.module != 'activity') 'กิจกรรม',
-                ],
-                index: _tab,
-                onChanged: (i) {
-                  setState(() => _tab = i);
-                  if (i == 3) _loadTimeline();
-                },
-              ),
+              Builder(builder: (context) {
+                final tabs = _tabs();
+                final idx = tabs.indexWhere((t) => t.$1 == _tabId);
+                return NxSegmented(
+                  labels: [for (final t in tabs) t.$2],
+                  index: idx < 0 ? 0 : idx,
+                  onChanged: (i) => _goTab(tabs[i].$1),
+                );
+              }),
               if (_loading) ...[
                 const SizedBox(height: 16),
                 const NxSkeletonDetail(),
@@ -556,34 +655,60 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 220),
                   child: KeyedSubtree(
-                    key: ValueKey(_tab),
-                    child: switch (_tab) {
-                      1 => EntityCommentsPanel(
+                    key: ValueKey(_tabId),
+                    child: switch (_tabsResolved()) {
+                      'summary' => _journeySummary(canEdit, session),
+                      'ops' => _jobOps(canEdit, session),
+                      'signatures' => JobSignaturesTab(jobId: _id, ctrl: _jc!, canEdit: canEdit, row: _row, onChanged: _reload),
+                      'lines' => _quotationLines(canEdit),
+                      'approval' => QuotationApprovalTab(
+                        row: _row,
+                        ctrl: _jc!,
+                        meId: int.tryParse(session.userId ?? ''),
+                        canEdit: canEdit,
+                        onAction: _journeyAction,
+                      ),
+                      'comments' => EntityCommentsPanel(
                         module: widget.module,
                         id: _id,
                         comments: _comments,
                         onChanged: _reload,
                       ),
-                      2 => EntityFilesPanel(
+                      'files' => EntityFilesPanel(
                         comments: _comments,
                         onAdd: _quickAttach,
                       ),
-                      3 => EntityHistoryPanel(
+                      'history' => EntityHistoryPanel(
                         events: _timeline,
                         loading: _timelineLoading,
                         valueLabel: _valueLabel,
                       ),
-                      4 => EntityActivitiesPanel(
-                        module: widget.module,
-                        id: _id,
-                        title: entityTitle(_row, module: widget.module),
-                        onOpen: (r) => nxPush<void>(context, ActivityDetailScreen(row: r), root: true),
-                        onCreate: _createLinkedActivity,
+                      'activities' => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_journey && widget.module == 'job' && canEdit) ...[
+                            FilledButton.tonalIcon(
+                              key: const ValueKey('job-gen-activities'),
+                              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+                              onPressed: () => _journeyAction('gen_activity'),
+                              icon: const Icon(NxI.calendarPlus),
+                              label: Text(tr('สร้างกิจกรรมของงาน (เทมเพลต / ด่วน)')),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          EntityActivitiesPanel(
+                            module: widget.module,
+                            id: _id,
+                            title: entityTitle(_row, module: widget.module),
+                            onOpen: (r) => nxPush<void>(context, ActivityDetailScreen(row: r), root: true),
+                            onCreate: _createLinkedActivity,
+                          ),
+                        ],
                       ),
                       _ => Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (widget.module == 'job' &&
+                          if (!_journey && widget.module == 'job' &&
                               MenuAccess.allow(
                                 session,
                                 MenuAccess.inspection,
@@ -623,6 +748,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                             id: _id,
                             row: _row,
                             canEdit: canEdit,
+                            journey: _journey,
                             onOpen: (module, id, {row}) {
                               nxPush<void>(
                                 context,
@@ -668,6 +794,158 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  String _tabsResolved() {
+    final tabs = _tabs();
+    return tabs.any((t) => t.$1 == _tabId) ? _tabId : tabs.first.$1;
+  }
+
+  Widget _journeyStrip(bool canEdit) {
+    if (widget.module == 'job') {
+      final cur = _row['job_status'];
+      final allowed = jobWorkflowActions(cur);
+      final cancelled = canonicalJobStatus(cur) == 'Cancelled';
+      return JourneyStageStrip(
+        steps: jobSteps(),
+        current: jobCurrentStep(_row),
+        side: cancelled ? 'cancelled' : null,
+        sideLabel: jobSideLabel(_row),
+        onPick: !canEdit || _jBusy
+            ? null
+            : (i) {
+                final a = jobStepAction(cur, kJobMain[i]);
+                if (a != null && allowed.contains(a)) {
+                  _journeyAction(a);
+                } else if (a != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ขั้นนี้ทำต่อจากสถานะปัจจุบันไม่ได้'))));
+                }
+              },
+        sideChips: [
+          if (canEdit && allowed.contains('cancel')) ('cancel', tr('ยกเลิกงาน'), () => _journeyAction('cancel')),
+        ],
+      );
+    }
+    final jc = _jc!;
+    final st = quotationStage(_row, approvalRequired: jc.approvalRequired, customer: jc.customer);
+    final finished = isQuotationFinished(_row);
+    return JourneyStageStrip(
+      steps: quotationSteps(st),
+      current: kQuotationStages.indexOf(st.stage),
+      skipped: st.skippedApproval ? const {'approval', 'approved'} : const {},
+      side: st.side,
+      sideLabel: quotationSideLabel(st),
+      sideDanger: st.side != 'revised',
+      onPick: !canEdit || _jBusy || finished
+          ? null
+          : (i) {
+              final step = kQuotationStages[i];
+              if (step == 'approval' && st.stage == 'open') _goTab('approval');
+              if (step == 'closed') _journeyAction('close_sale');
+            },
+      sideChips: [
+        if (canEdit && !finished) ('cancel', tr('ยกเลิก'), () => _journeyAction('cancel')),
+        if (canEdit && st.side == 'cancelled') ('reopen', tr('เปิดกลับ'), () => _journeyAction('reopen_quotation')),
+      ],
+    );
+  }
+
+  Widget _journeySummary(bool canEdit, SessionState session) {
+    final jc = _jc;
+    if (jc == null) return const SizedBox.shrink();
+    if (widget.module == 'job') {
+      return JobSummaryTab(
+        row: _row,
+        ctrl: jc,
+        canEdit: canEdit,
+        busy: _jBusy,
+        onAction: _journeyAction,
+        onGoTab: _goTab,
+        onReload: _reload,
+        onOpen: _openRecord,
+      );
+    }
+    return QuotationSummaryTab(
+      row: _row,
+      ctrl: jc,
+      canEdit: canEdit,
+      meId: int.tryParse(session.userId ?? ''),
+      comments: _comments,
+      busy: _jBusy,
+      jobEnabled: MenuAccess.allow(session, MenuAccess.job),
+      onAction: _journeyAction,
+      onGoTab: _goTab,
+      onReload: _reload,
+      onOpen: _openRecord,
+    );
+  }
+
+  Widget _jobOps(bool canEdit, SessionState session) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        JobExtrasPanel(
+          id: _id,
+          row: _row,
+          canEdit: canEdit,
+          onOpen: (module, id, {row}) => _openRecord(module, id),
+        ),
+        if (MenuAccess.allow(session, MenuAccess.inspection)) ...[
+          const SizedBox(height: 16),
+          NxHeroCta(
+            label: 'สร้างใบตรวจรับ',
+            onPressed: () => nxPush<void>(context, JobInspectionScreen(job: _row)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _quotationLines(bool canEdit) {
+    final theme = Theme.of(context);
+    final editable = isQuotationEditable(_row);
+    final st = canonicalQuotationStatus(_row['quotation_status']);
+    final lockKey = switch (st) {
+      QS.pending => 'pending',
+      QS.approved => 'approved',
+      QS.closed => 'closed',
+      QS.cancelled => 'cancelled',
+      QS.revised => 'revised',
+      _ => null,
+    };
+    final (String, String)? exit = switch (lockKey) {
+      'revised' => ('open_latest', 'ไปฉบับล่าสุด'),
+      'closed' || 'cancelled' => ('duplicate', 'ทำสำเนาเป็นใบใหม่'),
+      'pending' => ('view_approval', 'ดูการอนุมัติ'),
+      'approved' => ('revise', 'Revise (สร้างฉบับแก้ไข)'),
+      _ => null,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!editable && lockKey != null) ...[
+          Container(
+            key: const ValueKey('qt-lines-locked'),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: const Color(0xFFD97706).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(16)),
+            child: Row(
+              children: [
+                const Icon(NxI.lock, color: Color(0xFFD97706)),
+                const SizedBox(width: 10),
+                Expanded(child: Text(jt('journey.lines.lock.$lockKey', fallback: 'ใบเสนอราคานี้แก้ไขรายการไม่ได้'), style: theme.textTheme.bodyMedium)),
+                if (exit != null && canEdit) TextButton(onPressed: () => _journeyAction(exit.$1), child: Text(tr(exit.$2))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        QuotationLinesPanel(id: _id, canEdit: canEdit && editable),
+        if (isQuotationWon(_row)) ...[
+          const SizedBox(height: 12),
+          QuotationConvertBar(id: _id, onOpen: (module, id, {row}) => _openRecord(module, id)),
+        ],
+      ],
     );
   }
 
