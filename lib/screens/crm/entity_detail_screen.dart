@@ -35,6 +35,7 @@ import '../../core/detail_fields_pref.dart';
 import '../../core/journey_rules.dart';
 import '../../core/service_journey.dart';
 import '../journey/case_flows.dart';
+import '../fsm/inspection_lines.dart';
 import '../journey/job_journey.dart';
 import '../journey/journey_controller.dart';
 import '../journey/journey_widgets.dart';
@@ -84,7 +85,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   bool _jBusy = false;
 
   /// Current tab id (tabs differ per module / journey).
-  late String _tabId = widget.initialTab ?? 'info';
+  late String _tabId = widget.initialTab ?? (widget.module == 'inspection' ? 'checklist' : 'info');
 
   @override
   void initState() {
@@ -192,7 +193,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   /// Tabs: (id, label). Journey pages are shorter and start at "สรุป".
   /// Wide (tablet / unfolded) layout: the primary tab sits in the left pane.
   bool _wide = false;
-  String get _primaryTab => _journey ? 'summary' : 'info';
+  String get _primaryTab => _journey ? 'summary' : (widget.module == 'inspection' ? 'checklist' : 'info');
 
   List<(String, String)> _tabs() {
     final all = _allTabs();
@@ -209,7 +210,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     if (_journey && widget.module == 'quotation') {
       return [('summary', 'สรุป'), ('lines', 'รายการ'), ('approval', 'อนุมัติ'), ('activities', 'กิจกรรม'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
     }
-    return [('info', 'ข้อมูล'), ('comments', comments), ('files', 'ไฟล์'), ('history', 'ประวัติ'), if (widget.module != 'activity') ('activities', 'กิจกรรม')];
+    return [if (widget.module == 'inspection') ('checklist', 'รายการตรวจ'), ('info', 'ข้อมูล'), ('comments', comments), ('files', 'ไฟล์'), ('history', 'ประวัติ'), if (widget.module != 'activity') ('activities', 'กิจกรรม')];
   }
 
   /// Case watchers: whether I follow this case (server supports cases only).
@@ -627,6 +628,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 'signatures' => JobSignaturesTab(jobId: _id, ctrl: _jc!, canEdit: canEdit, row: _row, onChanged: _reload),
                 'lines' => _quotationLines(canEdit),
                 'approval' => QuotationApprovalTab(row: _row, ctrl: _jc!, meId: int.tryParse(session.userId ?? ''), canEdit: canEdit, onAction: _journeyAction),
+                'checklist' => InspectionLinesEditor(inspectionId: _id, canEdit: canEdit),
                 'comments' => EntityCommentsPanel(module: widget.module, id: _id, comments: _comments, onChanged: _reload),
                 'files' => EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
                 'history' => EntityHistoryPanel(events: _timeline, loading: _timelineLoading, valueLabel: _valueLabel),
@@ -655,10 +657,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 _ => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (!_journey && widget.module == 'job' && MenuAccess.allow(session, MenuAccess.inspection)) ...[
+                    if (widget.module == 'job' && MenuAccess.allow(session, MenuAccess.inspection)) ...[
                       const SizedBox(height: 16),
                       NxHeroCta(
-                        label: 'สร้างใบตรวจรับ',
+                        label: 'ใบตรวจรับของงานนี้',
                         onPressed: () => nxPush<void>(context, JobInspectionScreen(job: _row)),
                       ),
                     ],
@@ -847,6 +849,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     'signatures': NxI.penLine,
     'lines': NxI.listChecks,
     'approval': NxI.shieldCheck,
+    'checklist': NxI.listChecks,
   };
 
   Widget _tabBar() {

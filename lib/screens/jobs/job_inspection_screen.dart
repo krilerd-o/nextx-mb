@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
-import '../../widgets/nx_icons.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
+import '../../core/i18n.dart';
 import '../../core/nx_breakpoint.dart';
+import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
-import '../../services/file_open.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_hero_cta.dart';
-import '../../widgets/nx_surface_card.dart';
-import '../../core/i18n.dart';
+import '../../widgets/nx_icons.dart';
+import '../fsm/inspection_lines.dart';
 
+/// Inspection of a job, from "My Service Job": shows the job's existing
+/// inspections (opens the latest), or creates one (the server adds the
+/// template's checklist), then the checklist editor right here.
 class JobInspectionScreen extends StatefulWidget {
   const JobInspectionScreen({super.key, required this.job});
   final Map<String, dynamic> job;
@@ -21,143 +24,116 @@ class JobInspectionScreen extends StatefulWidget {
 }
 
 class _JobInspectionScreenState extends State<JobInspectionScreen> {
-  String? _inspectionId;
-  List<Map<String, dynamic>> _lines = [];
-  bool _busy = false;
+  List<Map<String, dynamic>>? _list;
+  String? _current;
+  bool _creating = false;
   Object? _error;
 
   String get _jobId => strId(widget.job['id']);
 
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final page = await context.read<AppConfig>().apiClient.getEntityList('inspection', limit: 50, extra: {'filter[related_job_id]': _jobId});
+      final list = page.items.where((r) => '${r['related_job_id'] ?? _jobId}' == _jobId).toList()
+        ..sort((a, b) => strId(b['id']).compareTo(strId(a['id'])));
+      if (!mounted) return;
+      setState(() {
+        _list = list;
+        _error = null;
+        _current ??= list.isEmpty ? null : strId(list.first['id']);
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = e);
+    }
+  }
+
   Future<void> _create() async {
     setState(() {
-      _busy = true;
+      _creating = true;
       _error = null;
     });
     try {
       final created = await context.read<AppConfig>().apiClient.createJobInspection(_jobId);
-      final id = strId(created['id'] ?? created['inspection']?['id']);
-      final lines = id.isEmpty ? <Map<String, dynamic>>[] : await context.read<AppConfig>().apiClient.getInspectionLines(id);
-      if (mounted) {
-        setState(() {
-          _inspectionId = id.isEmpty ? null : id;
-          _lines = lines;
-        });
-      }
+      final id = strId(created['id'] ?? (created['inspection'] is Map ? created['inspection']['id'] : null));
+      if (id.isEmpty) throw StateError(tr('สร้างใบตรวจรับไม่สำเร็จ'));
+      _current = id;
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างใบตรวจรับแล้ว — กดผล ผ่าน / ไม่ผ่าน ได้เลย'))));
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _save() async {
-    final id = _inspectionId;
-    if (id == null) return;
-    setState(() => _busy = true);
-    try {
-      final lines = _lines
-          .map(
-            (l) => {
-              'line_no': l['line_no'],
-              'item_label': l['item_label'],
-              'item_result': l['item_result'],
-              'remark': l['remark'],
-            },
-          )
-          .toList();
-      final saved = await context.read<AppConfig>().apiClient.putInspectionLines(id, lines);
-      if (mounted) setState(() => _lines = saved.isEmpty ? _lines : saved);
-    } catch (e) {
-      if (mounted) setState(() => _error = e);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _pdf() async {
-    final id = _inspectionId;
-    if (id == null) return;
-    try {
-      final bytes = await context.read<AppConfig>().apiClient.getInspectionPdf(id);
-      await openPdfBytes(bytes, 'inspection-$id.pdf');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-      }
+      if (mounted) setState(() => _creating = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final list = _list;
+    final current = _current;
     return Scaffold(
-      appBar: NxAppHeader(title: entityTitle(widget.job, module: 'job')),
+      appBar: NxAppHeader(title: 'ใบตรวจรับ', subtitle: entityTitle(widget.job, module: 'job')),
       body: ListView(
         padding: NxBreakpoint.of(context).scrollPadding(context),
         children: [
-          if (_error != null) Text(tr(formatApiError(_error!)), style: TextStyle(color: theme.colorScheme.error)),
-          NxHeroCta(
-            label: 'สร้างใบตรวจ',
-            busy: _busy && _inspectionId == null,
-            onPressed: _busy ? null : _create,
-          ),
-          const SizedBox(height: 12),
-          if (_inspectionId != null)
-            Text(tr('ใบตรวจ #$_inspectionId'), style: theme.textTheme.titleMedium),
-          for (var i = 0; i < _lines.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: NxSurfaceCard(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(tr(_lines[i]['item_label']?.toString() ?? 'รายการ ${i + 1}')),
-                    DropdownButtonFormField<String>(
-        icon: const Icon(NxI.caretDown, size: 18),
-                      key: ValueKey('result-$i-${_lines[i]['id']}'),
-                      value: () {
-                        final v = (_lines[i]['item_result'] ?? '').toString();
-                        if (v == 'pass' || v == 'fail' || v == 'na') return v;
-                        return '';
-                      }(),
-                      decoration: InputDecoration(labelText: tr('ผลตรวจ')),
-                      items: [
-                        DropdownMenuItem(value: '', child: Text(tr('—'))),
-                        DropdownMenuItem(value: 'pass', child: Text(tr('Pass'))),
-                        DropdownMenuItem(value: 'fail', child: Text(tr('Fail'))),
-                        DropdownMenuItem(value: 'na', child: Text(tr('N/A'))),
-                      ],
-                      onChanged: (v) => _lines[i]['item_result'] = v,
-                    ),
-                    TextFormField(
-                      key: ValueKey('remark-$i-${_lines[i]['id']}'),
-                      initialValue: _lines[i]['remark']?.toString() ?? '',
-                      decoration: InputDecoration(labelText: tr('หมายเหตุ')),
-                      onChanged: (v) => _lines[i]['remark'] = v,
-                    ),
-                  ],
-                ),
-              ),
+          if (_error != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: cs.errorContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(14)),
+              child: Text(error(_error!), style: TextStyle(color: cs.onErrorContainer)),
             ),
-          if (_inspectionId != null) ...[
-            NxHeroCta(
-              label: 'บันทึกบรรทัด',
-              busy: _busy,
-              onPressed: _busy ? null : _save,
+          if (list == null && _error == null) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
+          if (list != null && list.isEmpty) ...[
+            Container(
+              key: const ValueKey('job-insp-empty'),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20)),
+              child: Column(children: [
+                Icon(NxI.clipboardText, size: 40, color: cs.primary),
+                const SizedBox(height: 10),
+                Text(tr('งานนี้ยังไม่มีใบตรวจรับ'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(tr('สร้างแล้วจะได้รายการตรวจตามเทมเพลตของงาน แก้ไข/เพิ่มรายการได้'), textAlign: TextAlign.center, style: theme.textTheme.bodySmall?.copyWith(height: 1.4)),
+              ]),
             ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: _pdf,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+            const SizedBox(height: 14),
+            NxHeroCta(key: const ValueKey('job-insp-create'), label: 'สร้างใบตรวจรับ', busy: _creating, onPressed: _creating ? null : _create),
+          ],
+          if (list != null && list.isNotEmpty) ...[
+            if (list.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final r in list)
+                    ChoiceChip(
+                      key: ValueKey('job-insp-pick-${r['id']}'),
+                      label: Text('${r['inspection_no'] ?? '#${r['id']}'} · ${thaiDate(r['createdtime'])}'),
+                      selected: strId(r['id']) == current,
+                      onSelected: (_) => setState(() => _current = strId(r['id'])),
+                    ),
+                ]),
               ),
-              child: Text(tr('เปิด PDF')),
+            if (current != null) InspectionLinesEditor(key: ValueKey('insp-$current'), inspectionId: current),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              key: const ValueKey('job-insp-new'),
+              onPressed: _creating ? null : _create,
+              icon: const Icon(NxI.plus, size: 18),
+              label: Text(tr('สร้างใบตรวจรับใบใหม่')),
             ),
           ],
         ],
       ),
     );
   }
+
+  String error(Object e) => e is StateError ? e.message : formatApiError(e);
 }

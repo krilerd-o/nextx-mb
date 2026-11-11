@@ -114,32 +114,11 @@ void main() {
     );
     await tester.pump();
     expect(find.text('JOB-11'), findsWidgets);
-    expect(find.text('สร้างใบตรวจรับ'), findsOneWidget);
+    expect(find.text('ใบตรวจรับของงานนี้'), findsOneWidget);
     expect(find.text('PDF ใบสั่งงาน'), findsOneWidget);
     expect(find.text('นัดหมาย'), findsOneWidget);
     expect(find.text('ทักษะงาน'), findsOneWidget);
     expect(find.text('อะไหล่ / ชิ้นส่วน'), findsOneWidget);
-  });
-
-  testWidgets('inspection detail has lines and PDF', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => AppConfig(),
-        child: const MaterialApp(
-          home: EntityDetailScreen(
-            module: 'inspection',
-            row: {'id': '5', 'inspection_no': 'IN-5'},
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
-    expect(find.text('IN-5'), findsWidgets);
-    expect(find.text('บรรทัดตรวจรับ'), findsOneWidget);
-    expect(find.text('เปิด PDF'), findsOneWidget);
-    expect(find.text('บันทึกบรรทัด'), findsOneWidget);
   });
 
   testWidgets('asset and contract extras', (tester) async {

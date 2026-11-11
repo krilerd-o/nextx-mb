@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../journey/job_parts.dart';
+import '../fsm/inspection_lines.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -116,7 +117,6 @@ class EntityOpsSection extends StatelessWidget {
           DealPrimaryQuoteBar(id: id, onOpen: onOpen, canEdit: canEdit),
         ],
         if (module == 'lead') LeadConvertBar(id: id, row: row, onOpen: onOpen),
-        if (module == 'inspection') InspectionLinesPanel(id: id, canEdit: canEdit),
         if (module == 'job' && !journey) JobExtrasPanel(id: id, row: row, canEdit: canEdit, onOpen: onOpen),
         if (module == 'asset') AssetGenerateJobsBar(id: id, onOpen: onOpen),
         if (module == 'service_contract') ...[
@@ -1091,136 +1091,8 @@ class InspectionLinesPanel extends StatefulWidget {
 }
 
 class _InspectionLinesPanelState extends State<InspectionLinesPanel> {
-  List<Map<String, dynamic>> _lines = [];
-  bool _loading = true;
-  bool _saving = false;
-
-  String _inspectionResult(Map<String, dynamic> line) {
-    final v = (line['item_result'] ?? line['result'] ?? line['status'] ?? '').toString();
-    if (v == 'pass' || v == 'fail' || v == 'na') return v;
-    return '';
-  }
-
   @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    if (!context.read<AppConfig>().isLoggedIn) {
-      setState(() => _loading = false);
-      return;
-    }
-    try {
-      final lines = await context.read<AppConfig>().apiClient.getInspectionLines(widget.id);
-      if (mounted) setState(() => _lines = lines.map((e) => Map<String, dynamic>.from(e)).toList());
-    } catch (_) {
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    try {
-      final payload = [
-        for (var i = 0; i < _lines.length; i++)
-          {
-            'line_no': _lines[i]['line_no'] ?? i + 1,
-            'item_label': _lines[i]['item_label'] ?? _lines[i]['label'],
-            'item_result': _lines[i]['item_result'] ?? _lines[i]['result'] ?? _lines[i]['status'],
-            'result': _lines[i]['result'] ?? _lines[i]['item_result'],
-            'remark': _lines[i]['remark'],
-            'sort_order': _lines[i]['sort_order'] ?? i + 1,
-          },
-      ];
-      final saved = await context.read<AppConfig>().apiClient.putInspectionLines(widget.id, payload);
-      if (mounted) {
-        setState(() => _lines = saved.isEmpty ? _lines : saved.map((e) => Map<String, dynamic>.from(e)).toList());
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกผลตรวจแล้ว'))));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _LinesCard(
-      title: 'บรรทัดตรวจรับ',
-      loading: _loading,
-      saving: _saving,
-      canEdit: widget.canEdit,
-      empty: _lines.isEmpty,
-      onAdd: widget.canEdit
-          ? () => setState(() {
-                _lines.add({'item_label': 'รายการใหม่', 'item_result': '', 'remark': ''});
-              })
-          : null,
-      onSave: widget.canEdit ? _save : null,
-      extra: OutlinedButton(
-        onPressed: () async {
-          try {
-            final bytes = await context.read<AppConfig>().apiClient.getInspectionPdf(widget.id);
-            await openPdfBytes(bytes, 'inspection-${widget.id}.pdf');
-          } catch (e) {
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-            }
-          }
-        },
-        child: Text(tr('เปิด PDF')),
-      ),
-      children: [
-        for (var i = 0; i < _lines.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: NxSurfaceCard(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextFormField(
-                    enabled: widget.canEdit,
-                    initialValue: _lines[i]['item_label']?.toString() ?? _lines[i]['label']?.toString() ?? '',
-                    decoration: InputDecoration(labelText: tr('รายการ')),
-                    onChanged: (v) => _lines[i]['item_label'] = v,
-                  ),
-                  DropdownButtonFormField<String>(
-        icon: const Icon(NxI.caretDown, size: 18),
-                    value: _inspectionResult(_lines[i]),
-                    decoration: InputDecoration(labelText: tr('ผลตรวจ')),
-                    items: [
-                      DropdownMenuItem(value: '', child: Text(tr('—'))),
-                      DropdownMenuItem(value: 'pass', child: Text(tr('Pass'))),
-                      DropdownMenuItem(value: 'fail', child: Text(tr('Fail'))),
-                      DropdownMenuItem(value: 'na', child: Text(tr('N/A'))),
-                    ],
-                    onChanged: widget.canEdit
-                        ? (v) => setState(() {
-                              _lines[i]['item_result'] = v;
-                              _lines[i]['result'] = v;
-                            })
-                        : null,
-                  ),
-                  TextFormField(
-                    enabled: widget.canEdit,
-                    initialValue: _lines[i]['remark']?.toString() ?? '',
-                    decoration: InputDecoration(labelText: tr('หมายเหตุ')),
-                    onChanged: (v) => _lines[i]['remark'] = v,
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => InspectionLinesEditor(inspectionId: widget.id, canEdit: widget.canEdit);
 }
 
 class JobExtrasPanel extends StatefulWidget {
@@ -2350,7 +2222,6 @@ class _LinesCard extends StatelessWidget {
     required this.children,
     this.onAdd,
     this.onSave,
-    this.extra,
   });
 
   final String title;
@@ -2361,7 +2232,6 @@ class _LinesCard extends StatelessWidget {
   final List<Widget> children;
   final VoidCallback? onAdd;
   final VoidCallback? onSave;
-  final Widget? extra;
 
   @override
   Widget build(BuildContext context) {
@@ -2393,10 +2263,6 @@ class _LinesCard extends StatelessWidget {
                     label: Text(tr('เพิ่มบรรทัด')),
                   ),
                 if (onSave != null) NxHeroCta(label: 'บันทึกบรรทัด', busy: saving, onPressed: saving ? null : onSave),
-              ],
-              if (extra != null) ...[
-                const SizedBox(height: 8),
-                extra!,
               ],
             ],
           ),

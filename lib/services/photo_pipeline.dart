@@ -202,7 +202,7 @@ class PhotoBatch extends ValueNotifier<PhotoBatchState> {
       });
       _prepared++;
       _inFlight.add(p!.clientId);
-      if (persist) await PhotoUploadCenter.instance.keep(target, p!);
+      if (persist) await PhotoUploadCenter.instance.keep(target, p);
       _emit();
     } catch (e) {
       lastError = e;
@@ -210,7 +210,7 @@ class PhotoBatch extends ValueNotifier<PhotoBatchState> {
       _emit();
       return;
     }
-    await _upload(p!);
+    await _upload(p);
   }
 
   Future<void> _upload(PreparedPhoto p) async {

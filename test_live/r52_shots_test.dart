@@ -15,7 +15,6 @@ import 'package:nextx_mobile/core/service_journey.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/crm/entity_detail_screen.dart';
 import 'package:nextx_mobile/screens/journey/quotation_versions.dart';
-import 'package:nextx_mobile/screens/journey/case_flows.dart';
 import 'package:nextx_mobile/widgets/nx_upload_pill.dart';
 import 'package:nextx_mobile/services/photo_upload_center.dart';
 import 'package:provider/provider.dart';
