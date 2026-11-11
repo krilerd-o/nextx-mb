@@ -2159,6 +2159,7 @@ const Map<String, String> enStrings = {
   'ส่วนลด %': 'Discount %',
   'ใบเสนอราคา PDF': 'Quotation PDF',
   'ขาวดำ': 'Black & white',
+  'ลด %': 'Disc. %',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

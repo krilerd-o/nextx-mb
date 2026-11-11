@@ -628,7 +628,7 @@ class _HistoryRow extends StatelessWidget {
     final e = event;
     final details = e['details'] is Map ? e['details'] as Map : const {};
     final note = '${details['note'] ?? details['to_owner_name'] ?? ''}'.trim();
-    final when = formatThaiField(e['at'], 'at');
+    final when = formatThaiField(e['at'], 'at', year: uiYear);
     final from = '${e['from_status'] ?? ''}'.trim();
     final to = '${e['to_status'] ?? ''}'.trim();
     return IntrinsicHeight(

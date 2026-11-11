@@ -90,7 +90,7 @@ List<LineDiff> diffQuotationLines(List<Map<String, dynamic>> a, List<Map<String,
 
 List<HeaderDiff> diffQuotationHeaders(Map<String, dynamic> a, Map<String, dynamic> b) {
   String money(Object? v) => v == null || '$v'.isEmpty ? '' : formatMoney(_n(v));
-  String date(Object? v) => v == null || '$v'.isEmpty ? '' : formatThaiField(v, 'valid_until', dateOnly: true);
+  String date(Object? v) => v == null || '$v'.isEmpty ? '' : formatThaiField(v, 'valid_until', dateOnly: true, year: uiYear);
   return [
     HeaderDiff('quotation_no', 'เลขที่', _s(a['quotation_no']), _s(b['quotation_no'])),
     HeaderDiff('title_th', 'ชื่อเรื่อง', _s(a['title_th'] ?? a['title']), _s(b['title_th'] ?? b['title'])),
@@ -150,6 +150,7 @@ class _QuotationCompareScreenState extends State<QuotationCompareScreen> {
         key: key,
         value: value,
         isExpanded: true,
+        icon: const Icon(NxI.caretDown, size: 18),
         underline: const SizedBox(),
         items: [for (final v in widget.versions) DropdownMenuItem(value: _s(v['id']), child: Text(_label(_s(v['id'])), overflow: TextOverflow.ellipsis))],
         onChanged: (v) {
@@ -526,7 +527,7 @@ class _QuotationReviseScreenState extends State<QuotationReviseScreen> {
                       },
                       child: InputDecorator(
                         decoration: InputDecoration(labelText: tr('ใช้ได้ถึง'), suffixIcon: const Icon(NxI.calendarBlank, size: 18)),
-                        child: Text(_valid == null ? '—' : formatThaiField(_valid!.toIso8601String(), 'valid_until', dateOnly: true)),
+                        child: Text(_valid == null ? '—' : formatThaiField(_valid!.toIso8601String(), 'valid_until', dateOnly: true, year: uiYear)),
                       ),
                     ),
                     const SizedBox(height: 18),
@@ -575,7 +576,7 @@ class _QuotationReviseScreenState extends State<QuotationReviseScreen> {
             const SizedBox(width: 8),
             Expanded(flex: 2, child: TextField(key: ValueKey('revise-price-$i'), controller: l.price, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: dec('ราคา/หน่วย'), onChanged: (_) => setState(() {}))),
             const SizedBox(width: 8),
-            Expanded(child: TextField(controller: l.disc, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: dec('ส่วนลด %'), onChanged: (_) => setState(() {}))),
+            Expanded(child: TextField(controller: l.disc, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: dec('ลด %'), onChanged: (_) => setState(() {}))),
           ]),
         ),
         Align(

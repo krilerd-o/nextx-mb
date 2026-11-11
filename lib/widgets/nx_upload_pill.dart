@@ -74,8 +74,8 @@ class _Pill extends StatelessWidget {
     return Material(
       key: const ValueKey('upload-pill'),
       color: bg,
-      elevation: 8,
-      shadowColor: Colors.black38,
+      elevation: 3,
+      shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(99),
       child: InkWell(
         borderRadius: BorderRadius.circular(99),

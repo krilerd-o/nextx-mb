@@ -431,14 +431,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                     : (a == actions.first ? FilledButton.icon : FilledButton.tonalIcon)(
                         key: ValueKey('case-btn-$a'),
                         onPressed: () => _caseAction(a),
-                        icon: Icon(
-                          a == 'accept'
-                              ? NxI.check
-                              : a == 'close'
-                              ? NxI.flag
-                              : NxI.arrowRight,
-                          size: 16,
-                        ),
+                        icon: Icon(switch (a) { 'accept' => NxI.check, 'close' => NxI.flag, 'wait' => NxI.pause, 'resume' => NxI.play, _ => NxI.arrowRight }, size: 16),
                         label: Text(caseActionLabel(a)),
                       ),
             ],
