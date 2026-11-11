@@ -3,12 +3,14 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStream;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
 import '../realtime_service.dart';
+import 'call_mic_tap_native.dart';
 import 'call_service.dart';
 
 /// One line of live captions.
@@ -174,7 +176,7 @@ class RealtimeSttTransport implements SttTransport {
 /// Each phone sends only its own microphone; captions of everyone come back as `stt:segment`.
 /// Captions live in [captions] (a ValueNotifier) so the call screen does not rebuild for every word.
 class LiveTranscription extends ChangeNotifier {
-  LiveTranscription({SttTransport? transport, CallMicTap Function()? micTap}) : _t = transport ?? RealtimeSttTransport(), _micFactory = micTap ?? RecordMicTap.new {
+  LiveTranscription({SttTransport? transport, CallMicTap Function()? micTap}) : _t = transport ?? RealtimeSttTransport(), _micFactory = micTap {
     _sub = _t.events.listen(_onEvent);
   }
 
@@ -184,7 +186,18 @@ class LiveTranscription extends ChangeNotifier {
   static set instance(LiveTranscription v) => _instance = v;
 
   final SttTransport _t;
-  final CallMicTap Function() _micFactory;
+  final CallMicTap Function()? _micFactory;
+
+  /// Default: WebRTC's own captured audio (no second recorder); falls back to `record` when the
+  /// native tap is missing or silent on this device.
+  CallMicTap _defaultMic() => WebRtcMicTap.supported ? FallbackMicTap(WebRtcMicTap(_localAudioTrackId), RecordMicTap()) : RecordMicTap();
+
+  String? _localAudioTrackId() {
+    final s = _call?.media?.localStream;
+    if (s is! MediaStream) return null;
+    final tracks = s.getAudioTracks();
+    return tracks.isEmpty ? null : tracks.first.id;
+  }
   StreamSubscription<RealtimeEvent>? _sub;
   ApiClient? api;
   String? businessId;
@@ -300,7 +313,7 @@ class LiveTranscription extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      final mic = _micFactory();
+      final mic = (_micFactory ?? _defaultMic)();
       _mic = mic;
       Stream<Uint8List> stream;
       try {
@@ -323,6 +336,8 @@ class LiveTranscription extends ChangeNotifier {
         }
       }
       _micSub = stream.listen((pcm) {
+        // Muted in the call → nothing leaves the phone (and nothing is recorded).
+        if (_call?.muted == true) return;
         _t.emitAudio(id, pcm);
         _wav?.add(pcm);
       });
