@@ -1276,6 +1276,7 @@ const Map<String, String> enStrings = {
   'ทำซ้ำบอร์ดแล้ว': 'Board duplicated',
   'ทำซ้ำบอร์ด': 'Duplicate board',
   'ค้นหาบอร์ด': 'Search boards',
+  'ไม่พบบอร์ดที่ตรงกับ': 'No boards match',
   'สัปดาห์นี้': 'This week',
   'ไม่มีงานในช่วงนี้ 🎉': 'Nothing due in this range 🎉',
   'การลงเวลา': 'Time log',
