@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/i18n.dart';
 import '../../core/nx_page_route.dart';
-import '../../widgets/nx_icons.dart';
 import 'call_summary_screen.dart';
+import 'comm_ai_isaac.dart';
 
 /// Chat message `kind: 'call_summary'` — posted after a call with AI notes; opens the summary.
 class CallSummaryBubble extends StatelessWidget {
@@ -30,16 +30,11 @@ class CallSummaryBubble extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 10, 14, 10),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)])),
-                  child: const Icon(NxI.sparkle, color: Colors.white, size: 18),
-                ),
+                const IsaacAvatar(mood: 'answer_ready', size: 40, animate: false),
                 const SizedBox(width: 10),
                 Flexible(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                    Text(tr(video ? 'สรุปการวิดีโอคอลด้วย AI' : 'สรุปการโทรด้วย AI'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5))),
+                    Text(tr(video ? 'ISAAC สรุปวิดีโอคอล' : 'ISAAC สรุปการโทร'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5))),
                     Text(headline, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
                     if (actions > 0) Text(tr('$actions งานที่ต้องทำต่อ'), style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
                   ]),

@@ -58,6 +58,7 @@ class AppRoutes {
   static const String commerce = '/commerce';
   static const String callLog = '/call-log';
   static const String commAi = '/comm-ai';
+  static const String commAiSettings = '/comm-ai/settings';
 
   /// One group of the menu page (web nav rail group), e.g. `/menu/service`.
   static String menuGroup(String id) => '/menu/$id';

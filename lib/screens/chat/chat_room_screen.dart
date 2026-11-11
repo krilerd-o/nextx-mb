@@ -520,7 +520,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         if (!_isThread)
           IconButton(
             key: const ValueKey('chat-ai-summary'),
-            tooltip: tr('สรุปแชทด้วย AI'),
+            tooltip: tr('ISAAC สรุปแชท'),
             icon: const Icon(NxI.sparkle, color: Color(0xFF7C3AED)),
             onPressed: () => showChatSummarySheet(context, roomId: _id, roomName: chatRoomTitle(_room)),
           ),

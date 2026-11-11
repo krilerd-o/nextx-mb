@@ -26,6 +26,7 @@ import '../../screens/module/module_hub_screen.dart';
 import '../../screens/module/menu_group_screen.dart';
 import '../../screens/crm/call_log_screen.dart';
 import '../../screens/comm_ai/comm_ai_history_screen.dart';
+import '../../screens/comm_ai/comm_ai_settings_screen.dart';
 import '../../screens/notifications/notification_center_screen.dart';
 import '../../screens/whats_new/whats_new_screen.dart';
 import '../../screens/settings/devices_screen.dart';
@@ -245,6 +246,10 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.commAi,
         builder: (_, _) => const CommAiHistoryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.commAiSettings,
+        builder: (_, _) => const CommAiSettingsScreen(),
       ),
       GoRoute(
         path: AppRoutes.crmHome,

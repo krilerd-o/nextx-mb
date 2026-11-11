@@ -109,9 +109,10 @@ class NxSheetBody extends StatelessWidget {
 }
 
 /// Short sheet sized to content (actions, confirm, forms).
+/// [title] null: the content draws its own header (e.g. ISAAC sheets).
 Future<T?> showAppBottomSheet<T>({
   required BuildContext context,
-  required String title,
+  required String? title,
   required Widget child,
 }) {
   // Root navigator: above the tab bar and any nested list navigator, so

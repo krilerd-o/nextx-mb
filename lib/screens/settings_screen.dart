@@ -221,6 +221,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: roleSummary(config.shellConfig?.roles ?? const []),
         onTap: () => context.push(AppRoutes.roleEditor),
       )),
+      if (MenuAccess.any(session, const [MenuAccess.chat, MenuAccess.callLog]))
+        _Entry('เมนูและการใช้งาน', ['ISAAC', 'AI', 'ถอดเสียง', 'สรุป', 'prompt', 'โทร', 'แชท'], SettingsTile(
+          icon: NxI.sparkle,
+          tint: const Color(0xFF7C3AED),
+          title: 'ISAAC AI การสื่อสาร',
+          subtitle: session.isBusinessAdmin ? 'ถอดเสียงในสาย สรุปการโทร/แชท และ Prompt' : 'ดูการตั้งค่าการถอดเสียงและการสรุป',
+          onTap: () => context.push(AppRoutes.commAiSettings),
+        )),
 
       // ── Notifications
       _Entry('การแจ้งเตือน', ['แจ้งเตือน', 'notification'], SettingsTile(

@@ -2719,6 +2719,29 @@ class ApiClient {
   Future<Map<String, dynamic>> createConversationLink(String kind, String id, {List<String> include = const ['summary', 'actions', 'transcript'], int days = 7, String? password}) async =>
       _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/link', data: {'include': include, 'days': days, if (password != null && password.isNotEmpty) 'password': password}));
 
+  /// Links this user created for a conversation: `[{id, expires_at, revoked_at, view_count, has_password, ...}]`.
+  Future<List<Map<String, dynamic>>> listConversationLinks(String kind, String id) async =>
+      extractMapList(_dataMap(await _send('GET', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/links'))['list']);
+
+  Future<void> revokeConversationLink(int linkId) async => _send('DELETE', '/api/comm-ai/share/links/$linkId');
+
+  /// Admin: partial update → `{settings}`.
+  Future<Map<String, dynamic>> saveCommAiSettings(Map<String, dynamic> patch) async => _dataMap(await _send('PUT', '/api/comm-ai/settings', data: patch));
+
+  /// `{prompts: {call: {prompt, is_default, version, ...}, chat: {...}}, max_chars}`
+  Future<Map<String, dynamic>> getCommAiPrompts() async => _dataMap(await _send('GET', '/api/comm-ai/prompts'));
+
+  Future<Map<String, dynamic>> saveCommAiPrompt(String kind, {String? prompt, bool reset = false}) async =>
+      _dataMap(await _send('PUT', '/api/comm-ai/prompts/$kind', data: reset ? {'reset': true} : {'prompt': prompt ?? ''}));
+
+  /// Runs the prompt on a sample conversation (or [sample] lines "name: text") → `{result, ms}`. Not saved.
+  Future<Map<String, dynamic>> testCommAiPrompt(String kind, {String? prompt, String? sample}) async => _dataMap(await _send(
+        'POST',
+        '/api/comm-ai/prompts/$kind/test',
+        data: {if (prompt != null) 'prompt': prompt, if (sample != null && sample.trim().isNotEmpty) 'sample': sample},
+        options: Options(receiveTimeout: const Duration(minutes: 3)),
+      ));
+
   Future<List<int>> _downloadBytes(String path) async {
     try {
       final res = await _dio.get<List<int>>(

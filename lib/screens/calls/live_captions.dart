@@ -6,6 +6,7 @@ import '../../core/i18n.dart';
 import '../../services/calls/live_transcription.dart';
 import '../../widgets/nx_icons.dart';
 import '../comm_ai/call_summary_screen.dart';
+import '../comm_ai/comm_ai_isaac.dart';
 
 const _glass = Color(0xB3020617);
 
@@ -59,16 +60,9 @@ class _CallConsentPanelState extends State<CallConsentPanel> {
         border: Border.all(color: Colors.white12),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Center(
-          child: Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)])),
-            child: const Icon(NxI.sparkle, color: Colors.white, size: 26),
-          ),
-        ),
+        const Center(child: IsaacAvatar(mood: 'listening', size: 72)),
         const SizedBox(height: 10),
-        Text(tr('ให้ AI ช่วยจดบทสนทนาไหม?'), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+        Text(tr('ให้ ISAAC ช่วยจดบทสนทนาไหม?'), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
         Text(
           tr(widget.callerMode
@@ -144,12 +138,23 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                   if (lt.request != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
-                      child: Text('🔴 ${tr('${lt.request!['by_name']} เปิดให้ AI จดบทสนทนาในสายนี้')}', style: const TextStyle(color: Color(0xFFFDA4AF), fontSize: 12)),
+                      child: Text('🔴 ${tr('${lt.request!['by_name']} เปิดให้ ISAAC จดบทสนทนาในสายนี้')}', style: const TextStyle(color: Color(0xFFFDA4AF), fontSize: 12)),
                     ),
                   Row(children: [
-                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFF43F5E), shape: BoxShape.circle)),
+                    Stack(clipBehavior: Clip.none, children: [
+                      const IsaacAvatar(mood: 'listening', size: 26, ring: false, animate: false),
+                      Positioned(
+                        right: -1,
+                        top: -1,
+                        child: Container(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(color: const Color(0xFFF43F5E), shape: BoxShape.circle, border: Border.all(color: const Color(0xFF0F172A), width: 1.5)),
+                        ),
+                      ),
+                    ]),
                     const SizedBox(width: 8),
-                    Expanded(child: Text('${tr('กำลังจดบทสนทนา')}${names.isEmpty ? '' : ' · $names'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                    Expanded(child: Text('${tr('ISAAC กำลังจดบทสนทนา')}${names.isEmpty ? '' : ' · $names'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12))),
                     if (lt.status == 'reconnecting' || lt.status == 'connecting') const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFCD34D))),
                     if (lt.running)
                       IconButton(
@@ -290,16 +295,11 @@ class CallSummaryToast extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
               child: Row(children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)])),
-                  child: const Icon(NxI.sparkle, color: Colors.white, size: 20),
-                ),
+                const IsaacAvatar(mood: 'success', size: 42),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                    Text(tr('สรุปการสนทนาพร้อมแล้ว'), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(tr('ISAAC สรุปการสนทนาเสร็จแล้ว'), style: const TextStyle(fontWeight: FontWeight.w700)),
                     Text('${ready['headline'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
                   ]),
                 ),
