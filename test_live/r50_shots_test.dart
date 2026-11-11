@@ -172,6 +172,15 @@ void main() {
       await tester.pumpWidget(app(EntityDetailScreen(key: UniqueKey(), module: 'job', row: const {'id': 9})));
       await frames(24);
       await shot('job_summary');
+      tester.view.physicalSize = const Size(400, 860);
+      await frames(4);
+      await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+      await frames(10);
+      await shot('job_sticky');
+      await tester.drag(find.byType(ListView).first, const Offset(0, 700));
+      await frames(6);
+      tester.view.physicalSize = const Size(400, 2000);
+      await frames(4);
       await tester.tap(find.byKey(const ValueKey('next-action-open_signatures')));
       await frames(10);
       await shot('job_signatures');

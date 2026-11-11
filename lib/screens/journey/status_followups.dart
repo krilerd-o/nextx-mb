@@ -487,7 +487,7 @@ Future<Map<String, dynamic>?> showQuotationOutcomeSheet(
                   ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
             if (result == 'Won')
               TextField(
                 key: const ValueKey('outcome-po'),
@@ -495,6 +495,7 @@ Future<Map<String, dynamic>?> showQuotationOutcomeSheet(
                 maxLength: 200,
                 decoration: InputDecoration(labelText: tr('เลขที่ใบสั่งซื้อ (PO)'), counterText: ''),
               ),
+            if (result == 'Won') const SizedBox(height: 12),
             TextField(
               key: const ValueKey('outcome-note'),
               controller: note,
@@ -504,7 +505,7 @@ Future<Map<String, dynamic>?> showQuotationOutcomeSheet(
             ),
             if (result == 'Won')
               Padding(
-                padding: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.only(top: 10),
                 child: Text(
                   tr('ปิดชนะแล้ว ระบบอาจสร้างใบสั่งงานให้อัตโนมัติตามการตั้งค่า'),
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -647,7 +648,7 @@ class QuotationFlows {
               decoration: InputDecoration(labelText: '${tr('ถึง')} *', prefixIcon: const Icon(NxI.envelope)),
               onChanged: (_) => setS(() {}),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextField(controller: msg, minLines: 2, maxLines: 5, decoration: InputDecoration(labelText: tr('ข้อความ'))),
             const SizedBox(height: 14),
             SizedBox(

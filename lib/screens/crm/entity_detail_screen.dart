@@ -37,6 +37,7 @@ import '../../core/service_journey.dart';
 import '../journey/job_journey.dart';
 import '../journey/journey_controller.dart';
 import '../journey/journey_widgets.dart';
+import '../../widgets/nx_scroll_tabs.dart';
 import '../journey/quotation_journey.dart';
 import '../calendar/activity_detail_screen.dart';
 import '../calendar/activity_form_screen.dart';
@@ -182,7 +183,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
 
   /// Tabs: (id, label). Journey pages are shorter and start at "สรุป".
   List<(String, String)> _tabs() {
-    final comments = _comments.isEmpty ? 'คอมเม้นท์' : 'คอมเม้นท์ ${_comments.length}';
+    const comments = 'คอมเม้นท์';
     if (_journey && widget.module == 'job') {
       return [('summary', 'สรุป'), ('ops', 'ปฏิบัติงาน'), ('activities', 'กิจกรรม'), ('signatures', 'ลายเซ็น'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
     }
@@ -516,11 +517,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             : null,
       ),
       body: Builder(
-        builder: (context) => NxRefresh(
+        builder: (context) => Stack(children: [
+          NxRefresh(
           edgeOffset: NxScrollScaffold.topInset(context),
           color: theme.colorScheme.primary,
           onRefresh: _reload,
-          child: ListView(
+          child: NxSwipeTabs(
+            index: _tabIndex(),
+            count: _tabs().length,
+            onChanged: (i) => _goTab(_tabs()[i].$1),
+            child: ListView(
             controller: _heroScroll,
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.fromLTRB(
@@ -621,15 +627,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 ),
               ],
               const SizedBox(height: 14),
-              Builder(builder: (context) {
-                final tabs = _tabs();
-                final idx = tabs.indexWhere((t) => t.$1 == _tabId);
-                return NxSegmented(
-                  labels: [for (final t in tabs) t.$2],
-                  index: idx < 0 ? 0 : idx,
-                  onChanged: (i) => _goTab(tabs[i].$1),
-                );
-              }),
+              KeyedSubtree(key: _tabsAnchor, child: _tabBar()),
               if (_loading) ...[
                 const SizedBox(height: 16),
                 const NxSkeletonDetail(),
@@ -792,8 +790,49 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 ),
             ],
           ),
+          ),
         ),
+          // Tabs stay under the header while reading down the page.
+          NxStickyTabs(
+            controller: _heroScroll,
+            anchorKey: _tabsAnchor,
+            top: NxScrollScaffold.topInset(context),
+            child: _tabBar(),
+          ),
+        ]),
       ),
+    );
+  }
+
+  final _tabsAnchor = GlobalKey();
+
+  int _tabIndex() {
+    final i = _tabs().indexWhere((t) => t.$1 == _tabsResolved());
+    return i < 0 ? 0 : i;
+  }
+
+  static const _tabIcons = {
+    'summary': NxI.sparkle,
+    'info': NxI.info,
+    'comments': NxI.chatCircle,
+    'files': NxI.paperclip,
+    'history': NxI.clockCounterClockwise,
+    'activities': NxI.calendarCheck,
+    'ops': NxI.wrench,
+    'signatures': NxI.penLine,
+    'lines': NxI.listChecks,
+    'approval': NxI.shieldCheck,
+  };
+
+  Widget _tabBar() {
+    final tabs = _tabs();
+    return NxScrollTabs(
+      keyPrefix: 'detail-tab-',
+      labels: [for (final t in tabs) t.$2],
+      icons: [for (final t in tabs) _tabIcons[t.$1]],
+      badges: [for (final t in tabs) t.$1 == 'comments' ? _comments.length : null],
+      index: _tabIndex(),
+      onChanged: (i) => _goTab(tabs[i].$1),
     );
   }
 

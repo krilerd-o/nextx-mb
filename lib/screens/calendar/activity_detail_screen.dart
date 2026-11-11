@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_tabs.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -349,9 +350,15 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         ],
       ),
       body: Builder(
-        builder: (context) => NxRefresh(
+        builder: (context) => Stack(children: [
+          NxRefresh(
           onRefresh: () => Future.wait([_loadRecord(), _loadVisit()]),
-          child: ListView(
+          child: NxSwipeTabs(
+            index: _tab,
+            count: 4,
+            onChanged: _setTab,
+            child: ListView(
+          controller: _scroll,
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(
             16,
@@ -393,21 +400,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               ),
             ],
             const SizedBox(height: 14),
-            NxSegmented(
-              labels: [
-                'ภาพรวม',
-                _comments.isEmpty
-                    ? 'คอมเม้นท์'
-                    : 'คอมเม้นท์ ${_comments.length}',
-                'ไฟล์',
-                'ประวัติ',
-              ],
-              index: _tab,
-              onChanged: (i) {
-                setState(() => _tab = i);
-                if (i == 3) _loadTimeline();
-              },
-            ),
+            KeyedSubtree(key: _tabsAnchor, child: _tabBar()),
             if (_tab == 1) ...[
               const SizedBox(height: 14),
               EntityCommentsPanel(
@@ -635,9 +628,34 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
           ],
         ),
         ),
+        ),
+          NxStickyTabs(
+            controller: _scroll,
+            anchorKey: _tabsAnchor,
+            top: NxScrollScaffold.topInset(context),
+            child: _tabBar(),
+          ),
+        ]),
       ),
     );
   }
+
+  final _scroll = ScrollController();
+  final _tabsAnchor = GlobalKey();
+
+  void _setTab(int i) {
+    setState(() => _tab = i);
+    if (i == 3) _loadTimeline();
+  }
+
+  Widget _tabBar() => NxScrollTabs(
+        keyPrefix: 'detail-tab-',
+        labels: const ['ภาพรวม', 'คอมเม้นท์', 'ไฟล์', 'ประวัติ'],
+        icons: const [NxI.sparkle, NxI.chatCircle, NxI.paperclip, NxI.clockCounterClockwise],
+        badges: [null, _comments.length, null, null],
+        index: _tab,
+        onChanged: _setTab,
+      );
 
   Widget _line(BuildContext context, IconData icon, String text) {
     final theme = Theme.of(context);

@@ -108,11 +108,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(find.text('คุณเอ'), findsWidgets);
-    expect(find.text('คอมเม้นท์ 1'), findsOneWidget);
+    // Comment count is a badge on the tab now.
+    expect(find.text('คอมเม้นท์'), findsWidgets);
+    expect(find.text('1'), findsWidgets);
     // Tabs slide left / right on a phone: bring "ประวัติ" into view first.
-    await tester.ensureVisible(find.text('ประวัติ'));
+    await tester.ensureVisible(find.text('ประวัติ').first);
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text('ประวัติ'));
+    await tester.tap(find.text('ประวัติ').first);
     for (var i = 0; i < 8; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }

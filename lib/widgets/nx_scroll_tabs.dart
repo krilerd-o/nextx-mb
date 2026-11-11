@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../core/i18n.dart';
@@ -16,6 +17,7 @@ class NxScrollTabs extends StatefulWidget {
     required this.index,
     required this.onChanged,
     this.icons,
+    this.badges,
     this.keyPrefix = 'nx-tab-',
     this.padding = EdgeInsets.zero,
   });
@@ -26,6 +28,9 @@ class NxScrollTabs extends StatefulWidget {
 
   /// Optional leading icon per tab.
   final List<IconData?>? icons;
+
+  /// Optional count per tab (shown as a small pill; null / 0 = hidden).
+  final List<int?>? badges;
   final String keyPrefix;
   final EdgeInsets padding;
 
@@ -110,12 +115,161 @@ class _NxScrollTabsState extends State<NxScrollTabs> with TickerProviderStateMix
                       const SizedBox(width: 6),
                     ],
                     Text(tr(widget.labels[i]), maxLines: 1, softWrap: false),
+                    if (widget.badges != null && i < widget.badges!.length && (widget.badges![i] ?? 0) > 0) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: i == widget.index ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          widget.badges![i]! > 99 ? '99+' : '${widget.badges![i]}',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: i == widget.index ? cs.onPrimary : cs.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Shows a pinned copy of a page's tab row under the header once the real
+/// row (marked with [anchorKey]) scrolls above [top]. Put it in a [Stack]
+/// over the page's scroll view.
+class NxStickyTabs extends StatefulWidget {
+  const NxStickyTabs({
+    super.key,
+    required this.controller,
+    required this.anchorKey,
+    required this.top,
+    required this.child,
+    this.horizontal = 16,
+  });
+
+  final ScrollController controller;
+  final GlobalKey anchorKey;
+  final double top;
+  final double horizontal;
+  final Widget child;
+
+  @override
+  State<NxStickyTabs> createState() => _NxStickyTabsState();
+}
+
+class _NxStickyTabsState extends State<NxStickyTabs> {
+  bool _show = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_check);
+  }
+
+  @override
+  void didUpdateWidget(NxStickyTabs old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_check);
+      widget.controller.addListener(_check);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_check);
+    super.dispose();
+  }
+
+  /// Scroll offset at which the real tab row reaches [NxStickyTabs.top]
+  /// (remembered: lazy lists drop the row once it is far off screen).
+  double? _pinAt;
+
+  void _check() {
+    if (!widget.controller.hasClients) return;
+    final offset = widget.controller.offset;
+    final anchor = widget.anchorKey.currentContext?.findRenderObject();
+    final me = context.findRenderObject();
+    if (anchor is RenderBox && me is RenderBox && anchor.attached && me.attached) {
+      // Scroll offset that brings the row to the viewport top (layout-based,
+      // so it is right even while the frame is mid-scroll).
+      final viewport = RenderAbstractViewport.maybeOf(anchor);
+      if (viewport != null && viewport is RenderBox) {
+        final reveal = viewport.getOffsetToReveal(anchor, 0).offset;
+        final vpTop = (viewport as RenderBox).localToGlobal(Offset.zero).dy - me.localToGlobal(Offset.zero).dy;
+        _pinAt = reveal + vpTop - widget.top;
+      }
+    }
+    final at = _pinAt;
+    if (at == null) return;
+    final show = offset > at;
+    if (show != _show) setState(() => _show = show);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Stack(
+      children: [
+        Positioned(
+          top: widget.top,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            ignoring: !_show,
+            child: AnimatedOpacity(
+              opacity: _show ? 1 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: AnimatedSlide(
+                offset: _show ? Offset.zero : const Offset(0, -0.3),
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                child: Container(
+                  key: const ValueKey('sticky-tabs'),
+                  padding: EdgeInsets.fromLTRB(widget.horizontal, 6, widget.horizontal, 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.98),
+                    border: Border(bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
+                  ),
+                  child: _show ? widget.child : const SizedBox(height: NxScrollTabs.height),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Swipe the page content left / right to move to the next / previous tab.
+/// Horizontal scrollers inside (photo strips, steppers) still win their drags.
+class NxSwipeTabs extends StatelessWidget {
+  const NxSwipeTabs({super.key, required this.index, required this.count, required this.onChanged, required this.child});
+
+  final int index;
+  final int count;
+  final ValueChanged<int> onChanged;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragEnd: (d) {
+        final v = d.primaryVelocity ?? 0;
+        if (v.abs() < 350) return;
+        final next = v < 0 ? index + 1 : index - 1;
+        if (next < 0 || next >= count) return;
+        HapticFeedback.selectionClick();
+        onChanged(next);
+      },
+      child: child,
     );
   }
 }
