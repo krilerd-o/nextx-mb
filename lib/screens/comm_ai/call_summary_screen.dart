@@ -5,6 +5,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
@@ -43,12 +44,28 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
   String? _loadedUser;
   String? _loadingUser;
   bool _playing = false;
+  int _posMs = 0;
+  int? _durMs;
+  double _rate = 1;
+  String? _tapePath;
+  StreamSubscription<Duration>? _posSub;
+  StreamSubscription<Duration>? _durSub;
+
+  /// Combined "meeting tape" (every shared voice on one timeline); played by the same player as id 'tape'.
+  Map<String, dynamic>? get _tape => _data?['tape'] is Map ? {...Map<String, dynamic>.from(_data!['tape'] as Map), 'user_id': 'tape', 'mime': 'audio/mp4'} : null;
+  bool get _onTape => _loadedUser == 'tape';
 
   @override
   void initState() {
     super.initState();
     _stateSub = _player.onPlayerStateChanged.listen((s) {
       if (mounted) setState(() => _playing = s == PlayerState.playing);
+    });
+    _posSub = _player.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _posMs = p.inMilliseconds);
+    });
+    _durSub = _player.onDurationChanged.listen((d) {
+      if (mounted && d.inMilliseconds > 0) setState(() => _durMs = d.inMilliseconds);
     });
     _search.addListener(() {
       final v = _search.text.trim();
@@ -61,6 +78,8 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
   void dispose() {
     _poll?.cancel();
     _stateSub?.cancel();
+    _posSub?.cancel();
+    _durSub?.cancel();
     _player.dispose();
     _search.dispose();
     super.dispose();
@@ -97,7 +116,10 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
         await f.writeAsBytes(bytes);
         await _player.stop();
         await _player.setSourceDeviceFile(f.path);
+        await _player.setPlaybackRate(uid == 'tape' ? _rate : 1);
         _loadedUser = uid;
+        _durMs = null;
+        if (uid == 'tape') _tapePath = f.path;
       } else if (atMs == null && _playing) {
         await _player.pause();
         return;
@@ -109,6 +131,128 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
     } finally {
       if (mounted) setState(() => _loadingUser = null);
     }
+  }
+
+  /// Tap a line: the tape plays both sides from there; without a tape only that speaker's own file.
+  void _playLine(Map<String, dynamic> x, List<Map<String, dynamic>> recordings) {
+    final at = (x['start_ms'] as num?)?.toInt();
+    final tape = _tape;
+    if (tape != null) {
+      _play(tape, atMs: at);
+      return;
+    }
+    final rec = recordings.where((r) => '${r['user_id']}' == '${x['user_id']}').firstOrNull;
+    if (rec != null) _play(rec, atMs: at);
+  }
+
+  Widget _tapeCard(Map<String, dynamic> tape) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final hint = theme.hintColor;
+    final dur = (_onTape ? _durMs : null) ?? (tape['duration_ms'] as num?)?.toInt() ?? 0;
+    final pos = _onTape ? _posMs.clamp(0, dur > 0 ? dur : _posMs) : 0;
+    final voices = [for (final v in (tape['voices'] as List? ?? const [])) if (v is Map) '${v['name']}'];
+    final missing = [for (final m in (tape['missing'] as List? ?? const [])) '$m'];
+    final playingTape = _onTape && _playing;
+    return Container(
+      key: const ValueKey('call-tape'),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(12, 12, 8, 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: dark ? [const Color(0xFF312E81).withValues(alpha: 0.5), const Color(0xFF4C1D95).withValues(alpha: 0.3)] : [const Color(0xFFEEF2FF), const Color(0xFFF5F3FF)],
+        ),
+        border: Border.all(color: kIsaacIndigo.withValues(alpha: 0.18)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Material(
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: Ink(
+              decoration: const BoxDecoration(gradient: kIsaacGradient, shape: BoxShape.circle),
+              child: InkWell(
+                key: const ValueKey('call-tape-play'),
+                onTap: () => playingTape ? _player.pause() : _play(tape),
+                child: SizedBox(
+                  width: 46,
+                  height: 46,
+                  child: _loadingUser == 'tape'
+                      ? const Padding(padding: EdgeInsets.all(13), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Icon(playingTape ? NxI.pause : NxI.play, color: Colors.white, size: 22),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Flexible(child: Text(tr('เทปบันทึกการสนทนา'), overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(color: kIsaacIndigo.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(999)),
+                  child: Text(tr('${voices.length} เสียง'), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: kIsaacIndigo)),
+                ),
+              ]),
+              Text(voices.join(', '), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: hint)),
+            ]),
+          ),
+          IsaacAvatar(mood: playingTape ? 'listening' : 'idle', size: 34, ring: false, animate: false),
+        ]),
+        Row(children: [
+          SizedBox(width: 38, child: Text(_mmss(pos), textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: hint, fontFeatures: const [FontFeature.tabularFigures()]))),
+          Expanded(
+            child: Slider(
+              key: const ValueKey('call-tape-seek'),
+              value: dur > 0 ? pos.toDouble().clamp(0, dur.toDouble()) : 0,
+              max: dur > 0 ? dur.toDouble() : 1,
+              onChanged: (v) {
+                if (_onTape) {
+                  setState(() => _posMs = v.round());
+                  _player.seek(Duration(milliseconds: v.round()));
+                } else {
+                  _play(tape, atMs: v.round() + 300);
+                }
+              },
+            ),
+          ),
+          SizedBox(width: 34, child: Text(_mmss(dur), style: TextStyle(fontSize: 11, color: hint, fontFeatures: const [FontFeature.tabularFigures()]))),
+          TextButton(
+            key: const ValueKey('call-tape-speed'),
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact, minimumSize: const Size(36, 32), padding: const EdgeInsets.symmetric(horizontal: 6)),
+            onPressed: () {
+              const speeds = [1.0, 1.25, 1.5, 2.0];
+              final next = speeds[(speeds.indexOf(_rate) + 1) % speeds.length];
+              setState(() => _rate = next);
+              if (_onTape) _player.setPlaybackRate(next);
+            },
+            child: Text('${_rate == _rate.roundToDouble() ? _rate.toInt() : _rate}x', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+          ),
+          IconButton(
+            tooltip: tr('ย้อน 10 วินาที'),
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(NxI.arrowCounterClockwise, size: 18),
+            onPressed: _onTape ? () => _player.seek(Duration(milliseconds: (_posMs - 10000).clamp(0, 1 << 31))) : null,
+          ),
+          IconButton(
+            tooltip: tr('แชร์เทป'),
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(NxI.shareNetwork, size: 18),
+            onPressed: _tapePath == null ? null : () => Share.shareXFiles([XFile(_tapePath!, mimeType: 'audio/mp4')], subject: tr('เทปบันทึกการสนทนา')),
+          ),
+        ]),
+        if (missing.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+            child: Text('${tr('ไม่มีเสียงของ')} ${missing.join(', ')} ${tr('(ไม่ได้ยินยอมให้บันทึกหรือไม่ได้แชร์ข้อความ)')}', style: TextStyle(fontSize: 11.5, color: hint)),
+          ),
+      ]),
+    );
   }
 
   String _mmss(num ms) {
@@ -147,9 +291,10 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
     }
     final q = _q.toLowerCase();
     final shown = q.isEmpty ? transcript : transcript.where((x) => '${x['text']} ${x['name']}'.toLowerCase().contains(q)).toList();
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
-      if (recordings.isNotEmpty)
-        NxSurfaceCard(
+    final tape = _tape;
+    final Widget? perPerson = recordings.isEmpty
+        ? null
+        : NxSurfaceCard(
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.fromLTRB(14, 12, 8, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -174,6 +319,18 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
               ),
             if (recordings.length < ids.length) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(tr('มีเฉพาะเสียงของคนที่ยินยอมให้บันทึก'), style: TextStyle(fontSize: 11.5, color: hint))),
           ]),
+        );
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
+      if (perPerson != null && tape == null) perPerson,
+      if (perPerson != null && tape != null)
+        Theme(
+          data: theme.copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            key: const ValueKey('call-recordings-per-person'),
+            tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+            title: Text(tr('ไฟล์เสียงแยกรายคน'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kIsaacIndigo)),
+            children: [perPerson],
+          ),
         ),
       NxSearchField(key: const ValueKey('comm-ai-transcript-search'), controller: _search, hint: 'ค้นหาในบทสนทนา'),
       const SizedBox(height: 8),
@@ -184,11 +341,12 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
       for (final x in shown)
         InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            final rec = recordings.where((r) => '${r['user_id']}' == '${x['user_id']}').firstOrNull;
-            if (rec != null) _play(rec, atMs: (x['start_ms'] as num?)?.toInt());
-          },
-          child: Padding(
+          onTap: () => _playLine(x, recordings),
+          child: Container(
+            decoration: BoxDecoration(
+              color: _onTape && _posMs >= ((x['start_ms'] as num?) ?? 0) && _posMs <= ((x['end_ms'] as num?) ?? 0) + 400 ? const Color(0x33F59E0B) : null,
+              borderRadius: BorderRadius.circular(12),
+            ),
             padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               SizedBox(width: 42, child: Text(_mmss(x['start_ms'] as num? ?? 0), style: TextStyle(fontSize: 12, color: hint, fontFeatures: const [FontFeature.tabularFigures()]))),
@@ -238,10 +396,11 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
           return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Expanded(flex: 3, child: _summaryPane(summary, result, transcript, when)),
             VerticalDivider(width: 1, color: Theme.of(context).dividerColor.withValues(alpha: 0.4)),
-            Expanded(flex: 2, child: _transcriptPane(transcript, recordings)),
+            Expanded(flex: 2, child: Column(children: [if (_tape != null) _tapeCard(_tape!), Expanded(child: _transcriptPane(transcript, recordings))])),
           ]);
         }
         return Column(children: [
+          if (_tape != null) _tapeCard(_tape!),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: NxSlidingSegmented<String>(

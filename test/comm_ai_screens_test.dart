@@ -1,5 +1,6 @@
 // ISAAC AI การสื่อสาร (mobile): settings + prompts, history, chat summary sheet, share sheet, call summary.
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -268,6 +269,44 @@ void main() {
     await _settle(tester);
     expect(find.textContaining('ยังน้ำหยด'), findsOneWidget);
     expect(find.textContaining('สวัสดีครับ'), findsNothing);
+  });
+
+  testWidgets('call summary: combined tape — card shown, a line plays the tape (not one person)', (tester) async {
+    final api = await _pump(tester, const CallSummaryScreen(callId: 'c1'), {
+      'GET /api/comm-ai/calls/c1': {
+        'call_id': 'c1',
+        'media': 'audio',
+        'started_at': '2026-11-11T03:00:00Z',
+        'participants': [{'user_id': 1, 'name': 'สมชาย'}, {'user_id': 2, 'name': 'วิภา'}, {'user_id': 3, 'name': 'นที'}],
+        'summary': {'status': 'done', 'result': _result},
+        'transcript': [
+          {'user_id': 1, 'name': 'สมชาย', 'start_ms': 0, 'end_ms': 2000, 'text': 'สวัสดีครับ'},
+          {'user_id': 2, 'name': 'วิภา', 'start_ms': 3000, 'end_ms': 5000, 'text': 'แอร์ชั้น 3 ยังน้ำหยด'},
+        ],
+        'recordings': [
+          {'user_id': 1, 'name': 'สมชาย', 'duration_ms': 8000, 'url': '/api/comm-ai/calls/c1/recordings/1', 'mime': 'audio/wav'},
+          {'user_id': 2, 'name': 'วิภา', 'duration_ms': 7000, 'url': '/api/comm-ai/calls/c1/recordings/2', 'mime': 'audio/wav'},
+        ],
+        'tape': {
+          'url': '/api/comm-ai/calls/c1/tape',
+          'duration_ms': 9000,
+          'ready': true,
+          'voices': [{'user_id': 1, 'name': 'สมชาย'}, {'user_id': 2, 'name': 'วิภา'}],
+          'missing': ['นที'],
+        },
+      },
+      'GET /api/comm-ai/calls/c1/tape': Uint8List.fromList(List.filled(64, 1)),
+    });
+    expect(find.byKey(const ValueKey('call-tape')), findsOneWidget);
+    expect(find.text('เทปบันทึกการสนทนา'), findsOneWidget);
+    expect(find.textContaining('นที'), findsWidgets);
+    await tester.tap(find.textContaining('บทสนทนา (2)'));
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('call-recordings-per-person')), findsOneWidget, reason: 'per-person files folded away');
+    await tester.tap(find.textContaining('ยังน้ำหยด'));
+    await _settle(tester);
+    expect(api.callKeys, contains('GET /api/comm-ai/calls/c1/tape'));
+    expect(api.callKeys, isNot(contains('GET /api/comm-ai/calls/c1/recordings/2')));
   });
 
   test('chat post body matches the web', () {

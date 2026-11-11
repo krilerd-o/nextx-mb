@@ -2526,6 +2526,12 @@ const Map<String, String> enStrings = {
   'เวลาประเทศไทย': 'Thai time',
   'ผลที่บันทึกไว้': 'Saved result',
   // ISAAC AI การสื่อสาร (comm_ai, mobile redesign)
+  'เทปบันทึกการสนทนา': 'Conversation tape',
+  'ไฟล์เสียงแยกรายคน': 'Each person’s audio',
+  'ย้อน 10 วินาที': 'Back 10 s',
+  'แชร์เทป': 'Share tape',
+  'ไม่มีเสียงของ': 'No audio from',
+  '(ไม่ได้ยินยอมให้บันทึกหรือไม่ได้แชร์ข้อความ)': '(not recorded or not shared)',
   'แชร์ไฟล์': 'Share file',
   'มีรหัสผ่าน': 'password',
   'ให้ ISAAC ช่วยจดบทสนทนาไหม?': 'Let ISAAC take notes?',
@@ -2928,5 +2934,6 @@ const Map<String, String> enPatterns = {
   // AI การสื่อสาร (comm_ai)
   '{} เปิดให้ AI จดบทสนทนาในสายนี้': '{} turned on AI notes for this call',
   '{} เปิดให้ ISAAC จดบทสนทนาในสายนี้': '{} turned on ISAAC notes for this call',
+  '{} เสียง': '{} voices',
   '{} งานที่ต้องทำต่อ': '{} follow-ups',
 };
