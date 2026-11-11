@@ -388,8 +388,10 @@ List<ChecklistItem> jobCloseChecklist(Map<String, dynamic>? r, Map<String, dynam
 }
 
 /// Title / hint / button text for a next action.
-String nextTitle(String module, NextAction a) => jt('journey.$module.next.${a.key}.title', fallback: a.key);
-String nextHint(String module, NextAction a) => jt('journey.$module.next.${a.key}.hint', fallback: '');
+String nextTitle(String module, NextAction a, {Map<String, Object?> params = const {}}) =>
+    jt('journey.$module.next.${a.key}.title', fallback: a.key, params: params);
+String nextHint(String module, NextAction a, {Map<String, Object?> params = const {}}) =>
+    jt('journey.$module.next.${a.key}.hint', fallback: '', params: params);
 String actionLabel(String module, String action) => jt('journey.$module.action.$action', fallback: action);
 
 Object? _jsonDecode(String s) => jsonDecode(s);

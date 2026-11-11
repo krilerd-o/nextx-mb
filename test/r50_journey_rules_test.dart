@@ -177,6 +177,7 @@ void main() {
   test('texts come from the web i18n', () {
     expect(nextTitle('job', const NextAction('accept', 'primary', 'accept')), 'รอรับงาน');
     expect(actionLabel('quotation', 'close_sale'), 'ปิดการขาย');
+    expect(nextTitle('job', const NextAction('collect_signatures', 'warning', 'open_signatures'), params: {'signed': 1, 'total': 2}), 'เก็บลายเซ็น (1/2)');
     expect(jt('journey.nope', fallback: 'x'), 'x');
   });
 }

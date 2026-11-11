@@ -605,7 +605,12 @@ class ApiClient {
   }) async {
     if (accessToken != null) _accessToken = accessToken;
     if (businessId != null) _businessId = businessId;
-    return _dataMap(await _send('PUT', '/api/entity/$module/$id', data: payload));
+    // Job photos are appended by the photo endpoint; a full PUT of the list
+    // would overwrite uploads still in progress (NEXTX Service Journey).
+    final body = module == 'job' && payload.containsKey('evidence_photos')
+        ? ({...payload}..remove('evidence_photos'))
+        : payload;
+    return _dataMap(await _send('PUT', '/api/entity/$module/$id', data: body));
   }
 
   Future<Map<String, dynamic>> postEntity(

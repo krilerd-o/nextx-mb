@@ -84,7 +84,13 @@ class JobSummaryTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        NextActionCard(module: 'job', next: next, onAction: onAction, busy: busy),
+        NextActionCard(
+          module: 'job',
+          next: next,
+          onAction: onAction,
+          busy: busy,
+          params: {'signed': _n(sig['signed']), 'total': _n(sig['total']), 'open': _n(acts['open']), 'n': _n(acts['open'])},
+        ),
         const SizedBox(height: 12),
         KpiGrid(tiles: [
           KpiTile(

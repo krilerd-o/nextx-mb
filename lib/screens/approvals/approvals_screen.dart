@@ -7,8 +7,11 @@ import '../../core/app_config.dart';
 import '../../core/approval_queue.dart';
 import '../../core/entity_display.dart';
 import '../../core/menu_access.dart';
+import '../../core/service_journey.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
+import '../../core/nx_page_route.dart';
+import '../deep_link_loaders.dart';
 import '../../services/api_client.dart';
 import '../../widgets/dense_card_tile.dart';
 import '../../widgets/nx_app_header.dart';
@@ -38,12 +41,30 @@ class _Section {
 
 class _ApprovalsScreenState extends State<ApprovalsScreen> {
   var _revision = 0;
+
+  /// Service Journey inbox (`/api/approvals/inbox`): quotations + activities + jobs sent to me.
+  bool _journey = false;
+  Future<Map<String, dynamic>>? _inbox;
+
+  Future<Map<String, dynamic>> _loadInbox() {
+    if (_inbox != null) return _inbox!;
+    return _inbox = context.read<AppConfig>().apiClient.getApprovalInbox();
+  }
+
+  Future<List<Map<String, dynamic>>> _inboxList(String key) async {
+    final d = await _loadInbox();
+    final v = d[key];
+    return v is List ? [for (final x in v) if (x is Map) Map<String, dynamic>.from(x)] : const [];
+  }
   NxListQuery _query = const NxListQuery();
   late final NxListPrefs _prefs = NxListPrefs('approvals_${context.read<AppConfig>().businessScope}');
 
   @override
   void initState() {
     super.initState();
+    ServiceJourney.supported(context.read<AppConfig>().apiClient).then((ok) {
+      if (ok && mounted) setState(() => _journey = true);
+    });
     _prefs.loadQuery().then((q) {
       if (q != null && mounted) setState(() => _query = q);
     });
@@ -81,7 +102,10 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       await action();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(done))));
-      setState(() => _revision++);
+      setState(() {
+        _revision++;
+        _inbox = null;
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
@@ -109,6 +133,15 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         await _run(() async => api.approveLeave(id, approve: approve, reason: reason), label);
       case 'join':
         await _run(() => api.decideJoinRequest(id, approve: approve), label);
+      case 'activity':
+        await _run(() async => approve ? await api.approveActivity(id) : await api.rejectActivity(id, note: reason), label);
+      case 'job':
+        // "อนุมัติ" = รับงาน; "ไม่อนุมัติ" = เปิดงานเพื่อส่งต่อ/ยกเลิกเอง
+        if (approve) {
+          await _run(() async => api.jobWorkflowAction(id, 'accept'), 'รับงานแล้ว');
+        } else if (mounted) {
+          context.push(AppRoutes.crmRecord('job', id));
+        }
     }
   }
 
@@ -120,9 +153,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     final sections = <String, _Section>{
       if (MenuAccess.allow(session, MenuAccess.quotation))
         'quotation': _Section('ใบเสนอราคา', NxI.receipt, () async {
+          if (_journey) return _inboxList('quotations');
           final rows = await api.getPendingQuotationApprovals();
           return rows.where((r) => isAwaitingMyApproval(r, session.userId)).toList();
         }),
+      if (_journey) 'activity': _Section('กิจกรรม', NxI.calendarCheck, () => _inboxList('activities')),
+      if (_journey && MenuAccess.allow(session, MenuAccess.job)) 'job': _Section('งานที่ส่งถึงฉัน', NxI.wrench, () => _inboxList('jobs')),
       if (MenuAccess.allow(session, MenuAccess.leaveManagement))
         'leave': _Section('การลา', NxI.calendarCheck, () => api.getLeaveRequests(all: true, status: 'Pending')),
       if (MenuAccess.allow(session, MenuAccess.pendingApprovals))
@@ -136,7 +172,10 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       body: sections.isEmpty
           ? Center(child: Text(tr('ไม่มีสิทธิ์อนุมัติรายการใด')))
           : NxRefresh(
-              onRefresh: () async => setState(() => _revision++),
+              onRefresh: () async => setState(() {
+                _revision++;
+                _inbox = null;
+              }),
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: NxBreakpoint.of(context).scrollPadding(context),
@@ -161,7 +200,7 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   for (final e in sections.entries)
                     if (_query.values('type').isEmpty || _query.has('type', e.key))
                       _ApprovalSection(
-                        key: ValueKey('${e.key}-$_revision'),
+                        key: ValueKey('${e.key}-$_revision-$_journey'),
                         kind: e.key,
                         section: e.value,
                         query: _query,
@@ -208,6 +247,16 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
             if (amount != null) 'ยอด $amount',
             if (level != null) 'ขั้นที่ $level',
           ].join(' · '),
+        );
+      case 'activity':
+        return (
+          (r['subject'] ?? r['title'] ?? 'กิจกรรม').toString(),
+          [r['owner_name'], r['activitytype'], r['date_start']].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
+        );
+      case 'job':
+        return (
+          '${r['job_no'] ?? ''} ${r['job_name'] ?? ''}'.trim(),
+          [r['customer_name'], r['job_priority'], if (r['plan_start'] != null) thaiDate(r['plan_start'], year: uiYear)].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
         );
       case 'leave':
         return (
@@ -289,8 +338,10 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
                   return DenseCardTile(
                     title: title,
                     subtitle: subtitle,
-                    onTap: widget.kind == 'quotation' && id.isNotEmpty
-                        ? () => context.push(AppRoutes.crmRecord('quotation', id))
+                    onTap: (widget.kind == 'quotation' || widget.kind == 'activity' || widget.kind == 'job') && id.isNotEmpty
+                        ? () => widget.kind == 'activity'
+                            ? nxPush<void>(context, ActivityByIdLoader(id: id))
+                            : context.push(AppRoutes.crmRecord(widget.kind, id))
                         : null,
                     trailing: busy
                         ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
@@ -298,12 +349,12 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                tooltip: tr('อนุมัติ'),
+                                tooltip: tr(widget.kind == 'job' ? 'รับงาน' : 'อนุมัติ'),
                                 icon: const Icon(NxI.checkCircle, color: Colors.green),
                                 onPressed: () => act(true),
                               ),
                               IconButton(
-                                tooltip: tr('ไม่อนุมัติ'),
+                                tooltip: tr(widget.kind == 'job' ? 'เปิดงาน' : 'ไม่อนุมัติ'),
                                 icon: const Icon(NxI.xCircle, color: Colors.red),
                                 onPressed: () => act(false),
                               ),

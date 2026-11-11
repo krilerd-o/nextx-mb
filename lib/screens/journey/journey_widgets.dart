@@ -126,19 +126,22 @@ class JourneyStageStrip extends StatelessWidget {
 
 /// "ขั้นถัดไป" card: title + hint + primary button + secondary chips.
 class NextActionCard extends StatelessWidget {
-  const NextActionCard({super.key, required this.module, required this.next, required this.onAction, this.busy = false});
+  const NextActionCard({super.key, required this.module, required this.next, required this.onAction, this.busy = false, this.params = const {}});
 
   final String module;
   final NextAction next;
   final ValueChanged<String> onAction;
   final bool busy;
 
+  /// `{signed}`, `{total}`, `{n}`… placeholders in the web texts.
+  final Map<String, Object?> params;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final tone = journeyTone(context, next.tone);
-    final hint = nextHint(module, next);
+    final hint = nextHint(module, next, params: params);
     return Container(
       key: ValueKey('next-${next.key}'),
       decoration: BoxDecoration(
@@ -169,7 +172,7 @@ class NextActionCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(nextTitle(module, next), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          Text(nextTitle(module, next, params: params), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
           if (hint.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(hint, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),

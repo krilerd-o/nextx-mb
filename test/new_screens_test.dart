@@ -67,7 +67,8 @@ void main() {
     expect(find.textContaining('QT-MINE'), findsOneWidget);
     expect(find.textContaining('QT-OTHER'), findsNothing);
     expect(find.text('สมหญิง'), findsOneWidget);
-    expect(adapter.calls.first.queryParameters['filter_approval_state'], 'pending');
+    // (R50: a Service Journey probe may come first; older servers use the entity list.)
+    expect(adapter.calls.firstWhere((c) => c.path == '/api/entity/quotation').queryParameters['filter_approval_state'], 'pending');
   });
 
   testWidgets('commerce hides stock tab and mark-paid for members', (tester) async {

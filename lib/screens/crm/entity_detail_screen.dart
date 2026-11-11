@@ -137,7 +137,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   }
 
   void _openRecord(String module, String id) {
-    nxPush<void>(context, EntityByIdLoader(module: module, id: id));
+    nxPush<void>(context, module == 'activity' ? ActivityByIdLoader(id: id) : EntityByIdLoader(module: module, id: id));
   }
 
   List<({String value, String label})> _pickOptions(String key) => [
@@ -573,7 +573,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                         ),
                       ),
                     ],
-                    if (status != null && statusOptions.isEmpty) ...[
+                    if (status != null && statusOptions.isEmpty && !_journey) ...[
                       const SizedBox(height: 10),
                       Chip(
                         label: Text(tr(status)),

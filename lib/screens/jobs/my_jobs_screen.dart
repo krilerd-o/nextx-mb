@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -17,6 +18,9 @@ import 'job_inspection_screen.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
+import '../../core/service_journey.dart';
+import '../../services/api_client.dart';
+import '../journey/status_followups.dart' show journeyErrorText;
 import '../../widgets/nx_list_toolbar.dart';
 
 class MyJobsScreen extends StatefulWidget {
@@ -32,6 +36,115 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
   NxListQuery _lq = const NxListQuery();
   Map<String, dynamic>? _selected;
 
+  /// Service Journey: jobs forwarded to me that I have not accepted yet.
+  List<Map<String, dynamic>> _awaiting = const [];
+  final Set<String> _accepting = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAwaiting();
+  }
+
+  Future<void> _loadAwaiting() async {
+    final api = context.read<AppConfig>().apiClient;
+    if (!await ServiceJourney.supported(api)) return;
+    try {
+      final list = await api.getJobsAwaitingMe();
+      if (mounted) setState(() => _awaiting = list);
+    } catch (_) {}
+  }
+
+  Future<void> _accept(Map<String, dynamic> j) async {
+    final id = strId(j['id']);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _accepting.add(id));
+    try {
+      await context.read<AppConfig>().apiClient.jobWorkflowAction(id, 'accept');
+      HapticFeedback.mediumImpact();
+      messenger.showSnackBar(
+        SnackBar(content: Text(tr('รับงานแล้ว — กำลังดำเนินการ'))),
+      );
+      setState(() => _revision++);
+      await _loadAwaiting();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(tr(journeyErrorText(e)))));
+    } finally {
+      if (mounted) setState(() => _accepting.remove(id));
+    }
+  }
+
+  Widget _awaitingCard(BuildContext context) {
+    final theme = Theme.of(context);
+    const amber = Color(0xFFD97706);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        key: const ValueKey('jobs-awaiting-me'),
+        color: amber.withValues(alpha: 0.10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: amber.withValues(alpha: 0.35)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(NxI.bellRinging, color: amber, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    tr('รอคุณรับงาน (${_awaiting.length})'),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              for (final j in _awaiting)
+                ListTile(
+                  key: ValueKey('awaiting-${j['id']}'),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '${j['job_no'] ?? ''} ${j['job_name'] ?? ''}'.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    [
+                      j['customer_name'],
+                      if (j['plan_start'] != null) thaiDate(j['plan_start']),
+                    ].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
+                  ),
+                  onTap: () => nxPush<void>(
+                    context,
+                    EntityDetailScreen(module: 'job', row: j),
+                  ),
+                  trailing: _accepting.contains(strId(j['id']))
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : FilledButton(
+                          key: ValueKey('accept-${j['id']}'),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          onPressed: () => _accept(j),
+                          child: Text(tr('รับงาน')),
+                        ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final twoPane = NxBreakpoint.of(context).twoPane;
@@ -42,28 +155,44 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
         // Server returns at most 100 assigned jobs (no offset) — fetch them all, filter locally.
         load: () => context.read<AppConfig>().apiClient.getMyJobs(limit: 100),
         skeleton: const NxSkeletonList(),
-        isEmpty: (list) => list.isEmpty,
+        isEmpty: (list) => list.isEmpty && _awaiting.isEmpty,
         empty: Center(child: Text(tr('ไม่มีงานที่ได้รับมอบหมาย'))),
         builder: (context, all) {
           final statuses = <String>{
             for (final r in all)
               if ('${r['job_status'] ?? ''}'.isNotEmpty) '${r['job_status']}',
           }.toList()..sort();
-          String planOf(Map r) => '${r['plan_start'] ?? r['due_datetime'] ?? ''}';
+          String planOf(Map r) =>
+              '${r['plan_start'] ?? r['due_datetime'] ?? ''}';
           final today = thaiNow();
           bool onDay(Map r, Set<String> v) {
-            final d = r['plan_start'] != null ? parseThaiField(r['plan_start'], 'plan_start') : parseThaiField(r['due_datetime'], 'due_datetime');
+            final d = r['plan_start'] != null
+                ? parseThaiField(r['plan_start'], 'plan_start')
+                : parseThaiField(r['due_datetime'], 'due_datetime');
             if (d == null) return v.contains('none');
             final day = DateTime(d.year, d.month, d.day);
             final t0 = DateTime(today.year, today.month, today.day);
             return (v.contains('today') && day == t0) ||
-                (v.contains('tomorrow') && day == t0.add(const Duration(days: 1))) ||
-                (v.contains('week') && !day.isBefore(t0) && day.isBefore(t0.add(const Duration(days: 7)))) ||
-                (v.contains('overdue') && day.isBefore(t0) && !RegExp(r'complete|cancel|closed|done', caseSensitive: false).hasMatch('${r['job_status']}'));
+                (v.contains('tomorrow') &&
+                    day == t0.add(const Duration(days: 1))) ||
+                (v.contains('week') &&
+                    !day.isBefore(t0) &&
+                    day.isBefore(t0.add(const Duration(days: 7)))) ||
+                (v.contains('overdue') &&
+                    day.isBefore(t0) &&
+                    !RegExp(
+                      r'complete|cancel|closed|done',
+                      caseSensitive: false,
+                    ).hasMatch('${r['job_status']}'));
           }
 
           final groups = [
-            if (statuses.isNotEmpty) NxFilterGroup(key: 'status', label: 'สถานะ', options: [for (final st in statuses) NxFilterOption(st, st)]),
+            if (statuses.isNotEmpty)
+              NxFilterGroup(
+                key: 'status',
+                label: 'สถานะ',
+                options: [for (final st in statuses) NxFilterOption(st, st)],
+              ),
             const NxFilterGroup(
               key: 'day',
               label: 'วันนัด',
@@ -79,12 +208,19 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
           final list = nxApplyLocalQuery<Map<String, dynamic>>(
             all,
             _lq.copyWith(q: _query),
-            text: (r) => '${entityTitle(r, module: 'job')} ${entitySubtitle(r) ?? ''} ${r['job_no'] ?? ''} ${r['customer_name'] ?? ''}',
-            filters: {'status': (r, v) => v.contains('${r['job_status'] ?? ''}'), 'day': onDay},
+            text: (r) =>
+                '${entityTitle(r, module: 'job')} ${entitySubtitle(r) ?? ''} ${r['job_no'] ?? ''} ${r['customer_name'] ?? ''}',
+            filters: {
+              'status': (r, v) => v.contains('${r['job_status'] ?? ''}'),
+              'day': onDay,
+            },
             sorts: {
-              'plan_asc': (a, b) => (planOf(a).isEmpty ? 'z' : planOf(a)).compareTo(planOf(b).isEmpty ? 'z' : planOf(b)),
+              'plan_asc': (a, b) => (planOf(a).isEmpty ? 'z' : planOf(a))
+                  .compareTo(planOf(b).isEmpty ? 'z' : planOf(b)),
               'plan_desc': (a, b) => planOf(b).compareTo(planOf(a)),
-              'new': (a, b) => '${b['createdtime'] ?? b['id'] ?? ''}'.compareTo('${a['createdtime'] ?? a['id'] ?? ''}'),
+              'new': (a, b) => '${b['createdtime'] ?? b['id'] ?? ''}'.compareTo(
+                '${a['createdtime'] ?? a['id'] ?? ''}',
+              ),
             },
           );
           final items = ListView.builder(
@@ -93,7 +229,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
             itemCount: list.length + 1,
             itemBuilder: (context, index) {
               if (index == 0) {
-                return NxListToolbar(
+                final toolbar = NxListToolbar(
                   query: _lq.copyWith(q: _query),
                   liveSearch: true,
                   padding: const EdgeInsets.only(bottom: 8),
@@ -101,11 +237,20 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
                   quickGroup: 'day',
                   groups: groups,
                   resultCount: list.length,
-                  sorts: const [NxSortOption('plan_asc', 'วันนัดใกล้สุด'), NxSortOption('plan_desc', 'วันนัดล่าสุด'), NxSortOption('new', 'สร้างล่าสุด')],
+                  sorts: const [
+                    NxSortOption('plan_asc', 'วันนัดใกล้สุด'),
+                    NxSortOption('plan_desc', 'วันนัดล่าสุด'),
+                    NxSortOption('new', 'สร้างล่าสุด'),
+                  ],
                   onChanged: (q) => setState(() {
                     _query = q.q;
                     _lq = q.copyWith(q: '');
                   }),
+                );
+                if (_awaiting.isEmpty) return toolbar;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [_awaitingCard(context), toolbar],
                 );
               }
               final row = list[index - 1];
@@ -118,7 +263,10 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
                     setState(() => _selected = row);
                     return;
                   }
-                  nxPush<void>(context, EntityDetailScreen(module: 'job', row: row));
+                  nxPush<void>(
+                    context,
+                    EntityDetailScreen(module: 'job', row: row),
+                  );
                 },
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -128,7 +276,12 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
                         tooltip: tr('เช็คอิน'),
                         icon: const Icon(NxI.clock),
                         onPressed: () {
-                          nxPush<void>(context, ActivityDetailScreen(row: {'id': strId(row['related_activity_id'])}));
+                          nxPush<void>(
+                            context,
+                            ActivityDetailScreen(
+                              row: {'id': strId(row['related_activity_id'])},
+                            ),
+                          );
                         },
                       ),
                     IconButton(
@@ -145,7 +298,15 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
           return NxSplitView(
             onClose: () => setState(() => _selected = null),
             list: items,
-            detail: _selected == null ? null : EntityDetailScreen(key: ValueKey(_selected!['id']), module: 'job', row: _selected!, embedded: true, onDeleted: () => setState(() => _selected = null)),
+            detail: _selected == null
+                ? null
+                : EntityDetailScreen(
+                    key: ValueKey(_selected!['id']),
+                    module: 'job',
+                    row: _selected!,
+                    embedded: true,
+                    onDeleted: () => setState(() => _selected = null),
+                  ),
           );
         },
       ),
