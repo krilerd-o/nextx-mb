@@ -48,6 +48,9 @@ class _LeaveScreenState extends State<LeaveScreen> {
         body: Column(
           children: [
             TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.center,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 20),
               tabs: [
                 const Tab(text: 'คงเหลือ'),
                 const Tab(text: 'ยื่นคำขอ'),

@@ -109,6 +109,9 @@ void main() {
     }
     expect(find.text('คุณเอ'), findsWidgets);
     expect(find.text('คอมเม้นท์ 1'), findsOneWidget);
+    // Tabs slide left / right on a phone: bring "ประวัติ" into view first.
+    await tester.ensureVisible(find.text('ประวัติ'));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('ประวัติ'));
     for (var i = 0; i < 8; i++) {
       await tester.pump(const Duration(milliseconds: 50));

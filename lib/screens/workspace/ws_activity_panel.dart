@@ -10,6 +10,7 @@ import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
 import '../../core/workspace_models.dart';
 import '../../services/api_client.dart';
+import '../../widgets/nx_scroll_tabs.dart';
 import '../../widgets/nx_timeline.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_html_view.dart';
@@ -349,18 +350,16 @@ class WsActivityPanelState extends State<WsActivityPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SegmentedButton<int>(
-          showSelectedIcon: false,
-          segments: [
-            for (final (v, label, _, n) in tabs)
-              ButtonSegment(value: v, label: Text(n == null || n == 0 ? tr(label) : '${tr(label)} $n', maxLines: 1, softWrap: false, overflow: TextOverflow.fade)),
-          ],
-          selected: {_tab == 1 && !_isTask ? 0 : _tab},
-          onSelectionChanged: (s) {
-            HapticFeedback.selectionClick();
-            setState(() => _tab = s.first);
-          },
-        ),
+        Builder(builder: (context) {
+          final cur = _tab == 1 && !_isTask ? 0 : _tab;
+          final idx = tabs.indexWhere((t) => t.$1 == cur);
+          return NxScrollTabs(
+            keyPrefix: 'ws-activity-tab-',
+            labels: [for (final (_, label, _, n) in tabs) n == null || n == 0 ? label : '$label $n'],
+            index: idx < 0 ? 0 : idx,
+            onChanged: (i) => setState(() => _tab = tabs[i].$1),
+          );
+        }),
         const SizedBox(height: 12),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),

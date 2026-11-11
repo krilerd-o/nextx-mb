@@ -91,6 +91,8 @@ void main() {
 
   testWidgets('day view: "+N" opens the floating day card; resize saves a longer end', (tester) async {
     final adapter = await pump(tester);
+    await tester.ensureVisible(find.byKey(const ValueKey('cal-tab-day')));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const ValueKey('cal-tab-day')));
     await tester.pumpAndSettle();
     // 3 all-day + the timed one: day view shows 2 chips + "+2".
@@ -116,6 +118,8 @@ void main() {
 
   testWidgets('day view: long-press drag moves the appointment (15-min steps)', (tester) async {
     final adapter = await pump(tester);
+    await tester.ensureVisible(find.byKey(const ValueKey('cal-tab-day')));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const ValueKey('cal-tab-day')));
     await tester.pumpAndSettle();
     final block = find.byKey(const ValueKey('cal-block-31'));
@@ -137,6 +141,8 @@ void main() {
   testWidgets('all seven views open', (tester) async {
     await pump(tester);
     for (final v in CalView.values) {
+      await tester.ensureVisible(find.byKey(ValueKey('cal-tab-${v.name}')));
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.byKey(ValueKey('cal-tab-${v.name}')));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: v.name);

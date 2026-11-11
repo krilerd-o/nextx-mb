@@ -1,3 +1,4 @@
+import '../../widgets/nx_scroll_tabs.dart';
 import '../../widgets/nx_status_stepper.dart';
 import 'package:dio/dio.dart' show MultipartFile;
 import 'package:file_picker/file_picker.dart';
@@ -556,7 +557,8 @@ class EntityHistoryPanel extends StatelessWidget {
   }
 }
 
-/// Pill segmented control (Inbox reference).
+/// In-page tabs (record detail, activity…): pill tabs that slide left / right
+/// with a comfortable touch target — see [NxScrollTabs].
 class NxSegmented extends StatelessWidget {
   const NxSegmented({super.key, required this.labels, required this.index, required this.onChanged});
   final List<String> labels;
@@ -564,49 +566,7 @@ class NxSegmented extends StatelessWidget {
   final ValueChanged<int> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(999)),
-      child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++)
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  if (i == index) return;
-                  HapticFeedback.selectionClick();
-                  onChanged(i);
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  decoration: BoxDecoration(
-                    color: i == index ? cs.surface : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: i == index ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))] : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    tr(labels[i]),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
-                      color: i == index ? cs.onSurface : cs.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => NxScrollTabs(labels: labels, index: index, onChanged: onChanged, keyPrefix: 'detail-tab-');
 }
 
 /// Deletes wait 5 s with an "undo" snackbar before the API call is sent.

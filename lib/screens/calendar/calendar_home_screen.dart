@@ -414,11 +414,12 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
           // View tabs with a sliding underline (ปี เดือน สัปดาห์ 3 วัน วัน รายการ).
           SizedBox(
             height: 42,
-            // All seven fit the width (no sideways scrolling to reach "วัน" / "รายการ").
+            // Slides left / right when the views don't fit (each tab keeps a comfortable size).
             child: TabBar(
               controller: _tabs,
-              isScrollable: false,
-              labelPadding: EdgeInsets.zero,
+              isScrollable: true,
+              tabAlignment: TabAlignment.center,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 16),
               dividerColor: Colors.transparent,
               indicatorSize: TabBarIndicatorSize.label,
               labelStyle: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
