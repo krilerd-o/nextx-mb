@@ -17,6 +17,7 @@ import '../crm/entity_detail_parts.dart';
 import 'activity_form_screen.dart';
 import 'cal/cal_model.dart' show hm;
 import 'visit_check_sheet.dart';
+import '../../services/photo_pipeline.dart' show PhotoTarget;
 import 'visit_photo_flow.dart';
 import '../../widgets/nx_place_panel.dart';
 import 'package:flutter/services.dart';
@@ -196,6 +197,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   VisitPhotoFlow _flow() => _photoFlow ??= VisitPhotoFlow(
         upload: (files) => context.read<AppConfig>().apiClient.uploadActivityPhotos(_id, files),
         location: _location,
+        target: PhotoTarget('activity', _id),
         onProgress: (p) {
           if (mounted) setState(() => _photoProgress = p);
         },
