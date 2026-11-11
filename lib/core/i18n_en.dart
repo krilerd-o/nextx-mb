@@ -1706,7 +1706,7 @@ const Map<String, String> enStrings = {
   'โอกาสการขาย': 'Sales opportunities',
   'เสนอราคาและติดตาม': 'Quotes and follow-up',
   'แจ้งปัญหาและบริการลูกค้า': 'Customer issues and service',
-  'งานบริการภาคสนามทั้งหมด': 'All field service jobs',
+  'งานบริการภาคสนามทั้งหมด': 'All service jobs',
   'งานช่างของฉัน': 'My service jobs',
   'งานที่ได้รับมอบหมาย': 'Jobs assigned to me',
   'ตรวจรับงาน': 'Work inspection',
