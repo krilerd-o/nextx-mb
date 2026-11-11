@@ -2112,6 +2112,10 @@ const Map<String, String> enStrings = {
   'เคสเดินหน้าได้อย่างเดียว: รับเคส → ส่งต่อ → ปิดเคส หรือยกเลิกเคส': 'Cases only move forward: accept → forward → close, or cancel',
   'เคสนี้ปิดแล้ว จึงเปลี่ยนสถานะไม่ได้': 'This case is closed, so its status can\'t change',
   'เคสนี้ยกเลิกแล้ว จึงเปลี่ยนสถานะไม่ได้': 'This case is cancelled, so its status can\'t change',
+  'ทีละรูป': 'One photo',
+  'สูงสุด 30 รูป': 'Up to 30',
+  'เลือกหลายรูป': 'Pick many',
+  'ยังไม่มีรูป — ถ่ายหรือเลือกจากคลังภาพ': 'No photos yet — take one or pick from your gallery',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
