@@ -26,6 +26,7 @@ import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
 import '../../core/recent_records.dart';
 import '../../widgets/nx_refresh.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
   const ActivityDetailScreen({super.key, required this.row});
@@ -149,6 +150,16 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
       commit: () => api.deleteEntity('activity', _id),
     );
     Navigator.of(context).maybePop();
+  }
+
+  /// "ส่งออก / แชร์": the activity as text (when, where, who, details) plus
+  /// its web link, to the phone's share sheet (LINE, mail, Notes…) — like the
+  /// record pages' "แชร์ลิงก์".
+  Future<void> _export() async {
+    final base = Uri.tryParse(context.read<AppConfig>().apiBaseUrl);
+    final link = base?.replace(path: '/modules/activity/view/$_id', query: null).toString();
+    final subject = '${_row['subject'] ?? entityTitle(_row, module: 'activity')}';
+    await Share.share(activityExportText(_row, when: _whenRange(_row), link: link), subject: subject);
   }
 
   Future<void> _quickAttach() async {
@@ -403,6 +414,11 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
             label: 'ทำซ้ำ',
             icon: NxI.copySimple,
             onTap: _duplicate,
+          ),
+          NxHeaderMenuItem(
+            label: 'ส่งออก / แชร์',
+            icon: NxI.shareNetwork,
+            onTap: _export,
           ),
           NxHeaderMenuItem(
             label: 'ถ่ายรูป / แนบไฟล์',
@@ -830,4 +846,26 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
       ),
     );
   }
+}
+
+/// Plain-text export of an activity (see the detail page's "ส่งออก / แชร์").
+String activityExportText(Map<String, dynamic> row, {required String when, String? link}) {
+  String v(String k) {
+    final s = '${row[k] ?? ''}'.trim();
+    return s == 'null' ? '' : s;
+  }
+
+  final desc = stripTags(v('description').replaceAll(RegExp(r'<br\s*/?>|</p>', caseSensitive: false), '\n'));
+  final who = [v('account_name'), v('customer_name')].where((e) => e.isNotEmpty).toSet().join(' · ');
+  return [
+    v('subject').isEmpty ? entityTitle(row, module: 'activity') : v('subject'),
+    '${tr('เวลา')}: $when',
+    if (v('activitytype').isNotEmpty) '${tr('ประเภท')}: ${v('activitytype')}',
+    if (v('status').isNotEmpty) '${tr('สถานะ')}: ${v('status')}',
+    if (v('location').isNotEmpty) '${tr('สถานที่')}: ${v('location')}',
+    if (who.isNotEmpty) '${tr('ลูกค้า')}: $who',
+    if (v('video_conference_url').isNotEmpty) '${tr('ลิงก์')}: ${v('video_conference_url')}',
+    if (desc.isNotEmpty) '\n$desc',
+    if (link != null && link.isNotEmpty) '\n$link',
+  ].join('\n');
 }

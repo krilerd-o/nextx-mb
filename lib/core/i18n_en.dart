@@ -361,6 +361,7 @@ const Map<String, String> enStrings = {
   'บันทึกผล': 'Save result',
   'เปิดรายการ': 'Open item',
   'แชร์ลิงก์': 'Share link',
+  'ส่งออก / แชร์': 'Export / share',
   'คัดลอกลิงก์โมดูลแล้ว': 'Module link copied',
   'ลูกค้าและงานขาย': 'Customers and sales',
   'สินค้าและบริการ': 'Products and services',

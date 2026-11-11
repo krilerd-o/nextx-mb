@@ -338,7 +338,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     if ((_timelineLoaded && !force) || _timelineLoading) return;
     setState(() => _timelineLoading = true);
     try {
-      final rows = await context.read<AppConfig>().apiClient.getEntityTimeline(widget.module, _id);
+      final api = context.read<AppConfig>().apiClient;
+      final rows = await api.getEntityTimeline(widget.module, _id);
+      if (!mounted) return;
+      await _resolveTimelineRefs(api, rows);
       if (!mounted) return;
       setState(() {
         _timeline = rows;
@@ -356,7 +359,49 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       final p = NxPickOption.fromMap(o);
       if (p.value == value) return p.label;
     }
+    final related = _timelineRefModule(field);
+    if (related != null) return _refNames['$related:$value'] ?? value;
     return value;
+  }
+
+  /// Record names for ids in the history (`1591 → 1592` becomes account names).
+  final Map<String, String> _refNames = {};
+
+  /// Module a history field links to (account_id → account), or null.
+  String? _timelineRefModule(String field) {
+    for (final f in _fields) {
+      if (fieldName(f) == field) {
+        final m = resolveFieldUiType(f).entityModule;
+        if (m != null) return m;
+        break;
+      }
+    }
+    return _relatedModuleForField(field);
+  }
+
+  /// Looks up the names of linked records whose ids appear in field changes.
+  Future<void> _resolveTimelineRefs(ApiClient api, List<Map<String, dynamic>> rows) async {
+    final todo = <String, ({String module, String id})>{};
+    for (final e in rows) {
+      if (e['type']?.toString() != 'field_change') continue;
+      final module = _timelineRefModule('${e['field_name'] ?? ''}');
+      if (module == null) continue;
+      for (final v in [e['old_value'], e['new_value']]) {
+        final id = '${v ?? ''}'.trim();
+        final key = '$module:$id';
+        if (lookLikeId(id) && !_refNames.containsKey(key)) todo[key] = (module: module, id: id);
+      }
+    }
+    if (todo.isEmpty) return;
+    await Future.wait(todo.entries.take(30).map((t) async {
+      try {
+        final row = await api.getEntity(t.value.module, t.value.id);
+        final title = entityTitle(row, module: t.value.module);
+        if (title.isNotEmpty && title != 'รายการ' && title != 'ID ${t.value.id}') _refNames[t.key] = title;
+      } catch (_) {
+        // Deleted / no access: keep the id.
+      }
+    }));
   }
 
   List<({String value, String label})> _statusOptions(String? key) {
