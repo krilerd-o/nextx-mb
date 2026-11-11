@@ -11,6 +11,7 @@ import '../../core/chat_merge.dart';
 import '../../core/entity_display.dart';
 import '../../core/error_reporting.dart';
 import '../../core/i18n.dart';
+import '../../core/menu_access.dart';
 import '../../core/nx_page_route.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
@@ -517,7 +518,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         ]),
       ),
       actions: [
-        if (!_isThread)
+        if (!_isThread && MenuAccess.allow(context.read<AppConfig>().session, MenuAccess.commAi))
           IconButton(
             key: const ValueKey('chat-ai-summary'),
             tooltip: tr('ISAAC สรุปแชท'),

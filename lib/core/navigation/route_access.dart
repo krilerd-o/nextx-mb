@@ -43,7 +43,7 @@ List<String>? requiredMenusFor(String path) {
     case 'call-log':
       return const [MenuAccess.callLog];
     case 'comm-ai':
-      return const [MenuAccess.chat, MenuAccess.callLog];
+      return const [MenuAccess.commAi];
     case 'hr':
       if (segs.length >= 2 && segs[1] == 'attendance-report') {
         return const [MenuAccess.attendanceReport, MenuAccess.hrDashboard];

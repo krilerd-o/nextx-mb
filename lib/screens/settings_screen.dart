@@ -221,7 +221,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: roleSummary(config.shellConfig?.roles ?? const []),
         onTap: () => context.push(AppRoutes.roleEditor),
       )),
-      if (MenuAccess.any(session, const [MenuAccess.chat, MenuAccess.callLog]))
+      if (MenuAccess.allow(session, MenuAccess.commAi))
         _Entry('เมนูและการใช้งาน', ['ISAAC', 'AI', 'ถอดเสียง', 'สรุป', 'prompt', 'โทร', 'แชท'], SettingsTile(
           icon: NxI.sparkle,
           tint: const Color(0xFF7C3AED),
