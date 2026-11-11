@@ -404,8 +404,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             _caseAction(a);
           },
         ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            key: const ValueKey('case-history-btn'),
+            onPressed: () => showCaseStatusHistory(context, _id),
+            icon: const Icon(NxI.clockCounterClockwise, size: 16),
+            label: Text(tr('ประวัติสถานะ')),
+          ),
+        ),
         if (actions.isNotEmpty) ...[
-          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,

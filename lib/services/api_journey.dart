@@ -247,6 +247,19 @@ extension JourneyApi on ApiClient {
     return extractMapList(d);
   }
 
+  /// Status changes of a case, newest first: `{action, from_status, to_status, details, at, user_name}`.
+  Future<List<Map<String, dynamic>>> getCaseStatusEvents(String id) async {
+    final env = await _send('GET', '/api/entity/case/$id/status-events', query: {'limit': '50'});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['list'] : d);
+  }
+
+  /// Contacts of a customer account (direct + linked), for picking an email.
+  Future<List<Map<String, dynamic>>> getAccountContacts(String accountId) async {
+    final page = await getEntityList('contact', limit: 50, extra: {'filter[account_id_any]': accountId});
+    return page.items;
+  }
+
   // --------------------------------------------------------------- shared
 
   /// `{quotations, jobs, activities}` linked to a quotation / job / activity.

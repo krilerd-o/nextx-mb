@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
+import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
@@ -38,10 +39,13 @@ String classifyCaseStatus(Object? v) {
 
 /// Actions shown like the web: in progress → close / forward / cancel;
 /// open, waiting… → accept / forward / cancel; closed / cancelled → none.
+/// Plus (server-supported, mobile only): in progress → พักเคส (wait);
+/// waiting → ทำต่อ (resume).
 List<String> caseActions(Object? status) {
   final k = classifyCaseStatus(status);
   if (k == 'closed' || k == 'cancelled') return const [];
-  if (k == 'in_progress') return const ['close', 'forward', 'cancel'];
+  if (k == 'in_progress') return const ['close', 'wait', 'forward', 'cancel'];
+  if (k == 'waiting') return const ['accept', 'resume', 'forward', 'cancel'];
   return const ['accept', 'forward', 'cancel'];
 }
 
@@ -73,6 +77,8 @@ String caseActionLabel(String a) => tr(switch (a) {
       'forward' => 'ส่งต่อเคส',
       'close' => 'ปิดเคส',
       'cancel' => 'ยกเลิกเคส',
+      'wait' => 'พักเคส',
+      'resume' => 'ทำต่อ',
       _ => a,
     });
 
@@ -161,6 +167,8 @@ class CaseFlows {
       'forward' => await _forward(context, caseId, row),
       'close' => await _close(context, caseId, row),
       'cancel' => await _cancel(context, caseId),
+      'wait' => await _wait(context),
+      'resume' => await _resume(context),
       _ => null,
     };
     if (body == null || !context.mounted) return false;
@@ -174,6 +182,8 @@ class CaseFlows {
             'accept' => 'รับเคสแล้ว — กำลังดำเนินการ',
             'forward' => 'ส่งต่อเคสแล้ว — รอการตอบรับ',
             'close' => 'ปิดเคสแล้ว',
+            'wait' => 'พักเคสแล้ว — รอการตอบรับ',
+            'resume' => 'กลับมาดำเนินการต่อแล้ว',
             _ => 'ยกเลิกเคสแล้ว',
           })),
         ));
@@ -230,10 +240,56 @@ class CaseFlows {
         ),
       );
 
+  static String _contactEmail(Map<String, dynamic> c) => '${c['email_1st'] ?? c['email'] ?? c['email1'] ?? ''}'.trim();
+  static String _contactName(Map<String, dynamic> c) {
+    final n = '${c['contact_firstname'] ?? ''} ${c['contact_lastname'] ?? ''}'.trim();
+    return n.isNotEmpty ? n : '${c['contact_name'] ?? c['name'] ?? c['id']}';
+  }
+
+  /// Contacts of the case's customer that have an email (empty when none / no access).
+  static Future<List<Map<String, dynamic>>> _contacts(BuildContext context, Map<String, dynamic> row) async {
+    final acc = '${row['related_account_id'] ?? row['account_id'] ?? ''}'.trim();
+    if (acc.isEmpty || acc == 'null' || acc == '0') return const [];
+    try {
+      final list = await context.read<AppConfig>().apiClient.getAccountContacts(acc);
+      return [for (final c in list) if (_contactEmail(c).contains('@')) c];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Contact chips: tap fills the email (and remembers the contact for accept).
+  static Widget _contactPicker(BuildContext ctx, List<Map<String, dynamic>> contacts, String? selected, void Function(Map<String, dynamic>) onPick) {
+    if (contacts.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(ctx);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(tr('เลือกผู้ติดต่อของลูกค้า'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final c in contacts.take(12))
+            ChoiceChip(
+              key: ValueKey('case-contact-${c['id']}'),
+              avatar: const Icon(NxI.user, size: 16),
+              label: Text('${_contactName(c)} · ${_contactEmail(c)}', overflow: TextOverflow.ellipsis),
+              selected: selected == '${c['id']}',
+              onSelected: (_) => onPick(c),
+            ),
+        ]),
+      ]),
+    );
+  }
+
   static Future<Map<String, dynamic>?> _accept(BuildContext context, String id, Map<String, dynamic> row) async {
     final summary = await _preview(context, id, 'accept');
     if (!context.mounted) return null;
-    final email = TextEditingController(text: '${row['customer_email'] ?? ''}');
+    final contacts = await _contacts(context, row);
+    if (!context.mounted) return null;
+    String? contactId = '${row['related_contact_id'] ?? ''}'.trim();
+    if (contactId.isEmpty || contactId == 'null') contactId = null;
+    final current = contacts.where((c) => '${c['id']}' == contactId).firstOrNull;
+    final email = TextEditingController(text: current != null ? _contactEmail(current) : '${row['customer_email'] ?? ''}');
     final cc = TextEditingController(text: '${row['email_cc'] ?? ''}');
     final info = TextEditingController();
     var skip = true;
@@ -256,6 +312,10 @@ class CaseFlows {
               onChanged: (v) => setS(() => skip = !(v ?? false)),
             ),
             if (!skip) ...[
+              _contactPicker(ctx, contacts, contactId, (c) => setS(() {
+                    contactId = '${c['id']}';
+                    email.text = _contactEmail(c);
+                  })),
               TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: tr('อีเมลแจ้ง'))),
               _gap(),
               TextField(controller: cc, decoration: InputDecoration(labelText: tr('CC'))),
@@ -269,6 +329,7 @@ class CaseFlows {
                   if (!skip && email.text.trim().isNotEmpty) 'email': email.text.trim(),
                   if (!skip && cc.text.trim().isNotEmpty) 'cc': cc.text.trim(),
                   if (info.text.trim().isNotEmpty) 'support_info': info.text.trim(),
+                  if (contactId != null) 'related_contact_id': int.tryParse(contactId!) ?? contactId,
                 })),
           ],
         );
@@ -304,6 +365,9 @@ class CaseFlows {
   static Future<Map<String, dynamic>?> _close(BuildContext context, String id, Map<String, dynamic> row) async {
     final summary = await _preview(context, id, 'close');
     if (!context.mounted) return null;
+    final contacts = await _contacts(context, row);
+    if (!context.mounted) return null;
+    String? contactId;
     final est = num.tryParse('${row['original_estimate_minutes'] ?? ''}') ?? 0;
     final estDays = num.tryParse('${row['estimate_workday'] ?? ''}') ?? 0;
     final hasEstimate = est > 0 || estDays > 0;
@@ -353,6 +417,10 @@ class CaseFlows {
               onChanged: (v) => setS(() => skip = !(v ?? false)),
             ),
             if (!skip) ...[
+              _contactPicker(ctx, contacts, contactId, (c) => setS(() {
+                    contactId = '${c['id']}';
+                    email.text = _contactEmail(c);
+                  })),
               TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: tr('อีเมลแจ้ง'))),
               _gap(),
               TextField(controller: cc, decoration: InputDecoration(labelText: tr('CC'))),
@@ -385,6 +453,49 @@ class CaseFlows {
     if (h == 0) return '${r}m';
     return r == 0 ? '${h}h' : '${h}h ${r}m';
   }
+
+  static Future<Map<String, dynamic>?> _wait(BuildContext context) {
+    final note = TextEditingController();
+    const reasons = ['รอลูกค้าตอบกลับ', 'รออะไหล่ / อุปกรณ์', 'รอข้อมูลเพิ่มเติม', 'รอนัดหมาย'];
+    return showAppBottomSheet<Map<String, dynamic>>(
+      context: context,
+      title: tr('พักเคส'),
+      child: StatefulBuilder(builder: (ctx, setS) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(tr('เคสจะเป็น "รอการตอบรับ" ชั่วคราว กด "ทำต่อ" เมื่อพร้อมดำเนินการ — ผู้ติดตามเคสจะได้รับแจ้ง'), style: Theme.of(ctx).textTheme.bodyMedium),
+            _gap(),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final r in reasons)
+                ActionChip(key: ValueKey('case-wait-$r'), label: Text(tr(r)), onPressed: () => setS(() => note.text = tr(r))),
+            ]),
+            _gap(),
+            TextField(key: const ValueKey('case-wait-note'), controller: note, minLines: 2, maxLines: 4, decoration: InputDecoration(labelText: tr('เหตุผล (ไม่บังคับ)'))),
+            const SizedBox(height: 18),
+            _save(ctx, 'พักเคส', () => Navigator.pop(ctx, {'action': 'wait', if (note.text.trim().isNotEmpty) 'note': note.text.trim()})),
+          ],
+        );
+      }),
+    );
+  }
+
+  static Future<Map<String, dynamic>?> _resume(BuildContext context) => showAppBottomSheet<Map<String, dynamic>>(
+        context: context,
+        title: tr('ทำต่อ'),
+        child: Builder(
+          builder: (ctx) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(tr('เคสจะกลับมาเป็น "กำลังดำเนินการ"'), style: Theme.of(ctx).textTheme.bodyMedium),
+              const SizedBox(height: 18),
+              _save(ctx, 'ทำต่อ', () => Navigator.pop(ctx, {'action': 'resume'})),
+            ],
+          ),
+        ),
+      );
 
   static String _esc(String s) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
@@ -451,6 +562,8 @@ Future<String?> pickCaseAction(BuildContext context, Map<String, dynamic> row) {
               'accept' => NxI.check,
               'forward' => NxI.arrowRight,
               'close' => NxI.flag,
+              'wait' => NxI.pause,
+              'resume' => NxI.play,
               _ => NxI.x,
             }, color: a == 'cancel' ? const Color(0xFFE11D48) : null),
             title: Text(caseActionLabel(a)),
@@ -459,4 +572,88 @@ Future<String?> pickCaseAction(BuildContext context, Map<String, dynamic> row) {
       ],
     ),
   );
+}
+
+
+/// Status history of a case (who changed what, when), newest first.
+Future<void> showCaseStatusHistory(BuildContext context, String caseId) {
+  return showAppBottomSheet<void>(
+    context: context,
+    title: tr('ประวัติสถานะเคส'),
+    child: FutureBuilder<List<Map<String, dynamic>>>(
+      future: context.read<AppConfig>().apiClient.getCaseStatusEvents(caseId),
+      builder: (context, snap) {
+        final theme = Theme.of(context);
+        final cs = theme.colorScheme;
+        if (snap.connectionState != ConnectionState.done) {
+          return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
+        }
+        if (snap.hasError) return Padding(padding: const EdgeInsets.all(24), child: Text(caseErrorText(snap.error!)));
+        final list = snap.data ?? const [];
+        if (list.isEmpty) return Padding(padding: const EdgeInsets.all(24), child: Text(tr('ยังไม่มีประวัติสถานะ')));
+        return Column(
+          key: const ValueKey('case-history'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < list.length; i++)
+              _HistoryRow(event: list[i], last: i == list.length - 1, color: cs.primary),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+String _historyLabel(String action) => tr(switch (action) {
+      'create' => 'เปิดเคส',
+      'accept' => 'รับเคส',
+      'forward' => 'ส่งต่อเคส',
+      'wait' => 'พักเคส',
+      'resume' => 'ทำต่อ',
+      'cancel' => 'ยกเลิกเคส',
+      'close' => 'ปิดเคส',
+      _ => action,
+    });
+
+class _HistoryRow extends StatelessWidget {
+  const _HistoryRow({required this.event, required this.last, required this.color});
+  final Map<String, dynamic> event;
+  final bool last;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final e = event;
+    final details = e['details'] is Map ? e['details'] as Map : const {};
+    final note = '${details['note'] ?? details['to_owner_name'] ?? ''}'.trim();
+    final when = formatThaiField(e['at'], 'at');
+    final from = '${e['from_status'] ?? ''}'.trim();
+    final to = '${e['to_status'] ?? ''}'.trim();
+    return IntrinsicHeight(
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SizedBox(
+          width: 22,
+          child: Column(children: [
+            const SizedBox(height: 4),
+            Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+            if (!last) Expanded(child: Container(width: 2, color: cs.outlineVariant)),
+          ]),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_historyLabel('${e['action'] ?? ''}'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              if (from.isNotEmpty || to.isNotEmpty) Text('${from.isEmpty ? '—' : from} → $to', style: theme.textTheme.bodySmall),
+              if (note.isNotEmpty) Text(note, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text('${e['user_name'] ?? ''}${when.isEmpty ? '' : ' · $when'}', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+            ]),
+          ),
+        ),
+      ]),
+    );
+  }
 }

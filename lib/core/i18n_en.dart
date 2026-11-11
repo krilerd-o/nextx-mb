@@ -2124,6 +2124,20 @@ const Map<String, String> enStrings = {
   'ลบรูปนี้': 'Delete this photo',
   'ลบรูปที่ยังไม่ได้ส่ง?': 'Delete an unsent photo?',
   'รูปนี้ยังไม่ถึงเซิร์ฟเวอร์ ลบแล้วจะกู้คืนไม่ได้': 'This photo hasn\'t reached the server; deleting it can\'t be undone',
+  'พักเคส': 'Put on hold',
+  'ทำต่อ': 'Resume',
+  'พักเคสแล้ว — รอการตอบรับ': 'Case on hold — waiting',
+  'กลับมาดำเนินการต่อแล้ว': 'Back in progress',
+  'เลือกผู้ติดต่อของลูกค้า': 'Pick a customer contact',
+  'เคสจะเป็น "รอการตอบรับ" ชั่วคราว กด "ทำต่อ" เมื่อพร้อมดำเนินการ — ผู้ติดตามเคสจะได้รับแจ้ง': 'The case waits for now; tap "Resume" when ready — case followers are notified',
+  'รอลูกค้าตอบกลับ': 'Waiting for the customer',
+  'รออะไหล่ / อุปกรณ์': 'Waiting for parts',
+  'รอข้อมูลเพิ่มเติม': 'Waiting for more information',
+  'รอนัดหมาย': 'Waiting for an appointment',
+  'เคสจะกลับมาเป็น "กำลังดำเนินการ"': 'The case goes back to "In progress"',
+  'ประวัติสถานะเคส': 'Case status history',
+  'ประวัติสถานะ': 'Status history',
+  'ยังไม่มีประวัติสถานะ': 'No status changes yet',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

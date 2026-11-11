@@ -506,6 +506,7 @@ class EntityRecordActions {
         newId = await duplicateQuotation(config.apiClient, full) ?? '';
       } else {
         newId = await config.apiClient.duplicateEntity(module, '${row['id']}');
+        if (module == 'job' && newId.isNotEmpty) await resetDuplicatedJob(config.apiClient, newId);
       }
       if (newId.isEmpty) return false;
       _snack(messenger, 'ทำซ้ำแล้ว — เปิดรายการใหม่');
@@ -695,5 +696,17 @@ class _CommentsSheetState extends State<_CommentsSheet> {
           EntityCommentsPanel(module: widget.module, id: _id, comments: _comments!, onChanged: _load),
       ],
     );
+  }
+}
+
+/// A copied job is a new job: older servers copy the source status (e.g.
+/// Completed); move it back to Open. New servers already do this.
+Future<void> resetDuplicatedJob(ApiClient api, String id) async {
+  try {
+    final j = await api.getEntity('job', id);
+    if (canonicalJobStatus(j['job_status']) == 'Open') return;
+    await api.putEntity('job', id, {'job_status': 'Open'});
+  } catch (e) {
+    debugPrint('[job duplicate] reset status: $e');
   }
 }

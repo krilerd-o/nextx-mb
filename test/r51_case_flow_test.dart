@@ -32,8 +32,8 @@ void main() {
     });
     test('allowed actions', () {
       expect(caseActions('เปิดเคส'), ['accept', 'forward', 'cancel']);
-      expect(caseActions('รอการตอบรับ'), ['accept', 'forward', 'cancel']);
-      expect(caseActions('กำลังดำเนินการ'), ['close', 'forward', 'cancel']);
+      expect(caseActions('รอการตอบรับ'), ['accept', 'resume', 'forward', 'cancel']);
+      expect(caseActions('กำลังดำเนินการ'), ['close', 'wait', 'forward', 'cancel']);
       expect(caseActions('ปิดเคส'), isEmpty);
       expect(caseActions('ยกเลิก'), isEmpty);
       expect([caseStepAction(1), caseStepAction(2), caseStepAction(3), caseStepAction(0)], ['forward', 'accept', 'close', null]);
@@ -155,6 +155,63 @@ void main() {
     await settle(tester);
     expect(find.byKey(const ValueKey('case-not-allowed')), findsOneWidget);
     expect(find.textContaining('ติดต่อเจ้าของเคส'), findsOneWidget);
+  });
+
+  testWidgets('wait (พักเคส) with a quick reason, then resume', (tester) async {
+    final (a, _) = await pumpDetail(tester, {...open, 'case_status': 'กำลังดำเนินการ'});
+    await tester.tap(find.byKey(const ValueKey('case-btn-wait')));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('case-wait-รอลูกค้าตอบกลับ')));
+    await settle(tester, 4);
+    await tester.tap(find.byKey(const ValueKey('case-flow-save')));
+    await settle(tester);
+    expect(lastBody(a), {'action': 'wait', 'note': 'รอลูกค้าตอบกลับ'});
+  });
+
+  testWidgets('resume from waiting', (tester) async {
+    final (a, _) = await pumpDetail(tester, {...open, 'case_status': 'รอการตอบรับ', 'smownerid': 2});
+    await tester.tap(find.byKey(const ValueKey('case-btn-resume')));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('case-flow-save')));
+    await settle(tester);
+    expect(lastBody(a), {'action': 'resume'});
+  });
+
+  testWidgets('accept: pick a customer contact → email filled + related_contact_id', (tester) async {
+    final (a, _) = await pumpDetail(tester, {...open, 'related_account_id': 31}, extra: {
+      'GET /api/entity/contact': {'list': [
+        {'id': 41, 'contact_firstname': '[QA] สมชาย', 'contact_lastname': 'ทดสอบ', 'email_1st': 'qa.somchai@example.com'},
+        {'id': 42, 'contact_firstname': '[QA] ไม่มีอีเมล'},
+      ]},
+    });
+    await tester.tap(find.byKey(const ValueKey('case-btn-accept')));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('case-skip-email')));
+    await settle(tester, 4);
+    expect(find.byKey(const ValueKey('case-contact-42')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('case-contact-41')));
+    await settle(tester, 4);
+    await tester.tap(find.byKey(const ValueKey('case-flow-save')));
+    await settle(tester);
+    final b = lastBody(a);
+    expect([b['email'], b['related_contact_id'], b['skip_email']], ['qa.somchai@example.com', 41, false]);
+    final call = a.calls.firstWhere((c) => c.path == '/api/entity/contact');
+    expect(call.queryParameters['filter[account_id_any]'], '31');
+  });
+
+  testWidgets('status history sheet', (tester) async {
+    await pumpDetail(tester, open, extra: {
+      'GET /api/entity/case/7/status-events': {'list': [
+        {'action': 'wait', 'from_status': 'กำลังดำเนินการ', 'to_status': 'รอการตอบรับ', 'details': {'note': '[QA] รออะไหล่'}, 'at': '2026-11-11T03:00:00Z', 'user_name': '[QA] Second'},
+        {'action': 'create', 'from_status': null, 'to_status': 'เปิดเคส', 'details': {}, 'at': '2026-11-10T03:00:00Z', 'user_name': '[QA] Second'},
+      ]},
+    });
+    await tester.tap(find.byKey(const ValueKey('case-history-btn')));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('case-history')), findsOneWidget);
+    expect(find.text('พักเคส'), findsWidgets);
+    expect(find.text('[QA] รออะไหล่'), findsOneWidget);
+    expect(find.textContaining('11/11/'), findsOneWidget);
   });
 
   testWidgets('wide screen: record + info on the left, other tabs on the right', (tester) async {
