@@ -230,6 +230,11 @@ extension JourneyApi on ApiClient {
   // ------------------------------------------------------------------ Case
 
   /// accept | forward | wait | resume | cancel | close (NEXTX case workflow).
+  /// Service contract status change (`{action, ...}`) — the only way the
+  /// server accepts a new `contract_status`.
+  Future<Map<String, dynamic>> serviceContractWorkflowAction(String id, Map<String, dynamic> body) async =>
+      _dataMap(await _send('POST', '/api/entity/service_contract/$id/workflow-action', data: body));
+
   Future<Map<String, dynamic>> caseWorkflowAction(String id, Map<String, dynamic> body) async =>
       _dataMap(await _send('POST', '/api/entity/case/$id/workflow-action', data: body));
 

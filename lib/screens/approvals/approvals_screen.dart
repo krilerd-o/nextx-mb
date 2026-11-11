@@ -97,7 +97,6 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         ],
       ),
     );
-    ctrl.dispose();
     return reason;
   }
 

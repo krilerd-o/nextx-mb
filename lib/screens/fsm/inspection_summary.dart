@@ -78,6 +78,30 @@ class _InspectionSummaryState extends State<InspectionSummary> {
   List<Map<String, dynamic>>? _lines;
   Object? _error;
   String? _jobTitle;
+  bool _techSigned = false;
+  bool _signing = false;
+
+  /// Technician signature from my profile (same as the web button).
+  Future<void> _useMySignature() async {
+    final api = context.read<AppConfig>().apiClient;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _signing = true);
+    try {
+      final sig = await api.getMySignatures();
+      final path = [sig['upload_signature_th'], sig['upload_signature_en'], sig['signature_image']].firstWhere((x) => x != null && '$x'.isNotEmpty, orElse: () => null);
+      if (path == null) {
+        messenger.showSnackBar(SnackBar(content: Text(tr('ยังไม่มีลายเซ็นในโปรไฟล์ — ไปที่โปรไฟล์ › ลายเซ็นของฉัน'))));
+        return;
+      }
+      await api.putEntity('inspection', _id, {'technician_signature': path, 'technician_signed_at': DateTime.now().toUtc().toIso8601String()});
+      if (mounted) setState(() => _techSigned = true);
+      messenger.showSnackBar(SnackBar(content: Text(tr('เติมลายเซ็นช่างแล้ว'))));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    } finally {
+      if (mounted) setState(() => _signing = false);
+    }
+  }
 
   String get _id => strId(widget.row['id']);
 
@@ -308,7 +332,17 @@ class _InspectionSummaryState extends State<InspectionSummary> {
         card(
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             title(NxI.penLine, 'ลายเซ็น'),
-            _signRow(theme, tr('ช่างผู้ตรวจ'), _s('technician_signature').isNotEmpty, _s('technician_signed_at')),
+            _signRow(theme, tr('ช่างผู้ตรวจ'), _techSigned || _s('technician_signature').isNotEmpty, _s('technician_signed_at')),
+            if (widget.canEdit && !_techSigned && _s('technician_signature').isEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const ValueKey('insp-use-my-signature'),
+                  onPressed: _signing ? null : _useMySignature,
+                  icon: const Icon(NxI.penLine, size: 16),
+                  label: Text(tr('ใช้ลายเซ็นของฉัน (จากโปรไฟล์)')),
+                ),
+              ),
             const SizedBox(height: 8),
             _signRow(theme, tr('ลูกค้า'), _s('customer_signature').isNotEmpty || _s('signed_at').isNotEmpty, _s('signed_at'), name: _s('signed_by_name')),
           ]),

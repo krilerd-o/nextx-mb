@@ -35,6 +35,9 @@ import '../../core/journey_rules.dart';
 import '../../core/service_journey.dart';
 import '../journey/case_flows.dart';
 import '../docs/document_preview.dart';
+import '../../core/deal_stage.dart';
+import '../fsm/contract_flows.dart';
+import 'entity_share_sheet.dart';
 import '../fsm/inspection_lines.dart';
 import '../fsm/inspection_summary.dart';
 import '../journey/job_journey.dart';
@@ -380,10 +383,29 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   }
 
   Future<void> _changeStatus(String key, String value) async {
+    if (widget.module == 'service_contract') {
+      // Workflow only (the server ignores a plain contract_status update).
+      final action = await pickContractAction(context, {..._row, 'id': _id});
+      if (action == null || !mounted) return;
+      final rec = await ContractFlows.run(context, row: {..._row, 'id': _id}, action: action);
+      if (rec == null || !mounted) return;
+      setState(() => _row = {..._row, ...rec});
+      _timelineLoaded = false;
+      return;
+    }
+    Map<String, dynamic> payload = {key: value};
+    if (widget.module == 'deal' && key == 'deal_stage') {
+      String? lost;
+      if (value == kDealClosedLost) {
+        lost = await askDealLostReason(context, current: '${_row['closed_reason'] ?? ''}');
+        if (lost == null || !mounted) return;
+      }
+      payload = dealStagePayload(value, lostReason: lost);
+    }
     final before = _row[key];
-    setState(() => _row = {..._row, key: value});
+    setState(() => _row = {..._row, ...payload});
     try {
-      await context.read<AppConfig>().apiClient.putEntity(widget.module, _id, {key: value});
+      await context.read<AppConfig>().apiClient.putEntity(widget.module, _id, payload);
       _timelineLoaded = false;
       if (_tabId == 'history') _loadTimeline(force: true);
     } catch (e) {
@@ -612,6 +634,27 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                         : _changeStatus(statusKey!, v)
                   : null,
             ),
+            if (widget.module == 'deal' && canEdit && !isClosedDealStage(_row['deal_stage'])) ...[
+              const SizedBox(height: 8),
+              Row(children: [
+                if (nextDealStage(_row['deal_stage']) != null)
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      key: const ValueKey('deal-next-stage'),
+                      onPressed: () => _changeStatus('deal_stage', nextDealStage(_row['deal_stage'])!),
+                      icon: const Icon(NxI.arrowRight, size: 18),
+                      label: Text('${tr('เลื่อนไป')} ${_pickOptions('deal_stage').where((o) => o.value == nextDealStage(_row['deal_stage'])).firstOrNull?.label ?? nextDealStage(_row['deal_stage'])}', overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  key: const ValueKey('deal-close-lost'),
+                  onPressed: () => _changeStatus('deal_stage', kDealClosedLost),
+                  icon: Icon(NxI.x, size: 18, color: theme.colorScheme.error),
+                  label: Text(tr('ปิดแพ้'), style: TextStyle(color: theme.colorScheme.error)),
+                ),
+              ]),
+            ],
           ],
         ],
         if (tabs) ...[
@@ -753,6 +796,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 if (canConvert) NxHeaderMenuItem(label: 'แปลงเป็นลูกค้า', icon: NxI.userCheck, onTap: _convertLead),
                 NxHeaderMenuItem(label: 'ทำซ้ำ', icon: NxI.copySimple, onTap: _duplicate),
                 NxHeaderMenuItem(label: 'แชร์ลิงก์', icon: NxI.shareNetwork, onTap: _shareLink),
+                NxHeaderMenuItem(label: 'แชร์ให้ผู้ใช้ / Role', icon: NxI.users, onTap: () => showEntityShareSheet(context, module: widget.module, id: _id, title: entityTitle(_row, module: widget.module))),
                 NxHeaderMenuItem(
                   label: 'ถาม Isaac',
                   icon: NxI.sparkle,

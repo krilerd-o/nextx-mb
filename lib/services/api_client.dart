@@ -656,14 +656,40 @@ class ApiClient {
 
   /// `POST /api/entity/:m/bulk-update` — same fields on many records.
   /// Sends in chunks of 100 (the server's per-request cap).
-  Future<void> bulkUpdateEntities(String module, List<String> ids, Map<String, dynamic> fields) async {
+  /// Returns how many records were really updated (the server skips records
+  /// without permission or fields that must go through a workflow).
+  Future<int> bulkUpdateEntities(String module, List<String> ids, Map<String, dynamic> fields) async {
+    var updated = 0;
     for (var i = 0; i < ids.length; i += 100) {
       final chunk = ids.sublist(i, i + 100 > ids.length ? ids.length : i + 100);
-      await _send('POST', '/api/entity/$module/bulk-update', data: {
+      final env = await _send('POST', '/api/entity/$module/bulk-update', data: {
         'ids': [for (final id in chunk) int.tryParse(id) ?? id],
         ...fields,
       });
+      final d = env['data'];
+      final n = d is Map ? d['updated'] : null;
+      updated += n is num ? n.toInt() : (int.tryParse('${n ?? ''}') ?? chunk.length);
     }
+    return updated;
+  }
+
+  /// Who a record is shared with (users / roles).
+  Future<List<Map<String, dynamic>>> getEntityShares(String module, String id) async {
+    final env = await _send('GET', '/api/entity/$module/$id/shares');
+    final d = env['data'];
+    return extractMapList(d is Map ? d['list'] : d);
+  }
+
+  /// Replaces all shares of a record: `[{share_to_type, share_to_id, permission}]`.
+  Future<void> saveEntityShares(String module, String id, List<Map<String, dynamic>> shares) async {
+    await _send('PUT', '/api/entity/$module/$id/shares', data: {'shares': shares});
+  }
+
+  /// Roles of the current business.
+  Future<List<Map<String, dynamic>>> getRoles() async {
+    final env = await _send('GET', '/api/roles', query: {if (_businessId != null) 'business_id': _businessId!});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['list'] : d);
   }
 
   /// Case watchers: `{list, following}` (only cases support following).
@@ -1853,6 +1879,10 @@ class ApiClient {
     return extractMapList(d is Map ? d['list'] : d);
   }
 
+  /// Recompute the asset's PM / calibration due dates.
+  Future<Map<String, dynamic>> recomputeAssetCycles(String assetId) async =>
+      _dataMap(await _send('POST', '/api/field-service/assets/$assetId/recompute-cycles'));
+
   Future<Map<String, dynamic>> generateJobsFromAsset(String assetId) async {
     return _dataMap(await _send('POST', '/api/field-service/assets/$assetId/generate-jobs'));
   }
@@ -2591,6 +2621,11 @@ class ApiClient {
     return _dataMap(await _send('POST', '/api/entity/case/manday-requests/$requestId/reject', data: {
       if (reason != null && reason.isNotEmpty) 'reason': reason,
     }));
+  }
+
+  /// New sign link for a pending request (optionally re-emailing it).
+  Future<Map<String, dynamic>> resendCaseMandaySign(String requestId, {bool skipEmail = true}) async {
+    return _dataMap(await _send('POST', '/api/entity/case/manday-requests/$requestId/resend-sign', data: {'skip_email': skipEmail}));
   }
 
   Future<Map<String, dynamic>> cancelMandayRequest(String requestId) async {

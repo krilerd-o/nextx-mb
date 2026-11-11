@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../docs/document_preview.dart';
+import '../fsm/case_manday.dart';
+import 'lead_convert_sheet.dart';
 import '../journey/job_parts.dart';
 import '../fsm/inspection_lines.dart';
 import 'package:provider/provider.dart';
@@ -118,7 +120,26 @@ class EntityOpsSection extends StatelessWidget {
         ],
         if (module == 'lead') LeadConvertBar(id: id, row: row, onOpen: onOpen),
         if (module == 'job' && !journey) JobExtrasPanel(id: id, row: row, canEdit: canEdit, onOpen: onOpen),
-        if (module == 'asset') AssetGenerateJobsBar(id: id, onOpen: onOpen),
+        if (module == 'asset') ...[
+          AssetGenerateJobsBar(id: id, onOpen: onOpen),
+          if (canEdit) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const ValueKey('asset-recompute'),
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  await context.read<AppConfig>().apiClient.recomputeAssetCycles(id);
+                  messenger.showSnackBar(SnackBar(content: Text(tr('คำนวณรอบ PM / สอบเทียบใหม่แล้ว — ดึงลงเพื่อดูวันครบกำหนดล่าสุด'))));
+                } catch (e) {
+                  messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+                }
+              },
+              icon: const Icon(NxI.arrowClockwise, size: 18),
+              label: Text(tr('คำนวณรอบ PM / สอบเทียบใหม่')),
+            ),
+          ],
+        ],
         if (module == 'service_contract') ...[
           CreateJobFromParentBar(
             label: 'สร้างใบสั่งงานจากสัญญา',
@@ -137,7 +158,7 @@ class EntityOpsSection extends StatelessWidget {
           const SizedBox(height: 12),
           CreateActivityFromCaseBar(id: id, onOpen: onOpen),
           const SizedBox(height: 12),
-          CaseMandayPanel(id: id, canEdit: canEdit),
+          CaseMandayPanel(id: id, row: row, canEdit: canEdit),
         ],
         if (module == 'account') ...[
           const SizedBox(height: 12),
@@ -203,6 +224,9 @@ class _QuotationLinesPanelState extends State<QuotationLinesPanel> {
       final payload = [
         for (var i = 0; i < _lines.length; i++)
           {
+            // Keep every field the server knows (line_comment, item_label,
+            // model, discount_type/amount…) — the save replaces all lines.
+            ..._lines[i],
             'line_no': _lines[i]['line_no'] ?? i + 1,
             'line_type': _lines[i]['line_type'],
             'product_id': _lines[i]['product_id'],
@@ -883,190 +907,13 @@ class LeadConvertBar extends StatelessWidget {
         row['convert_contact_id'] != null;
   }
 
+  /// Same convert window as the web (settings, duplicates, owners,
+  /// move activities); the old inline dialog is gone.
   Future<void> _openPreview(BuildContext context) async {
-    Map<String, dynamic> preview = {};
-    try {
-      preview = await context.read<AppConfig>().apiClient.previewLeadConvert(id);
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-      }
-      return;
-    }
-    if (!context.mounted) return;
-    final host = context;
-    var createContact = preview['can_convert_contact'] != false;
-    var createAccount = preview['can_convert_account'] != false;
-    var createDeal = true;
-    var copyHistory = true;
-    String? linkAccountId;
-    String? linkContactId;
-    final defaults = asStringKeyedMap(preview['form_defaults']) ?? {};
-    final dup = asStringKeyedMap(preview['duplicates']) ?? {};
-    final dupAccounts = extractMapList(dup['accounts']);
-    final dupContacts = extractMapList(dup['contacts']);
-    await showNxLiftSheet<void>(
-      context: host,
-      builder: (ctx, scroll) {
-        return ListView(
-          controller: scroll,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-          children: [
-            Text(tr('แปลงลีด'), style: Theme.of(ctx).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(tr(preview['lead_name']?.toString() ?? entityTitle(row, module: 'lead'))),
-            if (defaults['account_name'] != null) Text(tr('บัญชี: ${defaults['account_name']}')),
-            if (defaults['contact_firstname'] != null || defaults['contact_lastname'] != null)
-              Text(tr('ผู้ติดต่อ: ${defaults['contact_firstname'] ?? ''} ${defaults['contact_lastname'] ?? ''}')),
-            const SizedBox(height: 8),
-            StatefulBuilder(
-              builder: (context, setLocal) {
-                return Column(
-                  children: [
-                    SwitchListTile(
-                      title: Text(tr('สร้างบัญชีลูกค้า')),
-                      value: createAccount,
-                      onChanged: (v) => setLocal(() {
-                        createAccount = v;
-                        if (v) linkAccountId = null;
-                      }),
-                    ),
-                    SwitchListTile(
-                      title: Text(tr('สร้างผู้ติดต่อ')),
-                      value: createContact,
-                      onChanged: (v) => setLocal(() {
-                        createContact = v;
-                        if (v) linkContactId = null;
-                      }),
-                    ),
-                    SwitchListTile(
-                      title: Text(tr('สร้างดีล')),
-                      value: createDeal,
-                      onChanged: (v) => setLocal(() => createDeal = v),
-                    ),
-                    SwitchListTile(
-                      title: Text(tr('คัดลอกประวัติ')),
-                      value: copyHistory,
-                      onChanged: (v) => setLocal(() => copyHistory = v),
-                    ),
-                    if (dupAccounts.isNotEmpty) ...[
-                      Align(alignment: Alignment.centerLeft, child: Text(tr('บัญชีที่อาจซ้ำ'))),
-                      for (final a in dupAccounts)
-                        RadioListTile<String>(
-                          title: Text(tr(entityTitle(a, module: 'account'))),
-                          value: strId(a['id']),
-                          groupValue: linkAccountId,
-                          onChanged: (v) => setLocal(() {
-                            linkAccountId = v;
-                            createAccount = false;
-                          }),
-                        ),
-                    ],
-                    if (dupContacts.isNotEmpty) ...[
-                      Align(alignment: Alignment.centerLeft, child: Text(tr('ผู้ติดต่อที่อาจซ้ำ'))),
-                      for (final c in dupContacts)
-                        RadioListTile<String>(
-                          title: Text(tr(entityTitle(c, module: 'contact'))),
-                          value: strId(c['id']),
-                          groupValue: linkContactId,
-                          onChanged: (v) => setLocal(() {
-                            linkContactId = v;
-                            createContact = false;
-                          }),
-                        ),
-                    ],
-                    NxHeroCta(
-                      label: 'แปลง',
-                      onPressed: () async {
-                        Navigator.pop(ctx);
-                        await _convert(
-                          host,
-                          createAccount: createAccount,
-                          createContact: createContact,
-                          createDeal: createDeal,
-                          copyHistory: copyHistory,
-                          existingAccountId: linkAccountId,
-                          existingContactId: linkContactId,
-                          defaults: defaults,
-                        );
-                      },
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _convert(
-    BuildContext context, {
-    required bool createAccount,
-    required bool createContact,
-    required bool createDeal,
-    required bool copyHistory,
-    String? existingAccountId,
-    String? existingContactId,
-    required Map<String, dynamic> defaults,
-  }) async {
-    try {
-      final data = await context.read<AppConfig>().apiClient.convertLead(id, {
-        'create_account': createAccount || (existingAccountId != null && existingAccountId.isNotEmpty),
-        'create_contact': createContact || (existingContactId != null && existingContactId.isNotEmpty),
-        'create_deal': createDeal,
-        'copy_history': copyHistory,
-        if (existingAccountId != null && existingAccountId.isNotEmpty) 'existing_account_id': existingAccountId,
-        if (existingContactId != null && existingContactId.isNotEmpty) 'existing_contact_id': existingContactId,
-        ...defaults,
-      });
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('แปลงลีดแล้ว'))));
-      final accountId = pickRecordId(data, const ['account_id']);
-      final contactId = pickRecordId(data, const ['contact_id']);
-      final dealId = pickRecordId(data, const ['deal_id']);
-      await showNxLiftSheet<void>(
-        context: context,
-        builder: (ctx, scroll) {
-          return ListView(
-            controller: scroll,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-            children: [
-              Text(tr('เปิดรายการที่แปลงแล้ว'), style: Theme.of(ctx).textTheme.titleMedium),
-              if (accountId.isNotEmpty)
-                DenseCardTile(
-                  title: 'บัญชีลูกค้า',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    onOpen('account', accountId, row: data);
-                  },
-                ),
-              if (contactId.isNotEmpty)
-                DenseCardTile(
-                  title: 'ผู้ติดต่อ',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    onOpen('contact', contactId, row: data);
-                  },
-                ),
-              if (dealId.isNotEmpty)
-                DenseCardTile(
-                  title: 'ดีล',
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    onOpen('deal', dealId, row: data);
-                  },
-                ),
-            ],
-          );
-        },
-      );
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-      }
-    }
+    final r = await showLeadConvertSheet(context, leadId: id);
+    if (r == null || !context.mounted) return;
+    final accountId = pickRecordId(r, const ['account_id']);
+    if (accountId.isNotEmpty) onOpen('account', accountId);
   }
 
   @override
@@ -1508,7 +1355,7 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
           children: [
             TextField(
               controller: qty,
-              decoration: InputDecoration(labelText: tr('จำนวน')),
+              decoration: InputDecoration(labelText: tr('จำนวน (ชั่วโมง)')),
               keyboardType: TextInputType.number,
             ),
             TextField(controller: note, decoration: InputDecoration(labelText: tr('หมายเหตุ'))),
@@ -1520,14 +1367,11 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
         ],
       ),
     );
-    if (ok != true || !mounted) {
-      qty.dispose();
-      note.dispose();
-      return;
-    }
+    if (ok != true || !mounted) return;
     try {
       await context.read<AppConfig>().apiClient.addContractManday(widget.id, {
         'qty': num.tryParse(qty.text.trim()) ?? 1,
+        'unit': 'Hour', // same as the web: the amount is in hours
         'note': note.text.trim(),
       });
       await _load();
@@ -1535,9 +1379,6 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
-    } finally {
-      qty.dispose();
-      note.dispose();
     }
   }
 
@@ -1566,7 +1407,7 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
                 ),
                 TextField(
                   controller: qty,
-                  decoration: InputDecoration(labelText: tr('จำนวน')),
+                  decoration: InputDecoration(labelText: tr('จำนวน (ชั่วโมง)')),
                   keyboardType: TextInputType.number,
                 ),
                 TextField(controller: note, decoration: InputDecoration(labelText: tr('หมายเหตุ'))),
@@ -1580,14 +1421,11 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
         ],
       ),
     );
-    if (ok != true || !mounted) {
-      qty.dispose();
-      note.dispose();
-      return;
-    }
+    if (ok != true || !mounted) return;
     try {
       await context.read<AppConfig>().apiClient.adjustContractManday(widget.id, {
         'qty': num.tryParse(qty.text.trim()) ?? 1,
+        'unit': 'Hour',
         'direction': direction,
         'note': note.text.trim(),
       });
@@ -1596,9 +1434,6 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
-    } finally {
-      qty.dispose();
-      note.dispose();
     }
   }
 
@@ -1631,181 +1466,6 @@ class _ContractMandayPanelState extends State<ContractMandayPanel> {
   }
 }
 
-class CaseMandayPanel extends StatefulWidget {
-  const CaseMandayPanel({super.key, required this.id, this.canEdit = true});
-  final String id;
-  final bool canEdit;
-
-  @override
-  State<CaseMandayPanel> createState() => _CaseMandayPanelState();
-}
-
-class _CaseMandayPanelState extends State<CaseMandayPanel> {
-  Map<String, dynamic> _summary = {};
-  List<Map<String, dynamic>> _requests = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    if (!context.read<AppConfig>().isLoggedIn) {
-      setState(() => _loading = false);
-      return;
-    }
-    final api = context.read<AppConfig>().apiClient;
-    try {
-      final summary = await api.getCaseMandaySummary(widget.id);
-      var requests = <Map<String, dynamic>>[];
-      try {
-        requests = await api.getCaseMandayRequests(widget.id);
-      } catch (e, s) {
-      ErrorReporting.report(e, s);
-    }
-      if (mounted) {
-        setState(() {
-          _summary = summary;
-          _requests = requests;
-        });
-      }
-    } catch (_) {
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _request() async {
-    final qty = TextEditingController(text: '1');
-    final note = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        scrollable: true, // fields stay reachable above the keyboard
-        title: Text(tr('ขอ manday')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: qty,
-              decoration: InputDecoration(labelText: tr('จำนวน')),
-              keyboardType: TextInputType.number,
-            ),
-            TextField(controller: note, decoration: InputDecoration(labelText: tr('หมายเหตุ'))),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ส่ง'))),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) {
-      qty.dispose();
-      note.dispose();
-      return;
-    }
-    try {
-      await context.read<AppConfig>().apiClient.postCaseMandayRequest(widget.id, {
-        'qty': num.tryParse(qty.text.trim()) ?? 1,
-        'note': note.text.trim(),
-      });
-      await _load();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-      }
-    } finally {
-      qty.dispose();
-      note.dispose();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _RelatedCard(
-      title: 'Manday ของเคส',
-      loading: _loading,
-      empty: _summary.isEmpty && _requests.isEmpty,
-      trailing: _summary['remain_hours'] != null || _summary['md_remain_hours'] != null
-          ? Text(tr('คงเหลือ ${_summary['remain_hours'] ?? _summary['md_remain_hours']} ชม.'))
-          : null,
-      actions: widget.canEdit ? [TextButton(onPressed: _request, child: Text(tr('ขอ manday')))] : const [],
-      children: [
-        if (_summary.isNotEmpty)
-          DenseCardTile(
-            title: 'สรุป',
-            subtitle: _summary.entries
-                .where((e) => e.value != null && e.value is! List && e.value is! Map)
-                .take(4)
-                .map((e) => '${e.key}: ${e.value}')
-                .join(' · '),
-          ),
-        for (final req in _requests)
-          DenseCardTile(
-            title: req['status']?.toString() ?? 'คำขอ',
-            subtitle: [
-              req['qty'] ?? req['manday_qty'],
-              req['note'],
-            ].where((e) => e != null).join(' · '),
-            trailing: widget.canEdit
-                ? Wrap(
-                    children: [
-                      TextButton(
-                        onPressed: () async {
-                          final rid = strId(req['id']);
-                          if (rid.isEmpty) return;
-                          try {
-                            await context.read<AppConfig>().apiClient.approveMandayRequest(rid);
-                            await _load();
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-                            }
-                          }
-                        },
-                        child: Text(tr('อนุมัติ')),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          final rid = strId(req['id']);
-                          if (rid.isEmpty) return;
-                          try {
-                            await context.read<AppConfig>().apiClient.rejectMandayRequest(rid);
-                            await _load();
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-                            }
-                          }
-                        },
-                        child: Text(tr('ปฏิเสธ')),
-                      ),
-                      TextButton(
-                        onPressed: () async {
-                          final rid = strId(req['id']);
-                          if (rid.isEmpty) return;
-                          try {
-                            await context.read<AppConfig>().apiClient.cancelMandayRequest(rid);
-                            await _load();
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-                            }
-                          }
-                        },
-                        child: Text(tr('ยกเลิก')),
-                      ),
-                    ],
-                  )
-                : null,
-          ),
-      ],
-    );
-  }
-}
 
 class CreateActivityFromCaseBar extends StatelessWidget {
   const CreateActivityFromCaseBar({super.key, required this.id, required this.onOpen});
@@ -1887,11 +1547,7 @@ class _AccountMandayPanelState extends State<AccountMandayPanel> {
         ],
       ),
     );
-    if (ok != true || !mounted) {
-      qty.dispose();
-      note.dispose();
-      return;
-    }
+    if (ok != true || !mounted) return;
     try {
       await context.read<AppConfig>().apiClient.addAccountManday(widget.id, {
         'qty': num.tryParse(qty.text.trim()) ?? 1,
@@ -1902,9 +1558,6 @@ class _AccountMandayPanelState extends State<AccountMandayPanel> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       }
-    } finally {
-      qty.dispose();
-      note.dispose();
     }
   }
 

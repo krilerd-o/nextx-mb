@@ -20,6 +20,8 @@ import 'entity_detail_parts.dart';
 import 'lead_convert_sheet.dart';
 import '../../core/journey_rules.dart';
 import '../../core/service_journey.dart';
+import '../../core/deal_stage.dart';
+import '../fsm/contract_flows.dart';
 import '../journey/case_flows.dart';
 import '../journey/quotation_journey.dart' show duplicateQuotation;
 import '../journey/status_followups.dart';
@@ -211,6 +213,21 @@ class EntityRecordActions {
         return '';
       }
     }
+    // Activity waiting for approval: the server keeps its status until decided.
+    if (module == 'activity' && '${row['approval_state'] ?? ''}'.toLowerCase() == 'pending') {
+      messenger?.showSnackBar(SnackBar(content: Text(tr('กิจกรรมนี้รออนุมัติอยู่ — เปลี่ยนสถานะได้หลังผู้อนุมัติตัดสิน (เมนูรออนุมัติ)'))));
+      return null;
+    }
+    // Service contract: status moves only through the workflow (approve, sign…).
+    if (module == 'service_contract') {
+      final action = await pickContractAction(context, row);
+      if (action == null || !context.mounted) return null;
+      final rec = await ContractFlows.run(context, row: row, action: action);
+      if (rec == null) return null;
+      final v = '${rec['contract_status'] ?? ''}';
+      onChanged?.call('contract_status', v);
+      return v;
+    }
     var lists = picklists;
     if (lists == null || lists.isEmpty) {
       try {
@@ -243,9 +260,19 @@ class EntityRecordActions {
     }
     final id = '${row['id'] ?? ''}';
     final label = options.firstWhere((o) => o.value == picked).label;
+    // Deal: probability follows the stage; Closed Lost needs a reason (like the web).
+    Map<String, dynamic> payload = {key: picked};
+    if (module == 'deal' && key == 'deal_stage') {
+      String? lost;
+      if (picked == kDealClosedLost) {
+        lost = await askDealLostReason(context, current: '${row['closed_reason'] ?? ''}');
+        if (lost == null) return null;
+      }
+      payload = dealStagePayload(picked, lostReason: lost);
+    }
     onChanged?.call(key, picked);
     try {
-      await api.putEntity(module, id, {key: picked});
+      await api.putEntity(module, id, payload);
       HapticFeedback.mediumImpact();
       messenger?.hideCurrentSnackBar();
       messenger?.showSnackBar(SnackBar(
@@ -355,7 +382,10 @@ class EntityRecordActions {
     if (picked == null || !context.mounted) return null;
     var ok = false;
     if (picked == 'close_sale') {
-      ok = await showQuotationOutcomeSheet(context, quotationId: id) != null;
+      final r = await showQuotationOutcomeSheet(context, quotationId: id);
+      ok = r != null;
+      // Won → offer to close the linked deal too (same as the detail page).
+      if (r != null && context.mounted) await maybeSuggestCloseDeal(context, r['suggest_close_deal']);
     } else if (picked.startsWith('offer:')) {
       ok = await QuotationFlows.setOffer(context, id, picked.substring(6));
     } else if (picked == 'cancel') {
@@ -709,4 +739,35 @@ Future<void> resetDuplicatedJob(ApiClient api, String id) async {
   } catch (e) {
     debugPrint('[job duplicate] reset status: $e');
   }
+}
+
+/// Reason for losing a deal (required on the server for Closed Lost).
+Future<String?> askDealLostReason(BuildContext context, {String current = ''}) async {
+  const presets = ['ราคาสูงกว่าคู่แข่ง', 'ลูกค้าเลื่อน/ยกเลิกโครงการ', 'ไม่ตรงความต้องการ', 'งบประมาณไม่พอ', 'เลือกเจ้าเดิม'];
+  final ctrl = TextEditingController(text: current);
+  final r = await showDialog<String>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) => AlertDialog(
+        title: Text(tr('ปิดดีลเป็น "แพ้"')),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final p in presets)
+              ChoiceChip(label: Text(tr(p)), selected: ctrl.text == tr(p), onSelected: (_) => setS(() => ctrl.text = tr(p))),
+          ]),
+          const SizedBox(height: 10),
+          TextField(key: const ValueKey('deal-lost-reason'), controller: ctrl, maxLines: 2, decoration: InputDecoration(labelText: '${tr('เหตุผลที่แพ้')} *'), onChanged: (_) => setS(() {})),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
+          FilledButton(
+            key: const ValueKey('deal-lost-ok'),
+            onPressed: ctrl.text.trim().isEmpty ? null : () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: Text(tr('ปิดเป็นแพ้')),
+          ),
+        ],
+      ),
+    ),
+  );
+  return r;
 }

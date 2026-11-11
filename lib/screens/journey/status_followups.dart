@@ -551,22 +551,34 @@ Future<Map<String, dynamic>?> showQuotationOutcomeSheet(
   );
 }
 
-/// Suggest closing the deal as won (after quotation won / customer accepted).
+/// Suggest closing the deal as won (after quotation won / customer accepted):
+/// one tap closes it (stage Closed Won, probability 100) like the web.
 Future<void> maybeSuggestCloseDeal(BuildContext context, Object? suggest) async {
   if (suggest is! Map || suggest['deal_id'] == null) return;
-  final go = await showDialog<bool>(
+  final dealId = suggest['deal_id'].toString();
+  final go = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(tr('ปิดดีลเป็น "ชนะ" ด้วยไหม?')),
-      content: Text(tr('ดีล ${suggest['deal_name'] ?? suggest['deal_no'] ?? ''} ยังเปิดอยู่ — เปิดดีลเพื่อปิดเป็น Closed Won')),
+      content: Text('${tr('ดีล')} ${suggest['deal_name'] ?? suggest['deal_no'] ?? ''} ${tr('ยังเปิดอยู่')}'),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ภายหลัง'))),
-        FilledButton(key: const ValueKey('open-deal'), onPressed: () => Navigator.pop(ctx, true), child: Text(tr('เปิดดีล'))),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ภายหลัง'))),
+        TextButton(key: const ValueKey('open-deal'), onPressed: () => Navigator.pop(ctx, 'open'), child: Text(tr('เปิดดีล'))),
+        FilledButton(key: const ValueKey('close-deal-won'), onPressed: () => Navigator.pop(ctx, 'won'), child: Text(tr('ปิดดีลเป็นชนะ'))),
       ],
     ),
   );
-  if (go == true && context.mounted) {
-    nxPush<void>(context, EntityByIdLoader(module: 'deal', id: suggest['deal_id'].toString()));
+  if (!context.mounted || go == null) return;
+  if (go == 'open') {
+    nxPush<void>(context, EntityByIdLoader(module: 'deal', id: dealId));
+    return;
+  }
+  try {
+    await context.read<AppConfig>().apiClient.putEntity('deal', dealId, {'deal_stage': 'Closed Won', 'probability': 100});
+    HapticFeedback.mediumImpact();
+    if (context.mounted) _snack(context, tr('ปิดดีลเป็นชนะแล้ว'));
+  } catch (e) {
+    if (context.mounted) _snack(context, journeyErrorText(e));
   }
 }
 

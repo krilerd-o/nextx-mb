@@ -520,6 +520,8 @@ class _EntityListScreenState extends State<EntityListScreen> {
     ];
   }
 
+  bool get _workflowStatus => const {'job', 'quotation', 'case', 'service_contract'}.contains(widget.module);
+
   /// Multi-select → one status for all picked records (`bulk-update`).
   Future<void> _bulkStatus() async {
     final group = _pickGroups.firstWhere((g) => g.key == 'pl:$_statusKey');
@@ -543,11 +545,15 @@ class _EntityListScreenState extends State<EntityListScreen> {
     if (value == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<AppConfig>().apiClient.bulkUpdateEntities(widget.module, ids, {_statusKey!: value});
+      final n = await context.read<AppConfig>().apiClient.bulkUpdateEntities(widget.module, ids, {_statusKey!: value});
       HapticFeedback.mediumImpact();
       if (!mounted) return;
       setState(_picked.clear);
-      messenger.showSnackBar(SnackBar(content: Text(tr('เปลี่ยนสถานะ ${ids.length} รายการแล้ว'))));
+      messenger.showSnackBar(SnackBar(
+        content: Text(n >= ids.length
+            ? tr('เปลี่ยนสถานะ ${ids.length} รายการแล้ว')
+            : '${tr('เปลี่ยนสถานะได้ $n จาก ${ids.length} รายการ')} — ${tr('ที่เหลือไม่มีสิทธิ์หรือต้องเปลี่ยนผ่านขั้นตอนของรายการ')}'),
+      ));
       _load(reset: true);
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
@@ -901,7 +907,9 @@ class _EntityListScreenState extends State<EntityListScreen> {
                   ]),
                 ),
               ),
-              if (_statusKey != null && _pickGroups.any((g) => g.key == 'pl:$_statusKey'))
+              // Job / quotation / case / contract statuses move only through
+              // their workflow (dialogs, reasons, notifications) — not in bulk.
+              if (_statusKey != null && !_workflowStatus && _pickGroups.any((g) => g.key == 'pl:$_statusKey'))
                 IconButton(
                   tooltip: tr('เปลี่ยนสถานะที่เลือก'),
                   icon: const Icon(NxI.flag),

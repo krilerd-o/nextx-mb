@@ -312,6 +312,69 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     return sameDay ? '${day(s)} · ${hm(s)}–${hm(e)}' : '${day(s)} ${hm(s)} → ${day(e)} ${hm(e)}';
   }
 
+  bool _deciding = false;
+
+  /// Waiting for approval: who decides; the approver approves / rejects here
+  /// (like the web's Service Journey panel).
+  Widget _approvalCard(BuildContext context, Map<String, dynamic> row) {
+    final theme = Theme.of(context);
+    final me = context.read<AppConfig>().session.userId;
+    final mine = '${row['approver_user_id'] ?? ''}' == '$me';
+    Future<void> decide(bool approve) async {
+      String? note;
+      if (!approve) {
+        final ctrl = TextEditingController();
+        note = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(tr('ไม่อนุมัติกิจกรรม')),
+            content: TextField(key: const ValueKey('act-reject-note'), controller: ctrl, autofocus: true, maxLines: 3, decoration: InputDecoration(labelText: tr('เหตุผล'))),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
+              FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('ไม่อนุมัติ'))),
+            ],
+          ),
+        );
+        if (note == null) return;
+      }
+      if (!mounted) return;
+      final api = context.read<AppConfig>().apiClient;
+      final messenger = ScaffoldMessenger.of(context);
+      setState(() => _deciding = true);
+      try {
+        approve ? await api.approveActivity(_id) : await api.rejectActivity(_id, note: note);
+        messenger.showSnackBar(SnackBar(content: Text(tr(approve ? 'อนุมัติกิจกรรมแล้ว' : 'ไม่อนุมัติกิจกรรมแล้ว'))));
+        await _loadRecord();
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      } finally {
+        if (mounted) setState(() => _deciding = false);
+      }
+    }
+
+    return NxSurfaceCard(
+      key: const ValueKey('act-approval'),
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Icon(NxI.shieldCheck, size: 18, color: Color(0xFFD97706)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(tr('กิจกรรมนี้รออนุมัติ'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
+        ]),
+        if ('${row['approver_name'] ?? row['approver_user_name'] ?? ''}'.isNotEmpty)
+          Padding(padding: const EdgeInsets.only(top: 6), child: Text('${tr('ผู้อนุมัติ')}: ${row['approver_name'] ?? row['approver_user_name']}', style: theme.textTheme.bodySmall)),
+        if (mine) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: FilledButton.icon(key: const ValueKey('act-approve'), onPressed: _deciding ? null : () => decide(true), icon: const Icon(NxI.check, size: 18), label: Text(tr('อนุมัติ')))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton.icon(key: const ValueKey('act-reject'), onPressed: _deciding ? null : () => decide(false), icon: Icon(NxI.x, size: 18, color: theme.colorScheme.error), label: Text(tr('ไม่อนุมัติ'), style: TextStyle(color: theme.colorScheme.error)))),
+          ]),
+        ],
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -392,6 +455,10 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 ],
               ),
             ),
+            if ('${row['approval_state'] ?? ''}' == 'pending') ...[
+              const SizedBox(height: 12),
+              _approvalCard(context, row),
+            ],
             if ((row['description']?.toString() ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 12),
               NxSurfaceCard(

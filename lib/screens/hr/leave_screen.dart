@@ -873,7 +873,6 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
           ],
         ),
       );
-      ctrl.dispose();
       if (reason == null || !mounted) return;
     }
     try {
