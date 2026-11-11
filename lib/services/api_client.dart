@@ -1549,9 +1549,10 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
-  Future<List<Map<String, dynamic>>> getMyJobs({int limit = 50}) async {
+  Future<List<Map<String, dynamic>>> getMyJobs({int limit = 50, bool includeDone = false}) async {
     final env = await _send('GET', '/api/field-service/me/jobs', query: {
       'limit': '$limit',
+      if (includeDone) 'include_done': '1',
     });
     return extractMapList(env['data']);
   }
