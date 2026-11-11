@@ -2343,6 +2343,12 @@ const Map<String, String> enStrings = {
   'ไม่ตรงความต้องการ': 'Doesn\'t fit the need',
   'งบประมาณไม่พอ': 'Not enough budget',
   'เลือกเจ้าเดิม': 'Chose the incumbent',
+  'บันทึกกิจกรรมของงานนี้เป็นเทมเพลต': 'Save this job\'s activities as a template',
+  'บันทึกเป็นเทมเพลตกิจกรรม': 'Save as activity template',
+  'ชื่อเทมเพลต': 'Template name',
+  'หมวด (ไม่บังคับ)': 'Category (optional)',
+  'ชื่องาน/ลูกค้าในหัวข้อกิจกรรมจะถูกแทนด้วยตัวแปร ใช้ซ้ำกับงานอื่นได้': 'Job/customer names in activity titles become variables, so it works for other jobs',
+  'บันทึกเป็นเทมเพลตแล้ว — เลือกได้ตอนสร้างกิจกรรมของงานถัดไป': 'Saved as a template — pick it when creating activities for the next job',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

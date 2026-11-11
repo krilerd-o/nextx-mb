@@ -230,6 +230,10 @@ extension JourneyApi on ApiClient {
   // ------------------------------------------------------------------ Case
 
   /// accept | forward | wait | resume | cancel | close (NEXTX case workflow).
+  /// Save a job's activities as a template (`{name, category?}`).
+  Future<Map<String, dynamic>> saveJobActivitiesAsTemplate(String jobId, {required String name, String? category}) async =>
+      _dataMap(await _send('POST', '/api/field-service/jobs/$jobId/activity-template', data: {'name': name, if (category != null && category.isNotEmpty) 'category': category}));
+
   /// Service contract status change (`{action, ...}`) — the only way the
   /// server accepts a new `contract_status`.
   Future<Map<String, dynamic>> serviceContractWorkflowAction(String id, Map<String, dynamic> body) async =>

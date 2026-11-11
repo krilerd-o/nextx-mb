@@ -369,6 +369,37 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     ], current: _row[key]?.toString());
   }
 
+  /// Job → save its activities as a reusable template (like the web).
+  Future<void> _saveActivitiesAsTemplate() async {
+    final name = TextEditingController(text: '${_row['job_name'] ?? ''}'.trim());
+    final category = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('บันทึกเป็นเทมเพลตกิจกรรม')),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(key: const ValueKey('tpl-name'), controller: name, autofocus: true, decoration: InputDecoration(labelText: '${tr('ชื่อเทมเพลต')} *')),
+          const SizedBox(height: 8),
+          TextField(controller: category, decoration: InputDecoration(labelText: tr('หมวด (ไม่บังคับ)'))),
+          const SizedBox(height: 8),
+          Text(tr('ชื่องาน/ลูกค้าในหัวข้อกิจกรรมจะถูกแทนด้วยตัวแปร ใช้ซ้ำกับงานอื่นได้'), style: Theme.of(ctx).textTheme.bodySmall),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(key: const ValueKey('tpl-save'), onPressed: () => Navigator.pop(ctx, true), child: Text(tr('บันทึก'))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted || name.text.trim().isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppConfig>().apiClient.saveJobActivitiesAsTemplate(_id, name: name.text.trim(), category: category.text.trim());
+      messenger.showSnackBar(SnackBar(content: Text(tr('บันทึกเป็นเทมเพลตแล้ว — เลือกได้ตอนสร้างกิจกรรมของงานถัดไป'))));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    }
+  }
+
   /// Status picker sheet (same as the list's long-press "ปรับสถานะ").
   Future<void> _pickStatus() async {
     await EntityRecordActions.changeStatus(
@@ -707,7 +738,14 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                         icon: const Icon(NxI.calendarPlus),
                         label: Text(tr('สร้างกิจกรรมของงาน (เทมเพลต / ด่วน)')),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 6),
+                      TextButton.icon(
+                        key: const ValueKey('job-save-activity-template'),
+                        onPressed: _saveActivitiesAsTemplate,
+                        icon: const Icon(NxI.copySimple, size: 18),
+                        label: Text(tr('บันทึกกิจกรรมของงานนี้เป็นเทมเพลต')),
+                      ),
+                      const SizedBox(height: 6),
                     ],
                     EntityActivitiesPanel(
                       module: widget.module,
