@@ -227,6 +227,26 @@ extension JourneyApi on ApiClient {
   Future<Map<String, dynamic>> resendQuotationApprovalEmail(String id) async =>
       _dataMap(await _send('POST', '/api/approvals/quotation/$id/resend-email'));
 
+  // ------------------------------------------------------------------ Case
+
+  /// accept | forward | wait | resume | cancel | close (NEXTX case workflow).
+  Future<Map<String, dynamic>> caseWorkflowAction(String id, Map<String, dynamic> body) async =>
+      _dataMap(await _send('POST', '/api/entity/case/$id/workflow-action', data: body));
+
+  Future<Map<String, dynamic>> previewCaseWorkflow(String id, String action, {String? ownerId}) async =>
+      _dataMap(await _send('GET', '/api/entity/case/$id/workflow-preview', query: {
+        'action': action,
+        if (ownerId != null) 'smownerid': ownerId,
+      }));
+
+  Future<List<Map<String, dynamic>>> getCaseOpenJobs(String id) async {
+    final env = await _send('GET', '/api/field-service/cases/$id/open-jobs');
+    final d = env['data'];
+    if (d is Map && d['list'] is List) return extractMapList(d['list']);
+    if (d is Map && d['jobs'] is List) return extractMapList(d['jobs']);
+    return extractMapList(d);
+  }
+
   // --------------------------------------------------------------- shared
 
   /// `{quotations, jobs, activities}` linked to a quotation / job / activity.

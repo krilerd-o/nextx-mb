@@ -216,14 +216,16 @@ void main() {
     }
   });
 
-  testWidgets('case: status is shown but cannot change from the list', (tester) async {
-    const c = {'id': 7, 'case_no': 'CS-QA-7', 'case_name': '[QA] เคส R43', 'case_status': 'New'};
+  testWidgets('case: status opens the web-like case actions (no plain PUT)', (tester) async {
+    const c = {'id': 7, 'case_no': 'CS-QA-7', 'case_name': '[QA] เคส R43', 'case_status': 'เปิดเคส'};
     final (adapter, _) = await pumpList(tester, module: 'case', row: c, statusKey: 'case_status', extra: {'GET /api/tags': {'list': []}});
     await longPressRow(tester, '[QA] เคส R43');
-    expect(find.text('เปลี่ยนสถานะเคสได้ในหน้าเคส'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('row-act-status')));
     await settle(tester);
-    expect(find.byKey(const ValueKey('status-opt-Qualified')), findsNothing);
+    expect(find.byKey(const ValueKey('case-action-accept')), findsOneWidget);
+    expect(find.byKey(const ValueKey('case-action-forward')), findsOneWidget);
+    expect(find.byKey(const ValueKey('case-action-cancel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('case-action-close')), findsNothing);
     expect(adapter.calls.where((x) => x.method == 'PUT'), isEmpty);
   });
 
@@ -249,7 +251,7 @@ void main() {
     expect(EntityRowPerms.of('lead', {'_shared_permission': 'edit'}).canEdit, isTrue);
     expect(EntityRowPerms.of('lead', {'lead_status': 'Converted'}).canEdit, isFalse);
     expect(EntityRowPerms.of('lead', {'convert_account_id': 3}).canStatus, isFalse);
-    expect(EntityRowPerms.of('case', {}).canStatus, isFalse);
+    expect(EntityRowPerms.of('case', {}).canStatus, isTrue);
     expect(EntityRowPerms.of('deal', {}).canStatus, isTrue);
     expect(EntityRecordActions.webStatusColumn('service_contract'), 'contract_status');
     expect(

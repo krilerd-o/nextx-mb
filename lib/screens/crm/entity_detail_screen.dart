@@ -34,6 +34,7 @@ import '../../core/recent_records.dart';
 import '../../core/detail_fields_pref.dart';
 import '../../core/journey_rules.dart';
 import '../../core/service_journey.dart';
+import '../journey/case_flows.dart';
 import '../journey/job_journey.dart';
 import '../journey/journey_controller.dart';
 import '../journey/journey_widgets.dart';
@@ -373,6 +374,71 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     }
   }
 
+  /// Case: stepper + action buttons; every change goes through the web's
+  /// workflow (`/workflow-action`) with its window, never a plain PUT.
+  Widget _caseStrip() {
+    final st = _row['case_status'];
+    final cancelled = classifyCaseStatus(st) == 'cancelled';
+    final steps = caseSteps();
+    final idx = caseStepIndex(st);
+    final options = [
+      for (final s in steps) (value: s.id, label: s.label),
+      if (cancelled) (value: CaseStatus.cancelled, label: tr('ยกเลิก')),
+    ];
+    final actions = caseActions(st);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        EntityStatusStepper(
+          options: options,
+          current: cancelled ? CaseStatus.cancelled : steps[idx < 0 ? 0 : idx].id,
+          onSelect: (v) {
+            final i = steps.indexWhere((s) => s.id == v);
+            if (i == idx) return;
+            final a = caseStepAction(i);
+            if (a == null || i < idx) {
+              showCaseNotAllowed(context, 'ย้อนสถานะเคสกลับไม่ได้', hint: 'เคสเดินหน้าได้อย่างเดียว: รับเคส → ส่งต่อ → ปิดเคส หรือยกเลิกเคส');
+              return;
+            }
+            _caseAction(a);
+          },
+        ),
+        if (actions.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final a in actions)
+                a == 'cancel'
+                    ? OutlinedButton.icon(
+                        key: ValueKey('case-btn-$a'),
+                        style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFE11D48)),
+                        onPressed: () => _caseAction(a),
+                        icon: const Icon(NxI.x, size: 16),
+                        label: Text(caseActionLabel(a)),
+                      )
+                    : (a == actions.first ? FilledButton.icon : FilledButton.tonalIcon)(
+                        key: ValueKey('case-btn-$a'),
+                        onPressed: () => _caseAction(a),
+                        icon: Icon(a == 'accept' ? NxI.check : a == 'close' ? NxI.flag : NxI.arrowRight, size: 16),
+                        label: Text(caseActionLabel(a)),
+                      ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _caseAction(String action) async {
+    final ok = await CaseFlows.run(context, caseId: _id, action: action, row: _row);
+    if (ok && mounted) {
+      _timelineLoaded = false;
+      _reload();
+    }
+  }
+
   /// Lead → Account / Contact (+ Deal), same Config as the web.
   Future<void> _convertLead() async {
     final r = await showLeadConvertSheet(context, leadId: _id);
@@ -611,6 +677,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
               if (_journey) ...[
                 const SizedBox(height: 12),
                 _journeyStrip(canEdit),
+              ] else if (widget.module == 'case') ...[
+                const SizedBox(height: 12),
+                _caseStrip(),
               ] else if (statusOptions.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 EntityStatusStepper(

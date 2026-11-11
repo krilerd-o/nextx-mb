@@ -20,6 +20,7 @@ import 'entity_detail_parts.dart';
 import 'lead_convert_sheet.dart';
 import '../../core/journey_rules.dart';
 import '../../core/service_journey.dart';
+import '../journey/case_flows.dart';
 import '../journey/quotation_journey.dart' show duplicateQuotation;
 import '../journey/status_followups.dart';
 
@@ -54,7 +55,7 @@ class EntityRowPerms {
     final perm = '${row['_shared_permission'] ?? 'full'}';
     var edit = perm != 'read_only';
     if (module == 'lead' && leadLocked(row)) edit = false;
-    return EntityRowPerms(canEdit: edit, canDelete: perm == 'full', canStatus: edit && module != 'case');
+    return EntityRowPerms(canEdit: edit, canDelete: perm == 'full', canStatus: module == 'case' || edit);
   }
 }
 
@@ -194,6 +195,22 @@ class EntityRecordActions {
       return _journeyStatus(context, module: module, row: row, onChanged: onChanged);
     }
     if (!context.mounted) return null;
+    // Case: same windows as the web (accept / forward / close / cancel).
+    if (module == 'case') {
+      final id = '${row['id'] ?? row['caseid'] ?? ''}';
+      final action = await pickCaseAction(context, row);
+      if (action == null || !context.mounted) return null;
+      final ok = await CaseFlows.run(context, caseId: id, action: action, row: row);
+      if (!ok) return null;
+      try {
+        final fresh = await api.getEntity('case', id);
+        final v = '${fresh['case_status'] ?? ''}';
+        onChanged?.call('case_status', v);
+        return v;
+      } catch (_) {
+        return '';
+      }
+    }
     var lists = picklists;
     if (lists == null || lists.isEmpty) {
       try {

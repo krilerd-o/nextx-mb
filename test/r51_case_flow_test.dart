@@ -1,0 +1,176 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:nextx_mobile/core/app_config.dart';
+import 'package:nextx_mobile/core/session_state.dart';
+import 'package:nextx_mobile/screens/crm/entity_detail_screen.dart';
+import 'package:nextx_mobile/screens/journey/case_flows.dart';
+
+import 'support/fake_api.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (c) async => null);
+  });
+
+  group('rules (same as the web)', () {
+    test('classify: เปิดเคส is open, not closed', () {
+      expect(classifyCaseStatus('เปิดเคส'), 'open');
+      expect(classifyCaseStatus('ปิดเคส'), 'closed');
+      expect(classifyCaseStatus('รอการตอบรับ'), 'waiting');
+      expect(classifyCaseStatus('กำลังดำเนินการ'), 'in_progress');
+      expect(classifyCaseStatus('ยกเลิก'), 'cancelled');
+      expect(classifyCaseStatus(null), 'open');
+    });
+    test('allowed actions', () {
+      expect(caseActions('เปิดเคส'), ['accept', 'forward', 'cancel']);
+      expect(caseActions('รอการตอบรับ'), ['accept', 'forward', 'cancel']);
+      expect(caseActions('กำลังดำเนินการ'), ['close', 'forward', 'cancel']);
+      expect(caseActions('ปิดเคส'), isEmpty);
+      expect(caseActions('ยกเลิก'), isEmpty);
+      expect([caseStepAction(1), caseStepAction(2), caseStepAction(3), caseStepAction(0)], ['forward', 'accept', 'close', null]);
+    });
+  });
+
+  Future<(FakeNextxAdapter, AppConfig)> pumpDetail(
+    WidgetTester tester,
+    Map<String, dynamic> row, {
+    Map<String, int> statusFor = const {},
+    Map<String, Object?> extra = const {},
+    String role = 'member',
+    String userId = '2',
+  }) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    final adapter = FakeNextxAdapter({
+      'GET /api/entity/case/7': row,
+      'GET /api/entity/case/7/comments': {'list': []},
+      'GET /api/entity/case/7/tags': {'list': []},
+      'GET /api/tags': {'list': []},
+      'GET /api/fields/case': {'list': [], 'picklists': {}},
+      'GET /api/entity/case/7/workflow-preview': {'summaryTh': '[QA] จะแจ้งลูกค้าว่ารับเคสแล้ว', 'to': '', 'cc': ''},
+      'GET /api/field-service/cases/7/open-jobs': {'list': [
+        {'id': 3, 'job_no': 'JOB-QA-3'},
+      ]},
+      'POST /api/entity/case/7/workflow-action': {'id': 7, 'case_status': 'กำลังดำเนินการ'},
+      'GET /api/users': {'list': [
+        {'user_id': 5, 'display_name': '[QA] ช่างเอ'},
+      ]},
+      ...extra,
+    }, statusFor: statusFor);
+    final config = AppConfig();
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    config.debugOverrideSession(SessionState(accessToken: 't', userId: userId, businessId: '1', businessRole: role, menusLoaded: true, menuKeys: const ['case']));
+    config.apiClient.debugSetHttpAdapter(adapter);
+    tester.view.physicalSize = const Size(420, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+      value: config,
+      child: MaterialApp(home: EntityDetailScreen(module: 'case', row: const {'id': 7})),
+    ));
+    await settle(tester, 20);
+    return (adapter, config);
+  }
+
+  Map<String, dynamic> lastBody(FakeNextxAdapter a) {
+    final c = a.calls.lastWhere((x) => x.method == 'POST' && x.path.endsWith('/workflow-action'));
+    final d = c.data;
+    return d is String ? jsonDecode(d) as Map<String, dynamic> : Map<String, dynamic>.from(d as Map);
+  }
+
+  const open = {'id': 7, 'case_no': 'CS-QA-7', 'case_title': '[QA] เคส R51', 'case_status': 'เปิดเคส', 'smownerid': 2};
+
+  testWidgets('accept: window like the web → POST workflow-action (not PUT)', (tester) async {
+    final (a, _) = await pumpDetail(tester, open);
+    expect(find.byKey(const ValueKey('case-btn-accept')), findsOneWidget);
+    expect(find.byKey(const ValueKey('case-btn-close')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('case-btn-accept')));
+    await settle(tester);
+    expect(find.text('[QA] จะแจ้งลูกค้าว่ารับเคสแล้ว'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('case-flow-save')));
+    await settle(tester);
+    final b = lastBody(a);
+    expect(b['action'], 'accept');
+    expect(b['skip_email'], isTrue);
+    expect(a.calls.where((x) => x.method == 'PUT'), isEmpty);
+  });
+
+  testWidgets('cancel: confirm text + cancel open jobs', (tester) async {
+    final (a, _) = await pumpDetail(tester, open);
+    await tester.tap(find.byKey(const ValueKey('case-btn-cancel')));
+    await settle(tester);
+    expect(find.textContaining('จะถูกปรับสถานะเป็นยกเลิก'), findsOneWidget);
+    expect(find.byKey(const ValueKey('case-cancel-jobs')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('case-flow-save')));
+    await settle(tester);
+    final b = lastBody(a);
+    expect([b['action'], b['cancel_jobs']], ['cancel', true]);
+  });
+
+  testWidgets('close (in progress): description + time spent', (tester) async {
+    final (a, _) = await pumpDetail(tester, {...open, 'case_status': 'กำลังดำเนินการ', 'original_estimate_minutes': 60});
+    await tester.tap(find.byKey(const ValueKey('case-btn-close')));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('case-time-spent')), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('case-close-desc')), '[QA] แก้ไขเรียบร้อย');
+    await tester.tap(find.byKey(const ValueKey('case-flow-save')));
+    await settle(tester);
+    final b = lastBody(a);
+    expect(b['action'], 'close');
+    expect(b['time_spent'], '1h');
+    expect(b['case_description_closed'], contains('[QA] แก้ไขเรียบร้อย'));
+  });
+
+  testWidgets('read-only: clear warning, nothing sent', (tester) async {
+    final (a, _) = await pumpDetail(tester, {...open, '_shared_permission': 'read_only'});
+    await tester.tap(find.byKey(const ValueKey('case-btn-accept')));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('case-not-allowed')), findsOneWidget);
+    expect(find.textContaining('ดูเคสนี้ได้อย่างเดียว'), findsOneWidget);
+    expect(a.calls.where((x) => x.method == 'POST'), isEmpty);
+  });
+
+  testWidgets('forwarded to someone else: member cannot accept', (tester) async {
+    final (a, _) = await pumpDetail(tester, {...open, 'case_status': 'รอการตอบรับ', 'smownerid': 9});
+    await tester.tap(find.byKey(const ValueKey('case-btn-accept')));
+    await settle(tester);
+    expect(find.textContaining('เฉพาะผู้รับผิดชอบปัจจุบันหรือผู้ดูแลระบบ'), findsOneWidget);
+    expect(a.calls.where((x) => x.method == 'POST'), isEmpty);
+  });
+
+  testWidgets('server says 403 → friendly dialog, not a silent failure', (tester) async {
+    await pumpDetail(tester, open, statusFor: {'POST /api/entity/case/7/workflow-action': 403}, extra: {});
+    await tester.tap(find.byKey(const ValueKey('case-btn-accept')));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('case-flow-save')));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('case-not-allowed')), findsOneWidget);
+    expect(find.textContaining('ติดต่อเจ้าของเคส'), findsOneWidget);
+  });
+
+  testWidgets('stepper: going back is explained; closed case has no buttons', (tester) async {
+    await pumpDetail(tester, {...open, 'case_status': 'ปิดเคส'});
+    expect(find.byKey(const ValueKey('case-btn-accept')), findsNothing);
+    await tester.ensureVisible(find.byKey(const ValueKey('step-เปิดเคส')));
+    await settle(tester, 4);
+    await tester.tap(find.byKey(const ValueKey('step-เปิดเคส')));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('case-not-allowed')), findsOneWidget);
+  });
+}
+
+Future<void> settle(WidgetTester tester, [int frames = 12]) async {
+  for (var i = 0; i < frames; i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
