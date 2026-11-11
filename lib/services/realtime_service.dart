@@ -47,6 +47,11 @@ class RealtimeService extends ChangeNotifier {
     'rtc:media',
     'rtc:signal',
     'rtc:ended',
+    // AI การสื่อสาร: คำบรรยายสด + สรุปหลังวางสาย (see services/calls/live_transcription.dart)
+    'stt:segment',
+    'stt:state',
+    'stt:request',
+    'ai:call_summary_ready',
   ];
 
   /// Synthetic event sent on every (re)connect.
@@ -158,6 +163,13 @@ class RealtimeService extends ChangeNotifier {
   String? get socketId => _socket?.id;
 
   void emit(String event, Map<String, dynamic> data) => _socket?.emit(event, data);
+
+  /// Live captions audio: `stt:audio (callId, bytes)` as a binary frame. Dropped while offline (never queued).
+  void emitAudio(String callId, Uint8List pcm) {
+    final s = _socket;
+    if (s == null || !connected) return;
+    s.emit('stt:audio', [callId, pcm]);
+  }
 
   /// Emit and wait for the server's acknowledgement (`{ok, ...}`); `{ok: false, error: 'timeout'}` after [timeout].
   Future<Map<String, dynamic>> emitAck(String event, Map<String, dynamic> data, {Duration timeout = const Duration(seconds: 10)}) {
