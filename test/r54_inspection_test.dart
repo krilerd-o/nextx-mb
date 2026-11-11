@@ -11,6 +11,7 @@ import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/crm/entity_detail_screen.dart';
 import 'package:nextx_mobile/screens/fsm/inspection_lines.dart';
+import 'package:nextx_mobile/screens/fsm/inspection_summary.dart';
 import 'package:nextx_mobile/screens/jobs/job_inspection_screen.dart';
 
 import 'support/fake_api.dart';
@@ -119,7 +120,7 @@ void main() {
     expect(list.queryParameters['filter[related_job_id]'], '19');
   });
 
-  testWidgets('inspection detail opens on the checklist tab', (tester) async {
+  testWidgets('inspection detail opens on the summary tab; checklist is next', (tester) async {
     await pump(tester, const EntityDetailScreen(module: 'inspection', row: {'id': '5', 'inspection_no': 'IN-5'}), {
       'GET /api/entity/inspection/5': {'id': 5, 'inspection_no': 'IN-5'},
       'GET /api/field-service/inspections/5/lines': {'list': [
@@ -127,8 +128,64 @@ void main() {
       ]},
     });
     await settle(tester);
+    expect(find.byType(InspectionSummary), findsOneWidget);
     expect(find.text('รายการตรวจ'), findsWidgets);
+    // Next step = continue checking → opens the checklist tab.
+    await tester.ensureVisible(find.byKey(const ValueKey('insp-sum-next')));
+    await tester.tap(find.byKey(const ValueKey('insp-sum-next')));
+    await settle(tester);
     expect(find.byType(InspectionLinesEditor), findsOneWidget);
     expect(find.text('[QA] ตรวจสภาพทั่วไป'), findsOneWidget);
+  });
+
+  testWidgets('summary: ring, counts, verdict, failed items and links', (tester) async {
+    final opened = <String>[];
+    final tabs = <String>[];
+    await pump(
+      tester,
+      Scaffold(
+        body: SingleChildScrollView(
+          child: InspectionSummary(
+            row: const {'id': 5, 'inspection_no': 'IN-5', 'inspection_name': '[QA] ตรวจรับแอร์', 'inspection_status': 'Draft', 'related_job_id': 19, 'related_job_id_name': 'JOB-19 [QA]', 'customer_name': '[QA] ลูกค้า', 'technician_signature': 'x.png'},
+            canEdit: true,
+            onGoTab: tabs.add,
+            onOpen: (m, id) => opened.add('$m:$id'),
+            onChangeStatus: () => tabs.add('status'),
+          ),
+        ),
+      ),
+      {
+        'GET /api/field-service/inspections/5/lines': {'list': [
+          {'id': 1, 'item_label': '[QA] ตรวจสภาพ', 'item_result': 'pass'},
+          {'id': 2, 'item_label': '[QA] แรงดันน้ำยา', 'item_result': 'fail', 'remark': '[QA] ต่ำกว่าเกณฑ์'},
+          {'id': 3, 'item_label': '[QA] ทำความสะอาด', 'item_result': 'na'},
+          {'id': 4, 'item_label': '[QA] ทดสอบ', 'item_result': 'pass'},
+        ]},
+      },
+    );
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('100%'), findsOneWidget);
+    expect(find.text('4/4'), findsOneWidget);
+    expect(find.text('ไม่ผ่าน 1 รายการ'), findsOneWidget);
+    expect(find.byKey(const ValueKey('insp-sum-failed')), findsOneWidget);
+    expect(find.text('[QA] ต่ำกว่าเกณฑ์'), findsOneWidget);
+    expect(find.text('JOB-19 [QA]'), findsOneWidget);
+    expect(find.text('เซ็นแล้ว'), findsOneWidget);
+    expect(find.text('ยังไม่เซ็น'), findsOneWidget);
+    // All checked → next step saves the inspection status.
+    await tester.tap(find.byKey(const ValueKey('insp-sum-next')));
+    expect(tabs, ['status']);
+    await tester.ensureVisible(find.byKey(const ValueKey('insp-sum-job')));
+    await tester.tap(find.byKey(const ValueKey('insp-sum-job')));
+    expect(opened, ['job:19']);
+    await tester.tap(find.byKey(const ValueKey('insp-sum-count-fail')));
+    expect(tabs.last, 'checklist');
+  });
+
+  test('verdict from the checklist', () {
+    expect(inspVerdict(InspCounts.of(const [])), InspVerdict.empty);
+    expect(inspVerdict(InspCounts.of(const [{'item_result': 'pass'}, {'item_result': null}])), InspVerdict.inProgress);
+    expect(inspVerdict(InspCounts.of(const [{'item_result': 'pass'}, {'item_result': 'na'}])), InspVerdict.passed);
+    expect(inspVerdict(InspCounts.of(const [{'item_result': 'pass'}, {'item_result': 'fail'}])), InspVerdict.failed);
   });
 }

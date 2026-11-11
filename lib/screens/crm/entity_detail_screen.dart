@@ -36,6 +36,7 @@ import '../../core/service_journey.dart';
 import '../journey/case_flows.dart';
 import '../docs/document_preview.dart';
 import '../fsm/inspection_lines.dart';
+import '../fsm/inspection_summary.dart';
 import '../journey/job_journey.dart';
 import '../journey/journey_controller.dart';
 import '../journey/journey_widgets.dart';
@@ -84,7 +85,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   bool _jBusy = false;
 
   /// Current tab id (tabs differ per module / journey).
-  late String _tabId = widget.initialTab ?? (widget.module == 'inspection' ? 'checklist' : 'info');
+  late String _tabId = widget.initialTab ?? (widget.module == 'inspection' ? 'insp-summary' : 'info');
 
   @override
   void initState() {
@@ -192,7 +193,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   /// Tabs: (id, label). Journey pages are shorter and start at "สรุป".
   /// Wide (tablet / unfolded) layout: the primary tab sits in the left pane.
   bool _wide = false;
-  String get _primaryTab => _journey ? 'summary' : (widget.module == 'inspection' ? 'checklist' : 'info');
+  String get _primaryTab => _journey ? 'summary' : (widget.module == 'inspection' ? 'insp-summary' : 'info');
 
   List<(String, String)> _tabs() {
     final all = _allTabs();
@@ -209,7 +210,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     if (_journey && widget.module == 'quotation') {
       return [('summary', 'สรุป'), ('lines', 'รายการ'), ('approval', 'อนุมัติ'), ('activities', 'กิจกรรม'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
     }
-    return [if (widget.module == 'inspection') ('checklist', 'รายการตรวจ'), ('info', 'ข้อมูล'), ('comments', comments), ('files', 'ไฟล์'), ('history', 'ประวัติ'), if (widget.module != 'activity') ('activities', 'กิจกรรม')];
+    return [if (widget.module == 'inspection') ...[('insp-summary', 'สรุป'), ('checklist', 'รายการตรวจ')], ('info', 'ข้อมูล'), ('comments', comments), ('files', 'ไฟล์'), ('history', 'ประวัติ'), if (widget.module != 'activity') ('activities', 'กิจกรรม')];
   }
 
   /// Case watchers: whether I follow this case (server supports cases only).
@@ -363,6 +364,19 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
           return (value: p.value, label: p.label);
         }(),
     ], current: _row[key]?.toString());
+  }
+
+  /// Status picker sheet (same as the list's long-press "ปรับสถานะ").
+  Future<void> _pickStatus() async {
+    await EntityRecordActions.changeStatus(
+      context,
+      module: widget.module,
+      row: {..._row, 'id': _id},
+      picklists: _picklists.isEmpty ? null : _picklists,
+      onChanged: (k, v) {
+        if (mounted) setState(() => _row = {..._row, k: v});
+      },
+    );
   }
 
   Future<void> _changeStatus(String key, String value) async {
@@ -628,6 +642,14 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 'lines' => _quotationLines(canEdit),
                 'approval' => QuotationApprovalTab(row: _row, ctrl: _jc!, meId: int.tryParse(session.userId ?? ''), canEdit: canEdit, onAction: _journeyAction),
                 'checklist' => InspectionLinesEditor(inspectionId: _id, canEdit: canEdit),
+                'insp-summary' => InspectionSummary(
+                  row: {..._row, 'id': _id},
+                  canEdit: canEdit,
+                  onGoTab: _goTab,
+                  onOpen: _openRecord,
+                  onChangeStatus: canEdit ? _pickStatus : null,
+                  statusLabel: _pickOptions('inspection_status').where((o) => o.value == '${_row['inspection_status'] ?? ''}').firstOrNull?.label,
+                ),
                 'comments' => EntityCommentsPanel(module: widget.module, id: _id, comments: _comments, onChanged: _reload),
                 'files' => EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
                 'history' => EntityHistoryPanel(events: _timeline, loading: _timelineLoading, valueLabel: _valueLabel),
@@ -848,6 +870,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     'lines': NxI.listChecks,
     'approval': NxI.shieldCheck,
     'checklist': NxI.listChecks,
+    'insp-summary': NxI.chartPie,
   };
 
   Widget _tabBar() {

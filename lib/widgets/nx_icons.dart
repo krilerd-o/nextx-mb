@@ -163,6 +163,7 @@ class NxI {
   static const timer = LucideIcons300.timer;
   static const filePdf = LucideIcons300.fileText;
   static const fileText = LucideIcons300.fileText;
+  static const chartPie = LucideIcons300.chartPie;
   static const printer = LucideIcons300.printer;
   static const magnifyingGlassPlus = LucideIcons300.zoomIn;
   static const magnifyingGlassMinus = LucideIcons300.zoomOut;

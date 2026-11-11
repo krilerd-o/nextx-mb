@@ -292,7 +292,7 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
         try {
           bytes = await _fetch(_variant(fb));
           shown = fb;
-          notice = tr('เทมเพลตเอกสาร (BIRT) ยังสร้างไม่ได้ตอนนี้ — แสดงแบบมาตรฐานแทน');
+          notice = '${tr('เทมเพลตเอกสาร (BIRT) ยังสร้างไม่ได้ตอนนี้ — แสดงแบบมาตรฐานแทน')}${want.label.isEmpty ? '' : ' ($want.label)'}';
         } catch (_) {
           if (token == _token && mounted) setState(() => _error = e);
         }

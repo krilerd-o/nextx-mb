@@ -2234,6 +2234,21 @@ const Map<String, String> enStrings = {
   'แบบมาตรฐาน': 'Standard',
   'ดูเอกสารใบตรวจรับ': 'View inspection document',
   'ดูเอกสาร PDF': 'View PDF document',
+  'กำลังตรวจ': 'In progress',
+  'ช่างผู้ตรวจ': 'Inspector',
+  'ดูรายการตรวจ': 'View checklist',
+  'ตรวจครบแล้ว — บันทึกสถานะใบตรวจรับ': 'All checked — save the inspection status',
+  'ตรวจจริง': 'Inspected at',
+  'ตรวจต่อ': 'Continue checking',
+  'นัดตรวจ': 'Planned',
+  'ผ่านทุกรายการ': 'All passed',
+  'ยังไม่เซ็น': 'Not signed',
+  'รายการที่ไม่ผ่าน': 'Failed items',
+  'สร้างเมื่อ': 'Created',
+  'เชื่อมโยง': 'Linked',
+  'เซ็นแล้ว': 'Signed',
+  'เพิ่มรายการตรวจ': 'Add checklist items',
+  'เหลือ': 'left',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

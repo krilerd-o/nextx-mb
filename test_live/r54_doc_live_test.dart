@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/app_theme.dart';
 import 'package:nextx_mobile/core/session_state.dart';
+import 'package:nextx_mobile/screens/crm/entity_detail_screen.dart';
 import 'package:nextx_mobile/screens/docs/document_preview.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -84,11 +85,13 @@ void main() {
             child: RepaintBoundary(key: const ValueKey('shot'), child: MaterialApp(key: UniqueKey(), theme: dark ? AppTheme.dark : AppTheme.light, debugShowCheckedModeBanner: false, home: home)),
           );
 
-      // Job 19 ([QA]): QA has no BIRT server → standard PDF + notice.
+      // Job 19 ([QA]): the BIRT report like the web (BIRT running locally).
+      final birt = Platform.environment['BIRT'] == '1';
       await tester.pumpWidget(app(DocumentPreviewScreen(source: jobDocumentSource(const {'id': 19, 'job_no': 'JOB-19 [QA]'}))));
-      await frames();
-      expect(find.byKey(const ValueKey('doc-fallback-notice')), findsOneWidget);
+      await frames(birt ? 60 : 30);
+      expect(find.byKey(const ValueKey('doc-fallback-notice')), birt ? findsNothing : findsOneWidget);
       expect(find.byKey(const ValueKey('doc-page-0')), findsOneWidget);
+      if (birt) expect(find.byKey(const ValueKey('doc-page-3')), findsOneWidget); // 4-page SERVICE REPORT
       await shot('doc_job');
       if (dark) {
         await tester.pumpWidget(const SizedBox());
@@ -107,13 +110,19 @@ void main() {
       // Quotation 6: template variants (th/en) and English black & white.
       got.clear();
       await tester.pumpWidget(app(DocumentPreviewScreen(source: quotationDocumentSource(const {'id': 6, 'quotation_no': 'QT-6', 'template_id': 1}))));
-      await frames();
+      await frames(birt ? 50 : 30);
+      if (birt) {
+        expect(find.byKey(const ValueKey('doc-fallback-notice')), findsNothing);
+        await shot('doc_qt_birt');
+      }
       expect(find.byKey(const ValueKey('doc-variant-birt-en-bw')), findsOneWidget);
       await tester.ensureVisible(find.byKey(const ValueKey('doc-variant-birt-en-bw')));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('doc-variant-birt-en-bw')));
       await frames(45);
       debugPrint('R54 quotation pdf sizes: $got');
+      // No en/bw BIRT report on this server → standard PDF in English B/W + notice.
+      expect(find.byKey(const ValueKey('doc-fallback-notice')), findsOneWidget);
       expect(got.length, 2);
       expect(got[0] != got[1], isTrue, reason: 'English B/W differs from Thai colour');
       await shot('doc_qt_en_bw');
@@ -121,6 +130,41 @@ void main() {
       await tester.pumpWidget(app(Scaffold(body: Padding(padding: const EdgeInsets.all(16), child: Center(child: DocumentCard(source: () => quotationDocumentSource(const {'id': 6, 'quotation_no': 'QT-6'})))))));
       await frames(6);
       await shot('doc_card');
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 30));
+    });
+  }
+
+  for (final dark in [false, true]) {
+    testWidgets('inspection summary live dark=$dark', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
+      HttpOverrides.global = null;
+      final config = AppConfig();
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      config.debugOverrideSession(SessionState(accessToken: token, userId: '1', businessId: '1', menusLoaded: true, menuKeys: const ['job', 'inspection']));
+      await tester.runAsync(() => config.setApiBaseUrl(_base));
+      tester.view.physicalSize = const Size(420, 1500);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      Future<void> frames([int n = 30]) async {
+        for (var i = 0; i < n; i++) {
+          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 60)));
+          await tester.pump(const Duration(milliseconds: 60));
+        }
+      }
+      await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: config,
+        child: RepaintBoundary(key: const ValueKey('shot'), child: MaterialApp(theme: dark ? AppTheme.dark : AppTheme.light, debugShowCheckedModeBanner: false, home: const EntityDetailScreen(module: 'inspection', row: {'id': 1}))),
+      ));
+      await frames(40);
+      expect(find.byKey(const ValueKey('insp-sum-root')), findsOneWidget);
+      final ro = tester.firstRenderObject<RenderRepaintBoundary>(find.byKey(const ValueKey('shot')));
+      await tester.runAsync(() async {
+        final i = await ro.toImage(pixelRatio: 1.5);
+        final b = await i.toByteData(format: ui.ImageByteFormat.png);
+        File('$_out/r55_insp_summary${dark ? '_dark' : ''}.png').writeAsBytesSync(b!.buffer.asUint8List());
+      });
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 30));
     });
