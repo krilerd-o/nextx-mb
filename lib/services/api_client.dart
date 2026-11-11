@@ -2695,6 +2695,19 @@ class ApiClient {
     await _send('POST', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/recording', data: form, options: Options(sendTimeout: const Duration(minutes: 5)));
   }
 
+  /// One part of a long call recording (parts are joined on the server when the final one arrives).
+  Future<Map<String, dynamic>> uploadCallRecordingPart(String callId, String filePath,
+      {required int part, int parts = 0, bool isFinal = false, int durationMs = 0, String mime = 'audio/wav'}) async {
+    final form = FormData.fromMap({
+      'part': '$part',
+      if (isFinal) 'final': '1',
+      if (isFinal) 'parts': '$parts',
+      'duration_ms': '$durationMs',
+      'audio': await MultipartFile.fromFile(filePath, filename: 'call.${mime.contains('wav') ? 'wav' : 'm4a'}', contentType: DioMediaType.parse(mime)),
+    });
+    return _dataMap(await _send('POST', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/recording', data: form, options: Options(sendTimeout: const Duration(minutes: 5))));
+  }
+
   Future<List<int>> downloadCallRecording(String path) => _downloadBytes(path);
 
   /// `{list, next_before}` — type all|call|video|chat, from/to YYYY-MM-DD (Thai), q, before (ISO).

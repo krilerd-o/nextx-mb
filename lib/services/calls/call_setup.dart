@@ -13,6 +13,7 @@ import 'call_media_webrtc.dart';
 import 'call_service.dart';
 import 'call_system_ui.dart';
 import 'live_transcription.dart';
+import 'recording_upload_queue.dart';
 
 /// Calls need WebRTC (Android / iOS); `flutter test` runs without the plugins.
 bool get callsSupported {
@@ -54,6 +55,8 @@ void bindCalls(AppConfig config) {
     ..businessId = config.session.businessId
     ..settings = null;
   lt.attach(service);
+  // Recordings from earlier calls that did not finish uploading are sent now / when back online.
+  RecordingUploadQueue.instance.start(api: config.apiClient, businessId: config.session.businessId);
   lt.ensureSettings();
 }
 

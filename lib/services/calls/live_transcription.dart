@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStream;
-import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,6 +11,7 @@ import '../api_client.dart';
 import '../realtime_service.dart';
 import 'call_mic_tap_native.dart';
 import 'call_service.dart';
+import 'recording_upload_queue.dart';
 
 /// One line of live captions.
 class LiveCaption {
@@ -97,34 +97,84 @@ Stream<Uint8List> rechunk(Stream<Uint8List> input, int size) async* {
   if (rest.length >= 2) yield Uint8List.sublistView(rest, 0, rest.length - rest.length % 2);
 }
 
-/// Builds a WAV file from PCM16 mono 24 kHz chunks (kept when the user agreed to recording).
-class _WavWriter {
-  _WavWriter(this.file) : _sink = file.openWrite();
-  final File file;
-  final IOSink _sink;
-  int _bytes = 0;
-  bool _headerWritten = false;
+/// Writes PCM16 mono 24 kHz into WAV parts of [partBytes] (~5 minutes) and hands each finished part
+/// to the upload queue, so a long call is never one huge file and nothing is lost if the app dies.
+class _WavParts {
+  _WavParts(this.dir, this.callId, {this.businessId});
+  final Directory dir;
+  final String callId;
+  final String? businessId;
+  static const partBytes = 48000 * 300; // 5 minutes of PCM16 24 kHz
+  IOSink? _sink;
+  File? _file;
+  int _bytes = 0; // in the current part
+  int _total = 0;
+  int _part = 0;
+
+  int get durationMs => _total ~/ 48;
 
   void add(Uint8List pcm) {
-    if (!_headerWritten) {
-      _sink.add(Uint8List(44)); // placeholder, rewritten on close
-      _headerWritten = true;
+    if (_sink == null) {
+      _file = File('${dir.path}/call-${callId.replaceAll(RegExp(r'[^\w-]'), '')}-${DateTime.now().millisecondsSinceEpoch}-$_part.wav');
+      _sink = _file!.openWrite()..add(Uint8List(44));
+      _bytes = 0;
     }
-    _sink.add(pcm);
+    _sink!.add(pcm);
     _bytes += pcm.length;
+    _total += pcm.length;
+    if (_bytes >= partBytes) unawaited(_closePart(isFinal: false));
   }
 
-  int get durationMs => _bytes ~/ 48;
+  Future<void> _closePart({required bool isFinal}) async {
+    final sink = _sink;
+    final file = _file;
+    final bytes = _bytes;
+    _sink = null;
+    _file = null;
+    if (sink != null && file != null) {
+      await sink.flush();
+      await sink.close();
+      final raf = await file.open(mode: FileMode.writeOnlyAppend);
+      await raf.setPosition(0);
+      await raf.writeFrom(wavHeader(bytes));
+      await raf.close();
+    }
+    if (file == null && !isFinal) return;
+    if (isFinal && _total < 48000) {
+      // < 1 s in total: nothing worth keeping.
+      if (file != null) file.delete().ignore();
+      return;
+    }
+    if (file == null) return; // final part already rolled; nothing new (handled by caller)
+    final n = _part++;
+    await RecordingUploadQueue.instance.add(RecordingPart(
+      callId: callId,
+      path: file.path,
+      part: n,
+      parts: isFinal ? _part : 0,
+      isFinal: isFinal,
+      durationMs: durationMs,
+      businessId: businessId,
+    ));
+  }
 
-  Future<File?> close() async {
-    await _sink.flush();
-    await _sink.close();
-    if (_bytes < 48000) return null; // < 1 s
-    final raf = await file.open(mode: FileMode.writeOnlyAppend);
-    await raf.setPosition(0);
-    await raf.writeFrom(wavHeader(_bytes));
-    await raf.close();
-    return file;
+  /// Throws the unsent recording away (parts already queued stay queued).
+  Future<void> discard() async {
+    final sink = _sink;
+    final file = _file;
+    _sink = null;
+    _file = null;
+    await sink?.close();
+    file?.delete().ignore();
+  }
+
+  /// Closes the last part (marked final, with the total part count).
+  Future<void> close() async {
+    if (_sink == null && _part > 0) {
+      // The last part was just rolled over: send a tiny closing part so the server knows the total.
+      add(Uint8List(4800));
+    }
+    await _closePart(isFinal: true);
   }
 }
 
@@ -217,7 +267,7 @@ class LiveTranscription extends ChangeNotifier {
 
   CallMicTap? _mic;
   StreamSubscription<Uint8List>? _micSub;
-  _WavWriter? _wav;
+  _WavParts? _wav;
   CallService? _call;
 
   static const _choiceKey = 'commAi.sttChoice';
@@ -329,15 +379,19 @@ class LiveTranscription extends ChangeNotifier {
       final record = serverAllows && (decision?.record ?? false);
       if (record) {
         try {
-          final dir = await getTemporaryDirectory();
-          _wav = _WavWriter(File('${dir.path}/call-$id.wav'));
+          _wav = _WavParts(await RecordingUploadQueue.instance.folder(), id, businessId: businessId);
         } catch (_) {
           _wav = null;
         }
       }
       _micSub = stream.listen((pcm) {
         // Muted in the call → nothing leaves the phone (and nothing is recorded).
-        if (_call?.muted == true) return;
+        // Muted in the call → nothing leaves the phone; the recording gets silence so the
+        // meeting tape stays in sync with everyone else.
+        if (_call?.muted == true) {
+          _wav?.add(Uint8List(pcm.length));
+          return;
+        }
         _t.emitAudio(id, pcm);
         _wav?.add(pcm);
       });
@@ -382,11 +436,10 @@ class LiveTranscription extends ChangeNotifier {
     final wav = _wav;
     _wav = null;
     if (wav != null) {
-      final file = await wav.close();
-      if (upload && file != null && callId != null && api != null) {
-        unawaited(api!.uploadCallRecording(callId, file.path, durationMs: wav.durationMs, mime: 'audio/wav').whenComplete(() {
-          file.delete().ignore();
-        }).catchError((_) {}));
+      if (upload) {
+        await wav.close();
+      } else {
+        await wav.discard();
       }
     }
   }
