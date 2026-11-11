@@ -14,6 +14,7 @@ import '../crm/entity_detail_parts.dart' show commentAttachments;
 import 'job_journey.dart' show showPublicLinkSheet;
 import 'journey_controller.dart';
 import 'journey_photos.dart';
+import '../docs/document_preview.dart';
 import 'journey_widgets.dart';
 import 'quotation_versions.dart';
 import 'status_followups.dart';
@@ -250,6 +251,8 @@ class QuotationSummaryTab extends StatelessWidget {
             ]),
           ),
         ],
+        const SizedBox(height: 12),
+        DocumentCard(source: () => quotationDocumentSource(row)),
         const SizedBox(height: 12),
         JourneySection(
           title: tr('ติดตามผล'),

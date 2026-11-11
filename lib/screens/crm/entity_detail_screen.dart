@@ -35,13 +35,13 @@ import '../../core/detail_fields_pref.dart';
 import '../../core/journey_rules.dart';
 import '../../core/service_journey.dart';
 import '../journey/case_flows.dart';
+import '../docs/document_preview.dart';
 import '../fsm/inspection_lines.dart';
 import '../journey/job_journey.dart';
 import '../journey/journey_controller.dart';
 import '../journey/journey_widgets.dart';
 import '../../widgets/nx_scroll_tabs.dart';
 import '../journey/quotation_journey.dart';
-import '../journey/quotation_versions.dart' show pickQuotationPdfVariant;
 import '../calendar/activity_detail_screen.dart';
 import '../calendar/activity_form_screen.dart';
 import 'package:share_plus/share_plus.dart';
@@ -723,8 +723,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         automaticallyImplyLeading: !widget.embedded,
         actions: [
           if (widget.module == 'quotation' || widget.module == 'inspection' || widget.module == 'job') ...[
-            IconButton(tooltip: tr('เปิด PDF'), icon: const Icon(NxI.filePdf), onPressed: _openPdf),
-            IconButton(tooltip: tr('แชร์ PDF'), icon: const Icon(NxI.shareNetwork), onPressed: _sharePdf),
+            IconButton(tooltip: tr('ดูเอกสาร PDF'), icon: const Icon(NxI.filePdf), onPressed: () => openRecordDocument(context, widget.module, {..._row, 'id': _id})),
           ],
           if (canEdit) IconButton(tooltip: tr('แก้ไข'), icon: const Icon(NxI.pencilSimple), onPressed: () => _openEdit(context)),
         ],
@@ -945,7 +944,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         if (MenuAccess.allow(session, MenuAccess.inspection)) ...[
           const SizedBox(height: 16),
           NxHeroCta(
-            label: 'สร้างใบตรวจรับ',
+            label: 'ใบตรวจรับของงานนี้',
             onPressed: () => nxPush<void>(context, JobInspectionScreen(job: _row)),
           ),
         ],
@@ -1216,53 +1215,6 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         return FieldUiType.skillSelect;
       default:
         return FieldUiType.picklist;
-    }
-  }
-
-  Future<({List<int> bytes, String name})> _pdfPayload() async {
-    final api = context.read<AppConfig>().apiClient;
-    if (widget.module == 'inspection') {
-      return (bytes: await api.getInspectionPdf(_id), name: 'inspection-$_id.pdf');
-    }
-    if (widget.module == 'job') {
-      return (bytes: await api.downloadJobPdf(_id), name: 'job-$_id.pdf');
-    }
-    return (bytes: await api.getQuotationPdf(_id), name: 'quotation-$_id.pdf');
-  }
-
-  /// Quotation: pick language × colour first (like the web menu).
-  Future<void> _quotationPdf({required bool share}) async {
-    final v = await pickQuotationPdfVariant(context);
-    if (v == null || !mounted) return;
-    try {
-      final bytes = await context.read<AppConfig>().apiClient.getQuotationPdfVariant(_id, lang: v.lang, color: v.color, template: _row['template_key']?.toString());
-      final name = '${_row['quotation_no'] ?? 'quotation-$_id'}-${v.lang}${v.color == 'bw' ? '-bw' : ''}.pdf';
-      v.share ? await sharePdfBytes(bytes, name) : await openPdfBytes(bytes, name);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-    }
-  }
-
-  Future<void> _openPdf() async {
-    if (widget.module == 'quotation') return _quotationPdf(share: false);
-    try {
-      final pdf = await _pdfPayload();
-      await openPdfBytes(pdf.bytes, pdf.name);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-    }
-  }
-
-  Future<void> _sharePdf() async {
-    if (widget.module == 'quotation') return _quotationPdf(share: true);
-    try {
-      final pdf = await _pdfPayload();
-      await sharePdfBytes(pdf.bytes, pdf.name);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 

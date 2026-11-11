@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../docs/document_preview.dart';
 import '../journey/job_parts.dart';
 import '../fsm/inspection_lines.dart';
 import 'package:provider/provider.dart';
@@ -1224,16 +1225,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
           runSpacing: 8,
           children: [
             OutlinedButton.icon(
-              onPressed: () async {
-                try {
-                  final bytes = await context.read<AppConfig>().apiClient.downloadJobPdf(widget.id);
-                  await openPdfBytes(bytes, 'job-${widget.id}.pdf');
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-                  }
-                }
-              },
+              onPressed: () => openRecordDocument(context, 'job', {...widget.row, 'id': widget.id}),
               icon: const Icon(NxI.filePdf),
               label: Text(tr('PDF ใบสั่งงาน')),
             ),

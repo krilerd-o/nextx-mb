@@ -9,6 +9,7 @@ import '../../core/i18n.dart';
 import '../../services/api_client.dart';
 import '../../services/file_open.dart';
 import '../../widgets/nx_icons.dart';
+import '../docs/document_preview.dart';
 
 /// Result of one inspection line.
 enum InspResult { none, pass, fail, na }
@@ -357,15 +358,10 @@ class _InspectionLinesEditorState extends State<InspectionLinesEditor> {
             onPressed: () async {
               await _save();
               if (!context.mounted) return;
-              try {
-                final bytes = await context.read<AppConfig>().apiClient.getInspectionPdf(widget.inspectionId);
-                await openPdfBytes(bytes, 'inspection-${widget.inspectionId}.pdf');
-              } catch (e) {
-                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
-              }
+              await openDocumentPreview(context, inspectionDocumentSource(widget.inspectionId));
             },
             icon: const Icon(NxI.filePdf, size: 18),
-            label: Text(tr('เปิด PDF ใบตรวจรับ')),
+            label: Text(tr('ดูเอกสารใบตรวจรับ')),
           ),
         ],
       ],

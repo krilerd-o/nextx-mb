@@ -2217,6 +2217,23 @@ const Map<String, String> enStrings = {
   'สร้างใบตรวจรับไม่สำเร็จ': 'Could not create inspection',
   'รายการตรวจ': 'Checklist',
   'ใบตรวจรับของงานนี้': 'This job\'s inspection',
+  'กำลังสร้างเอกสารตามเทมเพลต…': 'Building the document from the template…',
+  'กำลังแสดงหน้าเอกสาร…': 'Rendering pages…',
+  'ดูตัวอย่างตามเทมเพลต ซูมได้ · ดาวน์โหลด · พิมพ์': 'Template preview with zoom · download · print',
+  'ตามเทมเพลต': 'Template',
+  'พิมพ์': 'Print',
+  'ลิงก์ลูกค้า': 'Customer link',
+  'ลิงก์ให้ลูกค้า': 'Customer link',
+  'หน้า': 'Page',
+  'เซิร์ฟเวอร์ไม่ได้ส่งไฟล์ PDF กลับมา': 'The server did not return a PDF',
+  'เทมเพลต 1': 'Template 1',
+  'เทมเพลต 2': 'Template 2',
+  'เทมเพลตเอกสาร (BIRT) ยังสร้างไม่ได้ตอนนี้ — แสดงแบบมาตรฐานแทน': 'The document template (BIRT) can\'t be built right now — showing the standard version',
+  'เปิดด้วยแอปอื่น': 'Open in another app',
+  'เปิดเอกสารไม่สำเร็จ': 'Could not open the document',
+  'แบบมาตรฐาน': 'Standard',
+  'ดูเอกสารใบตรวจรับ': 'View inspection document',
+  'ดูเอกสาร PDF': 'View PDF document',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

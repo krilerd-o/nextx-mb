@@ -15,6 +15,7 @@ import '../../widgets/nx_status_stepper.dart';
 import '../profile/my_signatures_screen.dart' show SignaturePadScreen;
 import 'journey_controller.dart';
 import 'journey_photos.dart';
+import '../docs/document_preview.dart';
 import 'journey_widgets.dart';
 import 'status_followups.dart';
 
@@ -204,6 +205,8 @@ class JobSummaryTab extends StatelessWidget {
             (NxI.calendarCheck, tr('กิจกรรม ${_n(acts['total'])} รายการ'), _n(acts['open']) > 0 ? tr('ยังเปิด ${_n(acts['open'])}') : null, false, () => onGoTab('activities')),
           ]),
         ),
+        const SizedBox(height: 12),
+        DocumentCard(source: () => jobDocumentSource(row)),
         if ((row['cancel_reason'] ?? ov['cancel_reason'] ?? '').toString().isNotEmpty || (ov['close_note'] ?? '').toString().isNotEmpty) ...[
           const SizedBox(height: 12),
           JourneySection(
@@ -389,6 +392,8 @@ class _JobSignaturesTabState extends State<JobSignaturesTab> {
           ),
           const SizedBox(height: 12),
         ],
+        DocumentCard(source: () => jobDocumentSource(widget.row)),
+        const SizedBox(height: 12),
         JourneySection(
           title: tr('ลิงก์ให้ลูกค้าตอบรับ / เซ็น'),
           icon: NxI.link,

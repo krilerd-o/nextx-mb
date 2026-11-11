@@ -1905,6 +1905,29 @@ class ApiClient {
     }
   }
 
+  // --- Documents: the exact endpoints the web preview uses ---------------
+  // BIRT = the business's report template; "standard" = built-in jsPDF.
+
+  String _qs(Map<String, String?> q) {
+    final parts = [for (final e in q.entries) if (e.value != null && e.value!.isNotEmpty) '${e.key}=${Uri.encodeQueryComponent(e.value!)}'];
+    return parts.isEmpty ? '' : '?${parts.join('&')}';
+  }
+
+  Future<List<int>> getJobBirtPdf(String id) => _downloadBytes('/api/field-service/jobs/$id/birt-pdf');
+  Future<List<int>> getJobStandardPdf(String id) => _downloadBytes('/api/field-service/jobs/$id/pdf');
+  Future<List<int>> getInspectionBirtPdf(String id) => _downloadBytes('/api/field-service/inspections/$id/birt-pdf');
+  Future<List<int>> getQuotationBirtPdf(String id, {String? lang, String? color, String? template}) =>
+      _downloadBytes('/api/quotation/$id/birt-pdf${_qs({'template': template, 'lang': lang, 'color': color})}');
+  Future<List<int>> getQuotationStandardPdf(String id, {String? lang, String? color}) =>
+      _downloadBytes('/api/quotation/$id/pdf${_qs({'lang': lang, 'color': color})}');
+
+  /// Quotation document templates (incl. inactive, like the web preview).
+  Future<List<Map<String, dynamic>>> getQuotationTemplates() async {
+    final env = await _send('GET', '/api/quotation/templates', query: {'all': '1'});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['list'] : d);
+  }
+
   Future<List<int>> getQuotationPdf(String id) async {
     try {
       return await _downloadBytes('/api/quotation/$id/pdf');
