@@ -1837,8 +1837,19 @@ class ApiClient {
     return _dataMap(await _send('POST', '/api/field-service/jobs/$id/parts', data: body));
   }
 
-  Future<void> deleteJobPart(String jobId, String partId) async {
-    await _send('DELETE', '/api/field-service/jobs/$jobId/parts/$partId');
+  /// `{ok, stock_returned: {quantity, balance_after}?}` on new servers.
+  Future<Map<String, dynamic>> deleteJobPart(String jobId, String partId) async {
+    final env = await _send('DELETE', '/api/field-service/jobs/$jobId/parts/$partId');
+    final d = env['data'];
+    return d is Map ? Map<String, dynamic>.from(d) : const {};
+  }
+
+  /// Products to use as parts, with stock on hand when tracked (new servers;
+  /// throws on older ones → free-text parts only).
+  Future<List<Map<String, dynamic>>> searchPartCatalog(String q) async {
+    final env = await _send('GET', '/api/field-service/parts/catalog', query: {'q': q});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['list'] : d);
   }
 
   Future<Map<String, dynamic>> generateJobsFromAsset(String assetId) async {

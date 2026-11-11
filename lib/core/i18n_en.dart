@@ -2160,6 +2160,16 @@ const Map<String, String> enStrings = {
   'ใบเสนอราคา PDF': 'Quotation PDF',
   'ขาวดำ': 'Black & white',
   'ลด %': 'Disc. %',
+  'อะไหล่ / ชิ้นส่วน': 'Parts',
+  'บันทึกเมื่อมีการใช้อะไหล่ ไม่มีผลกับการปิดงาน': 'Record parts when used — doesn\'t affect closing the job',
+  'ตัดสต็อกแล้ว': 'Taken from stock',
+  'ลบรายการอะไหล่?': 'Remove this part?',
+  'จำนวนที่ตัดสต็อกไว้จะถูกคืนเข้าสต็อก': 'The quantity taken from stock will be returned',
+  'รายการจะถูกซ่อนจากใบสั่งงานนี้': 'The line will be removed from this job',
+  'ลบแล้ว และคืนสต็อกแล้ว': 'Removed and returned to stock',
+  'ระบุชื่ออะไหล่หรือเลือกสินค้า': 'Enter a part name or pick a product',
+  'ค้นหาสินค้า หรือพิมพ์ชื่ออะไหล่': 'Search products or type a part name',
+  'ไม่ได้ติดตามสต็อก': 'Stock not tracked',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -2429,4 +2439,6 @@ const Map<String, String> enPatterns = {
   'รออนุมัติ {}': '{} to approve',
   'ฉบับเดิม {} จะถูกเก็บไว้เป็นประวัติ และฉบับใหม่จะต้องขออนุมัติใหม่': '{} is kept as history; the new version needs approval again',
   'รายการ ({})': 'Lines ({})',
+  'จะตัดสต็อก (คงเหลือ {})': 'Will be taken from stock ({} left)',
+  'สต็อกไม่พอ — คงเหลือ {}': 'Not enough stock — {} left',
 };

@@ -192,6 +192,7 @@ class NxI {
   static const eyeOff = LucideIcons300.eyeOff;
   static const reply = LucideIcons300.reply;
   static const forward = LucideIcons300.forward;
+  static const minus = LucideIcons300.minus;
   static const circleMinus = LucideIcons300.circleMinus;
   static const lock = LucideIcons300.lock;
   static const unlink = LucideIcons300.unlink;

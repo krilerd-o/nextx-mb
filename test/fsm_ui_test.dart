@@ -118,7 +118,7 @@ void main() {
     expect(find.text('PDF ใบสั่งงาน'), findsOneWidget);
     expect(find.text('นัดหมาย'), findsOneWidget);
     expect(find.text('ทักษะงาน'), findsOneWidget);
-    expect(find.text('อะไหล่'), findsOneWidget);
+    expect(find.text('อะไหล่ / ชิ้นส่วน'), findsOneWidget);
   });
 
   testWidgets('inspection detail has lines and PDF', (tester) async {

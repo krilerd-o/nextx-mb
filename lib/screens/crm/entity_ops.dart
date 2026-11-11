@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../journey/job_parts.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -1450,37 +1451,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
             ),
         ],
         const SizedBox(height: 12),
-        Text(tr('อะไหล่'), style: theme.textTheme.titleSmall),
-        const SizedBox(height: 8),
-        if (_parts.isEmpty)
-          Text(tr('ยังไม่มีอะไหล่'), style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-        for (final part in _parts)
-          DenseCardTile(
-            title: part['description']?.toString() ?? part['product_name']?.toString() ?? 'อะไหล่',
-            subtitle: 'จำนวน ${part['quantity'] ?? part['qty'] ?? 1}',
-            trailing: widget.canEdit
-                ? IconButton(
-                    icon: const Icon(NxI.trash),
-                    onPressed: () async {
-                      final partId = strId(part['id']);
-                      if (partId.isEmpty) return;
-                      try {
-                        await context.read<AppConfig>().apiClient.deleteJobPart(widget.id, partId);
-                        await _load();
-                      } catch (e) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-                      }
-                    },
-                  )
-                : null,
-          ),
-        if (widget.canEdit)
-          TextButton.icon(
-            onPressed: () => _addPart(context),
-            icon: const Icon(NxI.plus),
-            label: Text(tr('เพิ่มอะไหล่')),
-          ),
+        JobPartsSection(jobId: widget.id, parts: _parts, canEdit: widget.canEdit, onChanged: _load),
       ],
     );
   }
@@ -1541,52 +1512,6 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
       }
     } finally {
       if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _addPart(BuildContext context) async {
-    final desc = TextEditingController();
-    final qty = TextEditingController(text: '1');
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        scrollable: true, // fields stay reachable above the keyboard
-        title: Text(tr('เพิ่มอะไหล่')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: desc, decoration: InputDecoration(labelText: tr('รายละเอียด'))),
-            TextField(
-              controller: qty,
-              decoration: InputDecoration(labelText: tr('จำนวน')),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('บันทึก'))),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) {
-      desc.dispose();
-      qty.dispose();
-      return;
-    }
-    try {
-      await context.read<AppConfig>().apiClient.addJobPart(widget.id, {
-        'description': desc.text.trim(),
-        'quantity': num.tryParse(qty.text.trim()) ?? 1,
-      });
-      await _load();
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-      }
-    } finally {
-      desc.dispose();
-      qty.dispose();
     }
   }
 }
