@@ -157,6 +157,23 @@ void main() {
     expect(find.textContaining('ติดต่อเจ้าของเคส'), findsOneWidget);
   });
 
+  testWidgets('wide screen: record + info on the left, other tabs on the right', (tester) async {
+    await pumpDetail(tester, open);
+    tester.view.physicalSize = const Size(1280, 900);
+    await settle(tester, 10);
+    expect(find.byKey(const ValueKey('detail-wide')), findsOneWidget);
+    final left = find.byKey(const ValueKey('detail-pane-left'));
+    final right = find.byKey(const ValueKey('detail-pane-right'));
+    expect(find.descendant(of: left, matching: find.byKey(const ValueKey('case-btn-accept'))), findsOneWidget);
+    expect(find.descendant(of: left, matching: find.text('[QA] เคส R51')), findsWidgets);
+    expect(find.descendant(of: right, matching: find.text('คอมเม้นท์')), findsOneWidget);
+    expect(find.descendant(of: right, matching: find.text('ข้อมูล')), findsNothing);
+    // Back to phone width: one column again.
+    tester.view.physicalSize = const Size(420, 1600);
+    await settle(tester, 6);
+    expect(find.byKey(const ValueKey('detail-wide')), findsNothing);
+  });
+
   testWidgets('stepper: going back is explained; closed case has no buttons', (tester) async {
     await pumpDetail(tester, {...open, 'case_status': 'ปิดเคส'});
     expect(find.byKey(const ValueKey('case-btn-accept')), findsNothing);

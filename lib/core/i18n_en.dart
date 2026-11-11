@@ -2390,4 +2390,5 @@ const Map<String, String> enPatterns = {
   'รอสัญญาณ · ค้างส่ง {} รูป': 'Waiting for signal · {} photos to send',
   'รอส่ง {} รูป': '{} photos waiting',
   'มีรูปของ Space อื่น {} รูป — จะส่งเมื่อสลับไป Space นั้น': '{} photos belong to another Space — they\'ll be sent when you switch to it',
+  'รออนุมัติ {}': '{} to approve',
 };

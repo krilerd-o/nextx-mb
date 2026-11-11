@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../services/unread_service.dart';
+import '../../widgets/nx_split_view.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -40,6 +42,8 @@ class _Section {
 }
 
 class _ApprovalsScreenState extends State<ApprovalsScreen> {
+  /// Two-pane: the record open on the right.
+  (String, String)? _open;
   var _revision = 0;
 
   /// Service Journey inbox (`/api/approvals/inbox`): quotations + activities + jobs sent to me.
@@ -102,6 +106,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       await action();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(done))));
+      final config = context.read<AppConfig>();
+      PendingApprovals.instance.refresh(config.apiClient, userId: config.session.userId);
       setState(() {
         _revision++;
         _inbox = null;
@@ -165,11 +171,21 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         'join': _Section('คำขอเข้าร่วมธุรกิจ', NxI.userPlus, api.getJoinRequests),
     };
 
+    final open = _open;
     return NxScrollScaffold(
       header: NxAppHeader(
         title: 'รออนุมัติ',
       ),
-      body: sections.isEmpty
+      body: NxSplitView(
+        onClose: () => setState(() => _open = null),
+        detail: open == null
+            ? null
+            : NxPaneHost(
+                key: ValueKey('approval-pane-${open.$1}-${open.$2}'),
+                onPopRoot: () => setState(() => _open = null),
+                child: open.$1 == 'activity' ? ActivityByIdLoader(id: open.$2) : EntityByIdLoader(module: open.$1, id: open.$2),
+              ),
+        list: sections.isEmpty
           ? Center(child: Text(tr('ไม่มีสิทธิ์อนุมัติรายการใด')))
           : NxRefresh(
               onRefresh: () async => setState(() {
@@ -205,10 +221,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                         section: e.value,
                         query: _query,
                         onDecide: _decide,
+                        onOpen: (k, id) => setState(() => _open = (k, id)),
                       ),
                 ],
               ),
             ),
+      ),
     );
   }
 }
@@ -219,6 +237,7 @@ class _ApprovalSection extends StatefulWidget {
     required this.kind,
     required this.section,
     required this.onDecide,
+    this.onOpen,
     this.query = const NxListQuery(),
   });
 
@@ -226,6 +245,7 @@ class _ApprovalSection extends StatefulWidget {
   final NxListQuery query;
   final _Section section;
   final Future<void> Function(String kind, Map<String, dynamic> row, bool approve) onDecide;
+  final void Function(String kind, String id)? onOpen;
 
   @override
   State<_ApprovalSection> createState() => _ApprovalSectionState();
@@ -339,9 +359,11 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
                     title: title,
                     subtitle: subtitle,
                     onTap: (widget.kind == 'quotation' || widget.kind == 'activity' || widget.kind == 'job') && id.isNotEmpty
-                        ? () => widget.kind == 'activity'
-                            ? nxPush<void>(context, ActivityByIdLoader(id: id))
-                            : context.push(AppRoutes.crmRecord(widget.kind, id))
+                        ? () => widget.onOpen != null && NxBreakpoint.of(context).twoPane
+                            ? widget.onOpen!(widget.kind, id)
+                            : widget.kind == 'activity'
+                                ? nxPush<void>(context, ActivityByIdLoader(id: id))
+                                : context.push(AppRoutes.crmRecord(widget.kind, id))
                         : null,
                     trailing: busy
                         ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))

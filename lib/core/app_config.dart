@@ -664,6 +664,7 @@ class AppConfig extends ChangeNotifier {
       businessId: _session.businessId,
     );
     UnreadNotifications.instance.refresh(apiClient);
+    PendingApprovals.instance.refresh(apiClient, userId: _session.userId);
     bindCalls(this);
   }
 

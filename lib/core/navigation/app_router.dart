@@ -328,6 +328,7 @@ GoRouter createAppRouter(AppConfig config) {
         builder: (_, state) => EntityByIdLoader(
           module: state.pathParameters['module'] ?? 'lead',
           id: state.pathParameters['id'] ?? '',
+          tab: state.uri.queryParameters['tab'],
         ),
       ),
       GoRoute(
@@ -339,6 +340,7 @@ GoRouter createAppRouter(AppConfig config) {
         builder: (_, state) => EntityByIdLoader(
           module: state.pathParameters['module'] ?? 'job',
           id: state.pathParameters['id'] ?? '',
+          tab: state.uri.queryParameters['tab'],
         ),
       ),
       GoRoute(

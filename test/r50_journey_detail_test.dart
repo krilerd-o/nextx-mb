@@ -42,7 +42,7 @@ Future<FakeNextxAdapter> _pump(WidgetTester tester, String module, Map<String, O
   await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 150)));
   config.debugOverrideSession(const SessionState(accessToken: 't', userId: '2', businessId: '1', menusLoaded: true, menuKeys: ['job', 'quotation', 'activity']));
   config.apiClient.debugSetHttpAdapter(adapter);
-  tester.view.physicalSize = const Size(1000, 2400);
+  tester.view.physicalSize = const Size(430, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(ChangeNotifierProvider.value(
@@ -77,6 +77,26 @@ void main() {
     await _pump(tester, 'job', {'GET /api/entity/job/9': job}, journey: false);
     expect(find.text('สรุป'), findsNothing);
     expect(find.text('ข้อมูล'), findsWidgets);
+  });
+
+  testWidgets('tablet: Summary on the left, other job tabs on the right', (tester) async {
+    await _pump(tester, 'job', {
+      'GET /api/entity/job/9': job,
+      'GET /api/field-service/jobs/9/overview': overview,
+      'GET /api/field-service/jobs/9/signatures': {'slots': []},
+    });
+    tester.view.physicalSize = const Size(1280, 1600);
+    await _frames(tester);
+    expect(find.byKey(const ValueKey('detail-wide')), findsOneWidget);
+    final left = find.byKey(const ValueKey('detail-pane-left'));
+    final right = find.byKey(const ValueKey('detail-pane-right'));
+    expect(find.descendant(of: left, matching: find.byKey(const ValueKey('next-accept'))), findsOneWidget);
+    expect(find.descendant(of: right, matching: find.text('ปฏิบัติงาน')), findsWidgets);
+    expect(find.descendant(of: right, matching: find.text('สรุป')), findsNothing);
+    // A KPI tile on the left switches the right pane.
+    await tester.tap(find.byKey(const ValueKey('kpi-signatures')));
+    await _frames(tester);
+    expect(find.descendant(of: right, matching: find.text('ลายเซ็น')), findsWidgets);
   });
 
   testWidgets('job: Summary first; next step "accept" → sheet → workflow-action with expected status', (tester) async {
