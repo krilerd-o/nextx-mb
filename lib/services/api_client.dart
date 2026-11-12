@@ -1753,6 +1753,10 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  /// One activity as a PDF (Thai font, Thai times) — same read access as the detail.
+  Future<List<int>> getActivityPdf(String id, {String lang = 'th'}) =>
+      _downloadBytes('/api/entity/activity/${Uri.encodeComponent(id)}/export?format=pdf&lang=$lang');
+
   Future<List<int>> getInspectionPdf(String inspectionId) =>
       _downloadBytes('/api/field-service/inspections/$inspectionId/pdf');
 

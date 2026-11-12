@@ -93,6 +93,17 @@ DocumentSource jobDocumentSource(Map<String, dynamic> row) {
   );
 }
 
+/// One activity (visit / meeting / call …) as a PDF: Thai and English.
+DocumentSource activityDocumentSource(String id, {String? subject}) => DocumentSource(
+  title: tr('กิจกรรม'),
+  subtitle: subject,
+  fileBase: 'activity-$id',
+  variants: [
+    DocVariant(id: 'th', label: tr('ภาษาไทย'), birt: false, suffix: '-th', fetch: (api) => api.getActivityPdf(id)),
+    DocVariant(id: 'en', label: 'English', birt: false, suffix: '-en', fetch: (api) => api.getActivityPdf(id, lang: 'en')),
+  ],
+);
+
 DocumentSource inspectionDocumentSource(String id, {String? no}) => DocumentSource(
   title: tr('ใบตรวจรับ'),
   subtitle: no,

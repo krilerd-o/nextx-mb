@@ -4,6 +4,7 @@ import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../docs/document_preview.dart';
 import '../../core/entity_display.dart';
 import '../../services/api_client.dart';
 import '../../services/location_service.dart';
@@ -414,6 +415,11 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
             label: 'ทำซ้ำ',
             icon: NxI.copySimple,
             onTap: _duplicate,
+          ),
+          NxHeaderMenuItem(
+            label: 'ส่งออก PDF',
+            icon: NxI.filePdf,
+            onTap: () => openDocumentPreview(context, activityDocumentSource(_id, subject: '${_row['subject'] ?? ''}')),
           ),
           NxHeaderMenuItem(
             label: 'ส่งออก / แชร์',

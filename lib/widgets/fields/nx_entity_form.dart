@@ -193,8 +193,18 @@ class NxEntityFormState extends State<NxEntityForm> {
     return opts;
   }
 
+  /// Product / service discount: `<x>_discount` + `<x>_discount_type` ('amount' baht | 'percent').
+  /// The type is a บาท / % toggle next to the number (same as the web), not a field of its own.
+  static final _discountRe = RegExp(r'^(product|service)_discount$');
+  bool _hasDiscountType(String name) =>
+      _discountRe.hasMatch(name) && widget.fields.any((f) => fieldName(f) == '${name}_type');
+
   List<Map<String, dynamic>> _orderedFields() {
-    final list = [...widget.fields];
+    final names = {for (final f in widget.fields) fieldName(f)};
+    final list = [
+      for (final f in widget.fields)
+        if (!(fieldName(f).endsWith('_discount_type') && names.contains(fieldName(f).replaceFirst(RegExp(r'_type$'), '')))) f,
+    ];
     if (list.any((f) => fieldSequence(f) != 0)) {
       list.sort((a, b) => fieldSequence(a).compareTo(fieldSequence(b)));
     }
@@ -260,6 +270,34 @@ class NxEntityFormState extends State<NxEntityForm> {
         onChanged: (v) => widget.onChanged(name, v),
       ),
       ),
+    );
+  }
+
+  Widget _fieldOrDiscount(int i, Map<String, dynamic> f) {
+    final name = fieldName(f);
+    if (!_hasDiscountType(name)) return _fieldAt(i, f);
+    final typeKey = '${name}_type';
+    final percent = '${unwrapFieldValue(widget.values[typeKey]) ?? ''}' == 'percent';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _fieldAt(i, f)),
+        const SizedBox(width: 8),
+        Padding(
+          padding: const EdgeInsets.only(top: 22),
+          child: SegmentedButton<String>(
+            key: ValueKey('discount-type-$name'),
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            segments: [
+              ButtonSegment(value: 'amount', label: Text(tr('บาท'))),
+              const ButtonSegment(value: 'percent', label: Text('%')),
+            ],
+            selected: {percent ? 'percent' : 'amount'},
+            onSelectionChanged: widget.enabled ? (v) => widget.onChanged(typeKey, v.first) : null,
+          ),
+        ),
+      ],
     );
   }
 
@@ -460,13 +498,15 @@ class NxEntityFormState extends State<NxEntityForm> {
           next != null &&
           (widget.sectionOf == null ? fieldBlockLabel(next) : null) == block &&
           _isShortField(resolveFieldUiType(f)) &&
-          _isShortField(resolveFieldUiType(next));
+          _isShortField(resolveFieldUiType(next)) &&
+          !_hasDiscountType(fieldName(f)) &&
+          !_hasDiscountType(fieldName(next));
       if (canPair) {
         children.add(
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _fieldAt(i, f)),
+              Expanded(child: _fieldOrDiscount(i, f)),
               const SizedBox(width: 12),
               Expanded(child: _fieldAt(i + 1, next)),
             ],
@@ -476,7 +516,7 @@ class NxEntityFormState extends State<NxEntityForm> {
         i += 1;
         continue;
       }
-      children.add(_fieldAt(i, f));
+      children.add(_fieldOrDiscount(i, f));
       children.add(const SizedBox(height: 20));
     }
     return Column(

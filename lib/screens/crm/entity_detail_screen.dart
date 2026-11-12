@@ -1247,6 +1247,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         keys.add(k);
       }
     }
+    // Product / service discount: the type (บาท / %) is shown with the number, not as its own row.
+    keys.removeWhere((k) => RegExp(r'^(product|service)_discount_type$').hasMatch(k));
     _allFieldCount = keys.length;
     // Default: only fields that have a value; "ทั้งหมด" shows every field.
     if (!_showAllFields) {
@@ -1272,10 +1274,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
           if (related != null && uiType.entityModule == null) {
             uiType = _selectTypeForModule(related);
           }
+          final discount = catalogDiscountText(name, _row);
+          if (discount != null) uiType = FieldUiType.text;
           return NxFieldValueView(
             uiType: uiType,
             label: _labelFor(name),
-            value: _row[name],
+            value: discount ?? _row[name],
             fieldName: name,
             module: widget.module,
             relatedModule: related,
@@ -1390,4 +1394,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final saved = await EntityRecordActions.edit(context, module: widget.module, row: _row, fields: _fields, picklists: _picklists);
     if (saved && context.mounted) _reload();
   }
+}
+
+
+/// `product_discount` / `service_discount` with its type: "15%" or "฿100" (null for other fields).
+String? catalogDiscountText(String field, Map<String, dynamic> row) {
+  if (!RegExp(r'^(product|service)_discount$').hasMatch(field)) return null;
+  final raw = row[field];
+  if (raw == null || '$raw'.trim().isEmpty) return null;
+  final n = num.tryParse('$raw'.replaceAll(',', ''));
+  if (n == null) return null;
+  final text = n == n.roundToDouble() ? n.toInt().toString() : n.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
+  return '${row['${field}_type'] ?? ''}' == 'percent' ? '$text%' : '฿$text';
 }
