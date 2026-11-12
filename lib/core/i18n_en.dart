@@ -360,6 +360,7 @@ const Map<String, String> enStrings = {
   'คัดลอกเบอร์แล้ว': 'Number copied',
   'บันทึกผล': 'Save result',
   'เปิดรายการ': 'Open item',
+  'แก้ไขคอมเม้นท์': 'Edit comment',
   'แชร์ลิงก์': 'Share link',
   'ส่งออก / แชร์': 'Export / share',
   'คัดลอกลิงก์โมดูลแล้ว': 'Module link copied',

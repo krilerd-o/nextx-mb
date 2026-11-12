@@ -837,6 +837,14 @@ class ApiClient {
     ));
   }
 
+  /// Edit a record comment (author; business owner/admin may edit any) → `{id, body, attachments}`.
+  /// [attachments] null keeps the current ones.
+  Future<Map<String, dynamic>> updateEntityComment(String module, String id, Object commentId, String body, {List<Map<String, dynamic>>? attachments}) async =>
+      _dataMap(await _send('PUT', '/api/entity/$module/$id/comments/$commentId', data: {
+        'body': body,
+        if (attachments != null) 'attachments': attachments,
+      }));
+
   /// Unified history (`audit` / `field_change` / status / engagement events,
   /// newest first) — `GET /api/entity/:module/:id/timeline`.
   Future<List<Map<String, dynamic>>> getEntityTimeline(String module, String id, {int limit = 100}) async {
