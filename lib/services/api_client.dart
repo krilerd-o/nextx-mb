@@ -311,6 +311,7 @@ class ApiClient {
           res.statusCode ?? 400,
           map['error_code']?.toString() ?? 'ERROR',
           map['message']?.toString() ?? res.statusMessage ?? 'Error',
+          details: asStringKeyedMap(map['details']),
         );
       }
       if ((res.statusCode ?? 200) >= 400) {
@@ -332,6 +333,7 @@ class ApiClient {
           statusCode,
           map['error_code']?.toString() ?? 'ERROR',
           map['message']?.toString() ?? 'Error',
+          details: asStringKeyedMap(map['details']),
         );
       }
     }
@@ -2841,11 +2843,65 @@ class ApiClient {
         options: Options(receiveTimeout: const Duration(minutes: 3)),
       ));
 
-  Future<List<int>> _downloadBytes(String path) async {
+  // ── operations: quotas, AI health, personal prefs (routes/commAiOps.js) ──
+
+  /// This month's usage vs the Package limits:
+  /// `{month, items:[{kind:'stt_minutes'|'summaries'|'translations', used, limit|null, unlimited, percent, exceeded, warn}]}`.
+  Future<Map<String, dynamic>> getCommAiUsage() async => _dataMap(await _send('GET', '/api/comm-ai/usage'));
+
+  /// Admins: AI problems `[{code, level:'error'|'warning', message, message_en, since}]` (403 for members).
+  Future<List<Map<String, dynamic>>> getCommAiHealth() async => extractMapList(_dataMap(await _send('GET', '/api/comm-ai/health'))['list']);
+
+  /// Settings page in one call: `{usage, prefs, is_admin, health (admins, else null), stt_enabled}`.
+  Future<Map<String, dynamic>> getCommAiOpsOverview() async => _dataMap(await _send('GET', '/api/comm-ai/ops/overview'));
+
+  /// My personal settings `{digest, digest_email}`.
+  Future<Map<String, dynamic>> getCommAiPrefs() async => asStringKeyedMap(_dataMap(await _send('GET', '/api/comm-ai/me/prefs'))['prefs']) ?? <String, dynamic>{};
+
+  /// Partial update of my personal settings → the saved `{digest, digest_email}`.
+  Future<Map<String, dynamic>> saveCommAiPrefs(Map<String, dynamic> patch) async =>
+      asStringKeyedMap(_dataMap(await _send('PUT', '/api/comm-ai/me/prefs', data: patch))['prefs']) ?? <String, dynamic>{};
+
+  /// Admins: who shared / exported / downloaded a conversation `[{id, at, action, channel, user_id, user_name, details}]`.
+  Future<List<Map<String, dynamic>>> getConversationShareHistory(String kind, String id) async =>
+      extractMapList(_dataMap(await _send('GET', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/history'))['list']);
+
+  /// ISAAC's guesses of the CRM record for a conversation `[{module, id, name, reason, reason_en, score}]` (best first).
+  Future<List<Map<String, dynamic>>> getConversationCrmSuggestions(String kind, String id) async =>
+      extractMapList(_dataMap(await _send('GET', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/crm-suggestions'))['list']);
+
+  // ── delete my data (PDPA) ──
+
+  /// Participant: delete my recording and/or my transcript lines → `{recordings, segments, summaries_marked}`.
+  Future<Map<String, dynamic>> deleteMyCallData(String callId, {bool recording = false, bool transcript = false}) async =>
+      _dataMap(await _send('DELETE', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/mine', query: {
+        if (recording) 'recording': 1,
+        if (transcript) 'transcript': 1,
+      }));
+
+  /// Admin: delete the whole conversation (transcript, everyone's audio, tape, summaries, share links).
+  Future<Map<String, dynamic>> deleteCommAiCall(String callId) async => _dataMap(await _send('DELETE', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}'));
+
+  /// A chat summary (its creator or an admin) / a call summary (admin).
+  Future<Map<String, dynamic>> deleteCommAiSummary(String id) async => _dataMap(await _send('DELETE', '/api/comm-ai/summaries/$id'));
+
+  // ── background exports (ZIP with audio, the call tape, e-mail with audio) ──
+
+  /// `{type:'file'|'tape'|'email', kind, id, ...}` → 202 `{job_id, status, progress, ...}`.
+  Future<Map<String, dynamic>> startCommAiExportJob(Map<String, dynamic> body) async => _dataMap(await _send('POST', '/api/comm-ai/export-jobs', data: body));
+
+  /// `{job_id, type, status:'pending'|'running'|'done'|'failed', progress, stage, filename, mime, download_url, result, error, error_code}`.
+  Future<Map<String, dynamic>> getCommAiExportJob(String jobId) async => _dataMap(await _send('GET', '/api/comm-ai/export-jobs/$jobId'));
+
+  /// The finished file of a job (only the person who started it).
+  Future<List<int>> downloadCommAiExportJob(String jobId) =>
+      _downloadBytes('/api/comm-ai/export-jobs/$jobId/download', receiveTimeout: const Duration(minutes: 10));
+
+  Future<List<int>> _downloadBytes(String path, {Duration? receiveTimeout}) async {
     try {
       final res = await _dio.get<List<int>>(
         path,
-        options: Options(responseType: ResponseType.bytes, method: 'GET'),
+        options: Options(responseType: ResponseType.bytes, method: 'GET', receiveTimeout: receiveTimeout),
       );
       return res.data ?? <int>[];
     } on DioException catch (e) {

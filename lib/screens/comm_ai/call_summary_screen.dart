@@ -18,6 +18,8 @@ import '../../widgets/nx_search_field.dart';
 import '../../widgets/nx_sliding_segmented.dart';
 import '../../widgets/nx_surface_card.dart';
 import 'comm_ai_access.dart';
+import 'comm_ai_delete_sheet.dart';
+import 'comm_ai_errors.dart';
 import 'comm_ai_isaac.dart';
 import 'comm_ai_widgets.dart';
 
@@ -38,8 +40,11 @@ const _speakerColors = [Color(0xFF0EA5E9), Color(0xFF10B981), Color(0xFFF59E0B),
 /// After a call: ISAAC summary (4 cards + Task / Visit suggestions) and the transcript with audio playback.
 /// Phones: two tabs. Tablets: summary and transcript side by side.
 class CallSummaryScreen extends StatefulWidget {
-  const CallSummaryScreen({super.key, required this.callId});
+  const CallSummaryScreen({super.key, required this.callId, this.onDeleted});
   final String callId;
+
+  /// The whole conversation was deleted (here or elsewhere). Default: close this screen.
+  final VoidCallback? onDeleted;
 
   @override
   State<CallSummaryScreen> createState() => _CallSummaryScreenState();
@@ -74,6 +79,12 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
   final _translated = <String, String>{}; // '$lang:$seq' → text
   bool _translating = false;
   StreamSubscription<RealtimeEvent>? _liveSub;
+  bool _gone = false;
+
+  /// What this viewer may delete: `{user_id, participant, admin}` from GET /calls/:id.
+  Map<String, dynamic> get _viewer => _data?['viewer'] is Map ? Map<String, dynamic>.from(_data!['viewer'] as Map) : const {};
+  bool get _canDeleteMine => _viewer['participant'] == true;
+  bool get _canDeleteAll => _viewer['admin'] == true;
 
   /// Combined "meeting tape" (every shared voice on one timeline); played by the same player as id 'tape'.
   Map<String, dynamic>? get _tape => _data?['tape'] is Map ? {...Map<String, dynamic>.from(_data!['tape'] as Map), 'user_id': 'tape', 'mime': 'audio/mp4'} : null;
@@ -142,8 +153,25 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
 
   /// Changes made on another device / by another person in this call: summary status, fixed lines.
   void _onLive(RealtimeEvent e) {
-    if (!mounted || '${e.data['call_id']}' != widget.callId) return;
+    if (!mounted) return;
+    if (e.type == 'ai:summary_deleted') {
+      final sid = (_data?['summary'] as Map?)?['id'];
+      if (sid != null && '${e.data['summary_id']}' == '$sid') _load();
+      return;
+    }
+    if ('${e.data['call_id']}' != widget.callId) return;
     switch (e.type) {
+      case 'ai:call_data_deleted':
+        final what = e.data['what'] is List ? [for (final w in e.data['what'] as List) '$w'] : const <String>[];
+        if (what.contains('call')) {
+          _closeDeleted(tr('การสนทนานี้ถูกลบแล้ว'));
+        } else {
+          _translated.clear();
+          _loadedUser = null;
+          _tapePath = null;
+          _stopPlayer();
+          _load();
+        }
       case 'ai:call_summary_status':
       case 'ai:call_summary_ready':
         _tries = 1;
@@ -183,7 +211,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _summarizing = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(commAiErrorText(e))));
     }
   }
 
@@ -235,11 +263,49 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
         });
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(commAiErrorText(e))));
+      if (mounted && isCommAiQuotaError(e)) setState(() => _lang = '');
     } finally {
       if (mounted) setState(() => _translating = false);
       if (mounted && _lang != lang) _translateMissing();
     }
+  }
+
+  /// The audio file may be gone: stop it (not awaited — the player answers on its own time).
+  void _stopPlayer() => unawaited(_player.stop().catchError((Object _) {}));
+
+  /// The conversation is gone: say so and close (or let the split view clear its pane).
+  void _closeDeleted(String message) {
+    if (_gone || !mounted) return;
+    _gone = true;
+    _poll?.cancel();
+    _stopPlayer();
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
+    final cb = widget.onDeleted;
+    if (cb != null) {
+      cb();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  /// "ลบข้อมูลของฉัน" (participants) / "ลบการสนทนาทั้งหมด" (admins).
+  Future<void> _delete() async {
+    final mineRec = _list('recordings').any((r) => '${r['user_id']}' == '${_viewer['user_id']}');
+    final out = await showCommAiDeleteSheet(context, kind: 'call', id: widget.callId, canMine: _canDeleteMine, canAll: _canDeleteAll, hasRecording: mineRec);
+    if (out == null || !mounted) return;
+    if (out.scope == 'all') {
+      _closeDeleted(tr('ลบการสนทนาทั้งหมดแล้ว'));
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ลบข้อมูลของคุณแล้ว — สรุปเดิมจะขึ้นว่าแหล่งข้อมูลถูกแก้'))));
+    _translated.clear();
+    if (out.recording) {
+      _stopPlayer();
+      _loadedUser = null;
+      _tapePath = null;
+    }
+    _load();
   }
 
   Future<void> _play(Map<String, dynamic> rec, {int? atMs}) async {
@@ -418,6 +484,25 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
               label: Text(tr('ให้ ISAAC สรุปใหม่')),
             ),
           ),
+        if (result['source_edited'] != null && result['source_edited'] != false)
+          Container(
+            key: const ValueKey('call-summary-source-edited'),
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+            decoration: BoxDecoration(color: const Color(0xFFF59E0B).withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.1), borderRadius: BorderRadius.circular(14)),
+            child: Row(children: [
+              const Icon(NxI.warning, size: 18, color: Color(0xFFD97706)),
+              const SizedBox(width: 8),
+              Expanded(child: Text(tr('แหล่งข้อมูลถูกแก้ — สรุปใหม่ได้'), style: const TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w600))),
+              if (_available && transcript.isNotEmpty)
+                FilledButton(
+                  key: const ValueKey('call-summary-source-edited-resummarize'),
+                  style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                  onPressed: _summarize,
+                  child: Text(tr('สรุปใหม่')),
+                ),
+            ]),
+          ),
         // New summary → fresh follow-up ticks.
         KeyedSubtree(
           key: ValueKey('call-summary-${summary?['id']}'),
@@ -434,7 +519,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
       body = CommAiIsaacState(
         mood: 'error',
         title: 'ISAAC สรุปไม่สำเร็จ',
-        message: 'ยังดูบทสนทนาและฟังเสียงได้ตามปกติ',
+        message: summary?['error'] == 'quota_exceeded' ? 'ใช้โควตาการสรุปของแพ็กเกจครบแล้วในเดือนนี้ — ยังดูบทสนทนาและฟังเสียงได้ตามปกติ' : 'ยังดูบทสนทนาและฟังเสียงได้ตามปกติ',
         action: _available && transcript.isNotEmpty
             ? FilledButton.icon(key: const ValueKey('call-summary-summarize'), onPressed: _summarize, icon: const Icon(NxI.arrowsClockwise, size: 16), label: Text(tr('ลองสรุปอีกครั้ง')))
             : OutlinedButton.icon(onPressed: _load, icon: const Icon(NxI.arrowsClockwise, size: 16), label: Text(tr('ลองโหลดใหม่'))),
@@ -692,6 +777,13 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
         title: 'ISAAC สรุปการสนทนา',
         subtitle: [isVideo ? tr('วิดีโอคอล') : tr('โทร'), if (when.isNotEmpty) when, if (people.isNotEmpty) people].join(' · '),
         actions: [
+          if (d != null && (_canDeleteMine || _canDeleteAll))
+            IconButton(
+              key: const ValueKey('call-summary-delete'),
+              tooltip: tr(_canDeleteMine ? 'ลบข้อมูลของฉัน' : 'ลบการสนทนาทั้งหมด'),
+              icon: const Icon(NxI.trash),
+              onPressed: _delete,
+            ),
           if (d != null && _available)
             IconButton(
               key: const ValueKey('call-summary-share'),

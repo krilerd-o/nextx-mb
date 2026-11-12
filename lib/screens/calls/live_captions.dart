@@ -7,6 +7,7 @@ import '../../core/i18n.dart';
 import '../../services/calls/live_transcription.dart';
 import '../../widgets/nx_icons.dart';
 import '../comm_ai/call_summary_screen.dart';
+import '../comm_ai/comm_ai_errors.dart';
 import '../comm_ai/comm_ai_isaac.dart';
 
 const _glass = Color(0xB3020617);
@@ -122,6 +123,7 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
   final _tr = <String, String>{}; // '$lang:$captionKey' → text
   final _asked = <String>{};
   Timer? _debounce;
+  String? _trError;
 
   @override
   void initState() {
@@ -146,6 +148,7 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
   }
 
   void _cycleLang() {
+    setState(() => _trError = null);
     setState(() => _lang = kCaptionLangCycle[(kCaptionLangCycle.indexOf(_lang) + 1) % kCaptionLangCycle.length]);
     _schedule();
   }
@@ -174,7 +177,16 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
           _tr['$lang:${batch[i].key}'] = i < out.length ? out[i] : '';
         }
       });
-    } catch (_) {
+    } catch (e) {
+      if (!mounted) return;
+      if (isCommAiQuotaError(e)) {
+        // Used up for the month: say so once and stop asking (the call goes on).
+        setState(() {
+          _trError = commAiErrorText(e);
+          _lang = '';
+        });
+        return;
+      }
       for (final c in batch) {
         _asked.remove('$lang:${c.key}');
       }
@@ -256,15 +268,12 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                   ]),
                   if (lt.error != null)
                     Text(
-                      tr(lt.error == 'stt_not_configured'
-                          ? 'ยังไม่ได้ตั้งค่า OpenAI API key สำหรับถอดเสียง'
-                          : lt.error == 'stt_disabled'
-                              ? 'ผู้ดูแลปิดการถอดเสียงไว้'
-                              : lt.error == 'mic'
-                                  ? 'เครื่องนี้แบ่งไมค์ให้ระบบถอดเสียงไม่ได้ — สายยังคุยต่อได้ตามปกติ'
-                                  : 'เริ่มถอดข้อความไม่สำเร็จ — สายยังคุยต่อได้ตามปกติ'),
+                      commAiSttErrorText(lt.error!, quota: lt.quota),
+                      key: const ValueKey('call-captions-error'),
                       style: const TextStyle(color: Color(0xFFFCD34D), fontSize: 12),
                     ),
+                  if (_trError != null)
+                    Text(_trError!, key: const ValueKey('call-captions-translate-error'), style: const TextStyle(color: Color(0xFFFCD34D), fontSize: 12)),
                   if (_open)
                     ValueListenableBuilder<List<LiveCaption>>(
                       valueListenable: lt.captions,

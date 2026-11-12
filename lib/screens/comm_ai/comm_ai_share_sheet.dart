@@ -11,6 +11,8 @@ import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
 import '../../core/nx_page_route.dart';
 import '../../services/api_exceptions.dart';
+import '../../services/comm_ai_export_jobs.dart';
+import '../../services/file_open.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/fields/nx_entity_picker_sheet.dart';
 import '../../widgets/fields/nx_pick_option.dart';
@@ -18,6 +20,7 @@ import '../../widgets/fields/nx_picker_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_sliding_segmented.dart';
 import '../deep_link_loaders.dart';
+import 'comm_ai_errors.dart';
 import 'comm_ai_isaac.dart';
 import 'comm_ai_widgets.dart';
 
@@ -70,7 +73,10 @@ class CommAiCrmRecordPicker extends StatelessWidget {
     return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SizedBox(
         width: 150,
-        child: DropdownButtonFormField<String>(
+        child: KeyedSubtree(
+          // A suggestion chip can switch the module from outside: rebuild the dropdown with it.
+          key: ValueKey('$keyPrefix-module-${value.module}'),
+          child: DropdownButtonFormField<String>(
           key: ValueKey('$keyPrefix-module'),
           isExpanded: true,
           initialValue: value.module,
@@ -79,6 +85,7 @@ class CommAiCrmRecordPicker extends StatelessWidget {
           onChanged: (m) {
             if (m != null && m != value.module) onChanged((module: m, record: null));
           },
+          ),
         ),
       ),
       const SizedBox(width: 10),
@@ -102,6 +109,150 @@ class CommAiCrmRecordPicker extends StatelessWidget {
   }
 }
 
+/// ISAAC's guesses of the CRM record (best first) as quick chips; the chosen one is highlighted.
+class CommAiCrmSuggestionChips extends StatelessWidget {
+  const CommAiCrmSuggestionChips({super.key, required this.list, required this.value, required this.onPick});
+  final List<Map<String, dynamic>> list;
+  final CommAiCrmPick? value;
+  final ValueChanged<CommAiCrmPick> onPick;
+
+  static bool pickable(Map<String, dynamic> x) => kCommAiCrmModules.any((m) => m.$1 == x['module']) && '${x['id'] ?? ''}'.isNotEmpty;
+
+  /// A suggestion as a picked record.
+  static CommAiCrmPick toPick(Map<String, dynamic> x) => (module: '${x['module']}', record: NxPickOption(value: '${x['id']}', label: '${x['name'] ?? '#${x['id']}'}'));
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = list.where(pickable).take(6).toList();
+    if (shown.isEmpty) return const SizedBox.shrink();
+    String modLabel(String m) => tr(kCommAiCrmModules.firstWhere((x) => x.$1 == m, orElse: () => (m, m)).$2);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(NxI.sparkle, size: 14, color: kIsaacViolet),
+          const SizedBox(width: 4),
+          Text(tr('ISAAC แนะนำ:'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kIsaacViolet)),
+        ]),
+        for (final x in shown)
+          Tooltip(
+            message: L10n.isEn ? '${x['reason_en'] ?? x['reason'] ?? ''}' : '${x['reason'] ?? ''}',
+            child: ChoiceChip(
+              key: ValueKey('comm-ai-crm-suggestion-${x['module']}-${x['id']}'),
+              visualDensity: VisualDensity.compact,
+              showCheckmark: false,
+              selected: value?.module == x['module'] && value?.record?.value == '${x['id']}',
+              selectedColor: kIsaacViolet.withValues(alpha: 0.16),
+              label: Text('${x['name'] ?? '#${x['id']}'} · ${modLabel('${x['module']}')}', overflow: TextOverflow.ellipsis),
+              onSelected: (_) => onPick(toPick(x)),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
+/// Stage of a background export → Thai label.
+const kCommAiExportStages = <String, String>{
+  'queued': 'รอคิว',
+  'start': 'เริ่มทำ',
+  'render': 'สร้างเอกสาร',
+  'audio': 'เตรียมเสียง',
+  'zip': 'บีบอัด ZIP',
+  'upload': 'บันทึกไฟล์',
+  'send': 'กำลังส่งอีเมล',
+  'retry': 'ลองใหม่',
+};
+
+/// Progress of a background export job (ZIP with audio, call tape, e-mail with audio).
+class CommAiJobProgress extends StatelessWidget {
+  const CommAiJobProgress({super.key, required this.job});
+  final Map<String, dynamic> job;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = ((job['progress'] as num?)?.toInt() ?? 0).clamp(2, 100);
+    final stage = kCommAiExportStages['${job['stage']}'] ?? 'กำลังทำงานเบื้องหลัง';
+    final hint = Theme.of(context).hintColor;
+    return Padding(
+      key: const ValueKey('comm-ai-export-job'),
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Expanded(child: Text('${tr(stage)}…', style: TextStyle(fontSize: 12, color: hint))),
+          Text('$pct%', key: const ValueKey('comm-ai-export-job-pct'), style: TextStyle(fontSize: 12, color: hint, fontFeatures: const [FontFeature.tabularFigures()])),
+        ]),
+        const SizedBox(height: 4),
+        ClipRRect(borderRadius: BorderRadius.circular(99), child: LinearProgressIndicator(value: pct / 100, minHeight: 6)),
+        const SizedBox(height: 4),
+        Text(tr('ปิดหน้านี้ได้ งานยังทำต่อบนเซิร์ฟเวอร์'), style: TextStyle(fontSize: 11.5, color: hint)),
+      ]),
+    );
+  }
+}
+
+const _historyChannels = <String, String>{
+  'email': 'อีเมล',
+  'link': 'ลิงก์ภายนอก',
+  'view': 'เปิดดูผ่านลิงก์',
+  'chat': 'ส่งให้ทีม',
+  'crm': 'บันทึกลง CRM',
+  'download': 'ดาวน์โหลด',
+  'delete': 'ลบข้อมูล',
+};
+const _historyActions = <String, String>{
+  'comm_ai.share.revoke': 'ยกเลิกลิงก์',
+  'comm_ai.share.link': 'สร้างลิงก์',
+  'comm_ai.recording.download': 'ดาวน์โหลดเสียง',
+  'comm_ai.tape.download': 'ฟัง / ดาวน์โหลดเทป',
+  'comm_ai.export': 'ส่งออกไฟล์',
+};
+
+/// Admin: PDPA audit of one conversation — who shared / exported / downloaded it (newest first).
+class CommAiShareHistoryList extends StatelessWidget {
+  const CommAiShareHistoryList({super.key, required this.list});
+  final List<Map<String, dynamic>> list;
+
+  static String detail(Map<String, dynamic> x) {
+    final d = x['details'] is Map ? Map<String, dynamic>.from(x['details'] as Map) : const <String, dynamic>{};
+    return [
+      if (d['format'] != null) '${d['format']}'.toUpperCase(),
+      if (d['recipients'] != null) tr('${d['recipients']} ผู้รับ'),
+      if (d['days'] != null) tr('${d['days']} วัน'),
+      if (d['password'] == true) tr('มีรหัสผ่าน'),
+      if (d['module'] != null) '${d['module']}',
+      if (d['public'] == true) tr('ผู้ไม่ได้ล็อกอิน'),
+      if (d['background'] == true) tr('เบื้องหลัง'),
+      if (d['scope'] == 'mine') '${tr('ของตัวเอง')}: ${(d['what'] as List? ?? const []).join(', ')}',
+      if (d['scope'] == 'conversation') tr('ทั้งบทสนทนา'),
+      if (d['sent'] == false) tr('ส่งไม่สำเร็จ'),
+    ].join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = Theme.of(context).hintColor;
+    return Column(key: const ValueKey('comm-ai-share-history'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const CommAiSectionTitle('ประวัติการแชร์', icon: NxI.clockCounterClockwise),
+      if (list.isEmpty)
+        Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Text(tr('ยังไม่มีการแชร์หรือส่งออก'), textAlign: TextAlign.center, style: TextStyle(color: hint)))
+      else
+        for (final x in list)
+          ListTile(
+            key: ValueKey('comm-ai-share-history-${x['id']}'),
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: Text.rich(TextSpan(children: [
+              TextSpan(text: tr(_historyActions['${x['action']}'] ?? _historyChannels['${x['channel']}'] ?? '${x['action']}'), style: const TextStyle(fontWeight: FontWeight.w600)),
+              if (detail(x).isNotEmpty) TextSpan(text: ' · ${detail(x)}', style: TextStyle(color: hint)),
+            ])),
+            subtitle: Text('${x['user_name'] ?? tr('บุคคลภายนอก (ลิงก์)')}'),
+            trailing: Text(commAiWhen(x['at']), style: TextStyle(fontSize: 11.5, color: hint)),
+          ),
+    ]);
+  }
+}
+
 class CommAiShareSheet extends StatefulWidget {
   const CommAiShareSheet({super.key, required this.kind, required this.id, this.title, this.hasAudio = false});
   final String kind;
@@ -110,6 +261,14 @@ class CommAiShareSheet extends StatefulWidget {
 
   /// The call has recorded audio (offers "attach tape" and audio in a ZIP).
   final bool hasAudio;
+
+  /// How a finished background export reaches the user (tests replace it): the device share sheet.
+  @visibleForTesting
+  static Future<void> Function(List<int> bytes, String filename) shareFile = shareFileBytes;
+
+  /// Polling of a background export when the socket is quiet (tests shorten it).
+  @visibleForTesting
+  static Duration jobPollInterval = const Duration(milliseconds: 1500);
 
   @override
   State<CommAiShareSheet> createState() => _CommAiShareSheetState();
@@ -143,6 +302,12 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
   late String _crmType = widget.kind == 'call' ? 'Call' : 'Meeting';
   final _crmNote = TextEditingController();
   String? _activityId;
+  // ISAAC's CRM record guesses (CRM tab + e-mail "log as activity"); loaded once when first needed.
+  List<Map<String, dynamic>>? _suggestions;
+  // Admins only: share history (403 → stays null and the tab is hidden).
+  List<Map<String, dynamic>>? _shareLog;
+  // Background export in progress (ZIP with audio, tape, e-mail with audio).
+  Map<String, dynamic>? _job;
 
   @override
   void initState() {
@@ -152,6 +317,67 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
       if (mounted && r['settings'] is Map) setState(() => _settings = Map<String, dynamic>.from(r['settings'] as Map));
     }).catchError((_) {});
     _loadLinks();
+    _loadShareLog();
+  }
+
+  Future<void> _loadShareLog() async {
+    try {
+      final list = await context.read<AppConfig>().apiClient.getConversationShareHistory(widget.kind, widget.id);
+      if (mounted) setState(() => _shareLog = list);
+    } catch (_) {
+      // Not an admin (403) or an older server: no history tab.
+    }
+  }
+
+  /// ISAAC's guesses; the best one is preselected where nothing is chosen yet.
+  Future<void> _loadSuggestions() async {
+    if (_suggestions != null) {
+      _preselect();
+      return;
+    }
+    _suggestions = const [];
+    try {
+      final list = await context.read<AppConfig>().apiClient.getConversationCrmSuggestions(widget.kind, widget.id);
+      if (!mounted) return;
+      setState(() => _suggestions = list);
+      _preselect();
+    } catch (_) {}
+  }
+
+  void _preselect() {
+    final best = (_suggestions ?? const <Map<String, dynamic>>[]).where(CommAiCrmSuggestionChips.pickable).firstOrNull;
+    if (best == null || !mounted) return;
+    setState(() {
+      if (_tab == 'crm' && _crm.record == null) _crm = CommAiCrmSuggestionChips.toPick(best);
+      if (_logTo != null && _logTo!.record == null) _logTo = CommAiCrmSuggestionChips.toPick(best);
+    });
+  }
+
+  /// Start a background export for this conversation and follow it (progress in [_job]).
+  Future<Map<String, dynamic>> _runJob(Map<String, dynamic> body) async {
+    try {
+      return await runCommAiExportJob(
+        context.read<AppConfig>().apiClient,
+        {'kind': widget.kind, 'id': widget.id, ...body},
+        onProgress: (j) {
+          if (mounted) setState(() => _job = j);
+        },
+        isCancelled: () => !mounted,
+        interval: CommAiShareSheet.jobPollInterval,
+      );
+    } finally {
+      if (mounted) setState(() => _job = null);
+    }
+  }
+
+  /// Download a finished job's file and hand it to the device share sheet.
+  Future<void> _deliverJob(Map<String, dynamic> job, String fallbackExt) async {
+    final bytes = await context.read<AppConfig>().apiClient.downloadCommAiExportJob('${job['job_id']}');
+    final server = '${job['filename'] ?? ''}';
+    final ext = server.contains('.') ? server.split('.').last : fallbackExt;
+    // The temp-file helper keeps ASCII names only: a Thai server name becomes a readable fallback.
+    final safe = RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(server) ? server : 'isaac-${widget.kind}-${widget.id.length > 8 ? widget.id.substring(0, 8) : widget.id}.$ext';
+    await CommAiShareSheet.shareFile(bytes, safe);
   }
 
   @override
@@ -208,10 +434,12 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
           _msgError = false;
         });
       }
+    } on CommAiExportCancelled {
+      return;
     } catch (e) {
       if (mounted) {
         setState(() {
-          _msg = formatApiError(e);
+          _msg = commAiErrorText(e);
           _msgError = true;
         });
       }
@@ -308,10 +536,14 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
         contentPadding: EdgeInsets.zero,
         controlAffinity: ListTileControlAffinity.leading,
         value: _logTo != null,
-        onChanged: (v) => setState(() => _logTo = v == true ? (module: 'account', record: null) : null),
+        onChanged: (v) {
+          setState(() => _logTo = v == true ? (module: 'account', record: null) : null);
+          if (v == true) _loadSuggestions();
+        },
         title: Text(tr('บันทึกการส่งเป็น Activity "Email" ในลูกค้า'), style: const TextStyle(fontSize: 14)),
       ),
       if (_logTo != null) ...[
+        CommAiCrmSuggestionChips(list: _suggestions ?? const [], value: _logTo, onPick: (v) => setState(() => _logTo = v)),
         CommAiCrmRecordPicker(keyPrefix: 'comm-ai-email-crm', value: _logTo!, onChanged: (v) => setState(() => _logTo = v)),
         const SizedBox(height: 6),
       ],
@@ -324,18 +556,38 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
             ? null
             : () => _run('email', () async {
                   final log = _logTo;
-                  final r = await api.shareConversationEmail(
-                    widget.kind,
-                    widget.id,
-                    to: _emails(_to.text),
-                    cc: _emails(_cc.text),
-                    message: _note.text.trim(),
-                    include: inc,
-                    format: _format,
-                    lang: _lang,
-                    attachAudio: _attachAudio && _isCall && widget.hasAudio && _format != 'zip',
-                    logTo: log?.record == null ? null : {'module': log!.module, 'record_id': int.tryParse(log.record!.value) ?? log.record!.value},
-                  );
+                  final attach = _attachAudio && _isCall && widget.hasAudio && _format != 'zip';
+                  final logTo = log?.record == null ? null : {'module': log!.module, 'record_id': int.tryParse(log.record!.value) ?? log.record!.value};
+                  // With audio the server prepares the tape / ZIP first: a background job with progress.
+                  final withAudio = _isCall && (attach || (_format == 'zip' && inc.contains('audio')));
+                  final Map<String, dynamic> r;
+                  if (withAudio) {
+                    final done = await _runJob({
+                      'type': 'email',
+                      'to': _emails(_to.text),
+                      'cc': _emails(_cc.text),
+                      'message': _note.text.trim(),
+                      'include': inc,
+                      'format': _format,
+                      'lang': _lang,
+                      if (attach) 'attach_audio': true,
+                      'log_to': ?logTo,
+                    });
+                    r = done['result'] is Map ? Map<String, dynamic>.from(done['result'] as Map) : const {};
+                  } else {
+                    r = await api.shareConversationEmail(
+                      widget.kind,
+                      widget.id,
+                      to: _emails(_to.text),
+                      cc: _emails(_cc.text),
+                      message: _note.text.trim(),
+                      include: inc,
+                      format: _format,
+                      lang: _lang,
+                      attachAudio: attach,
+                      logTo: logTo,
+                    );
+                  }
                   final activity = r['activity'] is Map ? r['activity'] as Map : null;
                   return [
                     tr('ส่งอีเมลแล้ว'),
@@ -399,6 +651,7 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
     return [
       Text(tr('ISAAC จะบันทึกสรุปและงานที่ต้องทำต่อเป็น Activity บนไทม์ไลน์ของรายการที่เลือก'), style: TextStyle(fontSize: 13, color: Theme.of(context).hintColor)),
       const SizedBox(height: 12),
+      CommAiCrmSuggestionChips(list: _suggestions ?? const [], value: _crm, onPick: (v) => setState(() => _crm = v)),
       CommAiCrmRecordPicker(value: _crm, onChanged: (v) => setState(() => _crm = v)),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
@@ -449,6 +702,7 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
       if (_linkOn) ('link', 'ลิงก์', NxI.link),
       ('chat', 'ทีม', NxI.chatCircle),
       ('crm', 'CRM', NxI.buildings),
+      if (_shareLog != null) ('history', 'ประวัติ', NxI.clockCounterClockwise),
     ];
     if (!tabs.any((t) => t.$1 == _tab)) _tab = 'device';
     final audioOk = _isCall && (_tab == 'link' || (widget.hasAudio && _format == 'zip' && _tab != 'chat' && _tab != 'crm'));
@@ -461,8 +715,10 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
     final inc = [for (final (k, _) in includeOptions) if (_include.contains(k)) k];
     final showInclude = _tab == 'device' || _tab == 'email' || _tab == 'link';
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const IsaacTip('ISAAC แนะนำ: แชร์ให้ลูกค้าเลือกแค่ "สรุป" และ "งานที่ต้องทำต่อ" — บทสนทนาเต็มเก็บไว้ใช้ภายในทีม'),
-      const SizedBox(height: 14),
+      if (_tab != 'history') ...[
+        const IsaacTip('ISAAC แนะนำ: แชร์ให้ลูกค้าเลือกแค่ "สรุป" และ "งานที่ต้องทำต่อ" — บทสนทนาเต็มเก็บไว้ใช้ภายในทีม'),
+        const SizedBox(height: 14),
+      ],
       NxSlidingSegmented<String>(
           value: _tab,
           options: tabs,
@@ -472,6 +728,8 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
               _msg = null;
             });
             if (v == 'email') _loadRecipients();
+            if (v == 'crm') _loadSuggestions();
+            if (v == 'history') _loadShareLog();
           }),
       const SizedBox(height: 14),
       if (showInclude) ...[
@@ -526,6 +784,12 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
           onPressed: _busy != null || inc.isEmpty
               ? null
               : () => _run('device', () async {
+                    if (_isCall && _format == 'zip' && inc.contains('audio')) {
+                      // ZIP with the call audio is built in the background (progress below).
+                      final done = await _runJob({'type': 'file', 'format': _format, 'include': inc, 'lang': _lang});
+                      await _deliverJob(done, 'zip');
+                      return null;
+                    }
                     final bytes = await api.exportConversation(widget.kind, widget.id, format: _format, include: inc, lang: _lang);
                     final dir = await getTemporaryDirectory();
                     final name = '${(widget.title ?? 'conversation').replaceAll(RegExp(r'[\\/:*?"<>|\n]'), ' ').trim()}.$_format';
@@ -534,6 +798,22 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
                     await Share.shareXFiles([XFile(f.path)], subject: widget.title);
                     return null;
                   }),
+        ),
+      if (_tab == 'device' && _isCall && widget.hasAudio)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: OutlinedButton.icon(
+            key: const ValueKey('comm-ai-share-tape'),
+            icon: _busy == 'tape' ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.speakerHigh),
+            label: Text(tr('เทปเสียงการสนทนา (.m4a)')),
+            onPressed: _busy != null
+                ? null
+                : () => _run('tape', () async {
+                      final done = await _runJob({'type': 'tape'});
+                      await _deliverJob(done, 'm4a');
+                      return null;
+                    }),
+          ),
         ),
       if (_tab == 'email') ..._emailTab(inc),
       if (_tab == 'link') ...[
@@ -618,6 +898,8 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
       ],
       if (_tab == 'chat') ..._chatTab(),
       if (_tab == 'crm') ..._crmTab(),
+      if (_tab == 'history') CommAiShareHistoryList(list: _shareLog ?? const []),
+      if (_job != null && (_tab == 'device' || _tab == 'email')) CommAiJobProgress(job: _job!),
       if (_msg != null)
         Padding(
           padding: const EdgeInsets.only(top: 10),

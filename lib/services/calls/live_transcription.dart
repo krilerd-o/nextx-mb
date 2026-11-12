@@ -296,6 +296,9 @@ class LiveTranscription extends ChangeNotifier {
   bool _starting = false;
   String status = 'idle';
   String? error;
+
+  /// With [error] `quota_exceeded`: `{kind, used, limit}` of the month's transcription minutes.
+  Map<String, dynamic>? quota;
   Map<String, dynamic>? request; // caller-decides notice
   final speakers = <String, SttSpeaker>{};
   final captions = ValueNotifier<List<LiveCaption>>(const []);
@@ -446,6 +449,7 @@ class LiveTranscription extends ChangeNotifier {
     if (_movedCallId == id) _movedCallId = null; // asked again on this device → take it back
     _starting = true;
     error = null;
+    quota = null;
     try {
       final deviceId = await CommAiDevice.id();
       final ack = await _t.emitAck('stt:start', {
@@ -458,6 +462,7 @@ class LiveTranscription extends ChangeNotifier {
       });
       if (ack['ok'] != true) {
         error = '${ack['error'] ?? 'error'}';
+        quota = ack['quota'] is Map ? Map<String, dynamic>.from(ack['quota'] as Map) : null;
         notifyListeners();
         return;
       }

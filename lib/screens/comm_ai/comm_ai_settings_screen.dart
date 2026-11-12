@@ -16,6 +16,7 @@ import '../../widgets/nx_sliding_segmented.dart';
 import '../../widgets/nx_surface_card.dart';
 import 'comm_ai_access.dart';
 import 'comm_ai_isaac.dart';
+import 'comm_ai_ops_panels.dart';
 import 'comm_ai_widgets.dart';
 
 /// Lines ISAAC can add to a prompt (same as the web settings page).
@@ -62,10 +63,37 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
   final _summaryModel = TextEditingController();
   Map<String, dynamic>? _providers;
 
+  /// `GET /ops/overview`: usage vs quota, my prefs, admin flag and (admins) AI health. Null until loaded / on old servers.
+  Map<String, dynamic>? _ops;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadOps();
+  }
+
+  Future<void> _loadOps() async {
+    try {
+      final r = await context.read<AppConfig>().apiClient.getCommAiOpsOverview();
+      if (mounted) setState(() => _ops = r);
+    } catch (_) {
+      // Older server without the operations API: the page works as before.
+    }
+  }
+
+  Map<String, dynamic>? get _usage => _ops?['usage'] is Map ? Map<String, dynamic>.from(_ops!['usage'] as Map) : null;
+
+  /// Usage (everyone), AI health (admins), personal digest settings (everyone).
+  List<Widget> _opsPanels() {
+    final ops = _ops;
+    if (ops == null) return const [];
+    final health = ops['health'] is List ? [for (final x in ops['health'] as List) if (x is Map) Map<String, dynamic>.from(x)] : null;
+    return [
+      if (_usage != null) CommAiUsagePanel(usage: _usage!),
+      if (ops['is_admin'] == true && health != null) CommAiHealthPanel(list: health),
+      CommAiPersonalPanel(prefs: ops['prefs'] is Map ? Map<String, dynamic>.from(ops['prefs'] as Map) : const {}),
+    ];
   }
 
   @override
@@ -275,16 +303,17 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
         final pad = EdgeInsets.fromLTRB(16, 8, 16, _dirty ? 96 : 32);
         if (wide) {
           return ListView(padding: pad, children: [
+            CommAiQuotaNotice(usage: _usage),
             hero,
             const SizedBox(height: 14),
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(flex: 5, child: Column(children: _left())),
+              Expanded(flex: 5, child: Column(children: [..._opsPanels(), ..._left()])),
               const SizedBox(width: 14),
               Expanded(flex: 7, child: Column(children: [prompts, _tipsPanel()])),
             ]),
           ]);
         }
-        return ListView(padding: pad, children: [hero, const SizedBox(height: 14), ..._left(), prompts, _tipsPanel()]);
+        return ListView(padding: pad, children: [CommAiQuotaNotice(usage: _usage), hero, const SizedBox(height: 14), ..._opsPanels(), ..._left(), prompts, _tipsPanel()]);
       });
     }
     return NxScrollScaffold(

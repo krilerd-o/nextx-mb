@@ -244,6 +244,14 @@ void main() {
         ],
       },
       'POST /api/comm-ai/share/call/c1/email': {'sent': true, 'audio': 'attached', 'activity': {'activity_id': 55}},
+      'POST /api/comm-ai/export-jobs': {'job_id': 9, 'type': 'email', 'status': 'pending', 'progress': 0},
+      'GET /api/comm-ai/export-jobs/9': {
+        'job_id': 9,
+        'type': 'email',
+        'status': 'done',
+        'progress': 100,
+        'result': {'sent': true, 'audio': 'attached', 'activity': {'activity_id': 55}},
+      },
       'GET /api/users': {
         'list': [
           {'id': 1, 'first_name': 'ฉัน'},
@@ -283,9 +291,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('บริษัท เอ'));
       await tester.pumpAndSettle();
+      CommAiShareSheet.jobPollInterval = const Duration(milliseconds: 50);
+      addTearDown(() => CommAiShareSheet.jobPollInterval = const Duration(milliseconds: 1500));
       await tester.tap(find.byKey(const ValueKey('comm-ai-share-email')));
       await _settle(tester);
-      final body = _body(api, 'POST /api/comm-ai/share/call/c1/email');
+      // With the tape attached the e-mail goes out as a background job (the server prepares the audio first).
+      expect(api.callKeys, isNot(contains('POST /api/comm-ai/share/call/c1/email')));
+      final body = _body(api, 'POST /api/comm-ai/export-jobs');
+      expect(body['type'], 'email');
+      expect(body['kind'], 'call');
+      expect(body['id'], 'c1');
       expect(body['to'], ['wipa@x.co']);
       expect(body['attach_audio'], true);
       expect(body['log_to'], {'module': 'account', 'record_id': 7});

@@ -8,10 +8,13 @@ import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_exceptions.dart';
+import '../../services/realtime_service.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
 import 'comm_ai_access.dart';
+import 'comm_ai_delete_sheet.dart';
+import 'comm_ai_errors.dart';
 import 'comm_ai_isaac.dart';
 import 'comm_ai_widgets.dart';
 
@@ -78,9 +81,14 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
   bool _posted = false;
   bool _available = true;
 
+  /// The open summary may be deleted by me (its creator, or an admin) — from GET /summaries/:id.
+  bool _canDelete = false;
+  StreamSubscription<RealtimeEvent>? _deletedSub;
+
   @override
   void initState() {
     super.initState();
+    _deletedSub = RealtimeService.instance.on('ai:summary_deleted').listen((e) => _forget('${e.data['summary_id']}'));
     CommAiAccess.of(context.read<AppConfig>().apiClient).then((a) {
       if (mounted && !a.available) setState(() => _available = false);
     });
@@ -91,6 +99,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
 
   @override
   void dispose() {
+    _deletedSub?.cancel();
     _cancel?.cancel();
     _text.dispose();
     super.dispose();
@@ -133,6 +142,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
       _done = null;
       _error = null;
       _posted = false;
+      _canDelete = false;
     });
     _text.value = '';
     var acc = '';
@@ -162,7 +172,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
     } catch (e) {
       if (cancel.isCancelled || !mounted) return;
       setState(() {
-        _error = formatApiError(e);
+        _error = commAiErrorText(e);
         _phase = 'error';
       });
     }
@@ -182,6 +192,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
         _phase = r == null ? 'error' : 'done';
         _error = r == null ? tr('เปิดสรุปไม่ได้') : null;
         _posted = false;
+        _canDelete = s['can_delete'] == true;
       });
     } catch (e) {
       if (mounted) {
@@ -191,6 +202,26 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
         });
       }
     }
+  }
+
+  /// A summary was deleted (here or on another device): drop it from the list and close it if open.
+  void _forget(String id) {
+    if (!mounted) return;
+    setState(() {
+      _history = [for (final h in _history) if ('${h['id']}' != id) h];
+      if ('${_done?['summary_id']}' == id) {
+        _done = null;
+        _phase = 'idle';
+        _canDelete = false;
+      }
+    });
+  }
+
+  Future<void> _delete(String id) async {
+    final out = await showCommAiDeleteSheet(context, kind: 'chat', id: id);
+    if (out == null || !mounted) return;
+    _forget(id);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ลบสรุปแชทแล้ว'))));
   }
 
   Future<void> _postToChat(Map<String, dynamic> r) async {
@@ -326,6 +357,14 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
           Expanded(
             child: Text('${tr('จาก')} ${_done!['message_count'] ?? '-'} ${tr('ข้อความ')}${_done!['cached'] == true ? ' · ${tr('ผลที่บันทึกไว้')}' : ''}', style: TextStyle(fontSize: 12, color: hint)),
           ),
+          if (_done!['summary_id'] != null && _canDelete)
+            IconButton(
+              key: const ValueKey('chat-summary-delete'),
+              tooltip: tr('ลบสรุปแชทนี้'),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(NxI.trash, size: 18),
+              onPressed: () => _delete('${_done!['summary_id']}'),
+            ),
           if (_done!['summary_id'] != null && _available)
             TextButton.icon(
               icon: const Icon(NxI.shareNetwork, size: 16),

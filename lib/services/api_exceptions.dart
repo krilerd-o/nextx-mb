@@ -16,10 +16,13 @@ class ApiException implements Exception {
 }
 
 class ApiEnvelopeException implements Exception {
-  ApiEnvelopeException(this.statusCode, this.errorCode, this.message);
+  ApiEnvelopeException(this.statusCode, this.errorCode, this.message, {this.details});
   final int statusCode;
   final String errorCode;
   final String message;
+
+  /// The envelope's `details` (e.g. `{kind, used, limit}` with `QUOTA_EXCEEDED`), when the server sent one.
+  final Map<String, dynamic>? details;
 
   @override
   String toString() => '$errorCode: $message';
