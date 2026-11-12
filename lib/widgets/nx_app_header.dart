@@ -230,7 +230,7 @@ class _HubBar extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const _HubAvatar(),
+            const NxHubAvatar(),
             const Spacer(),
             ..._circleActions(actions),
             Padding(
@@ -244,8 +244,13 @@ class _HubBar extends StatelessWidget {
   }
 }
 
-class _HubAvatar extends StatelessWidget {
-  const _HubAvatar();
+/// Signed-in user's photo (or initials). Tap = profile hub; long-press =
+/// Space switcher. Also used on Home's hero ([ring] = white outline on a photo).
+class NxHubAvatar extends StatelessWidget {
+  const NxHubAvatar({super.key, this.size = NxAppHeader.controlSize, this.ring = false});
+
+  final double size;
+  final bool ring;
 
   @override
   Widget build(BuildContext context) {
@@ -268,12 +273,19 @@ class _HubAvatar extends StatelessWidget {
         HapticFeedback.mediumImpact();
         showSpaceSwitcher(context);
       },
-      child: SizedBox(
-        width: NxAppHeader.controlSize,
-        height: NxAppHeader.controlSize,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: ring
+            ? BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withValues(alpha: 0.85), width: 2),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 10, offset: const Offset(0, 2))],
+              )
+            : null,
         child: CircleAvatar(
-          radius: NxAppHeader.controlSize / 2,
-          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
+          radius: size / 2,
+          backgroundColor: ring ? Colors.white : Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
           backgroundImage: image,
           child: image == null
               ? Text(
