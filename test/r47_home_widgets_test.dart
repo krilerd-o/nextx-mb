@@ -207,7 +207,11 @@ void main() {
     expect(homeWidgetAllowed(s, 'chart_won'), isFalse);
     expect(homeWidgetAllowed(s, 'chart_closing'), isFalse);
     expect(homeWidgetAllowed(s, 'chart_leave'), isFalse);
-    expect(homeWidgetAllowed(s, 'today'), isTrue);
+    // Classic sections follow their menus too: lead → birthdays, not clock-in/work.
+    expect(homeWidgetAllowed(s, 'birthdays'), isTrue);
+    expect(homeWidgetAllowed(s, 'stats'), isTrue);
+    expect(homeWidgetAllowed(s, 'today'), isFalse);
+    expect(homeWidgetAllowed(s, 'recent'), isTrue);
   });
 
   group('edit mode grid', () {
@@ -333,6 +337,8 @@ void main() {
     expect(find.byKey(const ValueKey('widget-gallery')), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const ValueKey('gallery-add-chart_lead_source')), 300,
         scrollable: find.descendant(of: find.byKey(const ValueKey('widget-gallery')), matching: find.byType(Scrollable)).first);
+    await tester.ensureVisible(find.byKey(const ValueKey('gallery-add-chart_lead_source')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('gallery-add-chart_lead_source')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('editor-chart_lead_source')), findsOneWidget);

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
+import '../../core/menu_access.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/thai_time.dart';
 import '../../widgets/nx_icons.dart';
@@ -60,8 +61,11 @@ class _HomeBirthdayBoxState extends State<HomeBirthdayBox> {
   Widget build(BuildContext context) {
     final today = calDay(thaiNow());
     final tomorrow = today.add(const Duration(days: 1));
-    final now = _b.on(today);
-    final next = _b.on(tomorrow);
+    // Only people from modules this user may open (Lead / Contact / Account).
+    final session = context.select((AppConfig c) => c.session);
+    bool ok(CalBirthday b) => MenuAccess.allow(session, b.module);
+    final now = _b.on(today).where(ok).toList();
+    final next = _b.on(tomorrow).where(ok).toList();
     if (now.isEmpty && next.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final cs = theme.colorScheme;

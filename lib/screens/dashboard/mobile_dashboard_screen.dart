@@ -555,6 +555,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
       int.tryParse(m?[key]?.toString() ?? '') ?? 0;
 
   List<Map<String, dynamic>> _upcoming() {
+    // Appointments are calendar data: none for users without a calendar menu.
+    if (!MenuAccess.anyCalendar(context.read<AppConfig>().session)) {
+      return const [];
+    }
     final now = thaiNow().subtract(const Duration(hours: 1));
     final all = extractMapList(_summary?['activities']);
     return all
@@ -617,8 +621,12 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
         const _QuickAction(NxI.clock, 'ลงเวลา', AppRoutes.attendance),
       if (MenuAccess.allow(session, MenuAccess.leave))
         const _QuickAction(NxI.calendarCheck, 'ขอลา', AppRoutes.leaveRequest),
-      if (MenuAccess.allow(session, MenuAccess.quotation) ||
-          MenuAccess.allow(session, MenuAccess.leaveManagement))
+      // Same menus as the รออนุมัติ page / tab.
+      if (MenuAccess.any(session, const [
+        MenuAccess.quotation,
+        MenuAccess.leaveManagement,
+        MenuAccess.pendingApprovals,
+      ]))
         const _QuickAction(NxI.checkCircle, 'รออนุมัติ', AppRoutes.approvals),
       if (MenuAccess.allow(session, MenuAccess.chat))
         const _QuickAction(NxI.chatCircle, 'แชท', AppRoutes.chatHome),
@@ -889,9 +897,17 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
                                     const SizedBox(height: 4),
                                     // Widgets in the user's order; long-press one to arrange.
                                     HomeWidgetGrid(
-                                      entries: _editing
-                                          ? _draft
-                                          : HomeLayout.instance.entries,
+                                      // Widgets this user may not see stay in the
+                                      // saved layout (they return with the
+                                      // permission) but are never shown.
+                                      entries: [
+                                        for (final e
+                                            in _editing
+                                                ? _draft
+                                                : HomeLayout.instance.entries)
+                                          if (homeWidgetAllowed(session, e.id))
+                                            e,
+                                      ],
                                       editing: _editing,
                                       wiggle: _wiggle,
                                       onStartEditing: _startEditing,
@@ -901,9 +917,9 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
                                       onDragUpdate: _onDragUpdate,
                                       onDragEnd: _onDragEnd,
                                       build: (e) {
+                                        if (!homeWidgetAllowed(session, e.id))
+                                          return null;
                                         if (HomeLayout.isChart(e.id)) {
-                                          if (!homeWidgetAllowed(session, e.id))
-                                            return null;
                                           return HomeChartCard(
                                             key: ValueKey('chart-${e.id}'),
                                             entry: e,

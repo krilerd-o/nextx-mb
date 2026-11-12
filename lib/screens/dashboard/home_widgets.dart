@@ -84,9 +84,44 @@ class HomeWidgetInfo {
   }
 }
 
-/// Charts the user may see (menu permissions, same as the web dashboards).
+/// Menu keys behind the "ทางลัด" shortcuts (each shortcut has its own gate
+/// on Home; the widget is offered when at least one of them is visible).
+const kHomeQuickMenuKeys = <String>[
+  MenuAccess.attendance,
+  MenuAccess.leave,
+  MenuAccess.quotation,
+  MenuAccess.leaveManagement,
+  MenuAccess.pendingApprovals,
+  MenuAccess.chat,
+  MenuAccess.calendar,
+  MenuAccess.incoming,
+  MenuAccess.pending,
+  MenuAccess.job,
+  MenuAccess.mailbox,
+  MenuAccess.ai,
+];
+
+/// Modules counted by "ภาพรวม" (menu key = module, except case → 'case').
+const kHomeStatMenuKeys = <String>[
+  MenuAccess.lead,
+  MenuAccess.deal,
+  MenuAccess.quotation,
+  MenuAccess.account,
+  MenuAccess.contact,
+  MenuAccess.caseKey,
+  MenuAccess.job,
+];
+
+/// Lead / Contact / Account — the records "วันเกิดลูกค้าวันนี้" reads.
+const kHomeBirthdayMenuKeys = <String>[MenuAccess.lead, MenuAccess.contact, MenuAccess.account];
+
+/// Whether this user may see widget [id] — from their menus (GET /api/me/menus
+/// = Package ∩ role permissions; superadmin sees everything). Home, the editor
+/// and the gallery all use this, so a widget only appears when the user can
+/// open the module(s) it is about. Unknown ids are never allowed.
 bool homeWidgetAllowed(SessionState s, String id) {
   switch (id) {
+    // Charts — same menus as the web dashboards.
     case 'chart_won':
     case 'chart_winrate':
     case 'chart_sales_trend':
@@ -108,6 +143,29 @@ bool homeWidgetAllowed(SessionState s, String id) {
       return MenuAccess.allow(s, MenuAccess.workspace);
     case 'chart_leave':
       return MenuAccess.allow(s, MenuAccess.leave);
+    // Classic sections — what each one actually reads.
+    case 'today': // clock-in (attendance) · next appointment (calendar) · work counts (workspace)
+      return MenuAccess.allow(s, MenuAccess.attendance) || MenuAccess.anyCalendar(s) || MenuAccess.allow(s, MenuAccess.workspace);
+    case 'ai':
+      return MenuAccess.allow(s, MenuAccess.ai);
+    case 'work':
+      return MenuAccess.allow(s, MenuAccess.workspace);
+    case 'pending': // overdue activities (calendar / pending-work) + overdue Workspace work
+      return MenuAccess.any(s, const [MenuAccess.calendar, MenuAccess.pending, MenuAccess.workspace]);
+    case 'quick':
+      return MenuAccess.any(s, kHomeQuickMenuKeys);
+    case 'recent': // device-local; rows are filtered by module inside
+      return true;
+    case 'sales':
+      return MenuAccess.any(s, const [MenuAccess.deal, MenuAccess.quotation]);
+    case 'cases':
+      return MenuAccess.allow(s, MenuAccess.caseKey);
+    case 'stats':
+      return MenuAccess.any(s, kHomeStatMenuKeys);
+    case 'birthdays':
+      return MenuAccess.any(s, kHomeBirthdayMenuKeys);
+    case 'upcoming':
+      return MenuAccess.anyCalendar(s);
   }
-  return HomeLayout.sections.containsKey(id);
+  return false;
 }

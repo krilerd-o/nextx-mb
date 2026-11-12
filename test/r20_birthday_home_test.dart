@@ -58,7 +58,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final adapter = FakeNextxAdapter(replies);
     final config = AppConfig();
-    config.debugOverrideSession(const SessionState(accessToken: 't', userId: '1', businessId: '1', menusLoaded: true, menuKeys: ['calendar']));
+    config.debugOverrideSession(const SessionState(accessToken: 't', userId: '1', businessId: '1', menusLoaded: true, menuKeys: ['calendar', 'lead', 'contact', 'account']));
     config.apiClient.debugSetHttpAdapter(adapter);
     await tester.pumpWidget(ChangeNotifierProvider.value(
       value: config,
