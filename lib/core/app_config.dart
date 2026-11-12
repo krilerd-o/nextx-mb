@@ -1043,7 +1043,10 @@ class AppConfig extends ChangeNotifier {
     if (pkg != null && pkg.isNotEmpty && bid != null) {
       try {
         menus = await _api.getMenuKeys(packageCode: pkg);
-      } catch (_) {}
+      } catch (_) {
+        // Offline / server error: keep the last known menus (never fall back to "everything").
+        menus = _session.menuKeys ?? const <String>[];
+      }
     }
     final allowed = me['allowed_menu_keys'];
     if (menus == null && allowed is List) {

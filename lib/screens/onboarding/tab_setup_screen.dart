@@ -30,6 +30,10 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
   late ShellTabsConfig _base;
   late List<String> _tabs;
   _TabFilter _filter = _TabFilter.all;
+  /// The user changed the list here: later permission updates must not reset it.
+  bool _edited = false;
+  /// Permissions [_tabs] was worked out with (menus may still be loading when the page opens).
+  (bool, Object?)? _resolvedFor;
 
   bool _allowed(ShellTabDef d) => d.anyMenu.isEmpty || MenuAccess.any(context.read<AppConfig>().session, d.anyMenu);
 
@@ -38,11 +42,28 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
     super.initState();
     final config = context.read<AppConfig>();
     _base = widget.initial ?? config.shellConfig ?? const ShellTabsConfig(roles: ['general']);
-    _tabs = resolveShellTabs(
+    _tabs = _resolve(config);
+  }
+
+  List<String> _resolve(AppConfig config) {
+    _resolvedFor = (config.session.menusLoaded, config.session.menuKeys);
+    return resolveShellTabs(
       roles: _base.roles,
       custom: _base.tabs,
       allowed: (keys) => MenuAccess.any(config.session, keys),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Opened before the menus arrived (cold start straight into this page): work the
+    // list out again once they do, unless the user has already changed it.
+    final config = context.watch<AppConfig>();
+    final now = (config.session.menusLoaded, config.session.menuKeys);
+    if (!_edited && _resolvedFor != null && _resolvedFor != now) {
+      _tabs = _resolve(config);
+    }
   }
 
   bool get _full => _tabs.length >= kMaxCustomTabs;
@@ -50,6 +71,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
   /// Adds or removes [id]. At least one tab stays; when the bar is full the
   /// add controls are disabled and an inline note explains why.
   void _toggle(String id) {
+    _edited = true;
     setState(() {
       if (_tabs.contains(id)) {
         if (_tabs.length > 1) _tabs.remove(id);
@@ -70,6 +92,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
   }
 
   void _resetToSuggested() {
+    _edited = true;
     setState(() {
       _tabs = resolveShellTabs(
         roles: _base.roles,
@@ -151,6 +174,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                       child: child,
                     ),
                     onReorderItem: (from, to) {
+                      _edited = true;
                       HapticFeedback.selectionClick();
                       setState(() {
                         final id = _tabs.removeAt(from);
@@ -225,14 +249,20 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                       child: Text(tr('ไม่มีรายการ'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                     )
                   else
-                    for (final d in shown)
-                      _CatalogTabRow(
-                        key: ValueKey('tab-option-${d.id}'),
-                        def: d,
-                        added: _tabs.contains(d.id),
-                        // Added: tap removes (unless it's the last one). Not added: tap adds while there's room.
-                        onToggle: _tabs.contains(d.id) ? (_tabs.length > 1 ? () => _toggle(d.id) : null) : (_full ? null : () => _toggle(d.id)),
-                      ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 10,
+                      children: [
+                        for (final d in shown)
+                          _TabCapsule(
+                            key: ValueKey('tab-option-${d.id}'),
+                            def: d,
+                            added: _tabs.contains(d.id),
+                            // Added: tap removes (unless it's the last one). Not added: tap adds while there's room.
+                            onToggle: _tabs.contains(d.id) ? (_tabs.length > 1 ? () => _toggle(d.id) : null) : (_full ? null : () => _toggle(d.id)),
+                          ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -270,15 +300,14 @@ class _SectionTitle extends StatelessWidget {
 
 /// The tab's icon in a tinted rounded square, with an optional order badge.
 class _TabIcon extends StatelessWidget {
-  const _TabIcon({required this.icon, this.order, this.muted = false});
+  const _TabIcon({required this.icon, this.order});
   final IconData icon;
   final int? order;
-  final bool muted;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final tint = muted ? cs.onSurfaceVariant : cs.primary;
+    final tint = cs.primary;
     return SizedBox(
       width: 44,
       height: 44,
@@ -359,50 +388,64 @@ class _ChosenTabRow extends StatelessWidget {
   }
 }
 
-class _CatalogTabRow extends StatelessWidget {
-  const _CatalogTabRow({super.key, required this.def, required this.added, required this.onToggle});
+/// "เพิ่มแท็บ" capsule: icon + label. Added = filled with ✓ (tap removes);
+/// not added = outlined with + (tap adds); no room = dimmed.
+class _TabCapsule extends StatelessWidget {
+  const _TabCapsule({super.key, required this.def, required this.added, required this.onToggle});
   final ShellTabDef def;
   final bool added;
   final VoidCallback? onToggle;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final disabled = onToggle == null && !added;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+    final fg = added ? cs.primary : (disabled ? cs.onSurfaceVariant : cs.onSurface);
+    return Tooltip(
+      message: tr(def.description),
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 180),
-        opacity: disabled ? 0.5 : 1,
-        child: NxSurfaceCard(
-          radius: 18,
-          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-          onTap: onToggle,
-          child: Row(children: [
-            _TabIcon(icon: def.icon, muted: !added),
-            const SizedBox(width: 12),
-            Expanded(child: _TabText(def: def)),
-            const SizedBox(width: 8),
-            Tooltip(
-              message: tr(added ? 'เอาออก' : 'เพิ่ม'),
-              child: InkResponse(
-                key: ValueKey('tab-toggle-${def.id}'),
-                onTap: onToggle,
-                radius: 22,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: added ? cs.primary : Colors.transparent,
-                    border: added ? null : Border.all(color: disabled ? cs.outlineVariant : cs.primary, width: 1.5),
-                  ),
-                  child: Icon(added ? NxI.check : NxI.plus, size: 16, color: added ? cs.onPrimary : (disabled ? cs.outlineVariant : cs.primary)),
-                ),
+        opacity: disabled ? 0.45 : 1,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: ValueKey('tab-toggle-${def.id}'),
+            onTap: onToggle == null
+                ? null
+                : () {
+                    HapticFeedback.selectionClick();
+                    onToggle!();
+                  },
+            customBorder: const StadiumBorder(),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.fromLTRB(12, 9, 10, 9),
+              decoration: ShapeDecoration(
+                shape: StadiumBorder(side: BorderSide(color: added ? cs.primary : cs.outlineVariant, width: added ? 1.6 : 1)),
+                color: added ? cs.primary.withValues(alpha: 0.10) : cs.surface,
+                shadows: added ? null : [BoxShadow(color: cs.shadow.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
               ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(def.icon, size: 18, color: added ? cs.primary : cs.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Text(tr(def.label), style: theme.textTheme.labelLarge?.copyWith(color: fg, fontWeight: added ? FontWeight.w700 : FontWeight.w600)),
+                const SizedBox(width: 8),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                  child: Container(
+                    key: ValueKey(added),
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: added ? cs.primary : cs.primary.withValues(alpha: disabled ? 0.08 : 0.12)),
+                    child: Icon(added ? NxI.check : NxI.plus, size: 12, color: added ? cs.onPrimary : (disabled ? cs.onSurfaceVariant : cs.primary)),
+                  ),
+                ),
+              ]),
             ),
-          ]),
+          ),
         ),
       ),
     );

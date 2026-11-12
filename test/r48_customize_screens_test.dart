@@ -138,9 +138,12 @@ void main() {
       expect(_keysWithPrefix('tab-chosen-'), {'calendar', 'search'});
     });
 
-    testWidgets('descriptions are one line', (tester) async {
+    testWidgets('descriptions of the chosen tabs are one line; "เพิ่มแท็บ" shows capsules', (tester) async {
       await _pumpTabs(tester, _s(['lead', 'calendar']));
-      for (final d in shellTabCatalog.where((d) => ['dashboard', 'leads', 'calendar', 'search'].contains(d.id))) {
+      // Not-added tabs are capsules (icon + label), no description line.
+      expect(find.descendant(of: _key('tab-option-search'), matching: find.text('ค้นหา')), findsOneWidget);
+      expect(find.descendant(of: _key('tab-option-search'), matching: find.text('ค้นหาทุกโมดูล')), findsNothing);
+      for (final d in shellTabCatalog.where((d) => ['dashboard', 'leads', 'calendar'].contains(d.id))) {
         final texts = tester.widgetList<Text>(find.text(d.description)).toList();
         expect(texts, isNotEmpty, reason: d.id);
         for (final t in texts) {
@@ -359,5 +362,16 @@ void main() {
 
   test('quick shortcut keys cover the รออนุมัติ menus', () {
     expect(kHomeQuickMenuKeys, containsAll([MenuAccess.quotation, MenuAccess.leaveManagement, MenuAccess.pendingApprovals]));
+  });
+
+  testWidgets('page opened before the menus arrive fills in when they do (cold start)', (tester) async {
+    final config = await _pumpTabs(tester, const SessionState(accessToken: 't', userId: '1', businessId: '1'));
+    // Menus not loaded yet: only the always-on tabs.
+    expect(find.byKey(const ValueKey('tab-option-leads')), findsNothing);
+    // Menus arrive: no Package / no role limit = unrestricted (same as the web).
+    config.debugOverrideSession(const SessionState(accessToken: 't', userId: '1', businessId: '1', menusLoaded: true));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const ValueKey('tab-option-leads')), findsOneWidget);
+    expect(find.byKey(const ValueKey('tab-chosen-leads')), findsOneWidget); // sales role suggests ลีด/ดีล
   });
 }

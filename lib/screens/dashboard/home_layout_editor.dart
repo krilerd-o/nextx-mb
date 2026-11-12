@@ -31,8 +31,21 @@ class _HomeLayoutEditorScreenState extends State<HomeLayoutEditorScreen> {
   /// in place when the permission does.
   List<(List<String>, HomeEntry)> _kept = const [];
 
+  /// Permissions the list was split with (menus may still be loading when the page opens).
+  Object? _splitFor;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Menus arrived (or changed) after opening: split again, keeping the user's order.
+    final s = context.watch<AppConfig>().session;
+    final now = (s.menusLoaded, s.menuKeys, s.isSuperadmin);
+    if (_splitFor != null && _splitFor != now) _split(_merged());
+  }
+
   void _split(List<HomeEntry> all) {
     final session = context.read<AppConfig>().session;
+    _splitFor = (session.menusLoaded, session.menuKeys, session.isSuperadmin);
     final shown = <HomeEntry>[];
     final kept = <(List<String>, HomeEntry)>[];
     for (var i = 0; i < all.length; i++) {

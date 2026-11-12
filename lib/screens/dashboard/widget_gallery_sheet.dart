@@ -42,7 +42,7 @@ class _GalleryState extends State<_Gallery> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final session = context.read<AppConfig>().session;
+    final session = context.select((AppConfig c) => c.session);
     // Only widgets about menus this user can open.
     final ids = [
       ...HomeLayout.charts.map((c) => c.id),

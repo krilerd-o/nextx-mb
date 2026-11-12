@@ -43,11 +43,15 @@ class SessionState {
       businessId != null &&
       businessId!.isNotEmpty;
 
+  /// Same rule as the NEXTX web: menus = Package ∩ role permissions. `null` (no Package picked /
+  /// the business has no Package, and the role does not restrict menus) means unrestricted — the
+  /// web shows every menu then. An empty list means nothing is allowed.
   bool canAccess(String menuKey) {
     if (isSuperadmin) return true;
     if (!menusLoaded) return false;
     final keys = menuKeys;
-    if (keys == null || keys.isEmpty) return false;
+    if (keys == null) return true;
+    if (keys.isEmpty) return false;
     return keys.contains(menuKey);
   }
 
