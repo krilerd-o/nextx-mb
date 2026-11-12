@@ -7,6 +7,7 @@ import flutter_callkit_incoming
 @main
 @objc class AppDelegate: FlutterAppDelegate, PKPushRegistryDelegate {
   private var voipRegistry: PKPushRegistry?
+  private var callMicTap: CallMicTap?
 
   override func application(
     _ application: UIApplication,
@@ -17,6 +18,9 @@ import flutter_callkit_incoming
       GMSServices.provideAPIKey(key)
     }
     GeneratedPluginRegistrant.register(with: self)
+    if let registrar = self.registrar(forPlugin: "CallMicTap") {
+      callMicTap = CallMicTap(messenger: registrar.messenger())
+    }
 
     // VoIP push (PushKit) → CallKit incoming-call screen, also when the app is closed / the phone is locked.
     let registry = PKPushRegistry(queue: DispatchQueue.main)

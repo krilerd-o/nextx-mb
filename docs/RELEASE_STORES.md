@@ -118,6 +118,25 @@ base64 -w0 dist.p12
 - ประมวลผลใน App Store Connect → TestFlight ราว 5–30 นาที แล้วเพิ่ม Internal Testers
 - ไม่ต้องตอบคำถามการเข้ารหัส (ตั้ง `ITSAppUsesNonExemptEncryption = false` ไว้แล้ว)
 
+### 4.x TestFlight แบบ External (ส่งรีวิว + ลิงก์สาธารณะ)
+
+ใส่ GitHub Secrets (Settings → Secrets and variables → Actions) — ค่าเหล่านี้ส่งให้ Apple เท่านั้น ไม่อยู่ใน git:
+
+| Secret | ค่า |
+|---|---|
+| `TF_REVIEW_SERVER` | URL เซิร์ฟเวอร์ (Space) ที่ผู้รีวิวของ Apple ใช้เข้าสู่ระบบ เช่น `https://moainext.moai-crm.com` |
+| `TF_REVIEW_USER` / `TF_REVIEW_PASSWORD` | บัญชีทดสอบสำหรับผู้รีวิว (สร้างเองใน Space นั้น ข้อมูลตัวอย่างเท่านั้น) |
+| `TF_CONTACT_FIRST` / `TF_CONTACT_LAST` | ชื่อ-นามสกุลผู้ติดต่อ |
+| `TF_CONTACT_EMAIL` / `TF_CONTACT_PHONE` | อีเมล / โทรศัพท์ (รูปแบบ `+66…`) |
+| `TF_FEEDBACK_EMAIL`, `TF_PRIVACY_URL` | (ไม่บังคับ) อีเมลรับ feedback, URL นโยบายความเป็นส่วนตัว |
+
+สั่ง Actions → Flutter CI → Run workflow: ติ๊ก `testflight` + `testflight_external` (+ `whats_new`)
+→ อัปโหลด → รอ Apple ประมวลผล → ตั้ง "What to Test"/Test Information/บัญชีทดสอบ → เพิ่มเข้ากลุ่ม
+**External Testers** (เปิด Public Link) → ส่ง Beta App Review → ลิงก์ `https://testflight.apple.com/join/…` อยู่ใน Summary ของ run
+
+อัปโหลดไปแล้วแต่ยังไม่ได้ส่ง: Run workflow ใส่ `tf_build_number` = เลขบิลด์ (ไม่ต้อง build ใหม่)
+Apple รีวิว beta ปกติราว 1 วัน; อนุมัติแล้วลิงก์ใช้ติดตั้งได้ทันที
+
 ## 5. Huawei AppGallery (EMUI / HarmonyOS 2–4)
 
 1. AppGallery Connect → สร้างแอป package `com.moai.nextt.mobile`

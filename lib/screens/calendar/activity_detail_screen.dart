@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_scroll_tabs.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -17,6 +18,7 @@ import '../crm/entity_detail_parts.dart';
 import 'activity_form_screen.dart';
 import 'cal/cal_model.dart' show hm;
 import 'visit_check_sheet.dart';
+import '../../services/photo_pipeline.dart' show PhotoTarget;
 import 'visit_photo_flow.dart';
 import '../../widgets/nx_place_panel.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +26,7 @@ import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
 import '../../core/recent_records.dart';
 import '../../widgets/nx_refresh.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
   const ActivityDetailScreen({super.key, required this.row});
@@ -149,6 +152,16 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     Navigator.of(context).maybePop();
   }
 
+  /// "ส่งออก / แชร์": the activity as text (when, where, who, details) plus
+  /// its web link, to the phone's share sheet (LINE, mail, Notes…) — like the
+  /// record pages' "แชร์ลิงก์".
+  Future<void> _export() async {
+    final base = Uri.tryParse(context.read<AppConfig>().apiBaseUrl);
+    final link = base?.replace(path: '/modules/activity/view/$_id', query: null).toString();
+    final subject = '${_row['subject'] ?? entityTitle(_row, module: 'activity')}';
+    await Share.share(activityExportText(_row, when: _whenRange(_row), link: link), subject: subject);
+  }
+
   Future<void> _quickAttach() async {
     final files = await pickAttachments(context);
     if (files.isEmpty || !mounted) return;
@@ -196,6 +209,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   VisitPhotoFlow _flow() => _photoFlow ??= VisitPhotoFlow(
         upload: (files) => context.read<AppConfig>().apiClient.uploadActivityPhotos(_id, files),
         location: _location,
+        target: PhotoTarget('activity', _id),
         onProgress: (p) {
           if (mounted) setState(() => _photoProgress = p);
         },
@@ -309,6 +323,69 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     return sameDay ? '${day(s)} · ${hm(s)}–${hm(e)}' : '${day(s)} ${hm(s)} → ${day(e)} ${hm(e)}';
   }
 
+  bool _deciding = false;
+
+  /// Waiting for approval: who decides; the approver approves / rejects here
+  /// (like the web's Service Journey panel).
+  Widget _approvalCard(BuildContext context, Map<String, dynamic> row) {
+    final theme = Theme.of(context);
+    final me = context.read<AppConfig>().session.userId;
+    final mine = '${row['approver_user_id'] ?? ''}' == '$me';
+    Future<void> decide(bool approve) async {
+      String? note;
+      if (!approve) {
+        final ctrl = TextEditingController();
+        note = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(tr('ไม่อนุมัติกิจกรรม')),
+            content: TextField(key: const ValueKey('act-reject-note'), controller: ctrl, autofocus: true, maxLines: 3, decoration: InputDecoration(labelText: tr('เหตุผล'))),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
+              FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('ไม่อนุมัติ'))),
+            ],
+          ),
+        );
+        if (note == null) return;
+      }
+      if (!mounted) return;
+      final api = context.read<AppConfig>().apiClient;
+      final messenger = ScaffoldMessenger.of(context);
+      setState(() => _deciding = true);
+      try {
+        approve ? await api.approveActivity(_id) : await api.rejectActivity(_id, note: note);
+        messenger.showSnackBar(SnackBar(content: Text(tr(approve ? 'อนุมัติกิจกรรมแล้ว' : 'ไม่อนุมัติกิจกรรมแล้ว'))));
+        await _loadRecord();
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      } finally {
+        if (mounted) setState(() => _deciding = false);
+      }
+    }
+
+    return NxSurfaceCard(
+      key: const ValueKey('act-approval'),
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Icon(NxI.shieldCheck, size: 18, color: Color(0xFFD97706)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(tr('กิจกรรมนี้รออนุมัติ'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800))),
+        ]),
+        if ('${row['approver_name'] ?? row['approver_user_name'] ?? ''}'.isNotEmpty)
+          Padding(padding: const EdgeInsets.only(top: 6), child: Text('${tr('ผู้อนุมัติ')}: ${row['approver_name'] ?? row['approver_user_name']}', style: theme.textTheme.bodySmall)),
+        if (mine) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: FilledButton.icon(key: const ValueKey('act-approve'), onPressed: _deciding ? null : () => decide(true), icon: const Icon(NxI.check, size: 18), label: Text(tr('อนุมัติ')))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton.icon(key: const ValueKey('act-reject'), onPressed: _deciding ? null : () => decide(false), icon: Icon(NxI.x, size: 18, color: theme.colorScheme.error), label: Text(tr('ไม่อนุมัติ'), style: TextStyle(color: theme.colorScheme.error)))),
+          ]),
+        ],
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -339,6 +416,11 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
             onTap: _duplicate,
           ),
           NxHeaderMenuItem(
+            label: 'ส่งออก / แชร์',
+            icon: NxI.shareNetwork,
+            onTap: _export,
+          ),
+          NxHeaderMenuItem(
             label: 'ถ่ายรูป / แนบไฟล์',
             icon: NxI.camera,
             onTap: _quickAttach,
@@ -347,9 +429,15 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
         ],
       ),
       body: Builder(
-        builder: (context) => NxRefresh(
+        builder: (context) => Stack(children: [
+          NxRefresh(
           onRefresh: () => Future.wait([_loadRecord(), _loadVisit()]),
-          child: ListView(
+          child: NxSwipeTabs(
+            index: _tab,
+            count: 4,
+            onChanged: _setTab,
+            child: ListView(
+          controller: _scroll,
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(
             16,
@@ -383,6 +471,10 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 ],
               ),
             ),
+            if ('${row['approval_state'] ?? ''}' == 'pending') ...[
+              const SizedBox(height: 12),
+              _approvalCard(context, row),
+            ],
             if ((row['description']?.toString() ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 12),
               NxSurfaceCard(
@@ -391,21 +483,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               ),
             ],
             const SizedBox(height: 14),
-            NxSegmented(
-              labels: [
-                'ภาพรวม',
-                _comments.isEmpty
-                    ? 'คอมเม้นท์'
-                    : 'คอมเม้นท์ ${_comments.length}',
-                'ไฟล์',
-                'ประวัติ',
-              ],
-              index: _tab,
-              onChanged: (i) {
-                setState(() => _tab = i);
-                if (i == 3) _loadTimeline();
-              },
-            ),
+            KeyedSubtree(key: _tabsAnchor, child: _tabBar()),
             if (_tab == 1) ...[
               const SizedBox(height: 14),
               EntityCommentsPanel(
@@ -633,9 +711,34 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
           ],
         ),
         ),
+        ),
+          NxStickyTabs(
+            controller: _scroll,
+            anchorKey: _tabsAnchor,
+            top: NxScrollScaffold.topInset(context),
+            child: _tabBar(),
+          ),
+        ]),
       ),
     );
   }
+
+  final _scroll = ScrollController();
+  final _tabsAnchor = GlobalKey();
+
+  void _setTab(int i) {
+    setState(() => _tab = i);
+    if (i == 3) _loadTimeline();
+  }
+
+  Widget _tabBar() => NxScrollTabs(
+        keyPrefix: 'detail-tab-',
+        labels: const ['ภาพรวม', 'คอมเม้นท์', 'ไฟล์', 'ประวัติ'],
+        icons: const [NxI.sparkle, NxI.chatCircle, NxI.paperclip, NxI.clockCounterClockwise],
+        badges: [null, _comments.length, null, null],
+        index: _tab,
+        onChanged: _setTab,
+      );
 
   Widget _line(BuildContext context, IconData icon, String text) {
     final theme = Theme.of(context);
@@ -743,4 +846,26 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
       ),
     );
   }
+}
+
+/// Plain-text export of an activity (see the detail page's "ส่งออก / แชร์").
+String activityExportText(Map<String, dynamic> row, {required String when, String? link}) {
+  String v(String k) {
+    final s = '${row[k] ?? ''}'.trim();
+    return s == 'null' ? '' : s;
+  }
+
+  final desc = stripTags(v('description').replaceAll(RegExp(r'<br\s*/?>|</p>', caseSensitive: false), '\n'));
+  final who = [v('account_name'), v('customer_name')].where((e) => e.isNotEmpty).toSet().join(' · ');
+  return [
+    v('subject').isEmpty ? entityTitle(row, module: 'activity') : v('subject'),
+    '${tr('เวลา')}: $when',
+    if (v('activitytype').isNotEmpty) '${tr('ประเภท')}: ${v('activitytype')}',
+    if (v('status').isNotEmpty) '${tr('สถานะ')}: ${v('status')}',
+    if (v('location').isNotEmpty) '${tr('สถานที่')}: ${v('location')}',
+    if (who.isNotEmpty) '${tr('ลูกค้า')}: $who',
+    if (v('video_conference_url').isNotEmpty) '${tr('ลิงก์')}: ${v('video_conference_url')}',
+    if (desc.isNotEmpty) '\n$desc',
+    if (link != null && link.isNotEmpty) '\n$link',
+  ].join('\n');
 }

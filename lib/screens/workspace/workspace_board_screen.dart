@@ -247,10 +247,9 @@ class _WorkspaceBoardScreenState extends State<WorkspaceBoardScreen> {
   }
 
   Future<void> _open(Map<String, dynamic> item) async {
-    await nxPush<void>(
+    await nxOpenDetail<void>(
       context,
       TaskDetailScreen(task: {...item, 'board_id': _boardId, 'board_code': _code, 'board_name': _board['name']}),
-      root: true,
     );
     if (mounted) _load();
   }

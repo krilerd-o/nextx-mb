@@ -57,22 +57,38 @@ class NxFieldValueView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              tr(label),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+    // Airy rows: more space between fields, comfortable line height, and a
+    // hairline between rows so long values don't run into the next label.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35), width: 0.6)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 124,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 12, top: 1),
+                child: Text(
+                  tr(label),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
               ),
             ),
-          ),
-          Expanded(child: _value(context)),
-        ],
+            Expanded(
+              child: DefaultTextStyle.merge(
+                style: const TextStyle(height: 1.5),
+                child: _value(context),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

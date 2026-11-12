@@ -22,6 +22,9 @@ void main() {
     expect(requiredMenusFor('/crm/lead/42'), [MenuAccess.lead]);
     expect(requiredMenusFor('/fsm/service_contract/7'), [MenuAccess.serviceContract]);
     expect(requiredMenusFor('/chat/9'), [MenuAccess.chat]);
+    // ISAAC AI การสื่อสาร is its own Package menu (not every chat package has it).
+    expect(requiredMenusFor('/comm-ai'), [MenuAccess.commAi]);
+    expect(requiredMenusFor('/comm-ai/settings'), [MenuAccess.commAi]);
     expect(requiredMenusFor('/modules/quotation/3'), [MenuAccess.quotation]);
     expect(accessRedirectFor(salesOnly, '/modules/quotation/3'), AppRoutes.mainShell);
     expect(accessRedirectFor(salesOnly, '/modules/lead'), isNull);

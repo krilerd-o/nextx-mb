@@ -7,9 +7,9 @@ import 'package:provider/provider.dart';
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
 import '../../core/menu_access.dart';
+import '../../core/session_state.dart';
 import '../../core/nx_page_route.dart';
 import '../../services/api_client.dart';
-import '../../services/file_open.dart';
 import '../../widgets/fields/field_ui_type.dart';
 import '../../widgets/fields/nx_field_value.dart';
 import '../../widgets/fields/nx_lift_sheet.dart';
@@ -31,19 +31,31 @@ import '../../core/i18n.dart';
 import '../../core/effects.dart';
 import '../../core/recent_records.dart';
 import '../../core/detail_fields_pref.dart';
+import '../../core/journey_rules.dart';
+import '../../core/service_journey.dart';
+import '../journey/case_flows.dart';
+import '../docs/document_preview.dart';
+import '../../core/deal_stage.dart';
+import '../fsm/contract_flows.dart';
+import '../fsm/service_more.dart';
+import 'entity_share_sheet.dart';
+import '../fsm/inspection_lines.dart';
+import '../fsm/inspection_summary.dart';
+import '../journey/job_journey.dart';
+import '../journey/journey_controller.dart';
+import '../journey/journey_widgets.dart';
+import '../../widgets/nx_scroll_tabs.dart';
+import '../journey/quotation_journey.dart';
 import '../calendar/activity_detail_screen.dart';
 import '../calendar/activity_form_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../widgets/nx_refresh.dart';
 
 class EntityDetailScreen extends StatefulWidget {
-  const EntityDetailScreen({
-    super.key,
-    required this.module,
-    required this.row,
-    this.embedded = false,
-    this.onDeleted,
-  });
+  const EntityDetailScreen({super.key, required this.module, required this.row, this.embedded = false, this.onDeleted, this.initialTab});
+
+  /// Open on this tab (e.g. 'approval' from an approval notification).
+  final String? initialTab;
 
   final String module;
   final Map<String, dynamic> row;
@@ -65,23 +77,36 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   bool _loading = true;
   Object? _error;
   late Map<String, dynamic> _row;
-  int _tab = 0;
   List<Map<String, dynamic>> _timeline = [];
   bool _timelineLoading = false;
   bool _timelineLoaded = false;
 
   String get _id => strId(widget.row['id']);
 
+  /// Service Journey page (job / quotation on servers that support it).
+  bool _journey = false;
+  JourneyController? _jc;
+  bool _jBusy = false;
+
+  /// Current tab id (tabs differ per module / journey).
+  late String _tabId = widget.initialTab ?? (widget.module == 'inspection' ? 'insp-summary' : 'info');
+
   @override
   void initState() {
     super.initState();
     _row = Map<String, dynamic>.from(widget.row);
     _reload();
+    _probeJourney();
     if (widget.module == 'case') _loadFollow();
     if (context.read<AppConfig>().isLoggedIn) {
-      context.read<AppConfig>().apiClient.getUsersCached().then((u) {
-        if (mounted) setState(() => _users = u);
-      }).catchError((_) {});
+      context
+          .read<AppConfig>()
+          .apiClient
+          .getUsersCached()
+          .then((u) {
+            if (mounted) setState(() => _users = u);
+          })
+          .catchError((_) {});
     }
   }
 
@@ -89,11 +114,107 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   List<Map<String, dynamic>> _users = const [];
 
   final _heroScroll = ScrollController();
+  final _paneScroll = ScrollController();
+  final _leftScroll = ScrollController();
 
   @override
   void dispose() {
     _heroScroll.dispose();
+    _paneScroll.dispose();
+    _leftScroll.dispose();
+    _jc?.dispose();
     super.dispose();
+  }
+
+  Future<void> _probeJourney() async {
+    if (!ServiceJourney.handles(widget.module)) return;
+    final config = context.read<AppConfig>();
+    if (!config.isLoggedIn) return;
+    final ok = await ServiceJourney.supported(config.apiClient);
+    if (!ok || !mounted) return;
+    final jc = JourneyController(api: config.apiClient, module: widget.module, id: _id)..addListener(_onJourney);
+    setState(() {
+      _journey = true;
+      _jc = jc;
+      _tabId = widget.initialTab ?? 'summary';
+    });
+    jc.load();
+  }
+
+  void _onJourney() {
+    if (mounted) setState(() {});
+  }
+
+  void _goTab(String id) {
+    setState(() => _tabId = id);
+    if (id == 'history') _loadTimeline();
+  }
+
+  void _openRecord(String module, String id) {
+    nxPush<void>(context, module == 'activity' ? ActivityByIdLoader(id: id) : EntityByIdLoader(module: module, id: id));
+  }
+
+  List<({String value, String label})> _pickOptions(String key) => [
+    for (final o in _picklists[key] ?? const <Map<String, dynamic>>[])
+      () {
+        final p = NxPickOption.fromMap(o);
+        return (value: p.value, label: p.label);
+      }(),
+  ];
+
+  /// Next-step / stage / bar action on a journey page.
+  Future<void> _journeyAction(String action) async {
+    final jc = _jc;
+    if (jc == null || _jBusy) return;
+    setState(() => _jBusy = true);
+    var changed = false;
+    try {
+      if (widget.module == 'job') {
+        changed = await runJobAction(context, action: action, row: _row, ctrl: jc, goTab: _goTab);
+      } else {
+        changed = await runQuotationAction(
+          context,
+          action: action,
+          row: _row,
+          ctrl: jc,
+          goTab: _goTab,
+          open: _openRecord,
+          edit: () => _openEdit(context),
+          followUp: () => _createLinkedActivity(),
+          winReasons: _pickOptions('quotation_win_reason'),
+          lostReasons: _pickOptions('quotation_lost_reason'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _jBusy = false);
+    }
+    if (changed && mounted) {
+      _timelineLoaded = false;
+      await _reload();
+    }
+  }
+
+  /// Tabs: (id, label). Journey pages are shorter and start at "สรุป".
+  /// Wide (tablet / unfolded) layout: the primary tab sits in the left pane.
+  bool _wide = false;
+  String get _primaryTab => _journey ? 'summary' : (widget.module == 'inspection' ? 'insp-summary' : 'info');
+
+  List<(String, String)> _tabs() {
+    final all = _allTabs();
+    if (!_wide) return all;
+    final rest = all.where((t) => t.$1 != _primaryTab).toList();
+    return rest.isEmpty ? all : rest;
+  }
+
+  List<(String, String)> _allTabs() {
+    const comments = 'คอมเม้นท์';
+    if (_journey && widget.module == 'job') {
+      return [('summary', 'สรุป'), ('ops', 'ปฏิบัติงาน'), ('activities', 'กิจกรรม'), ('signatures', 'ลายเซ็น'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
+    }
+    if (_journey && widget.module == 'quotation') {
+      return [('summary', 'สรุป'), ('lines', 'รายการ'), ('approval', 'อนุมัติ'), ('activities', 'กิจกรรม'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
+    }
+    return [if (widget.module == 'inspection') ...[('insp-summary', 'สรุป'), ('checklist', 'รายการตรวจ')], ('info', 'ข้อมูล'), ('comments', comments), ('files', 'ไฟล์'), ('history', 'ประวัติ'), if (widget.module != 'activity') ('activities', 'กิจกรรม')];
   }
 
   /// Case watchers: whether I follow this case (server supports cases only).
@@ -112,9 +233,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     try {
       await context.read<AppConfig>().apiClient.setCaseFollow(_id, next);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tr(next ? 'ติดตามเคสนี้แล้ว — จะได้รับแจ้งเตือนเมื่อมีความเคลื่อนไหว' : 'เลิกติดตามแล้ว'))),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(next ? 'ติดตามเคสนี้แล้ว — จะได้รับแจ้งเตือนเมื่อมีความเคลื่อนไหว' : 'เลิกติดตามแล้ว'))));
       }
     } catch (e) {
       if (!mounted) return;
@@ -154,8 +273,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
           'subject': entityTitle(_row, module: widget.module),
           'customer_name': entityTitle(_row, module: widget.module),
           'activitytype': 'Visit',
-          for (final k in const ['email', 'email1', 'email_1st']) if (_row[k] != null && '${_row[k]}'.isNotEmpty) 'customer_email': _row[k],
-          for (final k in const ['mobile', 'mobile_1st', 'phone']) if (_row[k] != null && '${_row[k]}'.isNotEmpty) 'customer_mobile': _row[k],
+          for (final k in const ['email', 'email1', 'email_1st'])
+            if (_row[k] != null && '${_row[k]}'.isNotEmpty) 'customer_email': _row[k],
+          for (final k in const ['mobile', 'mobile_1st', 'phone'])
+            if (_row[k] != null && '${_row[k]}'.isNotEmpty) 'customer_mobile': _row[k],
           if (_row['account_name'] != null) 'account_name': _row['account_name'],
         },
       ),
@@ -193,6 +314,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         ErrorReporting.report(e, s);
       }
       if (!mounted) return;
+      _jc?.load();
       setState(() {
         if (record.isNotEmpty) _row = {..._row, ...record};
         _comments = comments;
@@ -216,10 +338,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     if ((_timelineLoaded && !force) || _timelineLoading) return;
     setState(() => _timelineLoading = true);
     try {
-      final rows = await context.read<AppConfig>().apiClient.getEntityTimeline(
-        widget.module,
-        _id,
-      );
+      final api = context.read<AppConfig>().apiClient;
+      final rows = await api.getEntityTimeline(widget.module, _id);
+      if (!mounted) return;
+      await _resolveTimelineRefs(api, rows);
       if (!mounted) return;
       setState(() {
         _timeline = rows;
@@ -237,7 +359,49 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       final p = NxPickOption.fromMap(o);
       if (p.value == value) return p.label;
     }
+    final related = _timelineRefModule(field);
+    if (related != null) return _refNames['$related:$value'] ?? value;
     return value;
+  }
+
+  /// Record names for ids in the history (`1591 → 1592` becomes account names).
+  final Map<String, String> _refNames = {};
+
+  /// Module a history field links to (account_id → account), or null.
+  String? _timelineRefModule(String field) {
+    for (final f in _fields) {
+      if (fieldName(f) == field) {
+        final m = resolveFieldUiType(f).entityModule;
+        if (m != null) return m;
+        break;
+      }
+    }
+    return _relatedModuleForField(field);
+  }
+
+  /// Looks up the names of linked records whose ids appear in field changes.
+  Future<void> _resolveTimelineRefs(ApiClient api, List<Map<String, dynamic>> rows) async {
+    final todo = <String, ({String module, String id})>{};
+    for (final e in rows) {
+      if (e['type']?.toString() != 'field_change') continue;
+      final module = _timelineRefModule('${e['field_name'] ?? ''}');
+      if (module == null) continue;
+      for (final v in [e['old_value'], e['new_value']]) {
+        final id = '${v ?? ''}'.trim();
+        final key = '$module:$id';
+        if (lookLikeId(id) && !_refNames.containsKey(key)) todo[key] = (module: module, id: id);
+      }
+    }
+    if (todo.isEmpty) return;
+    await Future.wait(todo.entries.take(30).map((t) async {
+      try {
+        final row = await api.getEntity(t.value.module, t.value.id);
+        final title = entityTitle(row, module: t.value.module);
+        if (title.isNotEmpty && title != 'รายการ' && title != 'ID ${t.value.id}') _refNames[t.key] = title;
+      } catch (_) {
+        // Deleted / no access: keep the id.
+      }
+    }));
   }
 
   List<({String value, String label})> _statusOptions(String? key) {
@@ -251,21 +415,154 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     ], current: _row[key]?.toString());
   }
 
-  Future<void> _changeStatus(String key, String value) async {
-    final before = _row[key];
-    setState(() => _row = {..._row, key: value});
+  /// Job → save its activities as a reusable template (like the web).
+  Future<void> _saveActivitiesAsTemplate() async {
+    final name = TextEditingController(text: '${_row['job_name'] ?? ''}'.trim());
+    final category = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('บันทึกเป็นเทมเพลตกิจกรรม')),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(key: const ValueKey('tpl-name'), controller: name, autofocus: true, decoration: InputDecoration(labelText: '${tr('ชื่อเทมเพลต')} *')),
+          const SizedBox(height: 8),
+          TextField(controller: category, decoration: InputDecoration(labelText: tr('หมวด (ไม่บังคับ)'))),
+          const SizedBox(height: 8),
+          Text(tr('ชื่องาน/ลูกค้าในหัวข้อกิจกรรมจะถูกแทนด้วยตัวแปร ใช้ซ้ำกับงานอื่นได้'), style: Theme.of(ctx).textTheme.bodySmall),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(key: const ValueKey('tpl-save'), onPressed: () => Navigator.pop(ctx, true), child: Text(tr('บันทึก'))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted || name.text.trim().isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<AppConfig>().apiClient.putEntity(widget.module, _id, {
-        key: value,
-      });
+      await context.read<AppConfig>().apiClient.saveJobActivitiesAsTemplate(_id, name: name.text.trim(), category: category.text.trim());
+      messenger.showSnackBar(SnackBar(content: Text(tr('บันทึกเป็นเทมเพลตแล้ว — เลือกได้ตอนสร้างกิจกรรมของงานถัดไป'))));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    }
+  }
+
+  /// Status picker sheet (same as the list's long-press "ปรับสถานะ").
+  Future<void> _pickStatus() async {
+    await EntityRecordActions.changeStatus(
+      context,
+      module: widget.module,
+      row: {..._row, 'id': _id},
+      picklists: _picklists.isEmpty ? null : _picklists,
+      onChanged: (k, v) {
+        if (mounted) setState(() => _row = {..._row, k: v});
+      },
+    );
+  }
+
+  Future<void> _changeStatus(String key, String value) async {
+    if (widget.module == 'service_contract') {
+      // Workflow only (the server ignores a plain contract_status update).
+      final action = await pickContractAction(context, {..._row, 'id': _id});
+      if (action == null || !mounted) return;
+      final rec = await ContractFlows.run(context, row: {..._row, 'id': _id}, action: action);
+      if (rec == null || !mounted) return;
+      setState(() => _row = {..._row, ...rec});
       _timelineLoaded = false;
-      if (_tab == 3) _loadTimeline(force: true);
+      return;
+    }
+    Map<String, dynamic> payload = {key: value};
+    if (widget.module == 'deal' && key == 'deal_stage') {
+      String? lost;
+      if (value == kDealClosedLost) {
+        lost = await askDealLostReason(context, current: '${_row['closed_reason'] ?? ''}');
+        if (lost == null || !mounted) return;
+      }
+      payload = dealStagePayload(value, lostReason: lost);
+    }
+    final before = _row[key];
+    setState(() => _row = {..._row, ...payload});
+    try {
+      await context.read<AppConfig>().apiClient.putEntity(widget.module, _id, payload);
+      if (widget.module == 'deal' && value == kDealClosedWon && '${_row['related_board_id'] ?? ''}'.isEmpty && mounted) {
+        // Like the web: offer a delivery board right after winning.
+        showDealWorkspaceHandoff(context, _id, afterWon: true);
+      }
+      _timelineLoaded = false;
+      if (_tabId == 'history') _loadTimeline(force: true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _row = {..._row, key: before});
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    }
+  }
+
+  /// Case: stepper + action buttons; every change goes through the web's
+  /// workflow (`/workflow-action`) with its window, never a plain PUT.
+  Widget _caseStrip() {
+    final st = _row['case_status'];
+    final cancelled = classifyCaseStatus(st) == 'cancelled';
+    final steps = caseSteps();
+    final idx = caseStepIndex(st);
+    final options = [for (final s in steps) (value: s.id, label: s.label), if (cancelled) (value: CaseStatus.cancelled, label: tr('ยกเลิก'))];
+    final actions = caseActions(st);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        EntityStatusStepper(
+          options: options,
+          current: cancelled ? CaseStatus.cancelled : steps[idx < 0 ? 0 : idx].id,
+          onSelect: (v) {
+            final i = steps.indexWhere((s) => s.id == v);
+            if (i == idx) return;
+            final a = caseStepAction(i);
+            if (a == null || i < idx) {
+              showCaseNotAllowed(context, 'ย้อนสถานะเคสกลับไม่ได้', hint: 'เคสเดินหน้าได้อย่างเดียว: รับเคส → ส่งต่อ → ปิดเคส หรือยกเลิกเคส');
+              return;
+            }
+            _caseAction(a);
+          },
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            key: const ValueKey('case-history-btn'),
+            onPressed: () => showCaseStatusHistory(context, _id),
+            icon: const Icon(NxI.clockCounterClockwise, size: 16),
+            label: Text(tr('ประวัติสถานะ')),
+          ),
+        ),
+        if (actions.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final a in actions)
+                a == 'cancel'
+                    ? OutlinedButton.icon(
+                        key: ValueKey('case-btn-$a'),
+                        style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFE11D48)),
+                        onPressed: () => _caseAction(a),
+                        icon: const Icon(NxI.x, size: 16),
+                        label: Text(caseActionLabel(a)),
+                      )
+                    : (a == actions.first ? FilledButton.icon : FilledButton.tonalIcon)(
+                        key: ValueKey('case-btn-$a'),
+                        onPressed: () => _caseAction(a),
+                        icon: Icon(switch (a) { 'accept' => NxI.check, 'close' => NxI.flag, 'wait' => NxI.pause, 'resume' => NxI.play, _ => NxI.arrowRight }, size: 16),
+                        label: Text(caseActionLabel(a)),
+                      ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _caseAction(String action) async {
+    final ok = await CaseFlows.run(context, caseId: _id, action: action, row: _row);
+    if (ok && mounted) {
+      _timelineLoaded = false;
+      _reload();
     }
   }
 
@@ -275,13 +572,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     if (r != null && mounted) _reload();
   }
 
-  Future<void> _duplicate() => EntityRecordActions.duplicate(
-        context,
-        module: widget.module,
-        row: _row,
-        fields: _fields,
-        picklists: _picklists,
-      );
+  Future<void> _duplicate() => EntityRecordActions.duplicate(context, module: widget.module, row: _row, fields: _fields, picklists: _picklists);
 
   /// Camera / gallery / file → posted as a comment with attachments.
   Future<void> _quickAttach() async {
@@ -314,9 +605,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       await _reload();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }
 
@@ -342,332 +631,525 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final canConvert = widget.module == 'lead' && perms.canEdit && !EntityRowPerms.leadLocked(_row) && !_loading;
     final statusKey = entityStatusKey(_row, widget.module);
     final statusOptions = _statusOptions(statusKey);
+    // Record parts: 'all' (phone), or the left / right pane on wide screens.
+    List<Widget> detailParts({String pane = 'all'}) {
+      final head = pane != 'right';
+      final tabs = pane != 'left';
+      final bodyTab = pane == 'left' ? _primaryTab : _tabsResolved();
+      return [
+        if (head) ...[
+          NxSurfaceCard(
+            radius: 28,
+            padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
+            child: Column(
+              children: [
+                // Lite "metaball": the avatar shrinks, rises and melts into
+                // the header as you scroll.
+                AnimatedBuilder(
+                  animation: _heroScroll,
+                  builder: (context, child) {
+                    if (!Effects.animate(context) || !_heroScroll.hasClients) return child!;
+                    final t = (_heroScroll.offset / 140).clamp(0.0, 1.0);
+                    return Opacity(
+                      opacity: 1 - t * 0.85,
+                      child: Transform.translate(
+                        offset: Offset(0, -26 * t),
+                        child: Transform.scale(scale: 1 - 0.5 * t, child: child),
+                      ),
+                    );
+                  },
+                  child: Hero(
+                    tag: 'entity-${widget.module}-$_id',
+                    child: NxAvatar(label: title, size: 76),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  tr(title),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                if (people != null && people.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    tr(people),
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ],
+                if (status != null && statusOptions.isEmpty && !_journey) ...[const SizedBox(height: 10), Chip(label: Text(tr(status)), visualDensity: VisualDensity.compact)],
+                const SizedBox(height: 12),
+                EntityQuickActions(row: _row, onDuplicate: canEdit ? _duplicate : null),
+                if (canConvert) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton.icon(
+                      key: const ValueKey('lead-convert-cta'),
+                      icon: const Icon(NxI.userCheck),
+                      label: Text(tr('แปลงเป็นลูกค้า')),
+                      style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                      onPressed: _convertLead,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (_journey) ...[
+            const SizedBox(height: 12),
+            _journeyStrip(canEdit),
+          ] else if (widget.module == 'case') ...[
+            const SizedBox(height: 12),
+            _caseStrip(),
+          ] else if (statusOptions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            EntityStatusStepper(
+              options: statusOptions,
+              current: statusKey == null ? null : statusCurrent(widget.module, _row[statusKey]?.toString()),
+              onSelect: canEdit
+                  ? (v) => widget.module == 'lead' && isLeadConvertedStatus(v)
+                        // Converted only through the convert window (creates Account / Contact).
+                        ? _convertLead()
+                        : _changeStatus(statusKey!, v)
+                  : null,
+            ),
+            if (widget.module == 'deal' && canEdit && !isClosedDealStage(_row['deal_stage'])) ...[
+              const SizedBox(height: 8),
+              Row(children: [
+                if (nextDealStage(_row['deal_stage']) != null)
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      key: const ValueKey('deal-next-stage'),
+                      onPressed: () => _changeStatus('deal_stage', nextDealStage(_row['deal_stage'])!),
+                      icon: const Icon(NxI.arrowRight, size: 18),
+                      label: Text('${tr('เลื่อนไป')} ${_pickOptions('deal_stage').where((o) => o.value == nextDealStage(_row['deal_stage'])).firstOrNull?.label ?? nextDealStage(_row['deal_stage'])}', overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  key: const ValueKey('deal-close-lost'),
+                  onPressed: () => _changeStatus('deal_stage', kDealClosedLost),
+                  icon: Icon(NxI.x, size: 18, color: theme.colorScheme.error),
+                  label: Text(tr('ปิดแพ้'), style: TextStyle(color: theme.colorScheme.error)),
+                ),
+              ]),
+            ],
+          ],
+        ],
+        if (tabs) ...[
+          const SizedBox(height: 14),
+          KeyedSubtree(key: _tabsAnchor, child: _tabBar()),
+          if (_loading) ...[const SizedBox(height: 16), const NxSkeletonDetail()],
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 12),
+              child: Column(
+                children: [
+                  Text(tr(formatApiError(_error!)), style: TextStyle(color: theme.colorScheme.error)),
+                  TextButton(onPressed: _reload, child: Text(tr('ลองใหม่'))),
+                ],
+              ),
+            ),
+        ],
+        const SizedBox(height: 14),
+        if (!_loading)
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: KeyedSubtree(
+              key: ValueKey(bodyTab),
+              child: switch (bodyTab) {
+                'summary' => _journeySummary(canEdit, session),
+                'ops' => _jobOps(canEdit, session),
+                'signatures' => JobSignaturesTab(jobId: _id, ctrl: _jc!, canEdit: canEdit, row: _row, onChanged: _reload),
+                'lines' => _quotationLines(canEdit),
+                'approval' => QuotationApprovalTab(row: _row, ctrl: _jc!, meId: int.tryParse(session.userId ?? ''), canEdit: canEdit, onAction: _journeyAction),
+                'checklist' => InspectionLinesEditor(inspectionId: _id, canEdit: canEdit),
+                'insp-summary' => InspectionSummary(
+                  row: {..._row, 'id': _id},
+                  canEdit: canEdit,
+                  onGoTab: _goTab,
+                  onOpen: _openRecord,
+                  onChangeStatus: canEdit ? _pickStatus : null,
+                  statusLabel: _pickOptions('inspection_status').where((o) => o.value == '${_row['inspection_status'] ?? ''}').firstOrNull?.label,
+                ),
+                'comments' => EntityCommentsPanel(module: widget.module, id: _id, comments: _comments, onChanged: _reload),
+                'files' => EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
+                'history' => EntityHistoryPanel(events: _timeline, loading: _timelineLoading, valueLabel: _valueLabel),
+                'activities' => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_journey && widget.module == 'job' && canEdit) ...[
+                      FilledButton.tonalIcon(
+                        key: const ValueKey('job-gen-activities'),
+                        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+                        onPressed: () => _journeyAction('gen_activity'),
+                        icon: const Icon(NxI.calendarPlus),
+                        label: Text(tr('สร้างกิจกรรมของงาน (เทมเพลต / ด่วน)')),
+                      ),
+                      const SizedBox(height: 6),
+                      TextButton.icon(
+                        key: const ValueKey('job-save-activity-template'),
+                        onPressed: _saveActivitiesAsTemplate,
+                        icon: const Icon(NxI.copySimple, size: 18),
+                        label: Text(tr('บันทึกกิจกรรมของงานนี้เป็นเทมเพลต')),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                    EntityActivitiesPanel(
+                      module: widget.module,
+                      id: _id,
+                      title: entityTitle(_row, module: widget.module),
+                      onOpen: (r) => nxPush<void>(context, ActivityDetailScreen(row: r), root: true),
+                      onCreate: _createLinkedActivity,
+                    ),
+                  ],
+                ),
+                _ => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (widget.module == 'job' && MenuAccess.allow(session, MenuAccess.inspection)) ...[
+                      const SizedBox(height: 16),
+                      NxHeroCta(
+                        label: 'ใบตรวจรับของงานนี้',
+                        onPressed: () => nxPush<void>(context, JobInspectionScreen(job: _row)),
+                      ),
+                    ],
+                    Builder(
+                      builder: (context) {
+                        final rows = _valueRows();
+                        return NxSurfaceCard(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Padding(padding: const EdgeInsets.only(top: 6, bottom: 6), child: _fieldsToggle()),
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 220),
+                                alignment: Alignment.topCenter,
+                                child: Column(children: rows),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    EntityOpsSection(
+                      module: widget.module,
+                      id: _id,
+                      row: _row,
+                      canEdit: canEdit,
+                      journey: _journey,
+                      onOpen: (module, id, {row}) {
+                        nxPush<void>(context, row != null ? EntityDetailScreen(module: module, row: {...row, 'id': id}) : EntityByIdLoader(module: module, id: id));
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    Text(tr('แท็ก'), style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    NxSurfaceCard(
+                      padding: const EdgeInsets.all(12),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final t in _tags) InputChip(deleteIcon: const Icon(NxI.x, size: 16), label: Text(tr(t['name']?.toString() ?? '')), onDeleted: () => _toggleTag(t)),
+                          ActionChip(label: Text(tr('เลือกแท็ก')), onPressed: _catalog.isEmpty ? null : _pickTags),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              },
+            ),
+          ),
+      ];
+    }
+
     return NxScrollScaffold(
       insetBody: false,
       header: NxAppHeader(
         title: title,
         automaticallyImplyLeading: !widget.embedded,
         actions: [
-          if (widget.module == 'quotation' ||
-              widget.module == 'inspection' ||
-              widget.module == 'job') ...[
-            IconButton(
-              tooltip: tr('เปิด PDF'),
-              icon: const Icon(NxI.filePdf),
-              onPressed: _openPdf,
-            ),
-            IconButton(
-              tooltip: tr('แชร์ PDF'),
-              icon: const Icon(NxI.shareNetwork),
-              onPressed: _sharePdf,
-            ),
+          if (widget.module == 'quotation' || widget.module == 'inspection' || widget.module == 'job') ...[
+            IconButton(tooltip: tr('ดูเอกสาร PDF'), icon: const Icon(NxI.filePdf), onPressed: () => openRecordDocument(context, widget.module, {..._row, 'id': _id})),
           ],
-          if (canEdit)
-            IconButton(
-              tooltip: tr('แก้ไข'),
-              icon: const Icon(NxI.pencilSimple),
-              onPressed: () => _openEdit(context),
-            ),
+          if (canEdit) IconButton(tooltip: tr('แก้ไข'), icon: const Icon(NxI.pencilSimple), onPressed: () => _openEdit(context)),
         ],
         menu: canEdit && context.select((AppConfig c) => c.isLoggedIn)
             ? [
-                if (canConvert)
-                  NxHeaderMenuItem(
-                    label: 'แปลงเป็นลูกค้า',
-                    icon: NxI.userCheck,
-                    onTap: _convertLead,
-                  ),
-                NxHeaderMenuItem(
-                  label: 'ทำซ้ำ',
-                  icon: NxI.copySimple,
-                  onTap: _duplicate,
-                ),
-                NxHeaderMenuItem(
-                  label: 'แชร์ลิงก์',
-                  icon: NxI.shareNetwork,
-                  onTap: _shareLink,
-                ),
+                if (canConvert) NxHeaderMenuItem(label: 'แปลงเป็นลูกค้า', icon: NxI.userCheck, onTap: _convertLead),
+                NxHeaderMenuItem(label: 'ทำซ้ำ', icon: NxI.copySimple, onTap: _duplicate),
+                NxHeaderMenuItem(label: 'แชร์ลิงก์', icon: NxI.shareNetwork, onTap: _shareLink),
+                NxHeaderMenuItem(label: 'แชร์ให้ผู้ใช้ / Role', icon: NxI.users, onTap: () => showEntityShareSheet(context, module: widget.module, id: _id, title: entityTitle(_row, module: widget.module))),
                 NxHeaderMenuItem(
                   label: 'ถาม Isaac',
                   icon: NxI.sparkle,
-                  onTap: () => context.push(AppRoutes.aiAsk(module: widget.module, id: _id, title: entityTitle(_row, module: widget.module))),
+                  onTap: () => context.push(
+                    AppRoutes.aiAsk(
+                      module: widget.module,
+                      id: _id,
+                      title: entityTitle(_row, module: widget.module),
+                    ),
+                  ),
                 ),
                 if (widget.module == 'case' && _following != null)
-                  NxHeaderMenuItem(
-                    label: _following! ? 'เลิกติดตามเคส' : 'ติดตามเคส',
-                    icon: _following! ? NxI.bellSlash : NxI.bellRinging,
-                    onTap: _toggleFollow,
-                  ),
-                NxHeaderMenuItem(
-                  label: 'ถ่ายรูป / แนบไฟล์',
-                  icon: NxI.camera,
-                  onTap: _quickAttach,
-                ),
-                if (perms.canDelete)
-                  NxHeaderMenuItem(
-                    label: 'ลบ',
-                    icon: NxI.trash,
-                    onTap: _confirmDelete,
-                  ),
+                  NxHeaderMenuItem(label: _following! ? 'เลิกติดตามเคส' : 'ติดตามเคส', icon: _following! ? NxI.bellSlash : NxI.bellRinging, onTap: _toggleFollow),
+                NxHeaderMenuItem(label: 'ถ่ายรูป / แนบไฟล์', icon: NxI.camera, onTap: _quickAttach),
+                if (perms.canDelete) NxHeaderMenuItem(label: 'ลบ', icon: NxI.trash, onTap: _confirmDelete),
               ]
             : null,
       ),
-      body: Builder(
-        builder: (context) => NxRefresh(
-          edgeOffset: NxScrollScaffold.topInset(context),
-          color: theme.colorScheme.primary,
-          onRefresh: _reload,
-          child: ListView(
-            controller: _heroScroll,
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(
-              16,
-              8 + NxScrollScaffold.topInset(context),
-              16,
-              28,
-            ),
+      body: LayoutBuilder(
+        builder: (context, box) {
+          final wide = box.maxWidth >= 820 && !_loading;
+          if (wide != _wide) _wide = wide;
+          if (wide) return _wideBody(context, box.maxWidth, detailParts);
+          return Stack(
             children: [
-              NxSurfaceCard(
-                radius: 28,
-                padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
-                child: Column(
-                  children: [
-                    // Lite "metaball": the avatar shrinks, rises and melts into
-                    // the header as you scroll.
-                    AnimatedBuilder(
-                      animation: _heroScroll,
-                      builder: (context, child) {
-                        if (!Effects.animate(context) || !_heroScroll.hasClients) return child!;
-                        final t = (_heroScroll.offset / 140).clamp(0.0, 1.0);
-                        return Opacity(
-                          opacity: 1 - t * 0.85,
-                          child: Transform.translate(
-                            offset: Offset(0, -26 * t),
-                            child: Transform.scale(scale: 1 - 0.5 * t, child: child),
-                          ),
-                        );
-                      },
-                      child: Hero(
-                        tag: 'entity-${widget.module}-$_id',
-                        child: NxAvatar(label: title, size: 76),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      tr(title),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (people != null && people.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        tr(people),
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                    if (status != null && statusOptions.isEmpty) ...[
-                      const SizedBox(height: 10),
-                      Chip(
-                        label: Text(tr(status)),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    EntityQuickActions(
-                      row: _row,
-                      onDuplicate: canEdit ? _duplicate : null,
-                    ),
-                    if (canConvert) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: FilledButton.icon(
-                          key: const ValueKey('lead-convert-cta'),
-                          icon: const Icon(NxI.userCheck),
-                          label: Text(tr('แปลงเป็นลูกค้า')),
-                          style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                          onPressed: _convertLead,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (statusOptions.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                EntityStatusStepper(
-                  options: statusOptions,
-                  current: statusKey == null
-                      ? null
-                      : statusCurrent(widget.module, _row[statusKey]?.toString()),
-                  onSelect: canEdit
-                      ? (v) => widget.module == 'lead' && isLeadConvertedStatus(v)
-                          // Converted only through the convert window (creates Account / Contact).
-                          ? _convertLead()
-                          : _changeStatus(statusKey!, v)
-                      : null,
-                ),
-              ],
-              const SizedBox(height: 14),
-              NxSegmented(
-                labels: [
-                  'ข้อมูล',
-                  _comments.isEmpty
-                      ? 'คอมเม้นท์'
-                      : 'คอมเม้นท์ ${_comments.length}',
-                  'ไฟล์',
-                  'ประวัติ',
-                  if (widget.module != 'activity') 'กิจกรรม',
-                ],
-                index: _tab,
-                onChanged: (i) {
-                  setState(() => _tab = i);
-                  if (i == 3) _loadTimeline();
-                },
-              ),
-              if (_loading) ...[
-                const SizedBox(height: 16),
-                const NxSkeletonDetail(),
-              ],
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12, bottom: 12),
-                  child: Column(
-                    children: [
-                      Text(
-                        tr(formatApiError(_error!)),
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                      TextButton(
-                        onPressed: _reload,
-                        child: Text(tr('ลองใหม่')),
-                      ),
-                    ],
+              NxRefresh(
+                edgeOffset: NxScrollScaffold.topInset(context),
+                color: theme.colorScheme.primary,
+                onRefresh: _reload,
+                child: NxSwipeTabs(
+                  index: _tabIndex(),
+                  count: _tabs().length,
+                  onChanged: (i) => _goTab(_tabs()[i].$1),
+                  child: ListView(
+                    controller: _heroScroll,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(16, 8 + NxScrollScaffold.topInset(context), 16, 28),
+                    children: detailParts(),
                   ),
                 ),
-              const SizedBox(height: 14),
-              if (!_loading)
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: KeyedSubtree(
-                    key: ValueKey(_tab),
-                    child: switch (_tab) {
-                      1 => EntityCommentsPanel(
-                        module: widget.module,
-                        id: _id,
-                        comments: _comments,
-                        onChanged: _reload,
-                      ),
-                      2 => EntityFilesPanel(
-                        comments: _comments,
-                        onAdd: _quickAttach,
-                      ),
-                      3 => EntityHistoryPanel(
-                        events: _timeline,
-                        loading: _timelineLoading,
-                        valueLabel: _valueLabel,
-                      ),
-                      4 => EntityActivitiesPanel(
-                        module: widget.module,
-                        id: _id,
-                        title: entityTitle(_row, module: widget.module),
-                        onOpen: (r) => nxPush<void>(context, ActivityDetailScreen(row: r), root: true),
-                        onCreate: _createLinkedActivity,
-                      ),
-                      _ => Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (widget.module == 'job' &&
-                              MenuAccess.allow(
-                                session,
-                                MenuAccess.inspection,
-                              )) ...[
-                            const SizedBox(height: 16),
-                            NxHeroCta(
-                              label: 'สร้างใบตรวจรับ',
-                              onPressed: () => nxPush<void>(
-                                context,
-                                JobInspectionScreen(job: _row),
-                              ),
-                            ),
-                          ],
-                          Builder(builder: (context) {
-                            final rows = _valueRows();
-                            return NxSurfaceCard(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 6, bottom: 6),
-                                    child: _fieldsToggle(),
-                                  ),
-                                  AnimatedSize(
-                                    duration: const Duration(milliseconds: 220),
-                                    alignment: Alignment.topCenter,
-                                    child: Column(children: rows),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                          const SizedBox(height: 16),
-                          EntityOpsSection(
-                            module: widget.module,
-                            id: _id,
-                            row: _row,
-                            canEdit: canEdit,
-                            onOpen: (module, id, {row}) {
-                              nxPush<void>(
-                                context,
-                                row != null
-                                    ? EntityDetailScreen(
-                                        module: module,
-                                        row: {...row, 'id': id},
-                                      )
-                                    : EntityByIdLoader(module: module, id: id),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                          Text(tr('แท็ก'), style: theme.textTheme.titleMedium),
-                          const SizedBox(height: 8),
-                          NxSurfaceCard(
-                            padding: const EdgeInsets.all(12),
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (final t in _tags)
-                                  InputChip(
-        deleteIcon: const Icon(NxI.x, size: 16),
-                                    label: Text(tr(t['name']?.toString() ?? '')),
-                                    onDeleted: () => _toggleTag(t),
-                                  ),
-                                ActionChip(
-                                  label: Text(tr('เลือกแท็ก')),
-                                  onPressed: _catalog.isEmpty
-                                      ? null
-                                      : _pickTags,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    },
-                  ),
+              ),
+              // Tabs stay under the header while reading down the page.
+              NxStickyTabs(controller: _heroScroll, anchorKey: _tabsAnchor, top: NxScrollScaffold.topInset(context), child: _tabBar()),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Two panes: record + primary tab on the left, the other tabs on the right.
+  Widget _wideBody(BuildContext context, double width, List<Widget> Function({String pane}) parts) {
+    final top = NxScrollScaffold.topInset(context);
+    final theme = Theme.of(context);
+    final left = (width * 0.42).clamp(360.0, 520.0);
+    return Row(
+      key: const ValueKey('detail-wide'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: left,
+          child: NxRefresh(
+            edgeOffset: top,
+            color: theme.colorScheme.primary,
+            onRefresh: _reload,
+            child: ListView(
+              key: const ValueKey('detail-pane-left'),
+              controller: _leftScroll,
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(16, 8 + top, 8, 28),
+              children: parts(pane: 'left'),
+            ),
+          ),
+        ),
+        VerticalDivider(width: 1, thickness: 1, color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        Expanded(
+          child: Stack(
+            children: [
+              NxSwipeTabs(
+                index: _tabIndex(),
+                count: _tabs().length,
+                onChanged: (i) => _goTab(_tabs()[i].$1),
+                child: ListView(
+                  key: const ValueKey('detail-pane-right'),
+                  controller: _paneScroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(8, 8 + top - 14, 16, 28),
+                  children: parts(pane: 'right'),
                 ),
+              ),
+              NxStickyTabs(controller: _paneScroll, anchorKey: _tabsAnchor, top: top, horizontal: 8, child: _tabBar()),
             ],
           ),
         ),
-      ),
+      ],
+    );
+  }
+
+  final _tabsAnchor = GlobalKey();
+
+  int _tabIndex() {
+    final i = _tabs().indexWhere((t) => t.$1 == _tabsResolved());
+    return i < 0 ? 0 : i;
+  }
+
+  static const _tabIcons = {
+    'summary': NxI.sparkle,
+    'info': NxI.info,
+    'comments': NxI.chatCircle,
+    'files': NxI.paperclip,
+    'history': NxI.clockCounterClockwise,
+    'activities': NxI.calendarCheck,
+    'ops': NxI.wrench,
+    'signatures': NxI.penLine,
+    'lines': NxI.listChecks,
+    'approval': NxI.shieldCheck,
+    'checklist': NxI.listChecks,
+    'insp-summary': NxI.chartPie,
+  };
+
+  Widget _tabBar() {
+    final tabs = _tabs();
+    return NxScrollTabs(
+      keyPrefix: 'detail-tab-',
+      labels: [for (final t in tabs) t.$2],
+      icons: [for (final t in tabs) _tabIcons[t.$1]],
+      badges: [for (final t in tabs) t.$1 == 'comments' ? _comments.length : null],
+      index: _tabIndex(),
+      onChanged: (i) => _goTab(tabs[i].$1),
+    );
+  }
+
+  String _tabsResolved() {
+    final tabs = _tabs();
+    return tabs.any((t) => t.$1 == _tabId) ? _tabId : tabs.first.$1;
+  }
+
+  Widget _journeyStrip(bool canEdit) {
+    if (widget.module == 'job') {
+      final cur = _row['job_status'];
+      final allowed = jobWorkflowActions(cur);
+      final cancelled = canonicalJobStatus(cur) == 'Cancelled';
+      return JourneyStageStrip(
+        steps: jobSteps(),
+        current: jobCurrentStep(_row),
+        side: cancelled ? 'cancelled' : null,
+        sideLabel: jobSideLabel(_row),
+        onPick: !canEdit || _jBusy
+            ? null
+            : (i) {
+                final a = jobStepAction(cur, kJobMain[i]);
+                if (a != null && allowed.contains(a)) {
+                  _journeyAction(a);
+                } else if (a != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ขั้นนี้ทำต่อจากสถานะปัจจุบันไม่ได้'))));
+                }
+              },
+        sideChips: [if (canEdit && allowed.contains('cancel')) ('cancel', tr('ยกเลิกงาน'), () => _journeyAction('cancel'))],
+      );
+    }
+    final jc = _jc!;
+    final st = quotationStage(_row, approvalRequired: jc.approvalRequired, customer: jc.customer);
+    final finished = isQuotationFinished(_row);
+    return JourneyStageStrip(
+      steps: quotationSteps(st),
+      current: kQuotationStages.indexOf(st.stage),
+      skipped: st.skippedApproval ? const {'approval', 'approved'} : const {},
+      side: st.side,
+      sideLabel: quotationSideLabel(st),
+      sideDanger: st.side != 'revised',
+      onPick: !canEdit || _jBusy || finished
+          ? null
+          : (i) {
+              final step = kQuotationStages[i];
+              if (step == 'approval' && st.stage == 'open') _goTab('approval');
+              if (step == 'closed') _journeyAction('close_sale');
+            },
+      sideChips: [
+        if (canEdit && !finished) ('cancel', tr('ยกเลิก'), () => _journeyAction('cancel')),
+        if (canEdit && st.side == 'cancelled') ('reopen', tr('เปิดกลับ'), () => _journeyAction('reopen_quotation')),
+      ],
+    );
+  }
+
+  Widget _journeySummary(bool canEdit, SessionState session) {
+    final jc = _jc;
+    if (jc == null) return const SizedBox.shrink();
+    if (widget.module == 'job') {
+      return JobSummaryTab(row: _row, ctrl: jc, canEdit: canEdit, busy: _jBusy, onAction: _journeyAction, onGoTab: _goTab, onReload: _reload, onOpen: _openRecord);
+    }
+    return QuotationSummaryTab(
+      row: _row,
+      ctrl: jc,
+      canEdit: canEdit,
+      meId: int.tryParse(session.userId ?? ''),
+      comments: _comments,
+      busy: _jBusy,
+      jobEnabled: MenuAccess.allow(session, MenuAccess.job),
+      onAction: _journeyAction,
+      onGoTab: _goTab,
+      onReload: _reload,
+      onOpen: _openRecord,
+    );
+  }
+
+  Widget _jobOps(bool canEdit, SessionState session) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        JobExtrasPanel(id: _id, row: _row, canEdit: canEdit, onOpen: (module, id, {row}) => _openRecord(module, id)),
+        if (canEdit) ...[const SizedBox(height: 12), JobWorkspaceButton(jobId: _id)],
+        if (MenuAccess.allow(session, MenuAccess.inspection)) ...[
+          const SizedBox(height: 16),
+          NxHeroCta(
+            label: 'ใบตรวจรับของงานนี้',
+            onPressed: () => nxPush<void>(context, JobInspectionScreen(job: _row)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _quotationLines(bool canEdit) {
+    final theme = Theme.of(context);
+    final editable = isQuotationEditable(_row);
+    final st = canonicalQuotationStatus(_row['quotation_status']);
+    final lockKey = switch (st) {
+      QS.pending => 'pending',
+      QS.approved => 'approved',
+      QS.closed => 'closed',
+      QS.cancelled => 'cancelled',
+      QS.revised => 'revised',
+      _ => null,
+    };
+    final (String, String)? exit = switch (lockKey) {
+      'revised' => ('open_latest', 'ไปฉบับล่าสุด'),
+      'closed' || 'cancelled' => ('duplicate', 'ทำสำเนาเป็นใบใหม่'),
+      'pending' => ('view_approval', 'ดูการอนุมัติ'),
+      'approved' => ('revise', 'Revise (สร้างฉบับแก้ไข)'),
+      _ => null,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!editable && lockKey != null) ...[
+          Container(
+            key: const ValueKey('qt-lines-locked'),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: const Color(0xFFD97706).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(16)),
+            child: Row(
+              children: [
+                const Icon(NxI.lock, color: Color(0xFFD97706)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(jt('journey.lines.lock.$lockKey', fallback: 'ใบเสนอราคานี้แก้ไขรายการไม่ได้'), style: theme.textTheme.bodyMedium),
+                ),
+                if (exit != null && canEdit) TextButton(onPressed: () => _journeyAction(exit.$1), child: Text(tr(exit.$2))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        QuotationLinesPanel(id: _id, canEdit: canEdit && editable),
+        if (isQuotationWon(_row)) ...[const SizedBox(height: 12), QuotationConvertBar(id: _id, onOpen: (module, id, {row}) => _openRecord(module, id))],
+      ],
     );
   }
 
@@ -681,9 +1163,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             for (final t in _catalog)
               CheckboxListTile(
                 title: Text(tr(t['name']?.toString() ?? '')),
-                value: _tags.any(
-                  (x) => x['id']?.toString() == t['id']?.toString(),
-                ),
+                value: _tags.any((x) => x['id']?.toString() == t['id']?.toString()),
                 onChanged: (_) {
                   Navigator.pop(ctx);
                   _toggleTag(t);
@@ -695,12 +1175,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     );
   }
 
-  static const _skipKeys = {
-    'id',
-    'business_id',
-    '_shared_permission',
-    '_dashboard_unowned',
-  };
+  static const _skipKeys = {'id', 'business_id', '_shared_permission', '_dashboard_unowned'};
 
   /// "มีข้อมูล" (default, remembered) vs "ทั้งหมด".
   bool _showAllFields = DetailFieldsPref.showAll;
@@ -722,24 +1197,26 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final theme = Theme.of(context);
     return Row(
       children: [
-        Expanded(child: Text(tr('รายละเอียด'), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall)),
+        Expanded(
+          child: Text(tr('รายละเอียด'), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+        ),
         Flexible(
           flex: 3,
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerRight,
             child: SegmentedButton<bool>(
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(value: false, label: Text(tr('มีข้อมูล'))),
-            ButtonSegment(value: true, label: Text(tr('ทั้งหมด ($_allFieldCount)'))),
-          ],
-          selected: {_showAllFields},
-          onSelectionChanged: (v) {
-            setState(() => _showAllFields = v.first);
-            DetailFieldsPref.set(v.first);
-          },
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(value: false, label: Text(tr('มีข้อมูล'))),
+                ButtonSegment(value: true, label: Text(tr('ทั้งหมด ($_allFieldCount)'))),
+              ],
+              selected: {_showAllFields},
+              onSelectionChanged: (v) {
+                setState(() => _showAllFields = v.first);
+                DetailFieldsPref.set(v.first);
+              },
             ),
           ),
         ),
@@ -786,9 +1263,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     return [
       for (final name in keys)
         () {
-          var uiType = byName[name] == null
-              ? FieldUiType.text
-              : resolveFieldUiType(byName[name]!);
+          var uiType = byName[name] == null ? FieldUiType.text : resolveFieldUiType(byName[name]!);
           final recId = lookupRecordId(_row[name]);
           final related = uiType.entityModule ?? _relatedModuleForField(name);
           if (related != null && uiType.entityModule == null) {
@@ -802,24 +1277,13 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             module: widget.module,
             relatedModule: related,
             options: [
-              for (final o
-                  in _picklists[name] ?? const <Map<String, dynamic>>[])
-                NxPickOption.fromMap(o),
+              for (final o in _picklists[name] ?? const <Map<String, dynamic>>[]) NxPickOption.fromMap(o),
               // Owner / assignee ids → names.
               if (uiType == FieldUiType.picklistUser || uiType == FieldUiType.multiPicklistUser || uiType == FieldUiType.owner || name == 'smownerid')
                 for (final u in _users) NxPickOption.fromMap(u),
-              if (_row['${name}_name'] != null && _row[name] != null)
-                NxPickOption(
-                  value: _row[name].toString(),
-                  label: _row['${name}_name'].toString(),
-                ),
+              if (_row['${name}_name'] != null && _row[name] != null) NxPickOption(value: _row[name].toString(), label: _row['${name}_name'].toString()),
             ],
-            onOpen: related != null && recId.isNotEmpty
-                ? () => nxPush<void>(
-                    context,
-                    EntityByIdLoader(module: related, id: recId),
-                  )
-                : null,
+            onOpen: related != null && recId.isNotEmpty ? () => nxPush<void>(context, EntityByIdLoader(module: related, id: recId)) : null,
           );
         }(),
     ];
@@ -909,44 +1373,6 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     }
   }
 
-  Future<({List<int> bytes, String name})> _pdfPayload() async {
-    final api = context.read<AppConfig>().apiClient;
-    if (widget.module == 'inspection') {
-      return (
-        bytes: await api.getInspectionPdf(_id),
-        name: 'inspection-$_id.pdf',
-      );
-    }
-    if (widget.module == 'job') {
-      return (bytes: await api.downloadJobPdf(_id), name: 'job-$_id.pdf');
-    }
-    return (bytes: await api.getQuotationPdf(_id), name: 'quotation-$_id.pdf');
-  }
-
-  Future<void> _openPdf() async {
-    try {
-      final pdf = await _pdfPayload();
-      await openPdfBytes(pdf.bytes, pdf.name);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-    }
-  }
-
-  Future<void> _sharePdf() async {
-    try {
-      final pdf = await _pdfPayload();
-      await sharePdfBytes(pdf.bytes, pdf.name);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-    }
-  }
-
   Future<void> _confirmDelete() async {
     final ok = await EntityRecordActions.delete(context, module: widget.module, row: _row);
     if (!ok || !mounted) return;
@@ -958,13 +1384,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   }
 
   Future<void> _openEdit(BuildContext context) async {
-    final saved = await EntityRecordActions.edit(
-      context,
-      module: widget.module,
-      row: _row,
-      fields: _fields,
-      picklists: _picklists,
-    );
+    final saved = await EntityRecordActions.edit(context, module: widget.module, row: _row, fields: _fields, picklists: _picklists);
     if (saved && context.mounted) _reload();
   }
 }

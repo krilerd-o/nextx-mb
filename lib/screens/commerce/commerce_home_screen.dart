@@ -81,7 +81,12 @@ class CommerceHomeScreen extends StatelessWidget {
         header: const NxAppHeader(title: 'ร้านค้า'),
         body: Column(
           children: [
-            TabBar(tabs: [for (final t in tabs) Tab(text: t.$1)]),
+            TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.center,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 20),
+              tabs: [for (final t in tabs) Tab(text: t.$1)],
+            ),
             Expanded(child: TabBarView(children: [for (final t in tabs) t.$2])),
           ],
         ),

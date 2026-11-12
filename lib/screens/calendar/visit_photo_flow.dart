@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart' show MultipartFile;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,10 +7,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/i18n.dart';
-import '../../core/thai_time.dart';
-import '../../services/geo_address.dart';
 import '../../services/location_service.dart';
-import '../../services/photo_watermark.dart';
+import '../../services/photo_pipeline.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import 'fast_take_screen.dart';
@@ -127,93 +127,125 @@ class PhotoRunProgress {
   final int total;
 }
 
-/// Picks (camera / gallery / Fast Take), asks the watermark mode, stamps every
-/// photo, then uploads in batches of [kFastTakeBatch]. Returns how many were
-/// uploaded; throws [PhotoUploadIncomplete] when some batches failed.
+/// Picks (camera / gallery / Fast Take), asks the watermark mode, then
+/// prepares + uploads every photo through [PhotoBatch] — while the user is
+/// still shooting in Fast Take. Returns how many were uploaded; throws
+/// [PhotoUploadIncomplete] when some photos failed (see [retryPending]).
 class VisitPhotoFlow {
   VisitPhotoFlow({
     required this.upload,
     this.onProgress,
     LocationService? location,
     this.pick,
+    this.target = const PhotoTarget('activity', ''),
   }) : _location = location ?? LocationService();
 
   final Future<void> Function(List<MultipartFile> files) upload;
   final void Function(PhotoRunProgress? p)? onProgress;
   final LocationService _location;
+  final PhotoTarget target;
 
   /// Test hook: returns the files instead of opening the camera / gallery.
   final Future<List<XFile>> Function(PhotoSource source)? pick;
 
-  /// Files from a failed batch, for "ลองใหม่".
+  /// Files that failed, for "ลองใหม่".
   List<MultipartFile> pending = const [];
+  PhotoBatch? _last;
 
-  Future<List<XFile>> _pick(BuildContext context, PhotoSource source) async {
+  Future<List<XFile>> _pickFiles(PhotoSource source) async {
     if (pick != null) return pick!(source);
     final picker = ImagePicker();
     switch (source) {
       case PhotoSource.camera:
-        final shot = await picker.pickImage(source: ImageSource.camera, imageQuality: 85, maxWidth: 2560);
+        final shot = await picker.pickImage(source: ImageSource.camera, imageQuality: 90, maxWidth: 2560, requestFullMetadata: false);
         return shot == null ? const [] : [shot];
       case PhotoSource.gallery:
-        return picker.pickMultiImage(imageQuality: 85, maxWidth: 2560);
+        return picker.pickMultiImage(imageQuality: 90, maxWidth: 2560, requestFullMetadata: false);
       case PhotoSource.fastTake:
-        final shots = await Navigator.of(context, rootNavigator: true).push<List<XFile>>(
-          MaterialPageRoute(fullscreenDialog: true, builder: (_) => const FastTakeScreen()),
-        );
-        return shots ?? const [];
+        return const [];
     }
   }
 
+  PhotoBatch _newBatch(bool withLocation) => PhotoBatch(
+        target,
+        withLocation: withLocation,
+        location: _location,
+        uploader: (t, p) async {
+          await upload([MultipartFile.fromBytes(p.bytes, filename: p.filename)]);
+          return null;
+        },
+      );
+
   Future<int> run(BuildContext context, PhotoSource source) async {
-    // Camera: ask first (the user decides before shooting); others after picking.
+    // Camera / Fast Take: decide before shooting; gallery: after picking.
     PhotoTagMode? mode;
-    if (source == PhotoSource.camera) {
+    if (source != PhotoSource.gallery) {
       mode = await askPhotoTagMode(context, source: source);
       if (mode == null || !context.mounted) return 0;
     }
-    final files = await _pick(context, source);
-    if (files.isEmpty || !context.mounted) return 0;
-    mode ??= await askPhotoTagMode(context, source: source, count: files.length);
-    if (mode == null) return 0;
-
-    final parts = <MultipartFile>[];
-    try {
-      WatermarkInfo? base;
-      if (mode == PhotoTagMode.withLocation) {
-        onProgress?.call(PhotoRunProgress('กำลังหาพิกัด…', 0, files.length));
-        final fix = await _location.currentFix();
-        final address = fix.address ?? await GeoAddress.lookup(fix.latitude, fix.longitude);
-        base = WatermarkInfo(at: thaiNow(), lat: fix.latitude, lng: fix.longitude, address: address);
-      }
-      for (var i = 0; i < files.length; i++) {
-        onProgress?.call(PhotoRunProgress('เตรียมรูป', i, files.length));
-        final f = files[i];
-        final bytes = await f.readAsBytes();
-        final name = f.name.isEmpty ? 'photo_${i + 1}.jpg' : f.name;
-        if (base == null) {
-          parts.add(MultipartFile.fromBytes(bytes, filename: name));
-        } else {
-          final shotAt = await _shotTime(f) ?? base.at;
-          final out = await watermarkPhoto(bytes, WatermarkInfo(at: shotAt, lat: base.lat, lng: base.lng, address: base.address));
-          parts.add(MultipartFile.fromBytes(out, filename: name.replaceAll(RegExp(r'\.(png|heic|heif|webp)$', caseSensitive: false), '.jpg')));
-        }
-      }
-      return await uploadBatches(parts);
-    } finally {
-      onProgress?.call(null);
+    PhotoBatch? batch;
+    List<XFile> picked = const [];
+    if (source == PhotoSource.fastTake && pick == null) {
+      // Location fix + processing + upload start while shooting.
+      batch = _newBatch(mode == PhotoTagMode.withLocation)..shooting = true;
+      _watch(batch);
+      final b = batch;
+      await Navigator.of(context, rootNavigator: true).push<List<XFile>>(
+        MaterialPageRoute(fullscreenDialog: true, builder: (_) => FastTakeScreen(onShot: b.add)),
+      );
+    } else {
+      picked = await _pickFiles(source);
+      if (picked.isEmpty || !context.mounted) return 0;
+      mode ??= await askPhotoTagMode(context, source: source, count: picked.length);
+      if (mode == null) return 0;
+      batch = _newBatch(mode == PhotoTagMode.withLocation);
+      _watch(batch);
+      batch.addAll(picked, fresh: source != PhotoSource.gallery);
     }
+    return _await(batch);
   }
 
-  /// Gallery files keep their own time; fresh shots use now.
-  Future<DateTime?> _shotTime(XFile f) async {
-    try {
-      final m = await f.lastModified();
-      final age = DateTime.now().difference(m);
-      return age.inMinutes.abs() < 2 ? null : toThai(m);
-    } catch (_) {
-      return null;
+  void _watch(PhotoBatch b) {
+    _last = b;
+    void listen() {
+      final v = b.value;
+      onProgress?.call(PhotoRunProgress(v.locating && v.prepared == 0 ? 'กำลังหาพิกัด…' : 'กำลังอัปโหลด', v.uploaded, v.total));
     }
+
+    b.addListener(listen);
+  }
+
+  Future<int> _await(PhotoBatch b) async {
+    final done = Completer<void>();
+    void check() {
+      if (b.value.done && !done.isCompleted) done.complete();
+    }
+
+    b.addListener(check);
+    b.close();
+    check();
+    try {
+      if (b.value.total > 0) await done.future;
+    } finally {
+      b.removeListener(check);
+      onProgress?.call(null);
+    }
+    final v = b.value;
+    pending = [for (final p in b.failed) MultipartFile.fromBytes(p.bytes, filename: p.filename)];
+    if (v.failed > 0) throw PhotoUploadIncomplete(v.uploaded, v.failed, b.lastError);
+    return v.uploaded;
+  }
+
+  /// Retries what failed last time (same client ids: no duplicates).
+  Future<int> retryPending() async {
+    final b = _last;
+    if (b == null || b.failed.isEmpty) return uploadBatches([for (final f in pending) f.clone()]);
+    final before = b.value.uploaded;
+    await b.retryFailed();
+    pending = [for (final p in b.failed) MultipartFile.fromBytes(p.bytes, filename: p.filename)];
+    final sent = b.value.uploaded - before;
+    if (b.failed.isNotEmpty) throw PhotoUploadIncomplete(sent, b.failed.length, b.lastError);
+    return sent;
   }
 
   /// Sends [parts] in batches of [kFastTakeBatch]; keeps failures in [pending].
@@ -238,8 +270,6 @@ class VisitPhotoFlow {
     return sent;
   }
 
-  /// Retries what failed last time (MultipartFile can be sent once: clone).
-  Future<int> retryPending() => uploadBatches([for (final f in pending) f.clone()]);
 }
 
 class PhotoUploadIncomplete implements Exception {

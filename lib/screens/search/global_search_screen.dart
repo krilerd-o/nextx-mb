@@ -279,7 +279,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
             if (GoRouter.maybeOf(c) != null) {
               c.push(loc);
             } else {
-              nxPush<void>(c, EntityDetailScreen(module: module, row: row));
+              nxOpenDetail<void>(c, EntityDetailScreen(module: module, row: row));
             }
           },
         ),

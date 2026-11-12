@@ -1,3 +1,4 @@
+import '../../widgets/nx_scroll_tabs.dart';
 import '../../widgets/nx_status_stepper.dart';
 import 'package:dio/dio.dart' show MultipartFile;
 import 'package:file_picker/file_picker.dart';
@@ -209,6 +210,14 @@ Future<List<MultipartFile>> pickAttachments(BuildContext context) async {
   return out;
 }
 
+/// Comment body as editable text: line breaks kept, HTML tags and inline images dropped.
+String commentPlainText(String body) {
+  var s = body.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n').replaceAll(RegExp(r'</p>\s*<p[^>]*>', caseSensitive: false), '\n');
+  s = s.replaceAll(RegExp(r'<img[^>]*>', caseSensitive: false), '').replaceAll(RegExp(r'<[^>]+>'), '');
+  s = s.replaceAll('&nbsp;', ' ').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&amp;', '&');
+  return s.trim();
+}
+
 /// Threaded comments with reply + attachments (camera / gallery / file).
 class EntityCommentsPanel extends StatefulWidget {
   const EntityCommentsPanel({
@@ -272,6 +281,28 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
       _pending.clear();
       _replyTo = null;
       HapticFeedback.lightImpact();
+      await widget.onChanged();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  bool _canEdit(Map<String, dynamic> c) {
+    final s = context.read<AppConfig>().session;
+    return '${c['user_id']}' == '${s.userId}' || s.isBusinessAdmin || s.isSuperadmin;
+  }
+
+  Future<void> _edit(Map<String, dynamic> c) async {
+    final next = await showDialog<String>(context: context, builder: (_) => _CommentEditDialog(initial: commentPlainText('${c['body'] ?? ''}')));
+    if (next == null || !mounted) return;
+    if (next.isEmpty && commentAttachments(c).isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      // Inline images are not editable here: keep them after the new text.
+      final imgs = RegExp(r'<img[^>]*>', caseSensitive: false).allMatches('${c['body'] ?? ''}').map((m) => m.group(0)).join();
+      await context.read<AppConfig>().apiClient.updateEntityComment(widget.module, widget.id, c['id'] as Object, next + imgs);
       await widget.onChanged();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
@@ -360,13 +391,13 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _CommentTile(c: root),
+                  _CommentTile(c: root, onEdit: _canEdit(root) ? () => _edit(root) : null),
                   for (final r in replies)
                     Container(
                       margin: const EdgeInsets.only(left: 18, top: 8),
                       padding: const EdgeInsets.only(left: 12),
                       decoration: BoxDecoration(border: Border(left: BorderSide(color: cs.outlineVariant, width: 2))),
-                      child: _CommentTile(c: r, small: true),
+                      child: _CommentTile(c: r, small: true, onEdit: _canEdit(r) ? () => _edit(r) : null),
                     ),
                   Align(
                     alignment: Alignment.centerRight,
@@ -387,10 +418,47 @@ class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
   }
 }
 
+/// Edit box for one comment; owns its controller (disposed with the dialog).
+class _CommentEditDialog extends StatefulWidget {
+  const _CommentEditDialog({required this.initial});
+  final String initial;
+
+  @override
+  State<_CommentEditDialog> createState() => _CommentEditDialogState();
+}
+
+class _CommentEditDialogState extends State<_CommentEditDialog> {
+  late final _ctrl = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(tr('แก้ไขคอมเม้นท์')),
+        content: TextField(
+          key: const ValueKey('comment-edit-field'),
+          controller: _ctrl,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 8,
+          decoration: InputDecoration(hintText: tr('เขียนคอมเม้นท์')),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('ยกเลิก'))),
+          FilledButton(key: const ValueKey('comment-edit-save'), onPressed: () => Navigator.pop(context, _ctrl.text.trim()), child: Text(tr('บันทึก'))),
+        ],
+      );
+}
+
 class _CommentTile extends StatelessWidget {
-  const _CommentTile({required this.c, this.small = false});
+  const _CommentTile({required this.c, this.small = false, this.onEdit});
   final Map<String, dynamic> c;
   final bool small;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -406,6 +474,14 @@ class _CommentTile extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(child: Text(tr(name?.isNotEmpty == true ? name! : 'ผู้ใช้'), style: theme.textTheme.titleSmall)),
             Text(tr(relativeTime(c['created_at'])), style: theme.textTheme.bodySmall),
+            if (onEdit != null)
+              IconButton(
+                key: ValueKey('comment-edit-${c['id']}'),
+                tooltip: tr('แก้ไข'),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(NxI.pencilSimple, size: 16),
+                onPressed: onEdit,
+              ),
           ],
         ),
         if (nxCommentHasText('${c['body'] ?? ''}'))
@@ -556,7 +632,8 @@ class EntityHistoryPanel extends StatelessWidget {
   }
 }
 
-/// Pill segmented control (Inbox reference).
+/// In-page tabs (record detail, activity…): pill tabs that slide left / right
+/// with a comfortable touch target — see [NxScrollTabs].
 class NxSegmented extends StatelessWidget {
   const NxSegmented({super.key, required this.labels, required this.index, required this.onChanged});
   final List<String> labels;
@@ -564,49 +641,7 @@ class NxSegmented extends StatelessWidget {
   final ValueChanged<int> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(999)),
-      child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++)
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  if (i == index) return;
-                  HapticFeedback.selectionClick();
-                  onChanged(i);
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  decoration: BoxDecoration(
-                    color: i == index ? cs.surface : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: i == index ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))] : null,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    tr(labels[i]),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
-                      color: i == index ? cs.onSurface : cs.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => NxScrollTabs(labels: labels, index: index, onChanged: onChanged, keyPrefix: 'detail-tab-');
 }
 
 /// Deletes wait 5 s with an "undo" snackbar before the API call is sent.

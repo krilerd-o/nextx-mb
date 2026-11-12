@@ -6,8 +6,10 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../core/i18n.dart';
 import '../../services/calls/call_service.dart';
+import '../../services/calls/live_transcription.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_icons.dart';
+import 'live_captions.dart';
 
 /// Shows the call on top of the whole app: incoming, calling…, in call (full screen or a
 /// floating bubble). Put it in `MaterialApp.builder` above the navigator.
@@ -98,9 +100,30 @@ class _RoundButton extends StatelessWidget {
   }
 }
 
-class _IncomingView extends StatelessWidget {
+class _IncomingView extends StatefulWidget {
   const _IncomingView({required this.service});
   final CallService service;
+
+  @override
+  State<_IncomingView> createState() => _IncomingViewState();
+}
+
+class _IncomingViewState extends State<_IncomingView> {
+  /// Set while the consent panel is shown: answer with video?
+  bool? _askVideo;
+
+  CallService get service => widget.service;
+
+  /// Answering first asks "ให้ AI ช่วยจดบทสนทนาไหม?" (one tap answers and decides).
+  Future<void> _answer({bool? video}) async {
+    final lt = LiveTranscription.instance;
+    final id = service.incoming?['call_id']?.toString();
+    if (id != null && !lt.callerMode && await lt.needsConsent(id)) {
+      if (mounted) setState(() => _askVideo = video ?? service.incoming?['media'] == 'video');
+      return;
+    }
+    await service.accept(video: video);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +133,36 @@ class _IncomingView extends StatelessWidget {
     final caller = inc['caller_name']?.toString() ?? '';
     final title = group ? (inc['room_name']?.toString() ?? caller) : caller;
     final inCall = (inc['peers'] is List) ? (inc['peers'] as List).length : 0;
+    if (_askVideo != null) {
+      // Consent replaces the buttons; scrolls on short screens instead of overflowing.
+      return Material(
+        key: const ValueKey('call-incoming'),
+        color: const Color(0xFF0B1220),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const SizedBox(height: 12),
+                NxAvatar(label: caller, size: 64),
+                const SizedBox(height: 10),
+                Text(title, textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 14),
+                CallConsentPanel(
+                  incoming: true,
+                  recordOption: LiveTranscription.instance.settings?['record_audio'] == true,
+                  shareDefault: LiveTranscription.instance.settings?['share_captions_default'] != false,
+                  onDecide: (enabled, share, record, remember) {
+                    LiveTranscription.instance.decide('${inc['call_id']}', enabled: enabled, share: share, record: record, remember: remember);
+                    service.accept(video: _askVideo);
+                  },
+                  onDecline: service.decline,
+                ),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
     return Material(
       key: const ValueKey('call-incoming'),
       color: const Color(0xFF0B1220),
@@ -134,14 +187,14 @@ class _IncomingView extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 36),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
               _RoundButton(key: const ValueKey('call-decline'), icon: NxI.phoneX, label: 'ปฏิเสธ', color: const Color(0xFFEF4444), size: 68, onTap: service.decline),
-              if (video) _RoundButton(key: const ValueKey('call-accept-audio'), icon: NxI.phone, label: 'รับด้วยเสียง', size: 58, onTap: () => service.accept(video: false)),
+              if (video) _RoundButton(key: const ValueKey('call-accept-audio'), icon: NxI.phone, label: 'รับด้วยเสียง', size: 58, onTap: () => _answer(video: false)),
               _RoundButton(
                 key: const ValueKey('call-accept'),
                 icon: video ? NxI.videoCamera : NxI.phone,
                 label: 'รับสาย',
                 color: const Color(0xFF22C55E),
                 size: 68,
-                onTap: () => service.accept(),
+                onTap: () => _answer(),
               ),
             ]),
           ),
@@ -396,6 +449,9 @@ class _CallViewState extends State<_CallView> {
               ]),
             ),
           ),
+          // AI การสื่อสาร: ask (outgoing / answered from the phone's call screen) and live captions.
+          if (s.callId != null && LiveTranscription.instance.enabled) SttInlineAsk(lt: LiveTranscription.instance, callId: s.callId!),
+          if (!outgoing) LiveCaptionsPanel(lt: LiveTranscription.instance),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 18, 12, 22),
             child: Wrap(alignment: WrapAlignment.center, spacing: 18, runSpacing: 14, children: [

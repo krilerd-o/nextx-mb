@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
@@ -49,4 +50,16 @@ Future<bool> openFileRecord(Map<String, dynamic> file) async {
     return true;
   }
   return false;
+}
+
+/// Saves a PDF where the user chooses (Downloads, Files, Drive…) using the
+/// system save dialog. Returns null when cancelled.
+Future<String?> savePdfToDevice(List<int> bytes, String filename) async {
+  if (kIsWeb) return null;
+  return FilePicker.platform.saveFile(
+    fileName: filename,
+    bytes: Uint8List.fromList(bytes),
+    type: FileType.custom,
+    allowedExtensions: const ['pdf'],
+  );
 }

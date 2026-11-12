@@ -46,7 +46,23 @@ Uri? _asUri(String path) {
 }
 
 /// Maps a NEXTX notification `link_path` / FCM `url` to a go_router location.
-String notificationDeepLink(String path, {String? linkId}) {
+/// Record tab a notification should open on (from `link_extra` / meta kind).
+String? notificationTab(String? extra) {
+  final e = (extra ?? '').toLowerCase();
+  if (e.isEmpty) return null;
+  if (e.startsWith('quotation_approv') || e == 'quotation_rejected') return 'approval';
+  if (e.startsWith('quotation_customer') || e.startsWith('job_') || e == 'job_from_quotation') return 'summary';
+  return null;
+}
+
+String notificationDeepLink(String path, {String? linkId, String? extra}) {
+  final link = _notificationDeepLink(path, linkId: linkId);
+  final tab = notificationTab(extra);
+  if (tab == null || !(link.startsWith('/crm/') || link.startsWith('/fsm/')) || link.contains('?')) return link;
+  return '$link?tab=$tab';
+}
+
+String _notificationDeepLink(String path, {String? linkId}) {
   final uri = _asUri(path);
   final segs = uri?.pathSegments.where((s) => s.isNotEmpty).toList() ?? [];
   final open = uri?.queryParameters['open'];
@@ -126,5 +142,5 @@ String? notificationDeepLinkFromData(Map<String, dynamic> data) {
   final url = data['url']?.toString() ?? data['link_path']?.toString() ?? '';
   final id = data['link_id']?.toString() ?? data['id']?.toString();
   if (url.isEmpty && (id == null || id.isEmpty)) return AppRoutes.notifications;
-  return notificationDeepLink(url, linkId: id);
+  return notificationDeepLink(url, linkId: id, extra: data['extra']?.toString() ?? data['link_extra']?.toString());
 }

@@ -18,6 +18,9 @@ import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
 import '../../widgets/nx_refresh.dart';
+import '../../widgets/nx_split_view.dart';
+import '../../core/nx_breakpoint.dart';
+import '../deep_link_loaders.dart' show nxPaneForRoute;
 
 /// NEXTX notification categories (backend/src/services/notificationCategory.js).
 const notificationCategories = <String, String>{
@@ -65,6 +68,8 @@ class NotificationCenterScreen extends StatefulWidget {
 }
 
 class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
+  /// Two-pane: record opened beside the list.
+  String? _paneRoute;
   final _scroll = ScrollController();
   List<Map<String, dynamic>> _items = [];
   String? _cursor;
@@ -160,7 +165,15 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       _markLocalRead(item);
     }
     final path = item['link_path']?.toString() ?? '';
-    context.push(notificationDeepLink(path, linkId: item['link_id']?.toString()));
+    final meta = item['meta'];
+    final extra = item['link_extra']?.toString() ?? (meta is Map ? meta['kind']?.toString() : null);
+    final route = notificationDeepLink(path, linkId: item['link_id']?.toString(), extra: extra);
+    // Tablet / unfolded: open the record beside the list.
+    if (NxBreakpoint.of(context).twoPane && nxPaneForRoute(route) != null) {
+      setState(() => _paneRoute = route);
+      return;
+    }
+    context.push(route);
   }
 
   Future<void> _delete(Map<String, dynamic> item) async {
@@ -285,7 +298,16 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
           NxHeaderMenuItem(label: 'อ่านทั้งหมด', icon: NxI.checkCircle, onTap: _readAll),
         ],
       ),
-      body: Column(
+      body: NxSplitView(
+        onClose: () => setState(() => _paneRoute = null),
+        detail: _paneRoute == null
+            ? null
+            : NxPaneHost(
+                key: ValueKey('notif-pane-$_paneRoute'),
+                onPopRoot: () => setState(() => _paneRoute = null),
+                child: nxPaneForRoute(_paneRoute!)!,
+              ),
+        list: Column(
         children: [
           NxListToolbar(
             query: _query,
@@ -322,6 +344,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
           ),
           Expanded(child: NxRefresh(onRefresh: _reload, child: body)),
         ],
+      ),
       ),
     );
   }

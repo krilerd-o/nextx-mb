@@ -128,7 +128,12 @@ class _ChatRoomInfoScreenState extends State<ChatRoomInfoScreen> {
                   ),
                 ]),
                 const SizedBox(height: 8),
-                TabBar(tabs: [Tab(text: tr('สมาชิก')), Tab(text: tr('รูปและวิดีโอ')), Tab(text: tr('ไฟล์'))]),
+                TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.center,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 20),
+                  tabs: [Tab(text: tr('สมาชิก')), Tab(text: tr('รูปและวิดีโอ')), Tab(text: tr('ไฟล์'))],
+                ),
               ]),
             ),
           ],

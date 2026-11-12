@@ -146,7 +146,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
       });
     }
     applyFieldDefaults(_fields, _values);
-    normalizeFormDates(_fields, _values);
+    normalizeFormDates(_fields, _values, module: widget.module);
   }
 
   /// The case subject suggested from its type (while the user hasn't typed one).
@@ -240,7 +240,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
       _errors = {};
       _saving = true;
     });
-    final payload = collectEntityPayload(_fields, _values, currentRow: widget.initialValues);
+    final payload = collectEntityPayload(_fields, _values, currentRow: widget.initialValues, module: widget.module);
     // Links set by the caller (e.g. an appointment booked from a record) are
     // sent even when the form doesn't show those fields.
     if (!widget.isEdit) {

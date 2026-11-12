@@ -55,6 +55,7 @@ class _LeadConvertBodyState extends State<LeadConvertBody> {
   bool _createAccount = false;
   bool _createDeal = true;
   bool _copyHistory = true;
+  bool _moveActivities = true;
   final _accountName = TextEditingController();
   final _first = TextEditingController();
   final _last = TextEditingController();
@@ -166,6 +167,7 @@ class _LeadConvertBodyState extends State<LeadConvertBody> {
       if (_linkContact != null) 'existing_contact_id': int.tryParse(_linkContact!.value) ?? _linkContact!.value,
       if (_linkAccount != null) 'existing_account_id': int.tryParse(_linkAccount!.value) ?? _linkAccount!.value,
       'copy_history': _copyHistory,
+      'move_activities': _moveActivities,
     };
   }
 
@@ -380,6 +382,16 @@ class _LeadConvertBodyState extends State<LeadConvertBody> {
                 hint: 'กิจกรรม คอมเมนต์ แท็ก และบันทึกโทร — ไม่ลบฝั่ง Lead',
                 value: _copyHistory,
                 onChanged: (v) => setState(() => _copyHistory = v),
+              ),
+              _switchCard(
+                theme,
+                key: const ValueKey('convert-move-activities'),
+                icon: NxI.calendarCheck,
+                color: const Color(0xFF6366F1),
+                title: 'ย้ายกิจกรรมของ Lead ไปที่ Account/Contact',
+                hint: 'กิจกรรมจะไปอยู่กับ Account (หรือ Contact ถ้าไม่สร้าง Account) และยังเห็นในไทม์ไลน์ของ Lead',
+                value: _moveActivities,
+                onChanged: (v) => setState(() => _moveActivities = v),
               ),
               // What happens after.
               Container(

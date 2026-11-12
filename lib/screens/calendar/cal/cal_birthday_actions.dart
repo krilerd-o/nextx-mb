@@ -16,7 +16,7 @@ void openCalBirthday(BuildContext context, CalBirthday b, DateTime day, {Rect? a
     b: b,
     day: day,
     anchor: anchor,
-    onOpenRecord: () => nxPush<void>(context, EntityDetailScreen(module: b.module, row: b.row)),
+    onOpenRecord: () => nxOpenDetail<void>(context, EntityDetailScreen(module: b.module, row: b.row)),
     onPlanGreeting: () async {
       final at = DateTime(day.year, day.month, day.day, 9);
       await nxPush<void>(

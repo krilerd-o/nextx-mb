@@ -11,6 +11,7 @@ import '../../core/chat_merge.dart';
 import '../../core/entity_display.dart';
 import '../../core/error_reporting.dart';
 import '../../core/i18n.dart';
+import '../../core/menu_access.dart';
 import '../../core/nx_page_route.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
@@ -21,6 +22,8 @@ import '../../widgets/nx_skeleton.dart';
 import 'room/chat_call_hooks.dart';
 import 'room/chat_composer.dart';
 import 'room/chat_message_actions.dart';
+import '../comm_ai/call_summary_bubble.dart';
+import '../comm_ai/chat_summary_sheet.dart';
 import 'room/chat_message_bubble.dart';
 import 'room/chat_room_info_screen.dart';
 
@@ -515,6 +518,13 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         ]),
       ),
       actions: [
+        if (!_isThread && MenuAccess.allow(context.read<AppConfig>().session, MenuAccess.commAi))
+          IconButton(
+            key: const ValueKey('chat-ai-summary'),
+            tooltip: tr('ISAAC สรุปแชท'),
+            icon: const Icon(NxI.sparkle, color: Color(0xFF7C3AED)),
+            onPressed: () => showChatSummarySheet(context, roomId: _id, roomName: chatRoomTitle(_room)),
+          ),
         if (!_isThread && ChatCallHooks.available) ...[
           IconButton(key: const ValueKey('chat-call-voice'), tooltip: tr('โทรด้วยเสียง'), icon: const Icon(NxI.phone), onPressed: () => _call(false)),
           IconButton(key: const ValueKey('chat-call-video'), tooltip: tr('วิดีโอคอล'), icon: const Icon(NxI.videoCamera), onPressed: () => _call(true)),
@@ -551,6 +561,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         prevUser = null;
       }
       prevDay = day;
+      if (m['kind']?.toString() == 'call_summary' && m['call'] is Map) {
+        items.add(KeyedSubtree(key: key, child: CallSummaryBubble(message: m)));
+        prevUser = null;
+        continue;
+      }
       if (m['kind']?.toString() == 'call' && m['call'] is Map) {
         items.add(KeyedSubtree(
           key: key,

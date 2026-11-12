@@ -27,9 +27,12 @@ class EntityListRoute extends StatelessWidget {
 }
 
 class EntityByIdLoader extends StatefulWidget {
-  const EntityByIdLoader({super.key, required this.module, required this.id});
+  const EntityByIdLoader({super.key, required this.module, required this.id, this.tab});
   final String module;
   final String id;
+
+  /// Tab to open (from a notification).
+  final String? tab;
 
   @override
   State<EntityByIdLoader> createState() => _EntityByIdLoaderState();
@@ -59,6 +62,7 @@ class _EntityByIdLoaderState extends State<EntityByIdLoader> {
         return EntityDetailScreen(
           module: EntityModules.normalize(widget.module),
           row: row,
+          initialTab: widget.tab,
         );
       },
     );
@@ -391,4 +395,18 @@ class _LoaderPage extends StatelessWidget {
         ),
         body: child,
       );
+}
+
+
+/// Detail screen for an in-app route, to show in a split view's right pane.
+/// null = not a record route (open it the normal way).
+Widget? nxPaneForRoute(String route) {
+  final uri = Uri.tryParse(route);
+  if (uri == null) return null;
+  final seg = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+  if (seg.length == 3 && (seg[0] == 'crm' || seg[0] == 'fsm')) {
+    return EntityByIdLoader(module: seg[1], id: seg[2], tab: uri.queryParameters['tab']);
+  }
+  if (seg.length == 2 && seg[0] == 'calendar') return ActivityByIdLoader(id: seg[1]);
+  return null;
 }

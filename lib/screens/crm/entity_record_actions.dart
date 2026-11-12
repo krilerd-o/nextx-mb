@@ -18,6 +18,14 @@ import '../deep_link_loaders.dart';
 import 'entity_create_screen.dart';
 import 'entity_detail_parts.dart';
 import 'lead_convert_sheet.dart';
+import '../../core/journey_rules.dart';
+import '../../core/service_journey.dart';
+import '../../core/deal_stage.dart';
+import '../fsm/contract_flows.dart';
+import '../fsm/service_more.dart';
+import '../journey/case_flows.dart';
+import '../journey/quotation_journey.dart' show duplicateQuotation;
+import '../journey/status_followups.dart';
 
 /// What the current user may do with one record (same rules as the web list:
 /// `_shared_permission` read_only = view only, edit = edit/duplicate, full =
@@ -50,7 +58,7 @@ class EntityRowPerms {
     final perm = '${row['_shared_permission'] ?? 'full'}';
     var edit = perm != 'read_only';
     if (module == 'lead' && leadLocked(row)) edit = false;
-    return EntityRowPerms(canEdit: edit, canDelete: perm == 'full', canStatus: edit && module != 'case');
+    return EntityRowPerms(canEdit: edit, canDelete: perm == 'full', canStatus: module == 'case' || edit);
   }
 }
 
@@ -184,6 +192,43 @@ class EntityRecordActions {
   }) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final api = context.read<AppConfig>().apiClient;
+    // Service Journey: job / quotation status moves through the workflow (with its dialogs).
+    if (ServiceJourney.handles(module) && await ServiceJourney.supported(api)) {
+      if (!context.mounted) return null;
+      return _journeyStatus(context, module: module, row: row, onChanged: onChanged);
+    }
+    if (!context.mounted) return null;
+    // Case: same windows as the web (accept / forward / close / cancel).
+    if (module == 'case') {
+      final id = '${row['id'] ?? row['caseid'] ?? ''}';
+      final action = await pickCaseAction(context, row);
+      if (action == null || !context.mounted) return null;
+      final ok = await CaseFlows.run(context, caseId: id, action: action, row: row);
+      if (!ok) return null;
+      try {
+        final fresh = await api.getEntity('case', id);
+        final v = '${fresh['case_status'] ?? ''}';
+        onChanged?.call('case_status', v);
+        return v;
+      } catch (_) {
+        return '';
+      }
+    }
+    // Activity waiting for approval: the server keeps its status until decided.
+    if (module == 'activity' && '${row['approval_state'] ?? ''}'.toLowerCase() == 'pending') {
+      messenger?.showSnackBar(SnackBar(content: Text(tr('กิจกรรมนี้รออนุมัติอยู่ — เปลี่ยนสถานะได้หลังผู้อนุมัติตัดสิน (เมนูรออนุมัติ)'))));
+      return null;
+    }
+    // Service contract: status moves only through the workflow (approve, sign…).
+    if (module == 'service_contract') {
+      final action = await pickContractAction(context, row);
+      if (action == null || !context.mounted) return null;
+      final rec = await ContractFlows.run(context, row: row, action: action);
+      if (rec == null) return null;
+      final v = '${rec['contract_status'] ?? ''}';
+      onChanged?.call('contract_status', v);
+      return v;
+    }
     var lists = picklists;
     if (lists == null || lists.isEmpty) {
       try {
@@ -216,9 +261,22 @@ class EntityRecordActions {
     }
     final id = '${row['id'] ?? ''}';
     final label = options.firstWhere((o) => o.value == picked).label;
+    // Deal: probability follows the stage; Closed Lost needs a reason (like the web).
+    Map<String, dynamic> payload = {key: picked};
+    if (module == 'deal' && key == 'deal_stage') {
+      String? lost;
+      if (picked == kDealClosedLost) {
+        lost = await askDealLostReason(context, current: '${row['closed_reason'] ?? ''}');
+        if (lost == null) return null;
+      }
+      payload = dealStagePayload(picked, lostReason: lost);
+    }
     onChanged?.call(key, picked);
     try {
-      await api.putEntity(module, id, {key: picked});
+      await api.putEntity(module, id, payload);
+      if (module == 'deal' && picked == kDealClosedWon && '${row['related_board_id'] ?? ''}'.isEmpty && context.mounted) {
+        showDealWorkspaceHandoff(context, id, afterWon: true);
+      }
       HapticFeedback.mediumImpact();
       messenger?.hideCurrentSnackBar();
       messenger?.showSnackBar(SnackBar(
@@ -244,6 +302,108 @@ class EntityRecordActions {
     } catch (e) {
       if (before != null) onChanged?.call(key, before);
       _snack(messenger, formatApiError(e));
+      return null;
+    }
+  }
+
+  /// Job: allowed workflow actions; quotation: offer status / close sale / cancel.
+  static Future<String?> _journeyStatus(
+    BuildContext context, {
+    required String module,
+    required Map<String, dynamic> row,
+    void Function(String key, String value)? onChanged,
+  }) async {
+    final api = context.read<AppConfig>().apiClient;
+    final id = '${row['id'] ?? ''}';
+    var full = row;
+    try {
+      final r = await api.getEntity(module, id);
+      if (r.isNotEmpty) full = {...row, ...r};
+    } catch (_) {}
+    if (!context.mounted) return null;
+    if (module == 'job') {
+      final actions = jobWorkflowActions(full['job_status']);
+      if (actions.isEmpty) {
+        _snack(ScaffoldMessenger.maybeOf(context), 'งานนี้ยกเลิกแล้ว — เปลี่ยนสถานะไม่ได้');
+        return null;
+      }
+      final picked = await showAppBottomSheet<String>(
+        context: context,
+        title: '${tr('ปรับสถานะ')} · ${jobStatusLabel(full['job_status'])}',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final a in actions)
+              ListTile(
+                key: ValueKey('job-status-action-$a'),
+                leading: Icon(a == 'cancel' ? NxI.x : (a == 'close' ? NxI.flag : NxI.arrowRight)),
+                title: Text(jt('journey.job.action.$a', fallback: a)),
+                onTap: () => Navigator.pop(context, a),
+              ),
+          ],
+        ),
+      );
+      if (picked == null || !context.mounted) return null;
+      final ok = await JobFlows.run(context, jobId: id, action: picked, row: full);
+      if (!ok) return null;
+      try {
+        final r = await api.getEntity('job', id);
+        final v = r['job_status']?.toString();
+        if (v != null) onChanged?.call('job_status', v);
+        return v;
+      } catch (_) {
+        return null;
+      }
+    }
+    // quotation
+    final finished = isQuotationFinished(full);
+    final cancelled = canonicalQuotationStatus(full['quotation_status']) == QS.cancelled;
+    final offer = canonicalOfferStatus(full['offer_status']);
+    final picked = await showAppBottomSheet<String>(
+      context: context,
+      title: tr('ปรับสถานะใบเสนอราคา'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!finished)
+            for (final o in Offer.all)
+              ListTile(
+                key: ValueKey('qt-status-$o'),
+                leading: Icon(o == Offer.closed ? NxI.flag : NxI.arrowRight),
+                title: Text(o),
+                trailing: o == offer ? const Icon(NxI.check) : null,
+                onTap: o == offer ? null : () => Navigator.pop(context, o == Offer.closed ? 'close_sale' : 'offer:$o'),
+              ),
+          if (!finished)
+            ListTile(key: const ValueKey('qt-status-cancel'), leading: const Icon(NxI.x), title: Text(tr('ยกเลิกใบเสนอราคา')), onTap: () => Navigator.pop(context, 'cancel')),
+          if (cancelled)
+            ListTile(leading: const Icon(NxI.arrowsClockwise), title: Text(tr('เปิดใบเสนอราคากลับ')), onTap: () => Navigator.pop(context, 'reopen')),
+          if (finished && !cancelled)
+            Padding(padding: const EdgeInsets.all(12), child: Text(tr('ใบเสนอราคานี้จบแล้ว — ทำสำเนาเป็นใบใหม่แทน'))),
+        ],
+      ),
+    );
+    if (picked == null || !context.mounted) return null;
+    var ok = false;
+    if (picked == 'close_sale') {
+      final r = await showQuotationOutcomeSheet(context, quotationId: id);
+      ok = r != null;
+      // Won → offer to close the linked deal too (same as the detail page).
+      if (r != null && context.mounted) await maybeSuggestCloseDeal(context, r['suggest_close_deal']);
+    } else if (picked.startsWith('offer:')) {
+      ok = await QuotationFlows.setOffer(context, id, picked.substring(6));
+    } else if (picked == 'cancel') {
+      ok = await QuotationFlows.cancel(context, id);
+    } else if (picked == 'reopen') {
+      ok = await QuotationFlows.reopen(context, id);
+    }
+    if (!ok) return null;
+    try {
+      final r = await api.getEntity('quotation', id);
+      final v = r['quotation_status']?.toString();
+      if (v != null) onChanged?.call('quotation_status', v);
+      return v;
+    } catch (_) {
       return null;
     }
   }
@@ -353,6 +513,9 @@ class EntityRecordActions {
       }
     }
     if (!context.mounted) return false;
+    // Service Journey: copy as a brand-new quotation (fresh status, like the web).
+    final journeyQt = module == 'quotation' && await ServiceJourney.supported(config.apiClient);
+    if (!context.mounted) return false;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -367,7 +530,18 @@ class EntityRecordActions {
     );
     if (ok != true || !context.mounted) return false;
     try {
-      final newId = await config.apiClient.duplicateEntity(module, '${row['id']}');
+      final String newId;
+      if (journeyQt) {
+        var full = row;
+        try {
+          final r = await config.apiClient.getEntity(module, '${row['id']}');
+          if (r.isNotEmpty) full = {...row, ...r};
+        } catch (_) {}
+        newId = await duplicateQuotation(config.apiClient, full) ?? '';
+      } else {
+        newId = await config.apiClient.duplicateEntity(module, '${row['id']}');
+        if (module == 'job' && newId.isNotEmpty) await resetDuplicatedJob(config.apiClient, newId);
+      }
       if (newId.isEmpty) return false;
       _snack(messenger, 'ทำซ้ำแล้ว — เปิดรายการใหม่');
       if (context.mounted) nxPush<void>(context, EntityByIdLoader(module: module, id: newId), root: root);
@@ -557,4 +731,47 @@ class _CommentsSheetState extends State<_CommentsSheet> {
       ],
     );
   }
+}
+
+/// A copied job is a new job: older servers copy the source status (e.g.
+/// Completed); move it back to Open. New servers already do this.
+Future<void> resetDuplicatedJob(ApiClient api, String id) async {
+  try {
+    final j = await api.getEntity('job', id);
+    if (canonicalJobStatus(j['job_status']) == 'Open') return;
+    await api.putEntity('job', id, {'job_status': 'Open'});
+  } catch (e) {
+    debugPrint('[job duplicate] reset status: $e');
+  }
+}
+
+/// Reason for losing a deal (required on the server for Closed Lost).
+Future<String?> askDealLostReason(BuildContext context, {String current = ''}) async {
+  const presets = ['ราคาสูงกว่าคู่แข่ง', 'ลูกค้าเลื่อน/ยกเลิกโครงการ', 'ไม่ตรงความต้องการ', 'งบประมาณไม่พอ', 'เลือกเจ้าเดิม'];
+  final ctrl = TextEditingController(text: current);
+  final r = await showDialog<String>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) => AlertDialog(
+        title: Text(tr('ปิดดีลเป็น "แพ้"')),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final p in presets)
+              ChoiceChip(label: Text(tr(p)), selected: ctrl.text == tr(p), onSelected: (_) => setS(() => ctrl.text = tr(p))),
+          ]),
+          const SizedBox(height: 10),
+          TextField(key: const ValueKey('deal-lost-reason'), controller: ctrl, maxLines: 2, decoration: InputDecoration(labelText: '${tr('เหตุผลที่แพ้')} *'), onChanged: (_) => setS(() {})),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
+          FilledButton(
+            key: const ValueKey('deal-lost-ok'),
+            onPressed: ctrl.text.trim().isEmpty ? null : () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: Text(tr('ปิดเป็นแพ้')),
+          ),
+        ],
+      ),
+    ),
+  );
+  return r;
 }

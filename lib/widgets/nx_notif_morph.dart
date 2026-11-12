@@ -105,7 +105,7 @@ class _MorphTrayState extends State<_MorphTray> {
       UnreadNotifications.instance.markedRead();
     }
     Navigator.of(context).pop();
-    router.push(notificationDeepLink(it['link_path']?.toString() ?? '', linkId: it['link_id']?.toString()));
+    router.push(notificationDeepLink(it['link_path']?.toString() ?? '', linkId: it['link_id']?.toString(), extra: it['link_extra']?.toString()));
   }
 
   @override

@@ -244,7 +244,7 @@ void main() {
       expect(flow.pending, isEmpty);
     });
 
-    testWidgets('gallery: asks "with location / photo only", plain uploads as is', (tester) async {
+    testWidgets('gallery: asks "with location / photo only", plain uploads each photo', (tester) async {
       final uploaded = <List<MultipartFile>>[];
       late VisitPhotoFlow flow;
 
@@ -280,8 +280,9 @@ void main() {
         await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 150)));
       }
       await _frames(tester);
-      expect(uploaded, hasLength(1));
-      expect(uploaded.first.map((f) => f.filename), ['g0.jpg', 'g1.jpg', 'g2.jpg']);
+      // R50: each photo is sent as soon as it is ready (one per request).
+      expect(uploaded, hasLength(3));
+      expect(uploaded.expand((b) => b).map((f) => f.filename).toSet(), {'g0.jpg', 'g1.jpg', 'g2.jpg'});
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('nx_visit_photo_mode_v1'), 'plain');
     });

@@ -12,6 +12,8 @@ import '../../widgets/nx_avatar.dart';
 import 'call_media_webrtc.dart';
 import 'call_service.dart';
 import 'call_system_ui.dart';
+import 'live_transcription.dart';
+import 'recording_upload_queue.dart';
 
 /// Calls need WebRTC (Android / iOS); `flutter test` runs without the plugins.
 bool get callsSupported {
@@ -46,6 +48,16 @@ void bindCalls(AppConfig config) {
   };
   CallKitBridge.start(service: service, api: () => config.apiClient);
   CallKitBridge.registerVoipToken(config.apiClient);
+  // AI การสื่อสาร: live captions follow this call service; settings are re-read for the new Space.
+  final lt = LiveTranscription.instance
+    ..api = config.apiClient
+    ..myUserId = config.session.userId
+    ..businessId = config.session.businessId
+    ..settings = null;
+  lt.attach(service);
+  // Recordings from earlier calls that did not finish uploading are sent now / when back online.
+  RecordingUploadQueue.instance.start(api: config.apiClient, businessId: config.session.businessId);
+  lt.ensureSettings();
 }
 
 /// Group rooms with more than 4 people: choose up to 3 to call.

@@ -162,6 +162,12 @@ class NxI {
   static const dotsThreeVertical = LucideIcons300.ellipsisVertical;
   static const timer = LucideIcons300.timer;
   static const filePdf = LucideIcons300.fileText;
+  static const fileText = LucideIcons300.fileText;
+  static const chartPie = LucideIcons300.chartPie;
+  static const stack = LucideIcons300.layers;
+  static const printer = LucideIcons300.printer;
+  static const magnifyingGlassPlus = LucideIcons300.zoomIn;
+  static const magnifyingGlassMinus = LucideIcons300.zoomOut;
   static const note = LucideIcons300.stickyNote;
   static const squarePen = LucideIcons300.squarePen;
   static const users = LucideIcons300.users;
@@ -192,6 +198,7 @@ class NxI {
   static const eyeOff = LucideIcons300.eyeOff;
   static const reply = LucideIcons300.reply;
   static const forward = LucideIcons300.forward;
+  static const minus = LucideIcons300.minus;
   static const circleMinus = LucideIcons300.circleMinus;
   static const lock = LucideIcons300.lock;
   static const unlink = LucideIcons300.unlink;

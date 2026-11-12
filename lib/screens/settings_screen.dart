@@ -17,6 +17,8 @@ import '../core/server_profile.dart';
 import '../core/shell_tabs.dart';
 import '../core/ui_font.dart';
 import '../services/app_lock.dart';
+import '../services/shutter_sound.dart';
+import '../widgets/shutter_sound_picker.dart';
 import '../widgets/app_bottom_sheet.dart';
 import '../widgets/nx_app_header.dart';
 import '../widgets/nx_appearance_controls.dart';
@@ -71,6 +73,14 @@ const _groupOrder = [
 class _SettingsScreenState extends State<SettingsScreen> {
   final _search = TextEditingController();
   String _q = '';
+
+  @override
+  void initState() {
+    super.initState();
+    ShutterSound.instance.load().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
 
   @override
   void dispose() {
@@ -151,6 +161,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: config.navDock.label,
         onTap: () => showNavDockPicker(context),
       )),
+      _Entry('รูปลักษณ์', ['เสียง', 'ชัตเตอร์', 'กล้อง', 'shutter', 'camera', 'ถ่ายรูป'], SettingsTile(
+        key: const ValueKey('settings-shutter'),
+        icon: NxI.camera,
+        tint: const Color(0xFFF97316),
+        title: 'เสียงชัตเตอร์',
+        subtitle: ShutterSound.instance.style.labelTh,
+        onTap: () async {
+          await showShutterSoundPicker(context);
+          if (mounted) setState(() {});
+        },
+      )),
       _Entry('รูปลักษณ์', ['วันที่', 'เวลา', 'รูปแบบ', 'date'], SettingsTile(
         icon: NxI.calendarClock,
         tint: const Color(0xFF14B8A6),
@@ -200,6 +221,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: roleSummary(config.shellConfig?.roles ?? const []),
         onTap: () => context.push(AppRoutes.roleEditor),
       )),
+      if (MenuAccess.allow(session, MenuAccess.commAi))
+        _Entry('เมนูและการใช้งาน', ['ISAAC', 'AI', 'ถอดเสียง', 'สรุป', 'prompt', 'โทร', 'แชท'], SettingsTile(
+          icon: NxI.sparkle,
+          tint: const Color(0xFF7C3AED),
+          title: 'ISAAC AI การสื่อสาร',
+          subtitle: session.isBusinessAdmin ? 'ถอดเสียงในสาย สรุปการโทร/แชท และ Prompt' : 'ดูการตั้งค่าการถอดเสียงและการสรุป',
+          onTap: () => context.push(AppRoutes.commAiSettings),
+        )),
 
       // ── Notifications
       _Entry('การแจ้งเตือน', ['แจ้งเตือน', 'notification'], SettingsTile(

@@ -137,8 +137,8 @@ const kMenuGroups = <MenuGroupDef>[
     sections: [
       MenuSectionDef(title: 'งานบริการ', items: [
         MenuItemDef(id: 'case', title: 'เคส', subtitle: 'แจ้งปัญหาและบริการลูกค้า', icon: NxI.headset, route: '/crm/case', menuKeys: [MenuAccess.caseKey]),
-        MenuItemDef(id: 'job', title: 'ใบสั่งงาน', subtitle: 'งานบริการภาคสนามทั้งหมด', icon: NxI.wrench, route: '/fsm/job', menuKeys: [MenuAccess.job]),
-        MenuItemDef(id: 'my-jobs', title: 'งานช่างของฉัน', subtitle: 'งานที่ได้รับมอบหมาย', icon: NxI.hammer, route: AppRoutes.jobs, menuKeys: [MenuAccess.job]),
+        MenuItemDef(id: 'job', title: 'ใบสั่งงาน', subtitle: 'ใบสั่งงานทั้งหมดของทีม — สร้าง มอบหมาย ติดตาม', icon: NxI.wrench, route: '/fsm/job', menuKeys: [MenuAccess.job]),
+        MenuItemDef(id: 'my-jobs', title: 'งานช่างของฉัน', subtitle: 'งานที่มอบหมายให้ฉัน — วันนี้ เดินทาง เช็คอิน ปิดงาน', icon: NxI.hammer, route: AppRoutes.jobs, menuKeys: [MenuAccess.job]),
         MenuItemDef(id: 'inspection', title: 'ใบตรวจรับ', subtitle: 'ตรวจรับงาน', icon: NxI.clipboard, route: '/fsm/inspection', menuKeys: [MenuAccess.inspection]),
       ]),
       MenuSectionDef(title: 'สัญญา', items: [
@@ -158,6 +158,7 @@ const kMenuGroups = <MenuGroupDef>[
       ]),
       MenuSectionDef(title: 'คุยในทีม', items: [
         MenuItemDef(id: 'chat', title: 'แชท', subtitle: 'แชททีมแบบเรียลไทม์', icon: NxI.chatCircle, route: AppRoutes.chatHome, menuKeys: [MenuAccess.chat]),
+        MenuItemDef(id: 'comm-ai', title: 'ประวัติ AI การสนทนา', subtitle: 'บทสนทนา เสียง และสรุปจากการโทรและแชท', icon: NxI.sparkle, route: AppRoutes.commAi, menuKeys: [MenuAccess.commAi]),
       ]),
     ],
   ),

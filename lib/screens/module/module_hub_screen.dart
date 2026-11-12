@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/unread_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -135,6 +136,21 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
                   child: Icon(g.def.icon, color: color, size: 21),
                 ),
                 const Spacer(),
+                if (items.any((i) => i.id == 'approvals'))
+                  ListenableBuilder(
+                    listenable: PendingApprovals.instance,
+                    builder: (context, _) {
+                      final n = PendingApprovals.instance.count;
+                      if (n <= 0) return const SizedBox.shrink();
+                      return Container(
+                        key: const ValueKey('group-approvals-badge'),
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(999)),
+                        child: Text(tr('รออนุมัติ $n'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onError, fontWeight: FontWeight.w800)),
+                      );
+                    },
+                  ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(999)),

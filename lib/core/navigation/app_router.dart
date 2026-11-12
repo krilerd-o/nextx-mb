@@ -25,6 +25,8 @@ import '../../screens/jobs/my_jobs_screen.dart';
 import '../../screens/module/module_hub_screen.dart';
 import '../../screens/module/menu_group_screen.dart';
 import '../../screens/crm/call_log_screen.dart';
+import '../../screens/comm_ai/comm_ai_history_screen.dart';
+import '../../screens/comm_ai/comm_ai_settings_screen.dart';
 import '../../screens/notifications/notification_center_screen.dart';
 import '../../screens/whats_new/whats_new_screen.dart';
 import '../../screens/settings/devices_screen.dart';
@@ -242,6 +244,14 @@ GoRouter createAppRouter(AppConfig config) {
         builder: (_, _) => const CallLogScreen(),
       ),
       GoRoute(
+        path: AppRoutes.commAi,
+        builder: (_, _) => const CommAiHistoryScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.commAiSettings,
+        builder: (_, _) => const CommAiSettingsScreen(),
+      ),
+      GoRoute(
         path: AppRoutes.crmHome,
         builder: (_, _) => const CrmHomeScreen(),
       ),
@@ -328,6 +338,7 @@ GoRouter createAppRouter(AppConfig config) {
         builder: (_, state) => EntityByIdLoader(
           module: state.pathParameters['module'] ?? 'lead',
           id: state.pathParameters['id'] ?? '',
+          tab: state.uri.queryParameters['tab'],
         ),
       ),
       GoRoute(
@@ -339,6 +350,7 @@ GoRouter createAppRouter(AppConfig config) {
         builder: (_, state) => EntityByIdLoader(
           module: state.pathParameters['module'] ?? 'job',
           id: state.pathParameters['id'] ?? '',
+          tab: state.uri.queryParameters['tab'],
         ),
       ),
       GoRoute(

@@ -39,6 +39,13 @@ class FakeNextxAdapter implements HttpClientAdapter {
         Headers.contentTypeHeader: ['text/event-stream'],
       });
     }
+    final raw = replies[key];
+    if (raw is Uint8List) {
+      // Binary reply (PDF downloads).
+      return ResponseBody.fromBytes(raw, code ?? 200, headers: {
+        Headers.contentTypeHeader: ['application/pdf'],
+      });
+    }
     final Object body;
     if (replies.containsKey(key)) {
       body = {'status': 'S', 'messagestatus': 'Success', 'data': replies[key]};

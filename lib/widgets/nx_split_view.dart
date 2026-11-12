@@ -137,3 +137,29 @@ class _ListProxy extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _ListScope.of(context);
 }
+
+/// Hosts a full detail screen inside the right pane of a split view.
+/// It gets its own navigator, so the screen shows no back arrow, a pop from
+/// inside (e.g. after delete) stays in the pane, and pages it opens stack
+/// inside the pane with their own back button.
+class NxPaneHost extends StatelessWidget {
+  const NxPaneHost({super.key, required this.child, this.onPopRoot});
+  final Widget child;
+
+  /// The hosted screen tried to close itself (e.g. after delete).
+  final VoidCallback? onPopRoot;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: HeroControllerScope.none(
+        child: NavigatorPopHandler(
+          onPopWithResult: (_) => onPopRoot?.call(),
+          child: Navigator(
+            onGenerateRoute: (s) => MaterialPageRoute<void>(settings: s, builder: (_) => child),
+          ),
+        ),
+      ),
+    );
+  }
+}

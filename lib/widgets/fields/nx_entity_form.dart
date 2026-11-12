@@ -517,7 +517,9 @@ String extractUploadedMedia(Map<String, dynamic> data) {
 /// `1990-11-10`, date-times become `yyyy-MM-ddTHH:mm:00` in Thai time —
 /// what the pickers produce. Untouched dates then go back unchanged in
 /// meaning (no day lost on every save).
-void normalizeFormDates(List<Map<String, dynamic>> fields, Map<String, dynamic> values) {
+/// Lead / Contact / Account ([module]) keep date-times as UTC: they open in
+/// Thai time here and go back as UTC in [collectEntityPayload].
+void normalizeFormDates(List<Map<String, dynamic>> fields, Map<String, dynamic> values, {String? module}) {
   for (final f in fields) {
     final name = fieldName(f);
     final raw = values[name];
@@ -531,7 +533,7 @@ void normalizeFormDates(List<Map<String, dynamic>> fields, Map<String, dynamic> 
         }
       case FieldUiType.dateTime:
         if (RegExp(r'(Z|[+-]\d{2}:?\d{2})$', caseSensitive: false).hasMatch(v)) {
-          final d = parseThaiField(v, name);
+          final d = parseThaiField(v, name, module: module);
           if (d != null) values[name] = '${formatYmd(d)}T${two(d.hour)}:${two(d.minute)}:00';
         }
       default:
@@ -544,14 +546,20 @@ Map<String, dynamic> collectEntityPayload(
   List<Map<String, dynamic>> fields,
   Map<String, dynamic> values, {
   Map<String, dynamic>? currentRow,
+  String? module,
 }) {
   final payload = <String, dynamic>{};
+  final party = isPartyModule(module);
   for (final f in fields) {
     final name = fieldName(f);
     if (name.isEmpty) continue;
-    final v = unwrapFieldValue(values[name]);
+    var v = unwrapFieldValue(values[name]);
     if (v == null) continue;
     if (v is String && v.trim().isEmpty) continue;
+    // Lead / Contact / Account: Thai form time → the UTC they store (like the web).
+    if (party && v is String && (resolveFieldUiType(f) == FieldUiType.dateTime || name.toLowerCase().endsWith('_datetime'))) {
+      v = toPartyUtcWall(v);
+    }
     final old = currentRow?[name];
     if (old is int) {
       final n = int.tryParse(v.toString());

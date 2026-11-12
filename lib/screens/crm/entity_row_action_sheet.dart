@@ -67,7 +67,6 @@ class EntityRowActionGrid extends StatelessWidget {
     final no = '${row['${module}_no'] ?? row['no'] ?? ''}'.trim();
     final status = statusLabel;
     final sc = EntityRecordActions.statusColor(cs, status ?? '', statusColor);
-    final caseLocked = module == 'case' && hasStatus;
     final tiles = <Widget>[
       if (module == 'lead' && perms.canEdit && !EntityRowPerms.leadLocked(row))
         _ActionTile(
@@ -77,13 +76,12 @@ class EntityRowActionGrid extends StatelessWidget {
           color: const Color(0xFF16A34A),
           onTap: () => Navigator.pop(context, EntityRowAction.convert),
         ),
-      if (hasStatus && (perms.canStatus || caseLocked))
+      if (hasStatus && perms.canStatus)
         _ActionTile(
           key: const ValueKey('row-act-status'),
           icon: NxI.flag,
           label: 'ปรับสถานะ',
           color: status == null ? cs.primary : sc,
-          disabledHint: caseLocked ? 'เปลี่ยนสถานะเคสได้ในหน้าเคส' : null,
           onTap: perms.canStatus ? () => Navigator.pop(context, EntityRowAction.status) : null,
         ),
       _ActionTile(
@@ -196,7 +194,6 @@ class _ActionTile extends StatelessWidget {
     required this.color,
     required this.onTap,
     this.badge,
-    this.disabledHint,
   });
 
   final IconData icon;
@@ -204,7 +201,6 @@ class _ActionTile extends StatelessWidget {
   final Color color;
   final VoidCallback? onTap;
   final String? badge;
-  final String? disabledHint;
 
   @override
   Widget build(BuildContext context) {
@@ -226,12 +222,7 @@ class _ActionTile extends StatelessWidget {
                   HapticFeedback.selectionClick();
                   onTap!();
                 }
-              : () {
-                  if (disabledHint == null) return;
-                  ScaffoldMessenger.maybeOf(context)
-                    ?..hideCurrentSnackBar()
-                    ..showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, content: Text(tr(disabledHint!))));
-                },
+              : null,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
             child: Column(
@@ -272,15 +263,6 @@ class _ActionTile extends StatelessWidget {
                     color: enabled ? cs.onSurface : cs.onSurfaceVariant,
                   ),
                 ),
-                if (!enabled && disabledHint != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    tr(disabledHint!),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                  ),
-                ],
               ],
             ),
           ),

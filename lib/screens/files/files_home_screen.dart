@@ -194,7 +194,6 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         ],
       ),
     );
-    ctrl.dispose();
     return (name == null || name.isEmpty) ? null : name;
   }
 

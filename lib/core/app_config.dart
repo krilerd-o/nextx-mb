@@ -17,6 +17,7 @@ import '../services/app_lock.dart';
 import '../services/device_push_service.dart';
 import '../services/offline_queue.dart';
 import '../services/offline_photos.dart';
+import '../services/photo_upload_center.dart';
 import '../services/realtime_service.dart';
 import '../services/unread_service.dart';
 import 'app_version.dart';
@@ -663,6 +664,7 @@ class AppConfig extends ChangeNotifier {
       businessId: _session.businessId,
     );
     UnreadNotifications.instance.refresh(apiClient);
+    PendingApprovals.instance.refresh(apiClient, userId: _session.userId);
     bindCalls(this);
   }
 
@@ -1338,7 +1340,21 @@ class AppConfig extends ChangeNotifier {
     }
   }
 
+  @override
+  void notifyListeners() {
+    // Saved photos belong to the Space they were taken in.
+    PhotoUploadCenter.instance.scope = _session.isLoggedIn ? '${apiClient.baseUrl}|$businessScope' : '';
+    super.notifyListeners();
+  }
+
   Future<void> flushOfflineQueue() async {
+    if (_session.isLoggedIn) {
+      PhotoUploadCenter.instance.scope = '${apiClient.baseUrl}|$businessScope';
+      unawaited(PhotoUploadCenter.instance.drain(apiClient).catchError((Object e) {
+        debugPrint('[photo-queue] drain: $e');
+        return 0;
+      }));
+    }
     if (_failedPunches.isEmpty) await _loadFailedPunches();
     final pending = await _offlineQueue.load();
     if (pending.isEmpty) return;

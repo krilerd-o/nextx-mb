@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../core/approval_queue.dart';
 import 'api_client.dart';
 import 'realtime_service.dart';
 
@@ -58,4 +59,59 @@ class UnreadNotifications extends ChangeNotifier {
   void bump() => _set(_count + 1);
   void markedRead() => _set(_count - 1);
   void clear() => _set(0);
+}
+
+/// Items waiting for *my* approval (badge on the "รออนุมัติ" menu).
+/// New servers: `/api/approvals/inbox` count (quotations + activities + jobs
+/// sent to me). Older servers: quotations waiting on me.
+class PendingApprovals extends ChangeNotifier {
+  PendingApprovals._() {
+    _sub = RealtimeService.instance.on('notification').listen((_) => _soon());
+  }
+  static final PendingApprovals instance = PendingApprovals._();
+
+  // ignore: unused_field
+  late final StreamSubscription<RealtimeEvent> _sub;
+  int _count = 0;
+  ApiClient? _api;
+  String? _userId;
+  Timer? _debounce;
+
+  int get count => _count;
+
+  void _soon() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 2), () {
+      final api = _api;
+      if (api != null) refresh(api, userId: _userId);
+    });
+  }
+
+  Future<void> refresh(ApiClient api, {String? userId}) async {
+    _api = api;
+    _userId = userId ?? _userId;
+    var n = 0;
+    try {
+      final inbox = await api.getApprovalInbox();
+      n = int.tryParse('${inbox['count'] ?? ''}') ??
+          [for (final k in ['quotations', 'activities', 'jobs']) (inbox[k] is List ? (inbox[k] as List).length : 0)].fold(0, (a, b) => a + b);
+    } catch (_) {
+      try {
+        final rows = await api.getPendingQuotationApprovals();
+        n = rows.where((r) => isAwaitingMyApproval(r, _userId)).length;
+      } catch (e) {
+        debugPrint('[approvals] $e');
+        return;
+      }
+    }
+    if (n != _count) {
+      _count = n;
+      notifyListeners();
+    }
+  }
+
+  void clear() {
+    _count = 0;
+    notifyListeners();
+  }
 }

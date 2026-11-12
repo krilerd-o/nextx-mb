@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/unread_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -125,7 +126,25 @@ class MenuItemTile extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: Icon(NxI.caretRight, size: 18, color: cs.onSurfaceVariant),
+      trailing: item.id == 'approvals'
+          ? ListenableBuilder(
+              listenable: PendingApprovals.instance,
+              builder: (context, _) {
+                final n = PendingApprovals.instance.count;
+                return Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (n > 0)
+                    Container(
+                      key: const ValueKey('approvals-badge'),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(color: cs.error, borderRadius: BorderRadius.circular(99)),
+                      child: Text(n > 99 ? '99+' : '$n', style: theme.textTheme.labelMedium?.copyWith(color: cs.onError, fontWeight: FontWeight.w800)),
+                    ),
+                  const SizedBox(width: 6),
+                  Icon(NxI.caretRight, size: 18, color: cs.onSurfaceVariant),
+                ]);
+              },
+            )
+          : Icon(NxI.caretRight, size: 18, color: cs.onSurfaceVariant),
       onTap: () => context.push(item.route),
     );
   }
