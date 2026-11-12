@@ -837,6 +837,14 @@ class ApiClient {
     ));
   }
 
+  /// Edit a record comment (author; business owner/admin may edit any) → `{id, body, attachments}`.
+  /// [attachments] null keeps the current ones.
+  Future<Map<String, dynamic>> updateEntityComment(String module, String id, Object commentId, String body, {List<Map<String, dynamic>>? attachments}) async =>
+      _dataMap(await _send('PUT', '/api/entity/$module/$id/comments/$commentId', data: {
+        'body': body,
+        if (attachments != null) 'attachments': attachments,
+      }));
+
   /// Unified history (`audit` / `field_change` / status / engagement events,
   /// newest first) — `GET /api/entity/:module/:id/timeline`.
   Future<List<Map<String, dynamic>>> getEntityTimeline(String module, String id, {int limit = 100}) async {
@@ -2639,6 +2647,121 @@ class ApiClient {
   Future<Map<String, dynamic>> addAccountManday(String id, Map<String, dynamic> body) async {
     return _dataMap(await _send('POST', '/api/entity/account/$id/manday/add', data: body));
   }
+
+  // ───────────── AI การสื่อสาร (/api/comm-ai) ─────────────
+
+  /// `{settings, defaults, can_edit, max_range_days}`
+  Future<Map<String, dynamic>> getCommAiSettings() async => _dataMap(await _send('GET', '/api/comm-ai/settings'));
+
+  /// Chat summary of a room for a Thai-time range (`YYYY-MM-DD HH:mm`). Streams token / status / done / error.
+  Stream<AiStreamEvent> streamChatSummary(String roomId, {required String from, required String to, bool force = false, CancelToken? cancel}) async* {
+    final Response<ResponseBody> res;
+    try {
+      res = await _dio.post<ResponseBody>(
+        '/api/comm-ai/chat/rooms/$roomId/summary',
+        data: {'from': from, 'to': to, 'force': force, 'stream': true},
+        cancelToken: cancel,
+        options: Options(
+          responseType: ResponseType.stream,
+          headers: {'Accept': 'text/event-stream'},
+          receiveTimeout: const Duration(minutes: 6),
+          validateStatus: (_) => true,
+        ),
+      );
+    } on DioException catch (e) {
+      throw _fromDio(e);
+    }
+    final Stream<String> stream = res.data!.stream.cast<List<int>>().transform(utf8.decoder);
+    if ((res.statusCode ?? 200) >= 400) {
+      final text = await stream.join();
+      dynamic raw;
+      try {
+        raw = jsonDecode(text);
+      } catch (_) {
+        raw = text;
+      }
+      throw _envelopeError(res.statusCode ?? 500, raw);
+    }
+    yield* parseAiSse(stream);
+  }
+
+  Future<List<Map<String, dynamic>>> getChatSummaries(String roomId) async {
+    final d = _dataMap(await _send('GET', '/api/comm-ai/chat/rooms/$roomId/summaries'));
+    return extractMapList(d['list']);
+  }
+
+  Future<Map<String, dynamic>> getCommAiSummary(String id) async => _dataMap(await _send('GET', '/api/comm-ai/summaries/$id'));
+
+  /// Call: transcript (filtered by sharing), summary, recordings.
+  Future<Map<String, dynamic>> getCommAiCall(String callId) async => _dataMap(await _send('GET', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}'));
+
+  Future<void> uploadCallRecording(String callId, String filePath, {int durationMs = 0, String mime = 'audio/mp4'}) async {
+    final form = FormData.fromMap({
+      'duration_ms': '$durationMs',
+      'audio': await MultipartFile.fromFile(filePath, filename: 'call.${mime.contains('ogg') ? 'ogg' : mime.contains('wav') ? 'wav' : 'm4a'}', contentType: DioMediaType.parse(mime)),
+    });
+    await _send('POST', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/recording', data: form, options: Options(sendTimeout: const Duration(minutes: 5)));
+  }
+
+  /// One part of a long call recording (parts are joined on the server when the final one arrives).
+  Future<Map<String, dynamic>> uploadCallRecordingPart(String callId, String filePath,
+      {required int part, int parts = 0, bool isFinal = false, int durationMs = 0, String mime = 'audio/wav'}) async {
+    final form = FormData.fromMap({
+      'part': '$part',
+      if (isFinal) 'final': '1',
+      if (isFinal) 'parts': '$parts',
+      'duration_ms': '$durationMs',
+      'audio': await MultipartFile.fromFile(filePath, filename: 'call.${mime.contains('wav') ? 'wav' : 'm4a'}', contentType: DioMediaType.parse(mime)),
+    });
+    return _dataMap(await _send('POST', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/recording', data: form, options: Options(sendTimeout: const Duration(minutes: 5))));
+  }
+
+  Future<List<int>> downloadCallRecording(String path) => _downloadBytes(path);
+
+  /// `{list, next_before}` — type all|call|video|chat, from/to YYYY-MM-DD (Thai), q, before (ISO).
+  Future<Map<String, dynamic>> getCommAiHistory({String type = 'all', String? from, String? to, String? q, String? before, int limit = 30}) async =>
+      _dataMap(await _send('GET', '/api/comm-ai/history', query: {
+        'type': type,
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        if (before != null) 'before': before,
+        'limit': limit,
+      }));
+
+  /// kind 'call' (id = call id) or 'chat' (id = summary id). format pdf|docx|md|txt.
+  Future<List<int>> exportConversation(String kind, String id, {String format = 'pdf', List<String> include = const ['summary', 'actions', 'transcript'], String lang = 'th'}) =>
+      _downloadBytes('/api/comm-ai/export/$kind/${Uri.encodeComponent(id)}?format=$format&include=${include.join(',')}&lang=$lang');
+
+  Future<Map<String, dynamic>> shareConversationEmail(String kind, String id, {required List<String> to, List<String> cc = const [], String message = '', List<String> include = const ['summary', 'actions', 'transcript'], String format = 'pdf', String lang = 'th'}) async =>
+      _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/email', data: {'to': to, 'cc': cc, 'message': message, 'include': include, 'format': format, 'lang': lang}));
+
+  /// `{token, url_path, expires_at}`
+  Future<Map<String, dynamic>> createConversationLink(String kind, String id, {List<String> include = const ['summary', 'actions', 'transcript'], int days = 7, String? password}) async =>
+      _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/link', data: {'include': include, 'days': days, if (password != null && password.isNotEmpty) 'password': password}));
+
+  /// Links this user created for a conversation: `[{id, expires_at, revoked_at, view_count, has_password, ...}]`.
+  Future<List<Map<String, dynamic>>> listConversationLinks(String kind, String id) async =>
+      extractMapList(_dataMap(await _send('GET', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/links'))['list']);
+
+  Future<void> revokeConversationLink(int linkId) async => _send('DELETE', '/api/comm-ai/share/links/$linkId');
+
+  /// Admin: partial update → `{settings}`.
+  Future<Map<String, dynamic>> saveCommAiSettings(Map<String, dynamic> patch) async => _dataMap(await _send('PUT', '/api/comm-ai/settings', data: patch));
+
+  /// `{prompts: {call: {prompt, is_default, version, ...}, chat: {...}}, max_chars}`
+  Future<Map<String, dynamic>> getCommAiPrompts() async => _dataMap(await _send('GET', '/api/comm-ai/prompts'));
+
+  Future<Map<String, dynamic>> saveCommAiPrompt(String kind, {String? prompt, bool reset = false}) async =>
+      _dataMap(await _send('PUT', '/api/comm-ai/prompts/$kind', data: reset ? {'reset': true} : {'prompt': prompt ?? ''}));
+
+  /// Runs the prompt on a sample conversation (or [sample] lines "name: text") → `{result, ms}`. Not saved.
+  Future<Map<String, dynamic>> testCommAiPrompt(String kind, {String? prompt, String? sample}) async => _dataMap(await _send(
+        'POST',
+        '/api/comm-ai/prompts/$kind/test',
+        data: {if (prompt != null) 'prompt': prompt, if (sample != null && sample.trim().isNotEmpty) 'sample': sample},
+        options: Options(receiveTimeout: const Duration(minutes: 3)),
+      ));
 
   Future<List<int>> _downloadBytes(String path) async {
     try {

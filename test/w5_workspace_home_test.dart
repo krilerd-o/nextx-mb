@@ -76,13 +76,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('[QA] เลยกำหนด'), findsOneWidget);
     expect(find.text('เลย 2 วัน'), findsOneWidget);
-    // Board search lives in the header.
-    expect(find.byKey(const ValueKey('ws-board-q')), findsNothing);
-    await tester.tap(find.byTooltip('ค้นหาบอร์ด'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('ws-board-q')), findsOneWidget);
+    // Board search: the standard list search (header icon) filters as you type.
     expect(find.text('[QA] Mobile board'), findsWidgets);
     expect(find.text('เสร็จ 1/4'), findsOneWidget);
+    expect(find.byKey(const ValueKey('nx-list-search')), findsNothing);
+    await tester.tap(find.byTooltip('ค้นหา'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('nx-list-search')), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('nx-list-search')), 'mobile');
+    await tester.pumpAndSettle();
+    expect(find.text('[QA] Mobile board'), findsWidgets);
+    await tester.enterText(find.byKey(const ValueKey('nx-list-search')), 'ไม่มีบอร์ดนี้');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ws-board-none')), findsOneWidget);
+    expect(find.text('[QA] Mobile board'), findsNothing);
   });
 
   testWidgets('trash restores an item', (tester) async {

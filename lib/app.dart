@@ -9,8 +9,10 @@ import 'core/alice_debug_layer.dart';
 import 'core/app_config.dart';
 import 'screens/auth/app_lock_screen.dart';
 import 'screens/calls/call_overlay.dart';
+import 'screens/calls/live_captions.dart';
 import 'services/app_lock.dart';
 import 'services/calls/call_service.dart';
+import 'services/calls/live_transcription.dart';
 import 'services/unread_service.dart';
 import 'core/app_theme.dart';
 import 'core/navigation/app_router.dart';
@@ -128,6 +130,8 @@ class _NextXMobileAppState extends State<NextXMobileApp>
                         // Photo uploads (sending / waiting for signal / failed) on every screen.
                         if (sel.$4) NxUploadPill(navigatorKey: _router.routerDelegate.navigatorKey),
                         if (sel.$4 && CallService.instance != null) Positioned.fill(child: CallOverlay(service: CallService.instance!)),
+                        // "สรุปการสนทนาพร้อมแล้ว" after a call with AI notes.
+                        if (sel.$4 && CallService.instance != null) CallSummaryToast(lt: LiveTranscription.instance, navigatorKey: _router.routerDelegate.navigatorKey),
                         if (AppLock.instance.locked && sel.$4)
                           const Positioned.fill(child: AppLockScreen()),
                         if (!sel.$4) const _AddSpaceCancelPill(),

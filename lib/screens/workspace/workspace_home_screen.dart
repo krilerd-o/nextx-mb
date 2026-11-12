@@ -18,7 +18,7 @@ import 'task_detail_screen.dart';
 import 'workspace_board_screen.dart';
 import 'workspace_trash_screen.dart';
 import '../../widgets/nx_refresh.dart';
-import '../../widgets/nx_back_handler.dart';
+import '../../widgets/nx_list_toolbar.dart';
 
 /// Which of my open items to show at the top.
 enum WsMyScope { today, overdue, week, all }
@@ -60,19 +60,14 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
   String? _error;
   WsMyScope _scope = WsMyScope.today;
   bool _expanded = false;
-  String _q = '';
+  NxListQuery _query = const NxListQuery();
 
   /// My-work box starts folded (remembered per device).
   bool _myOpen = false;
-  bool _searching = false;
-  final _search = TextEditingController();
-  final _searchFocus = FocusNode();
   static const _kMyOpen = 'ws_home_mywork_open';
 
   @override
   void dispose() {
-    _search.dispose();
-    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -90,16 +85,6 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
     SharedPreferences.getInstance().then((p) => p.setBool(_kMyOpen, _myOpen)).catchError((_) => false);
   }
 
-  void _toggleSearch() {
-    setState(() {
-      _searching = !_searching;
-      if (!_searching) {
-        _search.clear();
-        _q = '';
-      }
-    });
-    if (_searching) WidgetsBinding.instance.addPostFrameCallback((_) => _searchFocus.requestFocus());
-  }
 
   ApiClient get _api => context.read<AppConfig>().apiClient;
 
@@ -204,26 +189,22 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => NxBackHandler(active: _searching, onBack: _toggleSearch, child: _buildPage(context));
+  Widget build(BuildContext context) => _buildPage(context);
 
 
   Widget _buildPage(BuildContext context) {
     final theme = Theme.of(context);
     final boards = _boards;
+    // Search board name, code and description (case-insensitive, any word order).
+    final words = _query.q.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
     final shownBoards = [
       for (final b in boards ?? const <Map<String, dynamic>>[])
-        if (_q.isEmpty || '${b['name']} ${b['code']}'.toLowerCase().contains(_q.toLowerCase())) b,
+        if (words.isEmpty || words.every('${b['name'] ?? ''} ${b['code'] ?? ''} ${b['description'] ?? ''}'.toLowerCase().contains)) b,
     ];
     return NxScrollScaffold(
       header: NxAppHeader(
         title: 'Workspace',
         actions: [
-          IconButton(
-            key: const ValueKey('ws-board-search'),
-            tooltip: tr(_searching ? 'ปิดค้นหา' : 'ค้นหาบอร์ด'),
-            icon: Icon(_searching ? NxI.x : NxI.magnifyingGlass),
-            onPressed: _toggleSearch,
-          ),
           IconButton(
             tooltip: tr('ถังขยะ'),
             icon: const Icon(NxI.trash),
@@ -234,7 +215,19 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
           ),
         ],
       ),
-      body: NxRefresh(
+      // Same search bar as the other lists (header search icon, live filter) — the old in-list
+      // field could lose the keyboard on Android when the page re-laid out.
+      body: Column(children: [
+        NxListToolbar(
+          key: const ValueKey('ws-board-toolbar'),
+          query: _query,
+          liveSearch: true,
+          allowSavedViews: false,
+          searchHint: 'ค้นหาบอร์ด',
+          onChanged: (q) => setState(() => _query = q),
+        ),
+        Expanded(
+          child: NxRefresh(
         onRefresh: _load,
         child: boards == null && _error == null
             ? const NxSkeletonList()
@@ -247,32 +240,26 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
                   const SizedBox(height: 18),
                   Row(children: [
                     Expanded(child: Text(tr('บอร์ด'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-                    Text('${boards?.length ?? 0}', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                  ]),
-                  if (_searching)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: TextField(
-                        key: const ValueKey('ws-board-q'),
-                        controller: _search,
-                        focusNode: _searchFocus,
-                        textInputAction: TextInputAction.search,
-                        decoration: InputDecoration(
-                          hintText: tr('ค้นหาบอร์ด'),
-                          prefixIcon: const Icon(NxI.magnifyingGlass, size: 18),
-                          isDense: true,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                        onChanged: (v) => setState(() => _q = v.trim()),
-                      ),
+                    Text(
+                      words.isEmpty ? '${boards?.length ?? 0}' : '${shownBoards.length}/${boards?.length ?? 0}',
+                      style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
+                  ]),
                   const SizedBox(height: 8),
                   if (boards != null && boards.isEmpty)
                     Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(tr('ยังไม่มีบอร์ด')))),
+                  if (boards != null && boards.isNotEmpty && shownBoards.isEmpty)
+                    Padding(
+                      key: const ValueKey('ws-board-none'),
+                      padding: const EdgeInsets.all(24),
+                      child: Center(child: Text('${tr('ไม่พบบอร์ดที่ตรงกับ')} "${_query.q}"', textAlign: TextAlign.center)),
+                    ),
                   for (final b in shownBoards) _boardCard(context, b),
                 ],
               ),
-      ),
+          ),
+        ),
+      ]),
     );
   }
 

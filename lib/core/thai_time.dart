@@ -40,11 +40,39 @@ extension ThaiTimeX on DateTime {
 bool isWallClockField(String? field, {String? module}) {
   final f = (field ?? '').toLowerCase();
   if (f.isEmpty) return false;
+  // Lead / Contact / Account keep their *_datetime (blacklist_datetime,
+  // lead_datetime …) as real UTC instants — the web shows them +7
+  // (`crmPartyDateTime.js`), so must we.
+  if (isPartyModule(module) && f.endsWith('_datetime')) return false;
   if (f == 'date_start' || f == 'date_end' || f.endsWith('_datetime')) return true;
   // Activity visit stamps are written as Bangkok wall clock (same as the web visit panel).
   if (f == 'checkindate' || f == 'checkoutdate') return true;
   if (module == 'case' && const {'createdtime', 'modifiedtime', 'created_at', 'updated_at'}.contains(f)) return true;
   return false;
+}
+
+/// Lead / Contact / Account: date-times stored as UTC (see [isWallClockField]).
+bool isPartyModule(String? module) => const {'lead', 'contact', 'account'}.contains((module ?? '').toLowerCase());
+
+/// A Thai wall-clock form value (`2026-11-11T10:37:00`, as the pickers
+/// produce) as the UTC wall clock Lead / Contact / Account store
+/// (`2026-11-11 03:37:00`) — same as the web's `serializePartyDateValue`.
+/// Values that already carry a zone are converted to UTC; others unchanged.
+String toPartyUtcWall(String raw) {
+  final s = raw.trim();
+  if (s.length <= 10) return raw; // date only: nothing to shift
+  DateTime? utc;
+  if (_zoned.hasMatch(s)) {
+    utc = DateTime.tryParse(s)?.toUtc();
+  } else {
+    final w = parseWall(s);
+    if (w != null) {
+      utc = DateTime.utc(w.year, w.month, w.day, w.hour, w.minute, w.second).subtract(thaiOffset);
+    }
+  }
+  if (utc == null) return raw;
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${utc.year}-${two(utc.month)}-${two(utc.day)} ${two(utc.hour)}:${two(utc.minute)}:${two(utc.second)}';
 }
 
 /// Wall-clock value: the digits as written, ignoring a fake `Z`/offset.

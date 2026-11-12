@@ -205,7 +205,10 @@ class NxFormField extends StatelessWidget {
         return _text(
           text: value?.toString() ?? '',
           onChanged: _on && !readOnly ? (v) => onChanged?.call(v) : null,
-          keyboard: const TextInputType.numberWithOptions(decimal: true, signed: true),
+          // No `signed`: some Android keyboards (Samsung) then hide the
+          // decimal point, so prices could not be typed with satang.
+          keyboard: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: const [NxDecimalInputFormatter(signed: true)],
           align: TextAlign.right,
           enabled: _on && !readOnly,
         );
@@ -214,6 +217,7 @@ class NxFormField extends StatelessWidget {
           text: value?.toString() ?? '',
           onChanged: _on ? (v) => onChanged?.call(v) : null,
           keyboard: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: const [NxDecimalInputFormatter()],
           align: TextAlign.right,
           prefix: Padding(
             padding: EdgeInsets.only(left: 12, top: 12),
@@ -226,6 +230,7 @@ class NxFormField extends StatelessWidget {
           text: value?.toString() ?? '',
           onChanged: _on ? (v) => onChanged?.call(v) : null,
           keyboard: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: const [NxDecimalInputFormatter()],
           align: TextAlign.right,
           suffix: Padding(
             padding: const EdgeInsets.only(right: 12, top: 12),
@@ -977,6 +982,37 @@ const _defaultEmojis = [
   NxPickOption(value: 'angry', label: 'โกรธ', emoji: '😡'),
   NxPickOption(value: 'love', label: 'ชอบ', emoji: '😍'),
 ];
+
+/// Number / price typing: digits and one decimal point, so `12.` and `12.5`
+/// can be typed (prices, discounts…). A comma from a locale decimal pad
+/// (`12,5`) becomes a point; thousands commas (`1,500.25`) are dropped.
+/// Anything else is refused (the old text stays).
+class NxDecimalInputFormatter extends TextInputFormatter {
+  const NxDecimalInputFormatter({this.signed = false});
+  final bool signed;
+
+  static String? clean(String raw, {bool signed = false}) {
+    var t = raw.replaceAll(RegExp(r'\s'), '');
+    if (t.contains('.')) {
+      t = t.replaceAll(',', '');
+    } else if (RegExp(r'^-?\d*,\d{0,2}$').hasMatch(t)) {
+      t = t.replaceFirst(',', '.');
+    } else {
+      t = t.replaceAll(',', '');
+    }
+    final ok = signed ? RegExp(r'^-?\d*\.?\d*$') : RegExp(r'^\d*\.?\d*$');
+    return ok.hasMatch(t) ? t : null;
+  }
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final t = clean(newValue.text, signed: signed);
+    if (t == null) return oldValue;
+    if (t == newValue.text) return newValue;
+    final end = (newValue.selection.end - (newValue.text.length - t.length)).clamp(0, t.length);
+    return TextEditingValue(text: t, selection: TextSelection.collapsed(offset: end));
+  }
+}
 
 class _TextBox extends StatefulWidget {
   const _TextBox({

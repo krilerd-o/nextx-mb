@@ -19,6 +19,9 @@ class MenuAccess {
   static const leave = 'leave-request';
   static const leaveManagement = 'leave-management';
   static const callLog = 'call-log';
+  /// ISAAC AI การสื่อสาร (live captions, summaries, history) — switched per Package.
+  static const commAi = 'comm-ai-history';
+  static const commAiInsights = 'comm-ai-insights';
   static const incoming = 'activity-incoming';
   static const pending = 'pending-work';
   static const job = 'job';

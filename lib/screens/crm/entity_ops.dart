@@ -16,6 +16,7 @@ import '../../services/api_client.dart';
 import '../../widgets/dense_card_tile.dart';
 import '../dashboard/home_boxes.dart' show RecentStrip;
 import '../../widgets/fields/nx_entity_picker_sheet.dart';
+import '../../widgets/fields/nx_form_field.dart' show NxDecimalInputFormatter;
 import '../../widgets/fields/nx_lift_sheet.dart';
 import '../../widgets/fields/nx_pick_option.dart';
 import '../../widgets/nx_hero_cta.dart';
@@ -382,7 +383,8 @@ class _QuoteLineEditor extends StatelessWidget {
                     enabled: canEdit,
                     initialValue: '${line['quantity'] ?? line['qty'] ?? ''}',
                     decoration: InputDecoration(labelText: tr('จำนวน')),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: const [NxDecimalInputFormatter()],
                     onChanged: (v) => onChanged({...line, 'quantity': v, 'qty': v}),
                   ),
                 ),
@@ -392,7 +394,8 @@ class _QuoteLineEditor extends StatelessWidget {
                     enabled: canEdit,
                     initialValue: '${line['unit_price'] ?? ''}',
                     decoration: InputDecoration(labelText: tr('ราคา')),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: const [NxDecimalInputFormatter()],
                     onChanged: (v) => onChanged({...line, 'unit_price': v}),
                   ),
                 ),
