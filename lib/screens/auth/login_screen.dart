@@ -755,10 +755,13 @@ class _ScanPanel extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(tr('เข้าสู่ระบบด้วย QR'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 3),
-                    Text(
-                      tr('บนเว็บ: ตั้งค่า → ความปลอดภัย → เข้าใช้งานแอปมือถือด้วย QR แล้วสแกนด้วยแอปนี้ เข้าได้ทันทีไม่ต้องพิมพ์รหัส'),
-                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.35),
+                    const SizedBox(height: 6),
+                    OutlinedButton.icon(
+                      key: const ValueKey('qr-howto'),
+                      style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, shape: const StadiumBorder()),
+                      onPressed: () => showQrHowTo(context),
+                      icon: const Icon(NxI.play, size: 16),
+                      label: Text(tr('วิธีสแกน')),
                     ),
                   ],
                 ),
@@ -770,3 +773,56 @@ class _ScanPanel extends StatelessWidget {
     );
   }
 }
+
+
+/// "วิธีสแกน": an animation of the web steps — profile picture (bottom left) →
+/// "คิวอาร์โค้ดเข้าสู่ระบบ" → scan the QR with this app.
+Future<void> showQrHowTo(BuildContext context) => showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final cs = theme.colorScheme;
+        Widget step(String n, String text) => Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(radius: 11, backgroundColor: cs.primary, child: Text(n, style: TextStyle(fontSize: 12, color: cs.onPrimary, fontWeight: FontWeight.w700))),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(tr(text), style: theme.textTheme.bodyMedium)),
+                ],
+              ),
+            );
+        return Dialog(
+          key: const ValueKey('qr-howto-dialog'),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Image.asset('assets/how_to_scan_qr.gif', key: const ValueKey('qr-howto-gif'), fit: BoxFit.fitWidth, gaplessPlayback: true),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(tr('วิธีสแกนเข้าสู่ระบบ'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      step('1', 'บนเว็บ แตะรูปโปรไฟล์ มุมซ้ายล่าง'),
+                      step('2', 'ในหน้าต่างที่ลอยขึ้นมา เลือก "คิวอาร์โค้ดเข้าสู่ระบบ"'),
+                      step('3', 'กด "สแกน QR จากเว็บ" ในแอปนี้ แล้วส่องไปที่ QR บนจอ'),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: FilledButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('เข้าใจแล้ว'))),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
