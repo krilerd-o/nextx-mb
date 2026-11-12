@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../widgets/nx_scroll_scaffold.dart';
@@ -30,31 +29,14 @@ class ProfileScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final config = context.watch<AppConfig>();
     final email = config.session.email ?? '—';
-    final b64 = config.profileAvatarBase64;
-
-    Widget avatar;
-    if (b64 != null && b64.isNotEmpty) {
-      try {
-        final bytes = base64Decode(b64);
-        avatar = CircleAvatar(
-          radius: 48,
-          backgroundColor: theme.colorScheme.primaryContainer,
-          backgroundImage: MemoryImage(bytes),
-        );
-      } catch (_) {
-        avatar = CircleAvatar(
-          radius: 48,
-          backgroundColor: theme.colorScheme.primaryContainer,
-          child: Icon(NxI.userFill, size: 48, color: theme.colorScheme.primary),
-        );
-      }
-    } else {
-      avatar = CircleAvatar(
-        radius: 48,
-        backgroundColor: theme.colorScheme.primaryContainer,
-        child: Icon(NxI.userFill, size: 48, color: theme.colorScheme.primary),
-      );
-    }
+    final image = config.profileAvatarImage;
+    final avatar = CircleAvatar(
+      radius: 48,
+      backgroundColor: theme.colorScheme.primaryContainer,
+      backgroundImage: image,
+      onBackgroundImageError: image == null ? null : (_, _) {},
+      child: image == null ? Icon(NxI.userFill, size: 48, color: theme.colorScheme.primary) : null,
+    );
 
     return NxScrollScaffold(
       header: const NxAppHeader(title: 'ความปลอดภัยขั้นสูง'),
@@ -96,7 +78,7 @@ class ProfileScreen extends StatelessWidget {
                     }
                   },
                 ),
-                if (b64 != null && b64.isNotEmpty)
+                if (config.profileAvatarUrl == null && (config.profileAvatarBase64 ?? '').isNotEmpty)
                   TextButton(
                     onPressed: () => config.clearProfileAvatar(),
                     child: Text(tr('ลบรูป')),

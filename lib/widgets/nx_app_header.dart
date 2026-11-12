@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -259,13 +258,8 @@ class NxHubAvatar extends StatelessWidget {
       config = context.watch<AppConfig>();
     } catch (_) {}
     final name = config?.session.displayName ?? config?.session.email ?? 'U';
-    final b64 = config?.profileAvatarBase64;
-    ImageProvider? image;
-    if (b64 != null && b64.isNotEmpty) {
-      try {
-        image = MemoryImage(base64Decode(b64.contains(',') ? b64.split(',').last : b64));
-      } catch (_) {}
-    }
+    // Same picture as the web (server imagename), else the copy on this phone.
+    final image = config?.profileAvatarImage;
     return GestureDetector(
       // Tap = profile hub (profile + all settings); long-press = Space switcher.
       onTap: () => GoRouter.maybeOf(context)?.push(AppRoutes.profile),
@@ -287,6 +281,7 @@ class NxHubAvatar extends StatelessWidget {
           radius: size / 2,
           backgroundColor: ring ? Colors.white : Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
           backgroundImage: image,
+          onBackgroundImageError: image == null ? null : (_, _) {},
           child: image == null
               ? Text(
                   tr(entityInitials(name)),
