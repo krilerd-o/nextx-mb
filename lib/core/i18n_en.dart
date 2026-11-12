@@ -127,7 +127,7 @@ const Map<String, String> enStrings = {
   'ภาพรวมงานวันนี้': 'Today\'s overview',
   'ผู้มุ่งหวังที่กำลังติดตาม': 'Leads you are following up',
   'กำลังหาที่อยู่…': 'Finding the address…',
-  'ค้นจากรหัสไปรษณีย์': 'Search by postcode',
+  'ค้นจากรหัส ปณ.': 'Search by postcode',
   'จังหวัด': 'Province',
   'อำเภอ/เขต': 'District',
   'ตำบล/แขวง': 'Sub-district',

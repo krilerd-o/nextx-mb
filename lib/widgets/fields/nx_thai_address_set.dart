@@ -614,7 +614,7 @@ class _NxThaiAddressSetState extends State<NxThaiAddressSet> {
                 key: const ValueKey('addr-zip-focus'),
                 onPressed: widget.enabled ? () => _zipFocus.requestFocus() : null,
                 icon: const Icon(NxI.magnifyingGlass, size: 18),
-                label: Text(tr('ค้นจากรหัสไปรษณีย์'), maxLines: 1, overflow: TextOverflow.ellipsis),
+                label: Text(tr('ค้นจากรหัส ปณ.'), maxLines: 1, overflow: TextOverflow.ellipsis),
                 style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44), shape: const StadiumBorder()),
               ),
             ),

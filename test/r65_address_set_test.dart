@@ -135,7 +135,7 @@ void main() {
       expect(find.byKey(const ValueKey('nx-field-address_province')), findsNothing);
       expect(find.byKey(const ValueKey('addr-map')), findsOneWidget);
       expect(find.text('ปักหมุดบนแผนที่'), findsOneWidget);
-      expect(find.text('ค้นจากรหัสไปรษณีย์'), findsOneWidget);
+      expect(find.text('ค้นจากรหัส ปณ.'), findsOneWidget);
       expect(find.byKey(const ValueKey('addr-hint')), findsOneWidget);
       expect(find.text('แตะเพื่อเลือกจังหวัด'), findsOneWidget);
       // District / sub-district wait for the level above.

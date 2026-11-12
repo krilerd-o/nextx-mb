@@ -482,7 +482,9 @@ class NxFormField extends StatelessWidget {
       case FieldUiType.latLong:
         return _wrap(
           context,
-          isEmpty: parseLatLong(value).lat.isEmpty && parseLatLong(value).lng.isEmpty,
+          // Label always floats: these boxes carry their own hints (ละติจูด / ลองจิจูด), so a resting
+          // label would be drawn over the first one.
+          isEmpty: false,
           child: _LatLongBox(
             value: value,
             enabled: _on,
@@ -493,7 +495,7 @@ class NxFormField extends StatelessWidget {
       case FieldUiType.addressMap:
         return _wrap(
           context,
-          isEmpty: _addressFromMap(value).isEmpty,
+          isEmpty: false, // same: inner boxes have their own hints
           child: Column(
             children: [
               _TextBox(
