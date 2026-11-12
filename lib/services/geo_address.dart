@@ -37,6 +37,23 @@ class GeoAddress {
     return out;
   }
 
+  /// Test hook: replaces the platform geocoder for [lookupParts].
+  @visibleForTesting
+  static Future<GeoAddressParts?> Function(double lat, double lng)? debugLookupParts;
+
+  /// Structured Thai address for a coordinate (street, ตำบล, อำเภอ, จังหวัด,
+  /// รหัสไปรษณีย์) — used to fill a form's address set from a map pin.
+  static Future<GeoAddressParts?> lookupParts(double lat, double lng, {Duration timeout = const Duration(seconds: 8)}) async {
+    try {
+      if (debugLookupParts != null) return await debugLookupParts!(lat, lng);
+      final marks = await Geocoding(locale: const Locale('th', 'TH')).placemarkFromCoordinates(lat, lng).timeout(timeout);
+      if (marks.isEmpty) return null;
+      return GeoAddressParts.fromPlacemark(marks.first);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// `Lumpini Tower\n1168/111 Rama IV Rd\nThung Maha Mek` style lines.
   static String format(Placemark p) {
     String c(String? s) => (s ?? '').trim();
@@ -56,4 +73,47 @@ class GeoAddress {
     if (lines.length < 3) add(c(p.administrativeArea));
     return lines.take(3).join('\n');
   }
+}
+
+/// Address parts from the device geocoder (Thai locale). Names may still
+/// carry "จังหวัด / อำเภอ / เขต / ตำบล / แขวง" prefixes; the address set
+/// matches them against the NEXTX lists.
+class GeoAddressParts {
+  const GeoAddressParts({
+    this.street = '',
+    this.subdistrict = '',
+    this.district = '',
+    this.province = '',
+    this.postalCode = '',
+  });
+
+  final String street;
+  final String subdistrict;
+  final String district;
+  final String province;
+  final String postalCode;
+
+  factory GeoAddressParts.fromPlacemark(Placemark p) {
+    String c(String? s) => (s ?? '').trim();
+    final street = [c(p.subThoroughfare), c(p.thoroughfare)].where((e) => e.isNotEmpty).join(' ');
+    // Thailand: subAdministrativeArea = อำเภอ/เขต; locality is sometimes the
+    // อำเภอ, sometimes the ตำบล; subLocality = ตำบล/แขวง.
+    var district = c(p.subAdministrativeArea);
+    var sub = c(p.subLocality);
+    final loc = c(p.locality);
+    if (district.isEmpty) {
+      district = loc;
+    } else if (sub.isEmpty && loc != district) {
+      sub = loc;
+    }
+    return GeoAddressParts(
+      street: street.isEmpty ? c(p.street) : street,
+      subdistrict: sub,
+      district: district,
+      province: c(p.administrativeArea),
+      postalCode: c(p.postalCode).replaceAll(RegExp(r'\D'), ''),
+    );
+  }
+
+  bool get isEmpty => street.isEmpty && subdistrict.isEmpty && district.isEmpty && province.isEmpty && postalCode.isEmpty;
 }

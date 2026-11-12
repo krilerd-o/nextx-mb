@@ -34,6 +34,7 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_measure_size.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_refresh.dart';
+import '../../widgets/nx_tip_banner.dart';
 
 class EntityListScreen extends StatefulWidget {
   const EntityListScreen({
@@ -185,38 +186,12 @@ class _EntityListScreenState extends State<EntityListScreen> {
     SharedPreferences.getInstance().then((p) => p.setBool(_hintKey, true)).catchError((_) => false);
   }
 
-  Widget _hintBanner(ThemeData theme) {
-    final cs = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: Material(
+  Widget _hintBanner(ThemeData theme) => NxTipBanner(
         key: const ValueKey('crm-row-hint'),
-        color: cs.primaryContainer.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
-          child: Row(
-            children: [
-              Icon(NxI.handPointing, size: 18, color: cs.onPrimaryContainer),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  tr('กดค้างที่รายการเพื่อดูคำสั่ง (ปรับสถานะ, คอมเมนต์, แก้ไข, ทำซ้ำ, ลบ)'),
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onPrimaryContainer),
-                ),
-              ),
-              IconButton(
-                tooltip: tr('ปิด'),
-                visualDensity: VisualDensity.compact,
-                icon: Icon(NxI.x, size: 16, color: cs.onPrimaryContainer),
-                onPressed: _hintSeen,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+        icon: NxI.handPointing,
+        text: tr('กดค้างที่รายการเพื่อดูคำสั่ง (ปรับสถานะ, คอมเมนต์, แก้ไข, ทำซ้ำ, ลบ)'),
+        onClose: _hintSeen,
+      );
 
   bool _loading = true;
   bool _refreshing = false;

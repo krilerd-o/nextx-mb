@@ -775,6 +775,56 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  // ── Thai address (same endpoints as the web's ThaiAddressPicker:
+  // GET /api/thai-address/*). Lists are static, so they are cached per run.
+  final Map<String, Object> _thaiAddrCache = {};
+
+  /// จังหวัด (names, Thai-sorted).
+  Future<List<String>> getThaiProvinces() async {
+    final hit = _thaiAddrCache['p'];
+    if (hit is List<String>) return hit;
+    final data = _dataMap(await _send('GET', '/api/thai-address/provinces'));
+    final out = [for (final v in (data['provinces'] as List? ?? const [])) '$v'];
+    if (out.isNotEmpty) _thaiAddrCache['p'] = out;
+    return out;
+  }
+
+  /// อำเภอ/เขต of [province].
+  Future<List<String>> getThaiDistricts(String province) async {
+    final k = 'd|$province';
+    final hit = _thaiAddrCache[k];
+    if (hit is List<String>) return hit;
+    final data = _dataMap(await _send('GET', '/api/thai-address/districts', query: {'province': province}));
+    final out = [
+      for (final v in (data['districts'] as List? ?? const []))
+        if (v is Map) '${v['name'] ?? ''}' else '$v',
+    ].where((s) => s.isNotEmpty).toList();
+    if (out.isNotEmpty) _thaiAddrCache[k] = out;
+    return out;
+  }
+
+  /// ตำบล/แขวง of [district]: `{name, postal_code, postal_codes?}`.
+  Future<List<Map<String, dynamic>>> getThaiSubdistricts(String province, String district) async {
+    final k = 's|$province|$district';
+    final hit = _thaiAddrCache[k];
+    if (hit is List<Map<String, dynamic>>) return hit;
+    final data = _dataMap(await _send('GET', '/api/thai-address/subdistricts', query: {'province': province, 'district': district}));
+    final out = extractMapList(data['subdistricts']);
+    if (out.isNotEmpty) _thaiAddrCache[k] = out;
+    return out;
+  }
+
+  /// Areas for a 5-digit postcode: `{subdistrict, district, province, postal_code}`.
+  Future<List<Map<String, dynamic>>> getThaiAddressByPostalCode(String postalCode) async {
+    final k = 'z|$postalCode';
+    final hit = _thaiAddrCache[k];
+    if (hit is List<Map<String, dynamic>>) return hit;
+    final data = _dataMap(await _send('GET', '/api/thai-address/by-postal-code', query: {'postalCode': postalCode}));
+    final out = extractMapList(data['options']);
+    _thaiAddrCache[k] = out;
+    return out;
+  }
+
   ({DateTime at, String biz, List<Map<String, dynamic>> users})? _usersCache;
 
   /// Business users for id → name labels; cached 10 minutes per business.

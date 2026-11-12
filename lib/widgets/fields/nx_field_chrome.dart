@@ -29,6 +29,23 @@ class NxFieldStyle {
 
   static const double lineHeight = 24;
 
+  /// Height of one line of text inside a single-line [TextField] (what
+  /// `RenderEditable` sizes itself to). Tap fields (picklist, date, user, …)
+  /// use it for their content so they come out exactly as tall as the text
+  /// inputs next to them, whatever the font / text scale.
+  static double inputLineHeight(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodyLarge ?? const TextStyle(fontSize: 16);
+    final tp = TextPainter(
+      text: TextSpan(text: ' ', style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final h = tp.preferredLineHeight;
+    tp.dispose();
+    return h;
+  }
+
   static TextStyle restingStyle(ColorScheme scheme) => TextStyle(
         color: scheme.onSurfaceVariant,
         fontSize: 15,
@@ -156,6 +173,8 @@ class NxOutlinedTapField extends StatelessWidget {
     this.suffixIcon,
     this.prefixIcon,
     this.onTap,
+    this.multiLine = false,
+    this.hint,
   });
 
   final String label;
@@ -170,9 +189,18 @@ class NxOutlinedTapField extends StatelessWidget {
   final Widget? prefixIcon;
   final VoidCallback? onTap;
 
+  /// Content may wrap onto more lines (chips). Otherwise the content box is
+  /// exactly one text-input line tall, so the field matches a text input.
+  final bool multiLine;
+
+  /// Shown inside an empty field (the label then sits on the border), e.g.
+  /// "แตะเพื่อเลือกจังหวัด".
+  final String? hint;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final line = NxFieldStyle.inputLineHeight(context);
     return InkWell(
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(NxFieldStyle.radius),
@@ -185,28 +213,66 @@ class NxOutlinedTapField extends StatelessWidget {
           errorText: trn(errorText),
           suffixIcon: suffixIcon,
           prefixIcon: prefixIcon,
-          floatLabel: !isEmpty,
+          floatLabel: !isEmpty || hint != null,
           skipRestingHint: true,
         ),
         child: isEmpty
             ? SizedBox(
-                height: NxFieldStyle.lineHeight,
+                height: line,
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: NxFieldStyle.restingLabel(scheme, label, required: required),
+                  child: hint != null
+                      ? Text(
+                          tr(hint!),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: NxFieldStyle.restingStyle(scheme).copyWith(color: scheme.onSurfaceVariant.withValues(alpha: enabled ? 1 : 0.6)),
+                        )
+                      : NxFieldStyle.restingLabel(scheme, label, required: required),
                 ),
               )
-            : ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: NxFieldStyle.lineHeight),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  heightFactor: 1,
-                  child: child,
-                ),
-              ),
+            : multiLine
+                ? ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: line),
+                    child: Align(alignment: Alignment.centerLeft, heightFactor: 1, child: child),
+                  )
+                : SizedBox(
+                    height: line,
+                    child: Align(alignment: Alignment.centerLeft, child: child),
+                  ),
       ),
     );
   }
+}
+
+/// Small "clear value" button that fits in a field's suffix slot (no extra
+/// height — a full IconButton would make the field taller than a text input).
+class NxFieldClearButton extends StatelessWidget {
+  const NxFieldClearButton({super.key, required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tr('ล้างค่า'),
+      child: InkResponse(
+        onTap: onPressed,
+        radius: 18,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Icon(NxI.x, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+}
+
+/// Suffix for a tap field: optional clear button + the caret.
+Widget nxTapFieldSuffix(BuildContext context, {VoidCallback? onClear}) {
+  final caret = Icon(NxI.caretDown, color: Theme.of(context).colorScheme.onSurfaceVariant);
+  if (onClear == null) return caret;
+  return Row(mainAxisSize: MainAxisSize.min, children: [NxFieldClearButton(onPressed: onClear), caret]);
 }
 
 class NxDashedDropzone extends StatelessWidget {

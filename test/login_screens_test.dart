@@ -80,8 +80,8 @@ void main() {
       session: const SessionState(accessToken: 't', userId: '7', businessId: '1', menusLoaded: true, menuKeys: ['lead', 'calendar']),
     );
     // quotation has no permission → not suggested.
-    expect(find.text('ลีด/ดีล'), findsWidgets);
-    expect(find.text('ใบเสนอ'), findsNothing);
+    expect(find.text('ผู้มุ่งหวัง'), findsWidgets);
+    expect(find.text('ใบเสนอราคา'), findsNothing);
     await tester.tap(find.text('เริ่มใช้งาน'));
     await tester.pump(const Duration(milliseconds: 100));
     expect(config.roleSetupDone, isTrue);

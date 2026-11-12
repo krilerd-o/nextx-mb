@@ -13,6 +13,7 @@ import 'field_ui_type.dart';
 import 'field_validate.dart';
 import 'nx_form_field.dart';
 import 'nx_pick_option.dart';
+import 'nx_thai_address_set.dart';
 import '../nx_shake.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
@@ -247,6 +248,32 @@ class NxEntityFormState extends State<NxEntityForm> {
     }
   }
 
+  /// Thai address sets (province / district / sub-district / postcode) in
+  /// this form — drawn as one easy group like the web, not 4 plain inputs.
+  List<ThaiAddressSetFields> _addressSets() => detectThaiAddressSets(widget.fields.map(fieldName));
+
+  Widget _addressSet(ThaiAddressSetFields set) {
+    final byName = {for (final f in widget.fields) fieldName(f): f};
+    final members = set.members.map((n) => byName[n]).whereType<Map<String, dynamic>>().toList();
+    return NxThaiAddressSet(
+      fields: set,
+      values: widget.values,
+      api: widget.api,
+      enabled: widget.enabled && !members.any(fieldIsReadonly),
+      labels: {for (final f in members) fieldName(f): fieldLabel(f)},
+      required: {for (final f in members) if (fieldIsRequired(f)) fieldName(f)},
+      errors: {
+        for (final n in set.members)
+          if (widget.errors[n] != null) n: widget.errors[n]!,
+      },
+      onChanged: widget.onChanged,
+      decorate: (name, child) => NxShake(
+        key: _shakers.putIfAbsent(name, GlobalKey<NxShakeState>.new),
+        child: KeyedSubtree(key: _keys.putIfAbsent(name, GlobalKey.new), child: child),
+      ),
+    );
+  }
+
   Widget _fieldAt(int i, Map<String, dynamic> f) {
     final name = fieldName(f);
     // Same key on every build, so revealErrors() can always find the field.
@@ -474,9 +501,28 @@ class NxEntityFormState extends State<NxEntityForm> {
     final theme = Theme.of(context);
     final pairShort = NxBreakpoint.of(context).twoPane;
     final children = <Widget>[];
+    final sets = _addressSets();
+    ThaiAddressSetFields? setOf(Map<String, dynamic>? f) {
+      if (f == null) return null;
+      final n = fieldName(f);
+      for (final s in sets) {
+        if (s.members.contains(n)) return s;
+      }
+      return null;
+    }
+
+    final drawnSets = <ThaiAddressSetFields>{};
     String? lastBlock;
     for (var i = 0; i < fields.length; i++) {
       final f = fields[i];
+      final set = setOf(f);
+      if (set != null) {
+        if (drawnSets.add(set)) {
+          children.add(_addressSet(set));
+          children.add(const SizedBox(height: 20));
+        }
+        continue;
+      }
       final block = widget.sectionOf == null ? fieldBlockLabel(f) : null;
       if (block != null && block != lastBlock) {
         lastBlock = block;
@@ -496,6 +542,7 @@ class NxEntityFormState extends State<NxEntityForm> {
       final next = i + 1 < fields.length ? fields[i + 1] : null;
       final canPair = pairShort &&
           next != null &&
+          setOf(next) == null &&
           (widget.sectionOf == null ? fieldBlockLabel(next) : null) == block &&
           _isShortField(resolveFieldUiType(f)) &&
           _isShortField(resolveFieldUiType(next)) &&

@@ -14,7 +14,7 @@ import '../../core/i18n.dart';
 const _packageHints = <String, (String, IconData)>{
   'next_x': ('ทุกเมนูของ NEXTX', NxI.squaresFour),
   'next_t': ('ทีมและงาน: Workspace แชท ปฏิทิน เคส', NxI.kanban),
-  'next_s': ('งานขาย: ลีด ดีล ใบเสนอราคา ลูกค้า', NxI.handshake),
+  'next_s': ('งานขาย: ผู้มุ่งหวัง ดีล ใบเสนอราคา ลูกค้า', NxI.handshake),
   'next_c': ('สื่อสาร: Omni Chat และเมล', NxI.chatCircle),
   'next_o': ('สินค้าและบริการ', NxI.package),
   'next_h': ('HR: ลงเวลา การลา พนักงาน', NxI.briefcase),

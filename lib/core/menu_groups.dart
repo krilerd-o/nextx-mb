@@ -82,10 +82,10 @@ const kMenuGroups = <MenuGroupDef>[
     color: Color(0xFF6366F1),
     sections: [
       MenuSectionDef(items: [
-        MenuItemDef(id: 'workspace', title: 'Workspace', subtitle: 'บอร์ดและงานของทีม', icon: NxI.kanban, route: AppRoutes.workspaceHome, menuKeys: [MenuAccess.workspace]),
+        MenuItemDef(id: 'workspace', title: 'เวิร์กสเปซ', subtitle: 'บอร์ดและงานของทีม', icon: NxI.kanban, route: AppRoutes.workspaceHome, menuKeys: [MenuAccess.workspace]),
         MenuItemDef(
           id: 'approvals',
-          title: 'รออนุมัติ',
+          title: 'รออนุมัติของฉัน',
           subtitle: 'ใบเสนอราคา การลา คำขอเข้าร่วม',
           icon: NxI.checkCircle,
           route: AppRoutes.approvals,
@@ -153,13 +153,13 @@ const kMenuGroups = <MenuGroupDef>[
     color: Color(0xFF8B5CF6),
     sections: [
       MenuSectionDef(title: 'คุยกับลูกค้า', items: [
-        MenuItemDef(id: 'mail', title: 'เมล', subtitle: 'อ่าน เขียน และตอบกลับ', icon: NxI.envelope, route: AppRoutes.mail, menuKeys: [MenuAccess.mailbox]),
+        MenuItemDef(id: 'mail', title: 'กล่องจดหมาย', subtitle: 'อ่าน เขียน และตอบกลับ', icon: NxI.envelope, route: AppRoutes.mail, menuKeys: [MenuAccess.mailbox]),
         MenuItemDef(id: 'call-log', title: 'บันทึกการโทร', subtitle: 'ผลการโทรและงานที่เกี่ยวข้อง', icon: NxI.phoneCall, route: AppRoutes.callLog, menuKeys: [MenuAccess.callLog]),
       ]),
       MenuSectionDef(title: 'คุยในทีม', items: [
-        MenuItemDef(id: 'chat', title: 'แชท', subtitle: 'แชททีมแบบเรียลไทม์', icon: NxI.chatCircle, route: AppRoutes.chatHome, menuKeys: [MenuAccess.chat]),
+        MenuItemDef(id: 'chat', title: 'แชททีม', subtitle: 'แชททีมแบบเรียลไทม์', icon: NxI.chatCircle, route: AppRoutes.chatHome, menuKeys: [MenuAccess.chat]),
         MenuItemDef(id: 'comm-ai', title: 'ประวัติ AI การสนทนา', subtitle: 'บทสนทนา เสียง และสรุปจากการโทรและแชท', icon: NxI.sparkle, route: AppRoutes.commAi, menuKeys: [MenuAccess.commAi]),
-        MenuItemDef(id: 'comm-ai-insights', title: 'แดชบอร์ด ISAAC', subtitle: 'งานค้างจากการคุย ความรู้สึกลูกค้า และหัวข้อที่ถูกพูดถึงบ่อย', icon: NxI.chartBar, route: AppRoutes.commAiInsights, menuKeys: [MenuAccess.commAiInsights]),
+        MenuItemDef(id: 'comm-ai-insights', title: 'แดชบอร์ด ISAAC การสื่อสาร', subtitle: 'งานค้างจากการคุย ความรู้สึกลูกค้า และหัวข้อที่ถูกพูดถึงบ่อย', icon: NxI.chartBar, route: AppRoutes.commAiInsights, menuKeys: [MenuAccess.commAiInsights]),
       ]),
     ],
   ),
@@ -173,14 +173,14 @@ const kMenuGroups = <MenuGroupDef>[
       MenuSectionDef(title: 'HR', items: [
         MenuItemDef(
           id: 'hr',
-          title: 'หน้า HR',
+          title: 'HR',
           subtitle: 'ภาพรวมลงเวลาและการลา',
           icon: NxI.briefcase,
           route: AppRoutes.hrHome,
           menuKeys: [MenuAccess.attendance, MenuAccess.leave, MenuAccess.leaveManagement],
         ),
-        MenuItemDef(id: 'attendance', title: 'ลงเวลา', subtitle: 'เข้างาน / ออกงาน', icon: NxI.clock, route: AppRoutes.attendance, menuKeys: [MenuAccess.attendance]),
-        MenuItemDef(id: 'leave', title: 'การลา', subtitle: 'ขอลาและดูสถานะ', icon: NxI.calendarCheck, route: AppRoutes.leaveList, menuKeys: [MenuAccess.leave, MenuAccess.leaveManagement]),
+        MenuItemDef(id: 'attendance', title: 'ลงเวลาเข้า-ออก', subtitle: 'เข้างาน / ออกงาน', icon: NxI.clock, route: AppRoutes.attendance, menuKeys: [MenuAccess.attendance]),
+        MenuItemDef(id: 'leave', title: 'ขอลา', subtitle: 'ขอลาและดูสถานะ', icon: NxI.calendarCheck, route: AppRoutes.leaveList, menuKeys: [MenuAccess.leave, MenuAccess.leaveManagement]),
         MenuItemDef(
           id: 'attendance-report',
           title: 'รายงานลงเวลา',
@@ -196,7 +196,7 @@ const kMenuGroups = <MenuGroupDef>[
         MenuItemDef(id: 'asset', title: 'สินทรัพย์', subtitle: 'เครื่องและอุปกรณ์ของลูกค้า', icon: NxI.hardDrives, route: '/fsm/asset', menuKeys: [MenuAccess.asset]),
         MenuItemDef(id: 'service-location', title: 'พื้นที่บริการ', subtitle: 'สถานที่ให้บริการ', icon: NxI.mapPin, route: '/fsm/service_location', menuKeys: [MenuAccess.serviceLocation]),
         MenuItemDef(id: 'skill', title: 'ทักษะ', subtitle: 'ทักษะช่าง', icon: NxI.medal, route: '/fsm/skill', menuKeys: [MenuAccess.skill]),
-        MenuItemDef(id: 'files', title: 'ไฟล์', subtitle: 'กล้องและอัปโหลด', icon: NxI.folder, route: AppRoutes.files, menuKeys: [MenuAccess.files]),
+        MenuItemDef(id: 'files', title: 'จัดการไฟล์', subtitle: 'กล้องและอัปโหลด', icon: NxI.folder, route: AppRoutes.files, menuKeys: [MenuAccess.files]),
       ]),
       MenuSectionDef(title: 'ร้านค้า', items: [
         MenuItemDef(

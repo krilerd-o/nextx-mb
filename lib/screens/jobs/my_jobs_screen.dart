@@ -22,6 +22,7 @@ import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_scroll_tabs.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
+import '../../widgets/nx_tip_banner.dart';
 import '../calendar/activity_detail_screen.dart';
 import '../crm/entity_detail_screen.dart';
 import '../journey/status_followups.dart' show journeyErrorText;
@@ -373,29 +374,18 @@ class _HintCard extends StatelessWidget {
   final VoidCallback onMore;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return Container(
-      key: const ValueKey('my-jobs-hint'),
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(14, 12, 6, 10),
-      decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(18)),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(NxI.info, size: 20, color: cs.primary),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(tr('หน้านี้แสดงเฉพาะงานที่มอบหมายให้คุณ'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            Text(tr('ดูและจัดการงานของทั้งทีมได้ที่เมนู "ใบสั่งงาน"'), style: theme.textTheme.bodySmall?.copyWith(height: 1.4)),
-            TextButton(onPressed: onMore, style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact), child: Text(tr('ต่างกันอย่างไร'))),
-          ]),
+  Widget build(BuildContext context) => NxTipBanner(
+        key: const ValueKey('my-jobs-hint'),
+        title: tr('หน้านี้แสดงเฉพาะงานที่มอบหมายให้คุณ'),
+        text: tr('ดูและจัดการงานของทั้งทีมได้ที่เมนู "ใบสั่งงาน"'),
+        closeKey: const ValueKey('my-jobs-hint-close'),
+        onClose: onClose,
+        action: TextButton(
+          onPressed: onMore,
+          style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+          child: Text(tr('ต่างกันอย่างไร')),
         ),
-        IconButton(key: const ValueKey('my-jobs-hint-close'), icon: const Icon(NxI.x, size: 18), onPressed: onClose),
-      ]),
-    );
-  }
+      );
 }
 
 class _Summary extends StatelessWidget {
