@@ -21,9 +21,12 @@ import 'cal/cal_model.dart' show hm;
 import 'visit_check_sheet.dart';
 import '../../services/photo_pipeline.dart' show PhotoTarget;
 import 'visit_photo_flow.dart';
+import 'visit_photo_grid.dart';
+import 'activity_outcome_notes.dart';
 import '../../widgets/nx_place_panel.dart';
 import 'package:flutter/services.dart';
 import '../../core/thai_time.dart';
+import '../../core/activity_guests.dart' show activityStatusLabel, activityTypeLabel;
 import '../../core/i18n.dart';
 import '../../core/recent_records.dart';
 import '../../widgets/nx_refresh.dart';
@@ -120,6 +123,18 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     );
     if (saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างกิจกรรมใหม่จากการทำซ้ำแล้ว'))));
+    }
+  }
+
+  /// "สร้างนัดหมายต่อ" from the next-step card: a new activity with the same
+  /// customer / place / guests, titled with the next step.
+  Future<void> _followUp(String nextStep) async {
+    final saved = await nxPush<bool>(
+      context,
+      ActivityFormScreen(initial: activityFollowUpSeed(_row, nextStep), title: 'สร้างนัดหมายต่อ'),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างนัดหมายต่อแล้ว'))));
     }
   }
 
@@ -236,6 +251,28 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     } finally {
       await _loadVisit();
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Deletes one visit photo on the server (already confirmed by the sheet);
+  /// the visit's photo list is replaced by what the server returns.
+  Future<bool> _deletePhoto(Map<String, dynamic> photo) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final photoId = '${photo['id'] ?? ''}';
+    if (photoId.isEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(tr('ลบรูปนี้ไม่ได้ — ไม่พบรหัสรูป'))));
+      return false;
+    }
+    try {
+      final left = await context.read<AppConfig>().apiClient.deleteActivityPhoto(_id, photoId);
+      if (!mounted) return true;
+      HapticFeedback.mediumImpact();
+      setState(() => _visit = {...?_visit, 'photos': left});
+      messenger.showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, content: Text(tr('ลบรูปแล้ว'))));
+      return true;
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      return false;
     }
   }
 
@@ -473,7 +510,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   if ((row['location']?.toString() ?? '').isNotEmpty)
                     _line(context, NxI.mapPin, row['location'].toString()),
                   if ((row['status']?.toString() ?? '').isNotEmpty)
-                    _line(context, NxI.flag, row['status'].toString()),
+                    _line(context, NxI.flag, activityStatusLabel(row['status'].toString())),
                 ],
               ),
             ),
@@ -486,6 +523,17 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
               NxSurfaceCard(
                 padding: const EdgeInsets.all(16),
                 child: NxHtmlView(html: row['description'].toString()),
+              ),
+            ],
+            if (_tab == 0) ...[
+              const SizedBox(height: 12),
+              ActivityOutcomeNotes(
+                activityId: _id,
+                row: row,
+                onSaved: (field, value) {
+                  if (mounted) setState(() => _row = {..._row, field: value});
+                },
+                onFollowUp: _followUp,
               ),
             ],
             const SizedBox(height: 14),
@@ -510,7 +558,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
             if (_tab == 0) ...[
               const SizedBox(height: 16),
               Text(
-                tr('การเยี่ยม'),
+                tr('การเข้าพบ'),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -576,7 +624,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                       )
                     else
                       Text(
-                        tr('เยี่ยมเสร็จแล้ว'),
+                        tr('เข้าพบเสร็จแล้ว'),
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: const Color(0xFF16A34A),
                         ),
@@ -657,15 +705,10 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   ),
                 )
               else
-                AttachmentStrip(
-                  items: [
-                    for (final p in photos)
-                      {
-                        'url': (p['url'] ?? '/uploads/${p['path']}').toString(),
-                        'name': p['name'],
-                        'mime': p['mime'] ?? 'image/jpeg',
-                      },
-                  ],
+                VisitPhotoGrid(
+                  key: const ValueKey('visit-photo-grid'),
+                  photos: photos,
+                  onDelete: _deletePhoto,
                 ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
@@ -866,8 +909,8 @@ String activityExportText(Map<String, dynamic> row, {required String when, Strin
   return [
     v('subject').isEmpty ? entityTitle(row, module: 'activity') : v('subject'),
     '${tr('เวลา')}: $when',
-    if (v('activitytype').isNotEmpty) '${tr('ประเภท')}: ${v('activitytype')}',
-    if (v('status').isNotEmpty) '${tr('สถานะ')}: ${v('status')}',
+    if (v('activitytype').isNotEmpty) '${tr('ประเภท')}: ${tr(activityTypeLabel(v('activitytype')))}',
+    if (v('status').isNotEmpty) '${tr('สถานะ')}: ${activityStatusLabel(v('status'))}',
     if (v('location').isNotEmpty) '${tr('สถานที่')}: ${v('location')}',
     if (who.isNotEmpty) '${tr('ลูกค้า')}: $who',
     if (v('video_conference_url').isNotEmpty) '${tr('ลิงก์')}: ${v('video_conference_url')}',

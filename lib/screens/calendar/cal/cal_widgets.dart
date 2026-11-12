@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/activity_guests.dart' show activityTypeLabel;
 import '../../../core/i18n.dart';
 import '../../../core/thai_time.dart';
 import '../../../widgets/nx_icons.dart';
@@ -29,7 +30,7 @@ class CalEventTile extends StatelessWidget {
     final endsToday = sameDay(e.end.subtract(const Duration(minutes: 1)), d);
     final sub = [
       if (e.location.isNotEmpty) e.location,
-      if (e.type.isNotEmpty) tr(e.type),
+      if (e.type.isNotEmpty) tr(activityTypeLabel(e.type)),
     ].join(' · ');
     return InkWell(
       onTap: onTap,

@@ -17,6 +17,7 @@ import '../../widgets/nx_attachments.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../notifications/notification_center_screen.dart' show relativeTime;
+import '../../core/activity_guests.dart' show activityStatusLabel, activityTypeLabel;
 import '../../core/i18n.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../core/thai_time.dart';
@@ -797,8 +798,8 @@ class _EntityActivitiesPanelState extends State<EntityActivitiesPanel> {
                         Text(
                           [
                             _activityWhen(r['date_start']),
-                            if ('${r['status'] ?? ''}'.isNotEmpty) '${r['status']}',
-                            if ('${r['activitytype'] ?? ''}'.isNotEmpty) '${r['activitytype']}',
+                            if ('${r['status'] ?? ''}'.isNotEmpty) activityStatusLabel('${r['status']}'),
+                            if ('${r['activitytype'] ?? ''}'.isNotEmpty) tr(activityTypeLabel('${r['activitytype']}')),
                           ].where((e) => e.isNotEmpty).join(' · '),
                           style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                         ),

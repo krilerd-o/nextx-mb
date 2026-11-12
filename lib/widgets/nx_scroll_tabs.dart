@@ -36,6 +36,10 @@ class NxScrollTabs extends StatefulWidget {
 
   static const height = 44.0;
 
+  /// Extra paint room above / below the track for the selected pill's shadow
+  /// (the TabBar's horizontal scroll view clips to its own box).
+  static const shadowRoom = 10.0;
+
   @override
   State<NxScrollTabs> createState() => _NxScrollTabsState();
 }
@@ -70,18 +74,41 @@ class _NxScrollTabsState extends State<NxScrollTabs> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    const room = NxScrollTabs.shadowRoom;
+    // The track keeps its 44 px; the TabBar (its scroll view clips) reaches
+    // [room] past it above and below so the selected pill's shadow is not cut.
     return Padding(
       padding: widget.padding,
-      child: Container(
+      child: SizedBox(
         height: NxScrollTabs.height,
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(999),
+        child: Stack(
+          clipBehavior: Clip.none,
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              key: const ValueKey('nx-tabs-track'),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: -room,
+              bottom: -room,
+              child: _tabBar(cs),
+            ),
+          ],
         ),
-        child: TabBar(
+      ),
+    );
+  }
+
+  Widget _tabBar(ColorScheme cs) => TabBar(
           controller: _ctrl,
           isScrollable: true,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4 + NxScrollTabs.shadowRoom),
           tabAlignment: TabAlignment.center,
           dividerColor: Colors.transparent,
           overlayColor: const WidgetStatePropertyAll(Colors.transparent),
@@ -133,10 +160,7 @@ class _NxScrollTabsState extends State<NxScrollTabs> with TickerProviderStateMix
                 ),
               ),
           ],
-        ),
-      ),
-    );
-  }
+        );
 }
 
 /// Shows a pinned copy of a page's tab row under the header once the real

@@ -121,7 +121,7 @@ class HomeLayout extends ChangeNotifier {
     HomeChartMeta(id: 'chart_lead_conv', title: 'Conversion rate', hint: 'Lead ที่แปลงเป็นลูกค้าแล้ว', group: 'customer', defaultSize: HomeSize.half, resizable: true),
     HomeChartMeta(id: 'chart_case_status', title: 'เคสตามสถานะ', hint: 'เคสแต่ละสถานะในช่วงนี้', group: 'service', defaultSize: HomeSize.half, resizable: true),
     HomeChartMeta(id: 'chart_case_sla', title: 'SLA เคส', hint: 'เคสที่ปิดทันเวลา (ของฉัน)', group: 'service', defaultSize: HomeSize.half, resizable: true, periods: ['d7', 'd30', 'd90'], defaultPeriod: 'd30', teamable: false),
-    HomeChartMeta(id: 'chart_activity', title: 'กิจกรรม / เยี่ยมลูกค้า', hint: 'เสร็จ · พลาด · กำลังมา รายวัน', group: 'work', defaultSize: HomeSize.full, periods: ['week', 'month'], defaultPeriod: 'week'),
+    HomeChartMeta(id: 'chart_activity', title: 'กิจกรรม / เข้าพบลูกค้า', hint: 'เสร็จ · พลาด · กำลังมา รายวัน', group: 'work', defaultSize: HomeSize.full, periods: ['week', 'month'], defaultPeriod: 'week'),
     HomeChartMeta(id: 'chart_work', title: 'งาน: สร้าง vs เคลียร์', hint: 'งาน Workspace ของฉัน รายสัปดาห์', group: 'work', defaultSize: HomeSize.full, periods: ['d30', 'd90'], defaultPeriod: 'd30', teamable: false),
     HomeChartMeta(id: 'chart_leave', title: 'วันลาคงเหลือ', hint: 'สิทธิ์ลาที่เหลือปีนี้ แต่ละประเภท', group: 'hr', defaultSize: HomeSize.half, resizable: true, periods: [], defaultPeriod: 'year', teamable: false),
   ];

@@ -1170,6 +1170,12 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  /// `DELETE /api/activity/:id/photos/:photoId` — the visit photos left.
+  Future<List<Map<String, dynamic>>> deleteActivityPhoto(String id, String photoId) async {
+    final env = await _send('DELETE', '/api/activity/$id/photos/${Uri.encodeComponent(photoId)}');
+    return extractMapList(env['data']);
+  }
+
   Future<List<Map<String, dynamic>>> getBoards({String? q, bool writable = false}) async {
     final env = await _send('GET', '/api/boards', query: {
       if (q != null && q.isNotEmpty) 'q': q,

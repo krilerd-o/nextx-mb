@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
+import '../../core/activity_guests.dart' show activityStatusLabel, activityTypeLabel;
 import '../../core/i18n.dart';
 import '../../core/menu_access.dart';
 import '../../core/nx_page_route.dart';
@@ -135,8 +136,8 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
     final statuses = {for (final e in all) if (e.status.isNotEmpty) e.status}.toList()..sort();
     final next = await showNxFilterSheet(context, query: _lq, groups: [
       const NxFilterGroup(key: 'scope', label: 'ขอบเขต', multi: false, options: [NxFilterOption('mine', 'ของฉัน')]),
-      if (types.isNotEmpty) NxFilterGroup(key: 'type', label: 'ประเภท', options: [for (final t in types) NxFilterOption(t, t)]),
-      if (statuses.isNotEmpty) NxFilterGroup(key: 'status', label: 'สถานะ', options: [for (final t in statuses) NxFilterOption(t, t)]),
+      if (types.isNotEmpty) NxFilterGroup(key: 'type', label: 'ประเภท', options: [for (final t in types) NxFilterOption(t, activityTypeLabel(t))]),
+      if (statuses.isNotEmpty) NxFilterGroup(key: 'status', label: 'สถานะ', options: [for (final t in statuses) NxFilterOption(t, activityStatusLabel(t))]),
       const NxFilterGroup(key: 'checkin', label: 'เช็คอิน', multi: false, options: [
         NxFilterOption('done', 'เช็คอินแล้ว'),
         NxFilterOption('not', 'ยังไม่เช็คอิน'),

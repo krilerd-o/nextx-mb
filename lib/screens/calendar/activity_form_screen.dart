@@ -87,7 +87,7 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
     _descInitial = stripHtmlPreview('${r['description'] ?? ''}', maxLen: 100000);
     _desc = TextEditingController(text: _descInitial);
     final t = '${r['activitytype'] ?? ''}';
-    // New activities start as a customer visit (เยี่ยมลูกค้า).
+    // New activities start as a customer visit (เข้าพบลูกค้า).
     _type = t.isEmpty ? 'Visit' : t;
     _allDay = r['all_day'] == true || r['all_day'] == 1 || '${r['all_day']}' == 'true';
     final s = parseWall(r['date_start']) ?? widget.start ?? _nextSlot(thaiNow());
