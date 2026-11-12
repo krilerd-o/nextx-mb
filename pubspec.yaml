@@ -76,7 +76,6 @@ flutter:
     - assets/
     - assets/isaac/
     - assets/sounds/
-    - assets/home/
   # App fonts (OFL 1.1) — same choices as the web; default Google Sans.
   # Google Sans is subset to Latin + Thai to keep the app small.
   fonts:

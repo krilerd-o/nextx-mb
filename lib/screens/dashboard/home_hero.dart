@@ -18,54 +18,9 @@ import '../../core/app_theme.dart' show NxAtmosphereTokens;
 import 'home_boxes.dart' show HomeCardShadow, homeCardFill;
 import 'home_chart_data.dart' show WonData;
 import 'home_charts.dart' show chartCompact;
+import 'home_hero_scene.dart';
 
-/// Photo behind the top of Home.
-const kHomeHeroImage = 'assets/home/hero_meadow.webp';
-
-// ─────────────────────────── time-of-day tone ───────────────────────────
-
-/// How the hero photo is tinted for the time of day (one photo, no extra images).
-enum HeroTone { morning, afternoon, evening, night }
-
-/// 05–10 morning · 11–15 afternoon · 16–18 evening · otherwise night.
-HeroTone heroToneFor(DateTime t) {
-  final h = t.hour;
-  if (h >= 5 && h < 11) return HeroTone.morning;
-  if (h >= 11 && h < 16) return HeroTone.afternoon;
-  if (h >= 16 && h < 19) return HeroTone.evening;
-  return HeroTone.night;
-}
-
-/// 4×5 colour matrix for the photo: morning brighter, afternoon as shot,
-/// evening warm / golden, night dark and blue. [dark] (app in dark mode) dims it.
-List<double> heroToneMatrix(HeroTone tone, {bool dark = false}) {
-  // (r, g, b) gains and offsets.
-  final (rs, gs, bs, ro, go, bo) = switch (tone) {
-    HeroTone.morning => (1.06, 1.06, 1.08, 10.0, 10.0, 12.0),
-    HeroTone.afternoon => (1.0, 1.0, 1.0, 0.0, 0.0, 0.0),
-    HeroTone.evening => (1.08, 0.94, 0.74, 18.0, 6.0, 0.0),
-    HeroTone.night => (0.36, 0.42, 0.62, 4.0, 10.0, 30.0),
-  };
-  final dim = dark ? 0.68 : 1.0;
-  return [
-    rs * dim, 0, 0, 0, ro * dim, //
-    0, gs * dim, 0, 0, go * dim, //
-    0, 0, bs * dim, 0, bo * dim, //
-    0, 0, 0, 1, 0, //
-  ];
-}
-
-/// Colour wash over the photo (top → bottom) for [tone].
-List<Color> heroToneOverlay(HeroTone tone, {bool dark = false}) {
-  final base = switch (tone) {
-    HeroTone.morning => [const Color(0x1AFFF4D6), const Color(0x00FFFFFF)],
-    HeroTone.afternoon => [const Color(0x00000000), const Color(0x00000000)],
-    HeroTone.evening => [const Color(0x47FF8A3D), const Color(0x1FF43F5E)],
-    HeroTone.night => [const Color(0x660B1640), const Color(0x330B1640)],
-  };
-  if (!dark) return base;
-  return [for (final c in base) Color.alphaBlend(const Color(0x33000000), c)];
-}
+export 'home_hero_scene.dart';
 
 // ─────────────────────────── headline choice ───────────────────────────
 
@@ -102,9 +57,9 @@ Duration _motion(BuildContext context, int ms) => MediaQuery.maybeDisableAnimati
 
 // ─────────────────────────── hero ───────────────────────────
 
-/// Full-bleed photo at the top of Home: avatar, greeting + name, date, frosted
+/// Full-bleed drawn landscape at the top of Home (follows the time of day): avatar, greeting + name, date, frosted
 /// search and bell, then the role's headline. [overlap] (the ISAAC card) sits
-/// over the bottom edge of the photo.
+/// over the bottom edge of the scene.
 class HomeHero extends StatelessWidget {
   const HomeHero({
     super.key,
@@ -124,19 +79,19 @@ class HomeHero extends StatelessWidget {
   final Widget? headline;
   final Widget? overlap;
 
-  /// Picks the tone (default: device clock).
+  /// Time of day the scene shows; it keeps following the clock from here
+  /// (default: device clock).
   final DateTime? now;
   final double maxContentWidth;
   final double gutter;
 
-  /// How far [overlap] hangs below the photo.
+  /// How far [overlap] hangs below the scene.
   static const double overlapDepth = 40;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
-    final tone = heroToneFor(now ?? DateTime.now());
     final top = MediaQuery.paddingOf(context).top;
     final hasName = name != null && name!.trim().isNotEmpty;
 
@@ -150,10 +105,10 @@ class HomeHero extends StatelessWidget {
       ),
     );
 
-    // No rounded edge: the photo runs on behind the ISAAC card and melts into the page.
-    // The bottom fades out with an alpha mask (the photo itself turns transparent), so it melts
+    // No rounded edge: the scene runs on behind the ISAAC card and melts into the page.
+    // The bottom fades out with an alpha mask (the scene itself turns transparent), so it melts
     // into whatever the page colour is, with no seam.
-    final photo = ShaderMask(
+    final scene = ShaderMask(
       blendMode: BlendMode.dstIn,
       shaderCallback: (r) => const LinearGradient(
         begin: Alignment.topCenter,
@@ -165,55 +120,24 @@ class HomeHero extends StatelessWidget {
         fit: StackFit.expand,
         clipBehavior: Clip.none,
         children: [
-          // Runs 12px past the bottom (cut by the outer clip): the image layer's own last pixel
+          // Runs 12px past the bottom (cut by the outer clip): the layer's own last pixel
           // row can escape the fade mask on some renderers and show as a hairline.
           Positioned(
             left: 0,
             right: 0,
             top: 0,
             bottom: -12,
-            child: ColorFiltered(
-              key: ValueKey('home-hero-tone-${tone.name}'),
-              colorFilter: ColorFilter.matrix(heroToneMatrix(tone, dark: dark)),
-              child: Image.asset(
-                kHomeHeroImage,
-                key: const ValueKey('home-hero-image'),
-                fit: BoxFit.cover,
-                // Keep the sun (top right) and the hills in view on any width.
-                alignment: const Alignment(0.35, -0.2),
-                excludeFromSemantics: true,
-                gaplessPlayback: true,
-                filterQuality: FilterQuality.medium,
-                errorBuilder: (_, _, _) => const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0xFF6FA8DC), Color(0xFFBFDDF0), Color(0xFF7CC26B), Color(0xFF4E9A3E)],
-                      stops: [0, 0.45, 0.62, 1],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            child: HomeHeroScene(key: const ValueKey('home-hero-scene'), time: now),
           ),
-          // Time-of-day wash.
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: heroToneOverlay(tone, dark: dark),
-              ),
-            ),
-          ),
+          // Dark mode: the whole scene a little dimmer.
+          if (dark) const ColoredBox(key: ValueKey('home-hero-dim'), color: Color(0x38000000)),
           // Scrim so white text reads on a bright sky, then fade into the page.
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.black.withValues(alpha: 0.30), Colors.black.withValues(alpha: 0.06), Colors.black.withValues(alpha: 0)],
+                colors: [Colors.black.withValues(alpha: 0.26), Colors.black.withValues(alpha: 0.05), Colors.black.withValues(alpha: 0)],
                 stops: const [0, 0.30, 0.55],
               ),
             ),
@@ -223,14 +147,14 @@ class HomeHero extends StatelessWidget {
     );
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      // Light status-bar icons while the photo is under them.
+      // Light status-bar icons while the scene is under them.
       value: SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent),
       child: Stack(
         key: const ValueKey('home-hero'),
         children: [
           // Ends 1px early and clipped: some renderers leave the mask's last pixel row unmasked.
-          Positioned(left: 0, right: 0, top: 0, bottom: 1, child: ClipRect(child: photo)),
-          // The photo layer's last, partly covered pixel row can show as a hairline at a
+          Positioned(left: 0, right: 0, top: 0, bottom: 1, child: ClipRect(child: scene)),
+          // The scene layer's last, partly covered pixel row can show as a hairline at a
           // fractional height; the page colour covers it (the fade is already transparent there).
           Positioned(left: 0, right: 0, bottom: 0, height: 3, child: ColoredBox(color: NxAtmosphereTokens.of(context).top)),
           Column(
