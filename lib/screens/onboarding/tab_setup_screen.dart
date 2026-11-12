@@ -7,7 +7,6 @@ import '../../core/menu_access.dart';
 import '../../core/shell_tabs.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
-import '../../widgets/nx_sliding_segmented.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_tab_nav.dart';
 import '../../widgets/nx_step_header.dart';
@@ -29,7 +28,6 @@ class TabSetupScreen extends StatefulWidget {
 class _TabSetupScreenState extends State<TabSetupScreen> {
   late ShellTabsConfig _base;
   late List<String> _tabs;
-  _TabFilter _filter = _TabFilter.all;
   /// The user changed the list here: later permission updates must not reset it.
   bool _edited = false;
   /// Permissions [_tabs] was worked out with (menus may still be loading when the page opens).
@@ -106,15 +104,7 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final catalog = shellTabCatalog.where(_allowed).toList();
-    final shown = [
-      for (final d in catalog)
-        if (switch (_filter) {
-          _TabFilter.all => true,
-          _TabFilter.notAdded => !_tabs.contains(d.id),
-          _TabFilter.added => _tabs.contains(d.id),
-        })
-          d,
-    ];
+    final shown = catalog;
     return Scaffold(
       appBar: widget.fromSettings
           ? AppBar(
@@ -214,18 +204,6 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
                   const SizedBox(height: 24),
                   const _SectionTitle(title: 'เพิ่มแท็บ'),
                   const SizedBox(height: 10),
-                  KeyedSubtree(
-                    key: const ValueKey('tab-filter'),
-                    child: NxSlidingSegmented<_TabFilter>(
-                      value: _filter,
-                      options: const [
-                        (_TabFilter.all, 'ทั้งหมด', null),
-                        (_TabFilter.notAdded, 'ยังไม่เพิ่ม', null),
-                        (_TabFilter.added, 'เพิ่มแล้ว', null),
-                      ],
-                      onChanged: (f) => setState(() => _filter = f),
-                    ),
-                  ),
                   if (_full) ...[
                     const SizedBox(height: 10),
                     Container(
@@ -277,7 +255,6 @@ class _TabSetupScreenState extends State<TabSetupScreen> {
   }
 }
 
-enum _TabFilter { all, notAdded, added }
 
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle({required this.title, this.trailing, this.hint});

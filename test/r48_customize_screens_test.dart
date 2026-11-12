@@ -94,21 +94,13 @@ Future<void> _openGallery(WidgetTester tester) async {
 
 void main() {
   group('ปรับแต่งเมนูล่าง', () {
-    testWidgets('filters ทั้งหมด | ยังไม่เพิ่ม | เพิ่มแล้ว list only allowed tabs', (tester) async {
+    testWidgets('capsules list only allowed tabs, no filter on this page', (tester) async {
       await _pumpTabs(tester, _s(['lead', 'calendar']));
       // Suggested for sales within permissions: dashboard, leads, calendar.
       expect(_keysWithPrefix('tab-chosen-'), {'dashboard', 'leads', 'calendar'});
       expect(_keysWithPrefix('tab-option-'), {'dashboard', 'leads', 'crm', 'calendar', 'search', 'notifications'}); // crm: lead is a CRM menu
       expect(_count(), '3/4');
-
-      await _filter(tester, 'tab-filter', 'ยังไม่เพิ่ม');
-      expect(_keysWithPrefix('tab-option-'), {'crm', 'search', 'notifications'});
-
-      await _filter(tester, 'tab-filter', 'เพิ่มแล้ว');
-      expect(_keysWithPrefix('tab-option-'), {'dashboard', 'leads', 'calendar'});
-
-      await _filter(tester, 'tab-filter', 'ทั้งหมด');
-      expect(_keysWithPrefix('tab-option-').length, 6);
+      expect(find.byKey(const ValueKey('tab-filter')), findsNothing);
     });
 
     testWidgets('add / remove from the list; full → inline note, add disabled, no SnackBar', (tester) async {
