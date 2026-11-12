@@ -64,6 +64,8 @@ class AiProposalCard extends StatelessWidget {
     final fields = preview['fields'] is Map ? Map<String, dynamic>.from(preview['fields'] as Map) : const <String, dynamic>{};
     final sample = preview['sample'] is List ? [for (final r in preview['sample'] as List) if (r is Map) Map<String, dynamic>.from(r)] : const <Map<String, dynamic>>[];
     final total = num.tryParse('${preview['total'] ?? ''}')?.toInt();
+    // Lead / Contact / Account *_datetime are real UTC instants (shown +7); others wall clock.
+    final module = '${preview['module'] ?? ''}';
     final cols = sample.isEmpty ? const <String>[] : sample.first.keys.where((k) => !k.startsWith('_')).take(4).toList();
     final done = state == 'done', cancelled = state == 'cancelled', working = state == 'working';
     return Container(
@@ -98,7 +100,7 @@ class AiProposalCard extends StatelessWidget {
                   decoration: BoxDecoration(border: i == 0 ? null : Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4)))),
                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     SizedBox(width: 110, child: Text(tr(_fieldLabel(e.key)), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant))),
-                    Expanded(child: Text(_fmt(e.key, e.value), style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600))),
+                    Expanded(child: Text(_fmt(e.key, e.value, module), style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600))),
                   ]),
                 ),
             ]),
@@ -117,7 +119,7 @@ class AiProposalCard extends StatelessWidget {
               columns: [for (final c in cols) DataColumn(label: Text(tr(_fieldLabel(c)), style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700)))],
               rows: [
                 for (final r in sample.take(5))
-                  DataRow(cells: [for (final c in cols) DataCell(Text(_fmt(c, r[c]), style: theme.textTheme.bodySmall))]),
+                  DataRow(cells: [for (final c in cols) DataCell(Text(_fmt(c, r[c], module), style: theme.textTheme.bodySmall))]),
               ],
             ),
           ),
@@ -167,11 +169,11 @@ class AiProposalCard extends StatelessWidget {
     );
   }
 
-  static String _fmt(String key, dynamic v) {
+  static String _fmt(String key, dynamic v, [String? module]) {
     if (v == null) return '—';
     if (key.contains('date') && '$v'.length >= 10) {
       final d = parseWall(v);
-      if (d != null) return formatThaiField('$v', key);
+      if (d != null) return formatThaiField('$v', key, module: module == null || module.isEmpty ? null : module);
     }
     return '$v';
   }

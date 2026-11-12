@@ -96,6 +96,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     super.initState();
     _row = Map<String, dynamic>.from(widget.row);
     _reload();
+    // Opened straight on the history tab (deep link / "ดูประวัติ"): load it now,
+    // since only switching tabs loads it otherwise.
+    if (_tabId == 'history') WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _loadTimeline(); });
     _probeJourney();
     if (widget.module == 'case') _loadFollow();
     if (context.read<AppConfig>().isLoggedIn) {
