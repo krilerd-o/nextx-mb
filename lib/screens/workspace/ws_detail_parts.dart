@@ -9,10 +9,37 @@ import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
 import '../../core/workspace_models.dart';
 import '../../widgets/app_bottom_sheet.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_status_stepper.dart';
 
+
+/// Shared status confirm for a workspace item (task / epic / subtask):
+/// current → new board status in the board's colours. True = go ahead.
+Future<bool> confirmWsStatus(
+  BuildContext context, {
+  required Map<String, dynamic> item,
+  required List<WsStatus> statuses,
+  required String to,
+}) async {
+  final from = statuses.where((s) => s.id == '${item['status_id'] ?? ''}').firstOrNull;
+  final target = statuses.where((s) => s.id == to).firstOrNull;
+  if (target == null) return true;
+  final ok = await showStatusChangeConfirm(
+    context,
+    recordTitle: wsTitle(item),
+    from: from?.label,
+    fromColor: from?.color,
+    to: target.label,
+    toColor: target.color,
+    impact: target.isDone
+        ? 'นับเป็นงานเสร็จ และแจ้งผู้ที่ติดตามงานนี้'
+        : (target.isCancelled ? 'งานนี้จะถูกปิดโดยไม่นับว่าเสร็จ' : null),
+    destructive: target.isCancelled,
+  );
+  return ok != null;
+}
 
 /// Status stepper: the board's statuses in order, the current one filled.
 /// Tapping another step changes the status (with a haptic tick).

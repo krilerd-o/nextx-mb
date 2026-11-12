@@ -7,7 +7,9 @@ import '../../core/i18n.dart';
 import '../../core/journey_rules.dart';
 import '../../core/nx_page_route.dart';
 import '../../services/api_client.dart';
+import '../../core/entity_display.dart';
 import '../../widgets/app_bottom_sheet.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../deep_link_loaders.dart';
 
@@ -124,6 +126,11 @@ Future<_ActionForm?> _askForm(
   required String confirm,
   bool danger = false,
   Widget? extra,
+  String? recordTitle,
+  String? from,
+  String? to,
+  Color? fromColor,
+  Color? toColor,
 }) {
   final form = _ActionForm(check: checkDefault, scope: scopeDefault ?? (scopes.isEmpty ? '' : scopes.first.$1));
   final ctrl = TextEditingController();
@@ -137,6 +144,18 @@ Future<_ActionForm?> _askForm(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
+          if ((recordTitle ?? '').trim().isNotEmpty) ...[
+            Text(recordTitle!.trim(), maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(ctx).textTheme.bodyLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+          ],
+          if (to != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+              decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(20)),
+              child: NxStatusTransition(from: from, to: to, fromColor: fromColor, toColor: toColor),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (message != null) ...[
             Text(tr(message), style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
             const SizedBox(height: 12),
@@ -191,29 +210,42 @@ Future<_ActionForm?> _askForm(
               onChanged: (v) => setS(() => form.check = v ?? false),
             ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 50,
-            child: FilledButton(
-              key: const ValueKey('journey-confirm'),
-              style: FilledButton.styleFrom(
-                backgroundColor: danger ? const Color(0xFFE11D48) : null,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              onPressed: canGo
-                  ? () {
-                      form.note = ctrl.text.trim();
-                      HapticFeedback.mediumImpact();
-                      Navigator.pop(ctx, form);
-                    }
-                  : null,
-              child: Text(tr(confirm), style: const TextStyle(fontWeight: FontWeight.w700)),
-            ),
+          NxConfirmButtons(
+            confirmKey: const ValueKey('journey-confirm'),
+            confirmLabel: confirm,
+            color: danger ? kNxDangerRed : (toColor ?? cs.primary),
+            onConfirm: canGo
+                ? () {
+                    form.note = ctrl.text.trim();
+                    HapticFeedback.lightImpact();
+                    Navigator.pop(ctx, form);
+                  }
+                : null,
           ),
         ],
       );
     }),
   );
 }
+
+/// Job status colour (same tones as the job lists).
+Color jobStatusTone(ColorScheme cs, Object? status) => switch (canonicalJobStatus(status)) {
+      'Open' => cs.onSurfaceVariant,
+      'Waiting' => const Color(0xFFF59E0B),
+      'In Progress' => const Color(0xFF2563EB),
+      'Completed' => const Color(0xFF16A34A),
+      'Cancelled' => kNxDangerRed,
+      final s => nxStatusTone(cs, s),
+    };
+
+/// Status a job workflow action leads to.
+String? jobActionTarget(String action) => switch (action) {
+      'accept' || 'resume' || 'reopen' => 'In Progress',
+      'forward' || 'assign' || 'wait' => 'Waiting',
+      'close' => 'Completed',
+      'cancel' => 'Cancelled',
+      _ => null,
+    };
 
 /// Job workflow actions with the same dialogs as the web
 /// (`JobWorkflowActions.jsx`, `JobCloseDialog.jsx`). Returns true when the job changed.
@@ -230,11 +262,24 @@ class JobFlows {
   }) async {
     final api = context.read<AppConfig>().apiClient;
     final expected = row['job_status']?.toString();
+    final cs = Theme.of(context).colorScheme;
+    final target = jobActionTarget(action);
+    // Status chips for every window: current → new, in the job colours.
+    final record = entityTitle(row, module: 'job');
+    final from = (expected ?? '').isEmpty ? null : jobStatusLabel(expected);
+    final fromColor = jobStatusTone(cs, expected);
+    final to = target == null ? null : jobStatusLabel(target);
+    final toColor = target == null ? null : jobStatusTone(cs, target);
     try {
       switch (action) {
         case 'accept':
           final f = await _askForm(
             context,
+            recordTitle: record,
+            from: from,
+            fromColor: fromColor,
+            to: to,
+            toColor: toColor,
             title: actionLabel('job', 'accept'),
             message: 'งานจะเป็น "กำลังดำเนินการ" และบันทึกเวลารับงาน',
             noteLabel: 'หมายเหตุ',
@@ -252,6 +297,11 @@ class JobFlows {
           if (u == null || !context.mounted) return false;
           final f = await _askForm(
             context,
+            recordTitle: record,
+            from: from,
+            fromColor: fromColor,
+            to: to,
+            toColor: toColor,
             title: 'ส่งต่องานให้ ${_userName(u)}',
             message: 'งานจะเป็น "รอการตอบรับ" จนกว่าผู้รับจะกดรับงาน',
             noteLabel: 'ข้อความถึงผู้รับ',
@@ -268,6 +318,11 @@ class JobFlows {
         case 'wait':
           final f = await _askForm(
             context,
+            recordTitle: record,
+            from: from,
+            fromColor: fromColor,
+            to: to,
+            toColor: toColor,
             title: actionLabel('job', 'wait'),
             noteLabel: 'รออะไร',
             noteChips: const ['รออะไหล่', 'รอลูกค้ายืนยัน', 'รอเข้าพื้นที่', 'รอทีมอื่น'],
@@ -279,12 +334,28 @@ class JobFlows {
           if (context.mounted) _snack(context, 'พักงานแล้ว — รอการตอบรับ');
           return true;
         case 'resume':
+          final ok = await showStatusChangeConfirm(
+            context,
+            recordTitle: record,
+            from: from,
+            fromColor: fromColor,
+            to: to ?? jobStatusLabel('In Progress'),
+            toColor: toColor,
+            impact: 'งานจะกลับมานับเวลาดำเนินการต่อ',
+            confirmLabel: actionLabel('job', 'resume'),
+          );
+          if (ok == null || !context.mounted) return false;
           await api.jobWorkflowAction(jobId, 'resume', expectedStatus: expected);
           if (context.mounted) _snack(context, 'ทำงานต่อแล้ว');
           return true;
         case 'cancel':
           final f = await _askForm(
             context,
+            recordTitle: record,
+            from: from,
+            fromColor: fromColor,
+            to: to,
+            toColor: toColor,
             title: actionLabel('job', 'cancel'),
             message: 'กิจกรรมที่ยังไม่เสร็จของงานนี้จะถูกยกเลิกด้วย',
             noteLabel: 'เหตุผลที่ยกเลิก',
@@ -298,10 +369,15 @@ class JobFlows {
           if (context.mounted) _snack(context, 'ยกเลิกงานแล้ว');
           return true;
         case 'close':
-          return await _close(context, jobId, expected, openSignatures);
+          return await _close(context, jobId, expected, openSignatures, header: (record: record, from: from, fromColor: fromColor, to: to, toColor: toColor));
         case 'reopen':
           final f = await _askForm(
             context,
+            recordTitle: record,
+            from: from,
+            fromColor: fromColor,
+            to: to,
+            toColor: toColor,
             title: actionLabel('job', 'reopen'),
             message: 'งานจะกลับมาเป็น "กำลังดำเนินการ"',
             noteLabel: 'เหตุผล',
@@ -321,7 +397,13 @@ class JobFlows {
     return false;
   }
 
-  static Future<bool> _close(BuildContext context, String jobId, String? expected, VoidCallback? openSignatures) async {
+  static Future<bool> _close(
+    BuildContext context,
+    String jobId,
+    String? expected,
+    VoidCallback? openSignatures, {
+    ({String record, String? from, Color fromColor, String? to, Color? toColor})? header,
+  }) async {
     final api = context.read<AppConfig>().apiClient;
     Map<String, dynamic> preview = const {};
     Map<String, dynamic> sigs = const {};
@@ -342,6 +424,11 @@ class JobFlows {
     final theme = Theme.of(context);
     final f = await _askForm(
       context,
+      recordTitle: header?.record,
+      from: header?.from,
+      fromColor: header?.fromColor,
+      to: header?.to,
+      toColor: header?.toColor,
       title: actionLabel('job', 'close'),
       message: open > 0 ? 'มีกิจกรรมที่ยังไม่เสร็จ $open รายการ' : 'กิจกรรมเสร็จครบแล้ว',
       extra: missing.isEmpty
@@ -582,12 +669,34 @@ Future<void> maybeSuggestCloseDeal(BuildContext context, Object? suggest) async 
   }
 }
 
+Color _qtTone(BuildContext context, String status) {
+  final cs = Theme.of(context).colorScheme;
+  return switch (status) {
+    QS.open => cs.onSurfaceVariant,
+    QS.pending => const Color(0xFFF59E0B),
+    QS.approved => const Color(0xFF16A34A),
+    QS.rejected || QS.cancelled => kNxDangerRed,
+    _ => nxStatusTone(cs, status),
+  };
+}
+
 /// Small helpers shared by the quotation flows.
 class QuotationFlows {
   QuotationFlows._();
 
-  static Future<bool> cancel(BuildContext context, String id) async {
-    final f = await _askForm(context, title: 'ยกเลิกใบเสนอราคา', message: 'ยกเลิกแล้วเปิดกลับได้ภายหลัง', confirm: 'ยกเลิกใบเสนอราคา', danger: true);
+  static Future<bool> cancel(BuildContext context, String id, {String? from, String? record}) async {
+    final f = await _askForm(
+      context,
+      title: 'ยกเลิกใบเสนอราคา',
+      recordTitle: record,
+      from: from,
+      fromColor: from == null ? null : _qtTone(context, from),
+      to: QS.cancelled,
+      toColor: kNxDangerRed,
+      message: 'ยกเลิกแล้วเปิดกลับได้ภายหลัง',
+      confirm: 'ยกเลิกใบเสนอราคา',
+      danger: true,
+    );
     if (f == null || !context.mounted) return false;
     try {
       await context.read<AppConfig>().apiClient.putEntity('quotation', id, {'quotation_status': QS.cancelled});
@@ -599,7 +708,18 @@ class QuotationFlows {
     }
   }
 
-  static Future<bool> reopen(BuildContext context, String id) async {
+  static Future<bool> reopen(BuildContext context, String id, {String? record}) async {
+    final ok = await showStatusChangeConfirm(
+      context,
+      recordTitle: record,
+      from: QS.cancelled,
+      fromColor: kNxDangerRed,
+      to: QS.open,
+      toColor: _qtTone(context, QS.open),
+      impact: 'ใบเสนอราคาจะกลับมาแก้ไขและส่งต่อได้อีกครั้ง',
+      confirmLabel: 'เปิดกลับ',
+    );
+    if (ok == null || !context.mounted) return false;
     try {
       await context.read<AppConfig>().apiClient.putEntity('quotation', id, {'quotation_status': QS.open});
       if (context.mounted) _snack(context, 'เปิดใบเสนอราคากลับแล้ว');
@@ -610,11 +730,17 @@ class QuotationFlows {
     }
   }
 
-  static Future<bool> reject(BuildContext context, String id) async {
+  static Future<bool> reject(BuildContext context, String id, {String? record}) async {
     final f = await _askForm(
       context,
       title: 'ไม่อนุมัติใบเสนอราคา',
+      recordTitle: record,
+      from: QS.pending,
+      fromColor: _qtTone(context, QS.pending),
+      to: QS.rejected,
+      toColor: kNxDangerRed,
       noteLabel: 'เหตุผล',
+      noteRequired: true,
       noteChips: const ['ราคาต่ำเกินไป', 'เงื่อนไขไม่เหมาะสม', 'ข้อมูลไม่ครบ', 'ส่วนลดเกินอำนาจ'],
       confirm: 'ไม่อนุมัติ',
       danger: true,
@@ -630,7 +756,18 @@ class QuotationFlows {
     }
   }
 
-  static Future<bool> approve(BuildContext context, String id) async {
+  static Future<bool> approve(BuildContext context, String id, {String? record}) async {
+    final ok = await showStatusChangeConfirm(
+      context,
+      recordTitle: record,
+      from: QS.pending,
+      fromColor: _qtTone(context, QS.pending),
+      to: QS.approved,
+      toColor: _qtTone(context, QS.approved),
+      impact: 'ผู้อนุมัติระดับถัดไป (ถ้ามี) จะได้รับแจ้งต่อ',
+      confirmLabel: 'อนุมัติ',
+    );
+    if (ok == null || !context.mounted) return false;
     try {
       final r = await context.read<AppConfig>().apiClient.approveQuotation(id);
       HapticFeedback.mediumImpact();
@@ -688,7 +825,18 @@ class QuotationFlows {
   }
 
   /// Offer status bar change (not "ปิดการขาย" — that is [showQuotationOutcomeSheet]).
-  static Future<bool> setOffer(BuildContext context, String id, String offer) async {
+  static Future<bool> setOffer(BuildContext context, String id, String offer, {String? from, String? record}) async {
+    final cs = Theme.of(context).colorScheme;
+    final ok = await showStatusChangeConfirm(
+      context,
+      recordTitle: record,
+      from: from,
+      fromColor: from == null ? null : nxStatusTone(cs, from),
+      to: offer,
+      toColor: nxStatusTone(cs, offer),
+      confirmLabel: 'ยืนยัน',
+    );
+    if (ok == null || !context.mounted) return false;
     try {
       final r = await context.read<AppConfig>().apiClient.setQuotationOfferStatus(id, offer);
       HapticFeedback.selectionClick();

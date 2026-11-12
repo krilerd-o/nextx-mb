@@ -12,6 +12,7 @@ import '../../services/realtime_service.dart';
 import '../../services/unread_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_notification_view.dart';
 import '../../core/thai_time.dart';
@@ -215,6 +216,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         padding: const EdgeInsets.only(right: 24),
         color: cs.errorContainer,
         child: Icon(NxI.trash, color: cs.onErrorContainer),
+      ),
+      // Ask first (accidental swipe); cancel snaps the row back.
+      confirmDismiss: (_) => showDeleteConfirm(
+        context,
+        name: '${it['title'] ?? ''}'.trim().isEmpty ? tr('การแจ้งเตือนนี้') : '${it['title']}'.trim(),
+        loses: const ['การแจ้งเตือนนี้จะหายจากรายการ'],
+        note: null,
       ),
       onDismissed: (_) => _delete(it),
       child: Material(

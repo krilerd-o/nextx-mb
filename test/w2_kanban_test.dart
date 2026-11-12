@@ -38,6 +38,13 @@ void main() {
     return key;
   }
 
+  /// A drop on another column asks first (R66): confirm the sheet.
+  Future<void> confirmStatus(WidgetTester tester) async {
+    expect(find.text('เปลี่ยนสถานะ?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('status-confirm-ok')));
+    await tester.pumpAndSettle();
+  }
+
   /// Long-press a card, slide to the right edge and hold there.
   Future<TestGesture> dragToRightEdge(WidgetTester tester, String title) async {
     final g = await tester.startGesture(tester.getCenter(find.text(title)));
@@ -70,6 +77,7 @@ void main() {
     expect(key.currentState!.horizontalOffset, greaterThan(500), reason: 'board scrolls itself toward Done');
     await g.up();
     await tester.pumpAndSettle();
+    await confirmStatus(tester);
     expect(moved, isNotNull);
     expect(moved!.$1['id'], 11);
     expect(moved!.$2, '4');
@@ -93,6 +101,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 16));
     await g.up();
     await tester.pumpAndSettle();
+    await confirmStatus(tester);
     expect(target, '2');
   });
 
@@ -101,6 +110,7 @@ void main() {
     final g = await dragToRightEdge(tester, '[QA] งาน A');
     await g.up();
     await tester.pumpAndSettle();
+    await confirmStatus(tester);
     // Back in To do: scroll home and the card is there again.
     expect(key.currentState!.horizontalOffset, greaterThan(0));
     await tester.drag(find.byType(ListView).first, const Offset(2000, 0));
@@ -112,5 +122,22 @@ void main() {
   test('parseDuration matches the web time format', () {
     expect(parseDuration('1h 30m'), 90);
     expect(parseDuration('2d'), 2880);
+  });
+
+  testWidgets('cancelling the status confirm leaves the card in its column (R66)', (tester) async {
+    var calls = 0;
+    await pumpBoard(tester, (_, _, _) async {
+      calls++;
+      return true;
+    });
+    final g = await dragToRightEdge(tester, '[QA] งาน A');
+    await g.up();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('status-confirm-cancel')));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+    await tester.drag(find.byType(ListView).first, const Offset(2000, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('[QA] งาน A'), findsOneWidget);
   });
 }

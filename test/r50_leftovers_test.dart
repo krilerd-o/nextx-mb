@@ -129,6 +129,10 @@ void main() {
     expect(find.text('งานที่ส่งถึงฉัน'), findsWidgets);
     await tester.tap(find.byTooltip('รับงาน'));
     await _frames(tester);
+    // R66: asks first.
+    expect(a.callKeys, isNot(contains('POST /api/entity/job/21/workflow-action')));
+    await tester.tap(find.byKey(const ValueKey('status-confirm-ok')));
+    await _frames(tester);
     expect(_body(a, 'POST /api/entity/job/21/workflow-action')['action'], 'accept');
   });
 
@@ -145,6 +149,14 @@ void main() {
     await _frames(tester);
     expect(find.byKey(const ValueKey('jobs-awaiting-me')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('accept-31')));
+    await _frames(tester);
+    // R66: asks first; cancel sends nothing.
+    await tester.tap(find.byKey(const ValueKey('status-confirm-cancel')));
+    await _frames(tester);
+    expect(a.callKeys, isNot(contains('POST /api/entity/job/31/workflow-action')));
+    await tester.tap(find.byKey(const ValueKey('accept-31')));
+    await _frames(tester);
+    await tester.tap(find.byKey(const ValueKey('status-confirm-ok')));
     await _frames(tester);
     expect(_body(a, 'POST /api/entity/job/31/workflow-action')['action'], 'accept');
   });

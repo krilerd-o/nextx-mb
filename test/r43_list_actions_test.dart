@@ -115,10 +115,14 @@ void main() {
     expect(find.byKey(const ValueKey('status-opt-Qualified')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('status-opt-Qualified')));
     await settle(tester);
+    // R66: confirm current → new first.
+    expect(find.text('เปลี่ยนสถานะ?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('status-confirm-ok')));
+    await settle(tester);
     final puts = adapter.calls.where((c) => c.method == 'PUT' && c.path == '/api/entity/lead/5').toList();
     expect(puts, hasLength(1));
     expect(puts.first.data, {'lead_status': 'Qualified'});
-    expect(find.textContaining('เปลี่ยนสถานะเป็น [QA] ผ่านเกณฑ์'), findsOneWidget);
+    expect(find.textContaining('เปลี่ยนสถานะแล้ว · [QA] ผ่านเกณฑ์'), findsOneWidget);
     await tester.tap(find.text('เลิกทำ'));
     await settle(tester);
     final puts2 = adapter.calls.where((c) => c.method == 'PUT' && c.path == '/api/entity/lead/5').toList();
@@ -188,8 +192,8 @@ void main() {
     await longPressRow(tester, '[QA] ลูกค้าทดสอบ R43');
     await tester.tap(find.byKey(const ValueKey('row-act-delete')));
     await settle(tester);
-    expect(find.text('ลบรายการนี้?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'ลบ'));
+    expect(find.text('ลบ [QA] ลูกค้าทดสอบ R43?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('delete-confirm')));
     await settle(tester);
     expect(find.text('[QA] ลูกค้าทดสอบ R43'), findsNothing, reason: 'hidden while the undo window is open');
     expect(adapter.callKeys, isNot(contains('DELETE /api/entity/lead/5')));

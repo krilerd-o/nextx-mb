@@ -20,6 +20,7 @@ import '../../widgets/fields/nx_form_field.dart' show NxDecimalInputFormatter;
 import '../../widgets/fields/nx_lift_sheet.dart';
 import '../../widgets/fields/nx_pick_option.dart';
 import '../../widgets/nx_hero_cta.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../calendar/activity_detail_screen.dart';
@@ -841,10 +842,19 @@ class QuotationMailApprovalBar extends StatelessWidget {
             Expanded(
               child: OutlinedButton(
                 onPressed: () async {
+                  final ok = await showStatusChangeConfirm(
+                    context,
+                    from: 'รออนุมัติ',
+                    fromColor: const Color(0xFFF59E0B),
+                    to: 'อนุมัติ',
+                    toColor: const Color(0xFF16A34A),
+                    confirmLabel: 'อนุมัติ',
+                  );
+                  if (ok == null || !context.mounted) return;
                   try {
                     await context.read<AppConfig>().apiClient.approveQuotation(id);
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('อนุมัติแล้ว'))));
+                      showNxStatusChangedSnack(ScaffoldMessenger.of(context), label: 'อนุมัติแล้ว');
                     }
                   } catch (e) {
                     if (context.mounted) {
@@ -859,10 +869,20 @@ class QuotationMailApprovalBar extends StatelessWidget {
             Expanded(
               child: OutlinedButton(
                 onPressed: () async {
+                  final ok = await showStatusChangeConfirm(
+                    context,
+                    from: 'รออนุมัติ',
+                    fromColor: const Color(0xFFF59E0B),
+                    to: 'ไม่อนุมัติ',
+                    requireReason: true,
+                    reasons: kNxRejectReasons,
+                    confirmLabel: 'ปฏิเสธ',
+                  );
+                  if (ok == null || !context.mounted) return;
                   try {
-                    await context.read<AppConfig>().apiClient.rejectQuotation(id);
+                    await context.read<AppConfig>().apiClient.rejectQuotation(id, reason: ok.note);
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ปฏิเสธแล้ว'))));
+                      showNxStatusChangedSnack(ScaffoldMessenger.of(context), label: 'ปฏิเสธแล้ว');
                     }
                   } catch (e) {
                     if (context.mounted) {

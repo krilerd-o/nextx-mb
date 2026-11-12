@@ -13,6 +13,7 @@ import '../../widgets/fields/field_ui_type.dart';
 import '../../widgets/fields/nx_pick_option.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_cached_future.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../deep_link_loaders.dart';
 import 'entity_create_screen.dart';
@@ -118,21 +119,68 @@ class EntityRecordActions {
   }
 
   /// Colour for a status: the picklist's own colour, else from the word.
-  static Color statusColor(ColorScheme cs, String value, [String? hex]) {
-    final s = (hex ?? '').replaceAll('#', '');
-    if (s.length == 6) {
-      final v = int.tryParse(s, radix: 16);
-      if (v != null) return Color(0xFF000000 | v);
+  static Color statusColor(ColorScheme cs, String value, [String? hex]) => nxStatusTone(cs, value, hex);
+
+  /// Tap-to-pick reasons for losing a deal (same presets as the web).
+  static const dealLostReasons = ['ราคาสูงกว่าคู่แข่ง', 'ลูกค้าเลื่อน/ยกเลิกโครงการ', 'ไม่ตรงความต้องการ', 'งบประมาณไม่พอ', 'เลือกเจ้าเดิม'];
+
+  /// What else changes when a record moves to [to] (shown in the confirm sheet).
+  static String? statusImpact(String module, String to) {
+    final w = to.toLowerCase();
+    switch (module) {
+      case 'deal':
+        if (to == kDealClosedWon) return 'นับเป็นดีลที่ชนะในยอดขาย · ความน่าจะเป็น 100%';
+        if (to == kDealClosedLost) return 'นับเป็นดีลที่แพ้ · ความน่าจะเป็น 0%';
+        final p = dealProbabilityFor(to);
+        return p == null ? null : 'ความน่าจะเป็นของดีลจะเป็น $p%';
+      case 'lead':
+        if (RegExp(r'unqualified|lost|junk|ไม่ผ่าน').hasMatch(w)) return 'ผู้มุ่งหวังนี้จะหลุดจากรายการที่กำลังติดตาม';
+        return null;
+      case 'activity':
+        if (RegExp(r'cancel|not held|ยกเลิก').hasMatch(w)) return 'กิจกรรมนี้จะไม่นับในงานที่ต้องทำ';
+        if (RegExp(r'held|done|complete|เสร็จ').hasMatch(w)) return 'นับเป็นกิจกรรมที่ทำเสร็จแล้ว';
+        return null;
+      case 'product' || 'service':
+        if (RegExp(r'inactive|discontinued|ไม่ใช้งาน|เลิก').hasMatch(w)) return 'จะเลือกใช้ในใบเสนอราคา / เอกสารใหม่ไม่ได้';
+        return null;
+      case 'account' || 'contact':
+        if (RegExp(r'inactive|ไม่ใช้งาน').hasMatch(w)) return 'รายการนี้จะถูกซ่อนจากการเลือกในเอกสารใหม่';
+        return null;
     }
-    final w = value.toLowerCase();
-    if (RegExp(r'won|approved|accept|done|complete|qualified|paid|active|อนุมัติ|สำเร็จ|เสร็จ|ใช้งาน$').hasMatch(w)) {
-      return const Color(0xFF16A34A);
-    }
-    if (RegExp(r'lost|reject|cancel|expired|unqualified|inactive|discontinued|ยกเลิก|ไม่อนุมัติ|ไม่ใช้งาน|เลิก').hasMatch(w)) {
-      return cs.error;
-    }
-    if (RegExp(r'draft|new|ร่าง|ใหม่').hasMatch(w)) return cs.onSurfaceVariant;
-    return const Color(0xFFF59E0B);
+    return null;
+  }
+
+  /// Confirm sheet for a plain status change (current → new). Deal
+  /// "Closed Lost" needs a reason (saved as `closed_reason`); other modules
+  /// take no note on a plain update, so none is asked. Null = cancelled.
+  static Future<NxStatusConfirm?> confirmStatus(
+    BuildContext context, {
+    required String module,
+    required Map<String, dynamic> row,
+    required List<({String value, String label, String? color})> options,
+    required String? from,
+    required String to,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final cur = statusCurrent(module, from) ?? from;
+    final f = options.where((o) => o.value == cur || o.value == from || (from != null && o.label == from)).firstOrNull;
+    final t = options.where((o) => o.value == to).firstOrNull;
+    final lost = module == 'deal' && to == kDealClosedLost;
+    return showStatusChangeConfirm(
+      context,
+      recordTitle: entityTitle(row, module: module),
+      from: f?.label ?? from,
+      fromColor: f == null && (from ?? '').isEmpty ? null : statusColor(cs, f?.value ?? from ?? '', f?.color),
+      to: t?.label ?? to,
+      toColor: statusColor(cs, to, t?.color),
+      impact: statusImpact(module, to),
+      requireReason: lost,
+      reasons: lost ? dealLostReasons : const [],
+      noteLabel: lost ? 'เหตุผลที่แพ้' : null,
+      initialNote: lost ? '${row['closed_reason'] ?? ''}'.trim() : '',
+      noteKey: lost ? const ValueKey('deal-lost-reason') : const ValueKey('status-confirm-note'),
+      destructive: nxIsDestructiveStatus('$to ${t?.label ?? ''}'),
+    );
   }
 
   /// Fields the edit / duplicate form shows (schema, else the row's keys).
@@ -261,15 +309,14 @@ class EntityRecordActions {
     }
     final id = '${row['id'] ?? ''}';
     final label = options.firstWhere((o) => o.value == picked).label;
+    final ok = await confirmStatus(context, module: module, row: row, options: options, from: before, to: picked);
+    if (ok == null || !context.mounted) return null;
     // Deal: probability follows the stage; Closed Lost needs a reason (like the web).
     Map<String, dynamic> payload = {key: picked};
+    Map<String, dynamic> back = {key: before};
     if (module == 'deal' && key == 'deal_stage') {
-      String? lost;
-      if (picked == kDealClosedLost) {
-        lost = await askDealLostReason(context, current: '${row['closed_reason'] ?? ''}');
-        if (lost == null) return null;
-      }
-      payload = dealStagePayload(picked, lostReason: lost);
+      payload = dealStagePayload(picked, lostReason: picked == kDealClosedLost ? ok.note : null);
+      if (before != null) back = dealStagePayload(before);
     }
     onChanged?.call(key, picked);
     try {
@@ -277,27 +324,21 @@ class EntityRecordActions {
       if (module == 'deal' && picked == kDealClosedWon && '${row['related_board_id'] ?? ''}'.isEmpty && context.mounted) {
         showDealWorkspaceHandoff(context, id, afterWon: true);
       }
-      HapticFeedback.mediumImpact();
-      messenger?.hideCurrentSnackBar();
-      messenger?.showSnackBar(SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: Text(tr('เปลี่ยนสถานะเป็น $label แล้ว')),
-        persist: false,
-        action: before == null
+      showNxStatusChangedSnack(
+        messenger,
+        label: label,
+        undo: before == null
             ? null
-            : SnackBarAction(
-                label: tr('เลิกทำ'),
-                onPressed: () async {
-                  onChanged?.call(key, before);
-                  try {
-                    await api.putEntity(module, id, {key: before});
-                  } catch (e) {
-                    onChanged?.call(key, picked);
-                    _snack(messenger, formatApiError(e));
-                  }
-                },
-              ),
-      ));
+            : () async {
+                onChanged?.call(key, before);
+                try {
+                  await api.putEntity(module, id, back);
+                } catch (e) {
+                  onChanged?.call(key, picked);
+                  _snack(messenger, formatApiError(e));
+                }
+              },
+      );
       return picked;
     } catch (e) {
       if (before != null) onChanged?.call(key, before);
@@ -391,11 +432,11 @@ class EntityRecordActions {
       // Won → offer to close the linked deal too (same as the detail page).
       if (r != null && context.mounted) await maybeSuggestCloseDeal(context, r['suggest_close_deal']);
     } else if (picked.startsWith('offer:')) {
-      ok = await QuotationFlows.setOffer(context, id, picked.substring(6));
+      ok = await QuotationFlows.setOffer(context, id, picked.substring(6), from: offer.isEmpty ? null : offer, record: entityTitle(full, module: module));
     } else if (picked == 'cancel') {
-      ok = await QuotationFlows.cancel(context, id);
+      ok = await QuotationFlows.cancel(context, id, from: canonicalQuotationStatus(full['quotation_status']), record: entityTitle(full, module: module));
     } else if (picked == 'reopen') {
-      ok = await QuotationFlows.reopen(context, id);
+      ok = await QuotationFlows.reopen(context, id, record: entityTitle(full, module: module));
     }
     if (!ok) return null;
     try {
@@ -560,24 +601,8 @@ class EntityRecordActions {
     VoidCallback? onCommitted,
   }) async {
     final title = entityTitle(row, module: module);
-    final cs = Theme.of(context).colorScheme;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: Icon(NxI.trash, color: cs.error),
-        title: Text(tr('ลบรายการนี้?')),
-        content: Text(tr('ลบ $title')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ลบ')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return false;
+    final ok = await showDeleteConfirm(context, name: title, loses: entityDeleteLoses(module));
+    if (!ok || !context.mounted) return false;
     final api = context.read<AppConfig>().apiClient;
     final id = '${row['id']}';
     PendingEntityDeletes.instance.schedule(
@@ -745,33 +770,19 @@ Future<void> resetDuplicatedJob(ApiClient api, String id) async {
   }
 }
 
-/// Reason for losing a deal (required on the server for Closed Lost).
-Future<String?> askDealLostReason(BuildContext context, {String current = ''}) async {
-  const presets = ['ราคาสูงกว่าคู่แข่ง', 'ลูกค้าเลื่อน/ยกเลิกโครงการ', 'ไม่ตรงความต้องการ', 'งบประมาณไม่พอ', 'เลือกเจ้าเดิม'];
-  final ctrl = TextEditingController(text: current);
-  final r = await showDialog<String>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setS) => AlertDialog(
-        title: Text(tr('ปิดดีลเป็น "แพ้"')),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Wrap(spacing: 6, runSpacing: 6, children: [
-            for (final p in presets)
-              ChoiceChip(label: Text(tr(p)), selected: ctrl.text == tr(p), onSelected: (_) => setS(() => ctrl.text = tr(p))),
-          ]),
-          const SizedBox(height: 10),
-          TextField(key: const ValueKey('deal-lost-reason'), controller: ctrl, maxLines: 2, decoration: InputDecoration(labelText: '${tr('เหตุผลที่แพ้')} *'), onChanged: (_) => setS(() {})),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
-          FilledButton(
-            key: const ValueKey('deal-lost-ok'),
-            onPressed: ctrl.text.trim().isEmpty ? null : () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: Text(tr('ปิดเป็นแพ้')),
-          ),
-        ],
-      ),
-    ),
-  );
-  return r;
-}
+/// What a delete takes with it (listed in the red confirm sheet).
+List<String> entityDeleteLoses(String module) => [
+      switch (module) {
+        'lead' => 'ข้อมูลผู้มุ่งหวังและที่อยู่',
+        'contact' => 'ข้อมูลผู้ติดต่อ',
+        'account' => 'ข้อมูลบัญชีลูกค้า',
+        'deal' => 'ข้อมูลดีลและมูลค่า',
+        'quotation' => 'ใบเสนอราคาและรายการสินค้า',
+        'case' => 'ข้อมูลเคสและการนับ SLA',
+        'job' => 'ใบสั่งงานและรายละเอียดงาน',
+        'activity' => 'ข้อมูลกิจกรรมและรูปถ่าย',
+        _ => 'ข้อมูลทั้งหมดของรายการนี้',
+      },
+      'คอมเม้นท์และไฟล์แนบ',
+      'ประวัติการเปลี่ยนแปลง',
+    ];

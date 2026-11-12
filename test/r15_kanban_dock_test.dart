@@ -80,6 +80,9 @@ void main() {
     expect(inPanel('3/3'), findsOneWidget, reason: 'counter of the hovered row');
     await g.up();
     await tester.pumpAndSettle();
+    // R66: a status change asks first.
+    await tester.tap(find.byKey(const ValueKey('status-confirm-ok')));
+    await tester.pumpAndSettle();
     expect(moves, [('11', '3')]);
     expect(NxChromeBus.dragging.value, isFalse);
     expect(find.byKey(const ValueKey('ws-dock-panel')), findsNothing);
@@ -91,6 +94,9 @@ void main() {
     await g.moveTo(tester.getCenter(inPanel('Done')));
     await tester.pump();
     await g.up();
+    await tester.pumpAndSettle();
+    expect(find.text('นับเป็นงานเสร็จ และแจ้งผู้ที่ติดตามงานนี้'), findsOneWidget, reason: 'R66: impact of Done');
+    await tester.tap(find.byKey(const ValueKey('status-confirm-ok')));
     await tester.pumpAndSettle();
     expect(moves, [('11', '4')]);
     expect(find.text('ย้ายไปยัง Done แล้ว'), findsOneWidget);

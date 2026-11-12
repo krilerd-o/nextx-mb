@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -473,23 +474,43 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       _timelineLoaded = false;
       return;
     }
+    // Ask first (current → new, impact; deal "แพ้" needs a reason).
+    final options = EntityRecordActions.statusOptions(widget.module, key, _picklists, current: _row[key]?.toString());
+    final ok = await EntityRecordActions.confirmStatus(context, module: widget.module, row: _row, options: options, from: _row[key]?.toString(), to: value);
+    if (ok == null || !mounted) return;
     Map<String, dynamic> payload = {key: value};
-    if (widget.module == 'deal' && key == 'deal_stage') {
-      String? lost;
-      if (value == kDealClosedLost) {
-        lost = await askDealLostReason(context, current: '${_row['closed_reason'] ?? ''}');
-        if (lost == null || !mounted) return;
-      }
-      payload = dealStagePayload(value, lostReason: lost);
-    }
     final before = _row[key];
+    Map<String, dynamic> back = {key: before};
+    if (widget.module == 'deal' && key == 'deal_stage') {
+      payload = dealStagePayload(value, lostReason: value == kDealClosedLost ? ok.note : null);
+      if (before != null) back = {...dealStagePayload('$before'), if (_row.containsKey('probability')) 'probability': _row['probability']};
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    final api = context.read<AppConfig>().apiClient;
+    final label = options.where((o) => o.value == value).firstOrNull?.label ?? value;
     setState(() => _row = {..._row, ...payload});
     try {
-      await context.read<AppConfig>().apiClient.putEntity(widget.module, _id, payload);
+      await api.putEntity(widget.module, _id, payload);
       if (widget.module == 'deal' && value == kDealClosedWon && '${_row['related_board_id'] ?? ''}'.isEmpty && mounted) {
         // Like the web: offer a delivery board right after winning.
         showDealWorkspaceHandoff(context, _id, afterWon: true);
       }
+      showNxStatusChangedSnack(
+        messenger,
+        label: label,
+        undo: before == null
+            ? null
+            : () async {
+                if (mounted) setState(() => _row = {..._row, ...back});
+                try {
+                  await api.putEntity(widget.module, _id, back);
+                  _timelineLoaded = false;
+                } catch (e) {
+                  if (mounted) setState(() => _row = {..._row, ...payload});
+                  messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+                }
+              },
+      );
       _timelineLoaded = false;
       if (_tabId == 'history') _loadTimeline(force: true);
     } catch (e) {

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
 import '../../core/journey_rules.dart';
 import '../../core/thai_time.dart';
@@ -551,8 +552,11 @@ Future<bool> runQuotationAction(
   final api = context.read<AppConfig>().apiClient;
   final messenger = ScaffoldMessenger.of(context);
   void snack(String t) => messenger.showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, content: Text(tr(t))));
+  final record = entityTitle(row, module: 'quotation');
+  final offerNow = canonicalOfferStatus(row['offer_status']);
+  final offerFrom = offerNow.isEmpty ? null : offerNow;
   try {
-    if (action.startsWith('offer:')) return await QuotationFlows.setOffer(context, id, action.substring(6));
+    if (action.startsWith('offer:')) return await QuotationFlows.setOffer(context, id, action.substring(6), from: offerFrom, record: record);
     switch (action) {
       case 'close_sale':
         final r = await showQuotationOutcomeSheet(context, quotationId: id, winReasons: winReasons, lostReasons: lostReasons);
@@ -565,13 +569,13 @@ Future<bool> runQuotationAction(
         if (context.mounted) await maybeSuggestCloseDeal(context, r['suggest_close_deal']);
         return true;
       case 'offer_comparing':
-        return await QuotationFlows.setOffer(context, id, Offer.comparing);
+        return await QuotationFlows.setOffer(context, id, Offer.comparing, from: offerFrom, record: record);
       case 'offer_waiting_po':
-        return await QuotationFlows.setOffer(context, id, Offer.waitingPo);
+        return await QuotationFlows.setOffer(context, id, Offer.waitingPo, from: offerFrom, record: record);
       case 'approve':
-        return await QuotationFlows.approve(context, id);
+        return await QuotationFlows.approve(context, id, record: record);
       case 'reject':
-        return await QuotationFlows.reject(context, id);
+        return await QuotationFlows.reject(context, id, record: record);
       case 'view_approval':
         goTab('approval');
         return false;
@@ -623,9 +627,9 @@ Future<bool> runQuotationAction(
         if (newId != null) open('quotation', newId);
         return false;
       case 'cancel':
-        return await QuotationFlows.cancel(context, id);
+        return await QuotationFlows.cancel(context, id, from: canonicalQuotationStatus(row['quotation_status']), record: record);
       case 'reopen_quotation':
-        return await QuotationFlows.reopen(context, id);
+        return await QuotationFlows.reopen(context, id, record: record);
       case 'edit':
         goTab('lines');
         return false;

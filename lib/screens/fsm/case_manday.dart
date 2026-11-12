@@ -6,6 +6,7 @@ import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
 import '../../services/api_client.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 
 /// Hours as "1 วัน 2 ชม." using the contract's hours per day.
@@ -124,32 +125,45 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
     });
   }
 
-  Future<void> _reject(Map<String, dynamic> req) async {
-    final ctrl = TextEditingController();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('ไม่อนุมัติคำขอ Manday')),
-        content: TextField(
-          key: const ValueKey('manday-reject-reason'),
-          controller: ctrl,
-          autofocus: true,
-          maxLines: 3,
-          decoration: InputDecoration(labelText: tr('เหตุผล (จำเป็น)')),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
-          FilledButton(
-            key: const ValueKey('manday-reject-ok'),
-            onPressed: () {
-              if (ctrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx, ctrl.text.trim());
-            },
-            child: Text(tr('ไม่อนุมัติ')),
-          ),
-        ],
-      ),
+  /// Approve / cancel a manday request after the shared status confirm.
+  Future<bool> _confirm(Map<String, dynamic> req, {required String to, required Color toColor, String? impact, required String confirm}) async {
+    final ok = await showStatusChangeConfirm(
+      context,
+      recordTitle: _reqTitle(req),
+      from: tr('รออนุมัติ'),
+      fromColor: const Color(0xFFD97706),
+      to: to,
+      toColor: toColor,
+      impact: impact,
+      confirmLabel: confirm,
     );
+    return ok != null && mounted;
+  }
+
+  String _reqTitle(Map<String, dynamic> req) {
+    final c = _contract(req['contract_id']);
+    final hours = _num(req['requested_hours'] ?? req['qty']);
+    return '${mandayHuman(hours, c?['md_hours_per_day'] == null ? null : _num(c!['md_hours_per_day']))} · ${c?['contract_no'] ?? 'SC #${req['contract_id']}'}';
+  }
+
+  Future<void> _reject(Map<String, dynamic> req) async {
+    final ok = await showStatusChangeConfirm(
+      context,
+      title: 'ไม่อนุมัติคำขอ Manday',
+      recordTitle: _reqTitle(req),
+      from: tr('รออนุมัติ'),
+      fromColor: const Color(0xFFD97706),
+      to: tr('ไม่อนุมัติ'),
+      toColor: kNxDangerRed,
+      impact: 'ชั่วโมงที่จองไว้จะคืนกลับเข้าสัญญา',
+      requireReason: true,
+      reasons: const ['เกินขอบเขตสัญญา', 'ข้อมูลไม่ครบ', 'ซ้ำกับคำขออื่น'],
+      noteLabel: 'เหตุผล',
+      confirmLabel: 'ไม่อนุมัติ',
+      noteKey: const ValueKey('manday-reject-reason'),
+      confirmKey: const ValueKey('manday-reject-ok'),
+    );
+    final reason = ok?.note;
     if (reason == null || !mounted) return;
     await _run('reject-${req['id']}', () async {
       final r = await _api.rejectMandayRequest(strId(req['id']), reason: reason);
@@ -289,18 +303,24 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
           Padding(padding: const EdgeInsets.only(top: 4), child: Text('${tr('ลูกค้าเซ็นแล้ว')} ${r['approvals_count'] ?? 0}/${r['approvals_required']}', style: theme.textTheme.bodySmall)),
         if (pending && widget.canEdit)
           Wrap(spacing: 2, children: [
-            TextButton.icon(key: ValueKey('manday-approve-$id'), onPressed: _busy == null ? () => _run('approve-$id', () async {
+            TextButton.icon(key: ValueKey('manday-approve-$id'), onPressed: _busy == null ? () async {
+              if (!await _confirm(r, to: tr('อนุมัติแล้ว'), toColor: const Color(0xFF16A34A), impact: 'หักชั่วโมงจากสัญญาบริการ', confirm: 'อนุมัติ')) return;
+              await _run('approve-$id', () async {
               await _api.approveMandayRequest(id);
               _snack(tr('อนุมัติแล้ว'));
               await _load();
-            }) : null, icon: const Icon(NxI.check, size: 16), label: Text(tr('อนุมัติ'))),
+              });
+            } : null, icon: const Icon(NxI.check, size: 16), label: Text(tr('อนุมัติ'))),
             TextButton.icon(key: ValueKey('manday-reject-$id'), onPressed: _busy == null ? () => _reject(r) : null, icon: Icon(NxI.x, size: 16, color: cs.error), label: Text(tr('ไม่อนุมัติ'), style: TextStyle(color: cs.error))),
             TextButton.icon(key: ValueKey('manday-link-$id'), onPressed: _busy == null ? () => _copyLink(r) : null, icon: const Icon(NxI.link, size: 16), label: Text(tr('ลิงก์เซ็น'))),
-            TextButton(key: ValueKey('manday-cancel-$id'), onPressed: _busy == null ? () => _run('cancel-$id', () async {
-              await _api.cancelMandayRequest(id);
-              _snack(tr('ยกเลิกคำขอแล้ว'));
-              await _load();
-            }) : null, child: Text(tr('ยกเลิกคำขอ'))),
+            TextButton(key: ValueKey('manday-cancel-$id'), onPressed: _busy == null ? () async {
+              if (!await _confirm(r, to: tr('ยกเลิกแล้ว'), toColor: kNxDangerRed, impact: 'ชั่วโมงที่จองไว้จะคืนกลับเข้าสัญญา', confirm: 'ยกเลิกคำขอ')) return;
+              await _run('cancel-$id', () async {
+                await _api.cancelMandayRequest(id);
+                _snack(tr('ยกเลิกคำขอแล้ว'));
+                await _load();
+              });
+            } : null, child: Text(tr('ยกเลิกคำขอ'))),
           ]),
       ]),
     );

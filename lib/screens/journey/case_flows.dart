@@ -6,7 +6,9 @@ import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
+import '../../core/entity_display.dart';
 import '../../widgets/app_bottom_sheet.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_status_stepper.dart';
 import 'status_followups.dart' show pickJourneyUser;
@@ -166,9 +168,9 @@ class CaseFlows {
       'accept' => await _accept(context, caseId, row),
       'forward' => await _forward(context, caseId, row),
       'close' => await _close(context, caseId, row),
-      'cancel' => await _cancel(context, caseId),
-      'wait' => await _wait(context),
-      'resume' => await _resume(context),
+      'cancel' => await _cancel(context, caseId, row),
+      'wait' => await _wait(context, row),
+      'resume' => await _resume(context, row),
       _ => null,
     };
     if (body == null || !context.mounted) return false;
@@ -227,18 +229,78 @@ class CaseFlows {
 
   static Widget _gap() => const SizedBox(height: 14);
 
-  static Widget _save(BuildContext ctx, String label, VoidCallback? onTap, {bool danger = false}) => SizedBox(
-        height: 50,
-        child: FilledButton(
-          key: const ValueKey('case-flow-save'),
-          style: FilledButton.styleFrom(
-            backgroundColor: danger ? const Color(0xFFE11D48) : null,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          ),
-          onPressed: onTap,
-          child: Text(tr(label), style: const TextStyle(fontWeight: FontWeight.w700)),
-        ),
+  static Widget _save(BuildContext ctx, String label, VoidCallback? onTap, {bool danger = false}) => NxConfirmButtons(
+        confirmKey: const ValueKey('case-flow-save'),
+        confirmLabel: label,
+        color: danger ? kNxDangerRed : Theme.of(ctx).colorScheme.primary,
+        onConfirm: onTap == null
+            ? null
+            : () {
+                HapticFeedback.lightImpact();
+                onTap();
+              },
       );
+
+  /// Status a case action leads to.
+  static String _target(String action) => switch (action) {
+        'accept' || 'resume' => 'กำลังดำเนินการ',
+        'forward' || 'wait' => 'รอการตอบรับ',
+        'close' => 'ปิดเคส',
+        _ => 'ยกเลิก',
+      };
+
+  /// Colour of a case status (open grey, in progress blue, waiting amber, closed green, cancelled red).
+  static Color tone(ColorScheme cs, Object? status) => switch (classifyCaseStatus(status)) {
+        'open' => cs.onSurfaceVariant,
+        'in_progress' || 'accepted' => const Color(0xFF2563EB),
+        'waiting' || 'forwarded' => const Color(0xFFF59E0B),
+        'closed' => const Color(0xFF16A34A),
+        'cancelled' => kNxDangerRed,
+        _ => nxStatusTone(cs, '${status ?? ''}'),
+      };
+
+  /// Window header shared with every status change: record + current → new (+ impact).
+  static Widget _head(BuildContext ctx, Map<String, dynamic> row, String action) {
+    final cs = Theme.of(ctx).colorScheme;
+    final cur = '${row['case_status'] ?? ''}'.trim();
+    final to = _target(action);
+    final impact = switch (action) {
+      'close' => 'ปิดเคสแล้วหยุดนับเวลา SLA ของเคสนี้',
+      'wait' => 'หยุดนับเวลา SLA ระหว่างพักเคส',
+      'cancel' => 'หยุดนับเวลา SLA และแจ้งผู้ติดตามเคส',
+      _ => null,
+    };
+    final title = entityTitle(row, module: 'case');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (title.trim().isNotEmpty) ...[
+          Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(ctx).textTheme.bodyLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+        ],
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+          decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(20)),
+          child: NxStatusTransition(from: cur.isEmpty ? null : cur, fromColor: tone(cs, cur), to: to, toColor: tone(cs, to)),
+        ),
+        if (impact != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            key: const ValueKey('status-confirm-impact'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(color: tone(cs, to).withValues(alpha: 0.08), borderRadius: BorderRadius.circular(14)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(NxI.info, size: 18, color: tone(cs, to)),
+              const SizedBox(width: 8),
+              Expanded(child: Text(tr(impact), style: Theme.of(ctx).textTheme.bodyMedium)),
+            ]),
+          ),
+        ],
+        const SizedBox(height: 14),
+      ],
+    );
+  }
 
   static String _contactEmail(Map<String, dynamic> c) => '${c['email_1st'] ?? c['email'] ?? c['email1'] ?? ''}'.trim();
   static String _contactName(Map<String, dynamic> c) {
@@ -301,6 +363,7 @@ class CaseFlows {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
+            _head(ctx, row, 'accept'),
             Text(tr('เคสจะเปลี่ยนเป็น "กำลังดำเนินการ" และบันทึกเวลารับเคส'), style: Theme.of(ctx).textTheme.bodyMedium),
             _gap(),
             _hint(ctx, summary),
@@ -351,6 +414,7 @@ class CaseFlows {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
+          Builder(builder: (ctx) => _head(ctx, row, 'forward')),
           Text(tr('เคสจะเป็น "รอการตอบรับ" จนกว่า $name จะกดรับเคส และระบบจะแจ้งผู้รับทันที'), style: Theme.of(context).textTheme.bodyMedium),
           _gap(),
           _hint(context, summary),
@@ -441,6 +505,7 @@ class CaseFlows {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
+            _head(ctx, row, 'close'),
             _hint(ctx, summary),
             if (hasEstimate || time.text.isNotEmpty) ...[
               TextField(
@@ -500,6 +565,7 @@ class CaseFlows {
             ],
             const SizedBox(height: 6),
             _save(
+              danger: true,
               ctx,
               'บันทึกและปิดเคส',
               badTime
@@ -534,7 +600,7 @@ class CaseFlows {
     return parts.join(' ');
   }
 
-  static Future<Map<String, dynamic>?> _wait(BuildContext context) {
+  static Future<Map<String, dynamic>?> _wait(BuildContext context, Map<String, dynamic> row) {
     final note = TextEditingController();
     const reasons = ['รอลูกค้าตอบกลับ', 'รออะไหล่ / อุปกรณ์', 'รอข้อมูลเพิ่มเติม', 'รอนัดหมาย'];
     return showAppBottomSheet<Map<String, dynamic>>(
@@ -545,6 +611,7 @@ class CaseFlows {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
+            _head(ctx, row, 'wait'),
             Text(tr('เคสจะเป็น "รอการตอบรับ" ชั่วคราว กด "ทำต่อ" เมื่อพร้อมดำเนินการ — ผู้ติดตามเคสจะได้รับแจ้ง'), style: Theme.of(ctx).textTheme.bodyMedium),
             _gap(),
             Wrap(spacing: 8, runSpacing: 8, children: [
@@ -561,7 +628,7 @@ class CaseFlows {
     );
   }
 
-  static Future<Map<String, dynamic>?> _resume(BuildContext context) => showAppBottomSheet<Map<String, dynamic>>(
+  static Future<Map<String, dynamic>?> _resume(BuildContext context, Map<String, dynamic> row) => showAppBottomSheet<Map<String, dynamic>>(
         context: context,
         title: tr('ทำต่อ'),
         child: Builder(
@@ -569,6 +636,7 @@ class CaseFlows {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              _head(ctx, row, 'resume'),
               Text(tr('เคสจะกลับมาเป็น "กำลังดำเนินการ"'), style: Theme.of(ctx).textTheme.bodyMedium),
               const SizedBox(height: 18),
               _save(ctx, 'ทำต่อ', () => Navigator.pop(ctx, {'action': 'resume'})),
@@ -579,7 +647,7 @@ class CaseFlows {
 
   static String _esc(String s) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
-  static Future<Map<String, dynamic>?> _cancel(BuildContext context, String id) async {
+  static Future<Map<String, dynamic>?> _cancel(BuildContext context, String id, Map<String, dynamic> row) async {
     List<Map<String, dynamic>> jobs = const [];
     try {
       jobs = await context.read<AppConfig>().apiClient.getCaseOpenJobs(id);
@@ -595,6 +663,7 @@ class CaseFlows {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
+            _head(ctx, row, 'cancel'),
             Text(tr('งานและกิจกรรมที่อยู่ภายใต้เคสนี้จะถูกปรับสถานะเป็นยกเลิก และเคสจะเปลี่ยนเป็นยกเลิก'), style: Theme.of(ctx).textTheme.bodyMedium),
             _gap(),
             if (jobs.isNotEmpty)
@@ -606,12 +675,31 @@ class CaseFlows {
                 subtitle: Text(jobs.map((j) => '${j['job_no'] ?? j['id']}').join(', ')),
                 onChanged: (v) => setS(() => cancelJobs = v ?? false),
               ),
-            TextField(controller: note, minLines: 2, maxLines: 4, decoration: InputDecoration(labelText: tr('เหตุผล (ไม่บังคับ)'))),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final (i, r) in kNxCancelReasons.indexed)
+                ChoiceChip(
+                  key: ValueKey('status-reason-$i'),
+                  label: Text(tr(r)),
+                  selected: note.text.trim() == tr(r),
+                  onSelected: (_) => setS(() => note.text = tr(r)),
+                ),
+            ]),
+            const SizedBox(height: 10),
+            TextField(
+              key: const ValueKey('case-cancel-reason'),
+              controller: note,
+              minLines: 2,
+              maxLines: 4,
+              decoration: InputDecoration(labelText: '${tr('เหตุผลที่ยกเลิก')} *'),
+              onChanged: (_) => setS(() {}),
+            ),
             const SizedBox(height: 18),
             _save(
               ctx,
               'ยกเลิกเคส',
-              () => Navigator.pop(ctx, {
+              note.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx, {
                 'action': 'cancel',
                 if (jobs.isNotEmpty && cancelJobs) 'cancel_jobs': true,
                 if (note.text.trim().isNotEmpty) 'reason': note.text.trim(),

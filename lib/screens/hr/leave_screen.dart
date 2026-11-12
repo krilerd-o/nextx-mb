@@ -13,6 +13,7 @@ import '../../widgets/nx_cached_future.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/thai_time.dart';
 import '../../core/leave_suggest.dart';
@@ -599,22 +600,25 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
   var _local = 0;
 
   Future<void> _cancel(Map<String, dynamic> p) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('ยกเลิกคำขอลา?')),
-        content: Text(tr('${p['leave_type_name'] ?? 'ลา'} ${thaiDate(p['start_date'], year: uiYear)} – ${thaiDate(p['end_date'], year: uiYear)}')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ไม่'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ยกเลิกคำขอ'))),
-        ],
-      ),
+    final cs = Theme.of(context).colorScheme;
+    final st = '${p['status'] ?? ''}';
+    final (stLabel, stColor) = leaveStatusStyle(st, cs);
+    final ok = await showStatusChangeConfirm(
+      context,
+      title: 'ยกเลิกคำขอลา?',
+      recordTitle: tr('${p['leave_type_name'] ?? 'ลา'} ${thaiDate(p['start_date'], year: uiYear)} – ${thaiDate(p['end_date'], year: uiYear)}'),
+      from: st.isEmpty ? null : stLabel,
+      fromColor: stColor,
+      to: 'ยกเลิก',
+      toColor: kNxDangerRed,
+      impact: 'วันลาที่ขอไว้จะคืนกลับเข้าสิทธิ์',
+      confirmLabel: 'ยกเลิกคำขอ',
     );
-    if (ok != true || !mounted) return;
+    if (ok == null || !mounted) return;
     try {
       await context.read<AppConfig>().apiClient.cancelLeave(p['id'].toString());
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ยกเลิกคำขอลาแล้ว'))));
+      showNxStatusChangedSnack(ScaffoldMessenger.of(context), label: 'ยกเลิกคำขอลาแล้ว');
       setState(() => _local++);
     } catch (e) {
       if (mounted) {
@@ -858,26 +862,28 @@ class _LeaveApprovalTab extends StatefulWidget {
 class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
   var _revision = 0;
 
-  Future<void> _act(String id, bool approve) async {
-    String? reason;
-    if (!approve) {
-      final ctrl = TextEditingController();
-      reason = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(tr('เหตุผลที่ไม่อนุมัติ')),
-          content: TextField(controller: ctrl, autofocus: true, maxLines: 3, decoration: InputDecoration(hintText: tr('ไม่บังคับ'))),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
-            FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('ไม่อนุมัติ'))),
-          ],
-        ),
-      );
-      if (reason == null || !mounted) return;
-    }
+  Future<void> _act(Map<String, dynamic> p, bool approve) async {
+    final id = p['id'].toString();
+    // Ask first; rejecting needs a reason (the server keeps it).
+    final ok = await showStatusChangeConfirm(
+      context,
+      recordTitle: '${p['user_name'] ?? p['employee_name'] ?? ''} · ${tr('${p['leave_type_name'] ?? 'ลา'}')} ${thaiDate(p['start_date'], year: uiYear)} – ${thaiDate(p['end_date'], year: uiYear)}',
+      from: 'รออนุมัติ',
+      fromColor: const Color(0xFFF59E0B),
+      to: approve ? 'อนุมัติ' : 'ไม่อนุมัติ',
+      toColor: approve ? const Color(0xFF16A34A) : kNxDangerRed,
+      impact: approve ? 'หักวันลาจากสิทธิ์ และแจ้งผู้ขอ' : 'ผู้ขอจะได้รับแจ้งว่าไม่อนุมัติ',
+      requireReason: !approve,
+      reasons: approve ? const [] : const ['ช่วงนี้งานเร่งด่วน', 'คนในทีมลาพร้อมกันหลายคน', 'สิทธิ์ลาไม่พอ', 'ขอเอกสารเพิ่มเติม'],
+      confirmLabel: approve ? 'อนุมัติ' : 'ไม่อนุมัติ',
+    );
+    if (ok == null || !mounted) return;
+    final reason = approve ? null : ok.note;
     try {
       await context.read<AppConfig>().apiClient.approveLeave(id, approve: approve, reason: reason);
-      if (mounted) setState(() => _revision++);
+      if (!mounted) return;
+      showNxStatusChangedSnack(ScaffoldMessenger.of(context), label: approve ? 'อนุมัติแล้ว' : 'ไม่อนุมัติแล้ว');
+      setState(() => _revision++);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
@@ -906,11 +912,11 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
                   children: [
                     IconButton(
                       icon: const Icon(NxI.checkCircle, color: Colors.green),
-                      onPressed: () => _act(p['id'].toString(), true),
+                      onPressed: () => _act(p, true),
                     ),
                     IconButton(
                       icon: const Icon(NxI.xCircle, color: Colors.red),
-                      onPressed: () => _act(p['id'].toString(), false),
+                      onPressed: () => _act(p, false),
                     ),
                   ],
                 ),

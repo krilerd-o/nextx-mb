@@ -13,6 +13,7 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../core/error_reporting.dart';
 import '../../core/nx_page_route.dart';
 import '../crm/entity_detail_parts.dart';
@@ -370,29 +371,29 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final me = context.read<AppConfig>().session.userId;
     final mine = '${row['approver_user_id'] ?? ''}' == '$me';
     Future<void> decide(bool approve) async {
-      String? note;
-      if (!approve) {
-        final ctrl = TextEditingController();
-        note = await showDialog<String>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text(tr('ไม่อนุมัติกิจกรรม')),
-            content: TextField(key: const ValueKey('act-reject-note'), controller: ctrl, autofocus: true, maxLines: 3, decoration: InputDecoration(labelText: tr('เหตุผล'))),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
-              FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('ไม่อนุมัติ'))),
-            ],
-          ),
-        );
-        if (note == null) return;
-      }
-      if (!mounted) return;
+      // Shared status confirm; rejecting needs a reason (the server keeps it).
+      final ok = await showStatusChangeConfirm(
+        context,
+        title: approve ? 'อนุมัติกิจกรรม?' : 'ไม่อนุมัติกิจกรรม?',
+        recordTitle: entityTitle(row, module: 'activity'),
+        from: 'รออนุมัติ',
+        fromColor: const Color(0xFFF59E0B),
+        to: approve ? 'อนุมัติ' : 'ไม่อนุมัติ',
+        toColor: approve ? const Color(0xFF16A34A) : kNxDangerRed,
+        impact: approve ? 'ผู้บันทึกกิจกรรมจะได้รับแจ้งผล' : 'ผู้บันทึกกิจกรรมจะได้รับแจ้งพร้อมเหตุผล',
+        requireReason: !approve,
+        reasons: approve ? const [] : kNxRejectReasons,
+        confirmLabel: approve ? 'อนุมัติ' : 'ไม่อนุมัติ',
+        noteKey: const ValueKey('act-reject-note'),
+      );
+      if (ok == null || !context.mounted) return;
+      final note = approve ? null : ok.note;
       final api = context.read<AppConfig>().apiClient;
       final messenger = ScaffoldMessenger.of(context);
       setState(() => _deciding = true);
       try {
         approve ? await api.approveActivity(_id) : await api.rejectActivity(_id, note: note);
-        messenger.showSnackBar(SnackBar(content: Text(tr(approve ? 'อนุมัติกิจกรรมแล้ว' : 'ไม่อนุมัติกิจกรรมแล้ว'))));
+        showNxStatusChangedSnack(messenger, label: approve ? 'อนุมัติกิจกรรมแล้ว' : 'ไม่อนุมัติกิจกรรมแล้ว');
         await _loadRecord();
       } catch (e) {
         messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));

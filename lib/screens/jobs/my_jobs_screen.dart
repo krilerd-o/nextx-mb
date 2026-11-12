@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,6 +15,7 @@ import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_refresh.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
@@ -25,7 +25,7 @@ import '../../widgets/nx_split_view.dart';
 import '../../widgets/nx_tip_banner.dart';
 import '../calendar/activity_detail_screen.dart';
 import '../crm/entity_detail_screen.dart';
-import '../journey/status_followups.dart' show journeyErrorText;
+import '../journey/status_followups.dart' show journeyErrorText, jobStatusTone;
 import 'job_inspection_screen.dart';
 
 /// Which list a job belongs to on "My Service Job".
@@ -118,12 +118,23 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
 
   Future<void> _accept(Map<String, dynamic> j) async {
     final id = strId(j['id']);
+    final cs = Theme.of(context).colorScheme;
+    final ok = await showStatusChangeConfirm(
+      context,
+      recordTitle: entityTitle(j, module: 'job'),
+      from: (j['job_status'] ?? '').toString().isEmpty ? null : jobStatusLabel(j['job_status']),
+      fromColor: jobStatusTone(cs, j['job_status']),
+      to: jobStatusLabel('In Progress'),
+      toColor: jobStatusTone(cs, 'In Progress'),
+      impact: 'บันทึกเวลารับงาน และแจ้งผู้ส่งงานว่ารับแล้ว',
+      confirmLabel: 'รับงาน',
+    );
+    if (ok == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _accepting.add(id));
     try {
       await context.read<AppConfig>().apiClient.jobWorkflowAction(id, 'accept');
-      HapticFeedback.mediumImpact();
-      messenger.showSnackBar(SnackBar(content: Text(tr('รับงานแล้ว — กำลังดำเนินการ'))));
+      showNxStatusChangedSnack(messenger, label: 'รับงานแล้ว — กำลังดำเนินการ');
       await _load();
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(tr(journeyErrorText(e)))));

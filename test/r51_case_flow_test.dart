@@ -110,10 +110,15 @@ void main() {
     await settle(tester);
     expect(find.textContaining('จะถูกปรับสถานะเป็นยกเลิก'), findsOneWidget);
     expect(find.byKey(const ValueKey('case-cancel-jobs')), findsOneWidget);
+    // R66: current → new chips; a reason is required (tap a chip).
+    expect(find.byKey(const ValueKey('status-to')), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('case-flow-save'))).onPressed, isNull);
+    await tester.tap(find.byKey(const ValueKey('status-reason-0')));
+    await settle(tester);
     await tester.tap(find.byKey(const ValueKey('case-flow-save')));
     await settle(tester);
     final b = lastBody(a);
-    expect([b['action'], b['cancel_jobs']], ['cancel', true]);
+    expect([b['action'], b['cancel_jobs'], b['reason']], ['cancel', true, 'ลูกค้ายกเลิก']);
   });
 
   testWidgets('close (in progress): description + time spent', (tester) async {

@@ -197,6 +197,10 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('offer-รอเปรียบเทียบ')));
     await tester.tap(find.byKey(const ValueKey('offer-รอเปรียบเทียบ')));
     await _frames(tester);
+    // R66: confirm the change first (current → new offer status).
+    expect(find.descendant(of: find.byKey(const ValueKey('status-from')), matching: find.text('เสนอราคา')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('status-confirm-ok')));
+    await _frames(tester);
     expect(_body(a, 'PUT /api/quotation/9/offer-status')['offer_status'], 'รอเปรียบเทียบ');
     expect(a.callKeys.where((k) => k == 'PUT /api/entity/quotation/9'), isEmpty);
   });

@@ -15,6 +15,7 @@ import '../../core/error_reporting.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import 'custom_views.dart';
 import 'card_layout_editor.dart';
 import '../../core/card_layout.dart';
@@ -518,10 +519,28 @@ class _EntityListScreenState extends State<EntityListScreen> {
       ),
     );
     if (value == null || !mounted) return;
+    // Confirm: the shared status (when all picked rows agree) → the new one.
+    final current = {
+      for (final r in _items)
+        if (ids.contains(r['id']?.toString())) statusCurrent(widget.module, r[_statusKey!]?.toString()) ?? '',
+    };
+    final from = current.length == 1 ? current.first : null;
+    String label(String? v) => group.options.where((o) => o.value == v).firstOrNull?.label ?? (v ?? '');
+    final ok = await showStatusChangeConfirm(
+      context,
+      recordTitle: tr('${ids.length} รายการ'),
+      from: from == null ? 'หลายสถานะ' : (from.isEmpty ? null : label(from)),
+      fromColor: from == null || from.isEmpty ? null : EntityRecordActions.statusColor(cs, from),
+      to: label(value),
+      toColor: EntityRecordActions.statusColor(cs, value),
+      impact: EntityRecordActions.statusImpact(widget.module, value),
+      destructive: nxIsDestructiveStatus('$value ${label(value)}'),
+    );
+    if (ok == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       final n = await context.read<AppConfig>().apiClient.bulkUpdateEntities(widget.module, ids, {_statusKey!: value});
-      HapticFeedback.mediumImpact();
+      HapticFeedback.lightImpact();
       if (!mounted) return;
       setState(_picked.clear);
       messenger.showSnackBar(SnackBar(
@@ -1063,9 +1082,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
           final row = items[i];
           final id = row['id']?.toString() ?? '';
           final picked = _picked.contains(id);
-          final phone = ['mobile_1st', 'mobile', 'phone', 'contact_mobile']
-              .map((k) => row[k]?.toString().trim() ?? '')
-              .firstWhere((v) => v.isNotEmpty && v != 'null', orElse: () => '');
+          final phones = nxRowPhones(row);
           void open() {
               if (_picked.isNotEmpty) {
                 _togglePick(row);
@@ -1113,12 +1130,16 @@ class _EntityListScreenState extends State<EntityListScreen> {
                 )
               : tile;
           if (_picked.isNotEmpty || id.isEmpty) return decorated;
-          // Swipe left = delete (undo 5 s), swipe right = call.
+          // Swipe left = delete (undo 5 s), swipe right = call — both ask
+          // first (accidental swipes); cancel snaps the card back.
+          final canDelete = EntityRowPerms.of(widget.module, row).canDelete;
+          if (phones.isEmpty && !canDelete) return decorated;
+          final name = entityTitle(row, module: widget.module);
           return Dismissible(
             key: ValueKey('row-${widget.module}-$id'),
-            direction: phone.isEmpty
+            direction: phones.isEmpty
                 ? DismissDirection.endToStart
-                : DismissDirection.horizontal,
+                : (canDelete ? DismissDirection.horizontal : DismissDirection.startToEnd),
             background: _swipeBg(
               theme.colorScheme.primary,
               NxI.phoneCall,
@@ -1133,14 +1154,13 @@ class _EntityListScreenState extends State<EntityListScreen> {
             ),
             confirmDismiss: (dir) async {
               if (dir == DismissDirection.startToEnd) {
-                launchUrl(Uri(scheme: 'tel', path: phone));
+                final number = await showCallConfirm(context, name: name, phones: phones);
+                if (number != null) launchUrl(Uri(scheme: 'tel', path: number));
                 return false;
               }
-              HapticFeedback.mediumImpact();
-              return true;
+              return showDeleteConfirm(context, name: name, loses: entityDeleteLoses(widget.module));
             },
-            onDismissed: (_) =>
-                _deleteIds([id], entityTitle(row, module: widget.module)),
+            onDismissed: (_) => _deleteIds([id], name),
             child: decorated,
           );
         },
