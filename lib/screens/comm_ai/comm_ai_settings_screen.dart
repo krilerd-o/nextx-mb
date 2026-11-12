@@ -14,6 +14,7 @@ import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_select_tile.dart';
 import '../../widgets/nx_sliding_segmented.dart';
 import '../../widgets/nx_surface_card.dart';
+import 'comm_ai_access.dart';
 import 'comm_ai_isaac.dart';
 import 'comm_ai_widgets.dart';
 
@@ -58,6 +59,8 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
   bool _saving = false;
   final _linkDays = TextEditingController();
   final _retention = TextEditingController();
+  final _summaryModel = TextEditingController();
+  Map<String, dynamic>? _providers;
 
   @override
   void initState() {
@@ -69,6 +72,7 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
   void dispose() {
     _linkDays.dispose();
     _retention.dispose();
+    _summaryModel.dispose();
     super.dispose();
   }
 
@@ -84,9 +88,21 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
         _canEdit = r['can_edit'] == true;
         _linkDays.text = '${s['share_link_max_days'] ?? 30}';
         _retention.text = '${s['retention_days'] ?? 365}';
+        _summaryModel.text = '${s['summary_model'] ?? ''}';
       });
+      if (_canEdit) _loadProviders();
     } catch (e) {
       if (mounted) setState(() => _error = formatApiError(e));
+    }
+  }
+
+  /// AI providers / models for the admin panel (which keys are set).
+  Future<void> _loadProviders() async {
+    try {
+      final r = await context.read<AppConfig>().apiClient.getCommAiProviders();
+      if (mounted) setState(() => _providers = r);
+    } catch (_) {
+      if (mounted) setState(() => _providers = const {});
     }
   }
 
@@ -107,7 +123,9 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
         _settings = Map<String, dynamic>.from(out);
         _linkDays.text = '${out['share_link_max_days']}';
         _retention.text = '${out['retention_days']}';
+        _summaryModel.text = '${out['summary_model'] ?? ''}';
       });
+      CommAiAccess.invalidate(context.read<AppConfig>().apiClient);
       // Calls on this phone pick the new rules up right away.
       LiveTranscription.instance.settings = Map<String, dynamic>.from(out);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกการตั้งค่าแล้ว'))));
@@ -215,6 +233,7 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
           onChanged: _canEdit ? (v) => _set('language', v ?? 'th') : null,
         ),
       ]),
+      if (_canEdit) _aiPanel(),
       _panel(icon: NxI.shareNetwork, title: 'การแชร์และการเก็บข้อมูล', desc: 'ควบคุมการส่งบทสนทนา เสียง และสรุปออกไปภายนอก', children: [
         _switch('share_email_enabled', 'แชร์ทางอีเมล'),
         _switch('share_link_enabled', 'ลิงก์แชร์ภายนอก', desc: 'เปิดได้โดยไม่ต้องล็อกอิน ตั้งวันหมดอายุ/รหัสผ่าน และยกเลิกได้'),
@@ -292,6 +311,7 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
                               _settings = Map<String, dynamic>.from(_saved!);
                               _linkDays.text = '${_saved!['share_link_max_days']}';
                               _retention.text = '${_saved!['retention_days']}';
+                              _summaryModel.text = '${_saved!['summary_model'] ?? ''}';
                             }),
                     child: Text(tr('ยกเลิก')),
                   ),
@@ -307,6 +327,81 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
           ),
       ]),
     );
+  }
+
+  /// Admins: the transcription model and the provider / model that writes summaries (same as the web).
+  Widget _aiPanel() {
+    final s = _settings!;
+    final p = _providers;
+    final providers = [for (final x in (p?['providers'] as List? ?? const [])) if (x is Map) Map<String, dynamic>.from(x)];
+    final stt = [for (final m in (p?['stt_models'] as List? ?? const ['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1'])) '$m'];
+    final sttValue = '${s['stt_model'] ?? ''}'.isEmpty ? 'gpt-4o-transcribe' : '${s['stt_model']}';
+    final provider = '${s['summary_provider'] ?? ''}';
+    final models = [for (final m in (providers.where((x) => x['id'] == provider).firstOrNull?['models'] as List? ?? const [])) '$m'];
+    return _panel(icon: NxI.sparkle, title: 'AI ที่ ISAAC ใช้', desc: 'เลือกโมเดลถอดเสียงและผู้ให้บริการสำหรับเขียนสรุป', children: [
+      if (p == null) const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator())),
+      if (p != null) ...[
+        const SizedBox(height: 4),
+        DropdownButtonFormField<String>(
+          key: const ValueKey('comm-ai-stt-model'),
+          isExpanded: true,
+          initialValue: stt.contains(sttValue) ? sttValue : null,
+          decoration: InputDecoration(
+            labelText: tr('โมเดลถอดเสียง (OpenAI)'),
+            helperText: tr(p['stt_ready'] == false ? 'ยังไม่ได้ใส่ OpenAI API key — ตั้งค่า → AI' : 'gpt-4o-transcribe แม่นที่สุด · mini ประหยัดกว่า'),
+            helperMaxLines: 2,
+          ),
+          items: [for (final m in stt) DropdownMenuItem(value: m, child: Text(m))],
+          onChanged: (v) => _set('stt_model', v ?? sttValue),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          key: const ValueKey('comm-ai-summary-provider'),
+          isExpanded: true,
+          initialValue: provider.isEmpty || providers.any((x) => x['id'] == provider) ? provider : '',
+          decoration: InputDecoration(labelText: tr('ผู้ให้บริการสำหรับสรุป')),
+          items: [
+            DropdownMenuItem(value: '', child: Text('${tr('ค่าเริ่มต้นของระบบ')} (${p['default_provider'] ?? 'auto'})', overflow: TextOverflow.ellipsis)),
+            for (final x in providers)
+              DropdownMenuItem(
+                value: '${x['id']}',
+                child: Text('${x['label']}${x['configured'] == true ? '' : ' — ${tr('ยังไม่ได้ตั้งค่า key')}'}', overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (v) {
+            if ((v ?? '') == provider) return;
+            setState(() {
+              _settings!['summary_provider'] = v ?? '';
+              _settings!['summary_model'] = '';
+              _summaryModel.text = '';
+            });
+          },
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: const ValueKey('comm-ai-summary-model'),
+          controller: _summaryModel,
+          decoration: InputDecoration(
+            labelText: tr('โมเดลสำหรับสรุป'),
+            helperText: tr('เว้นว่าง = โมเดลเริ่มต้นของผู้ให้บริการ'),
+            hintText: models.isEmpty ? null : models.first,
+            suffixIcon: models.isEmpty
+                ? null
+                : PopupMenuButton<String>(
+                    key: const ValueKey('comm-ai-summary-model-pick'),
+                    tooltip: tr('โมเดลที่แนะนำ'),
+                    icon: const Icon(NxI.caretDown, size: 18),
+                    onSelected: (m) {
+                      _summaryModel.text = m;
+                      _set('summary_model', m);
+                    },
+                    itemBuilder: (_) => [for (final m in models) PopupMenuItem(value: m, child: Text(m))],
+                  ),
+          ),
+          onChanged: (v) => _set('summary_model', v.trim()),
+        ),
+      ],
+    ]);
   }
 
   Widget _chip(String text, Color color) => Container(

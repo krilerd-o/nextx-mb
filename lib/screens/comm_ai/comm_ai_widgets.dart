@@ -1,10 +1,6 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
@@ -13,10 +9,11 @@ import '../../core/thai_time.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
-import '../../widgets/nx_sliding_segmented.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../calendar/activity_form_screen.dart';
 import 'comm_ai_isaac.dart';
+
+export 'comm_ai_share_sheet.dart';
 
 /// Server time → "11/11/2569 10:05" in Thai time (Buddhist year when the UI is Thai).
 String commAiWhen(dynamic raw, {bool withDate = true}) {
@@ -135,19 +132,23 @@ List<String> _strings(dynamic v) => v is List ? [for (final x in v) '$x'] : cons
 List<Map<String, dynamic>> _maps(dynamic v) => v is List ? [for (final x in v) if (x is Map) Map<String, dynamic>.from(x)] : const [];
 
 /// 4 cards (key points / issues / follow-ups / recommendations) + ISAAC suggestions + source lines.
-/// Two columns on tablets, like the web.
+/// Two columns on tablets, like the web. With [summaryId] the follow-up ticks are saved on the summary
+/// (everyone who can read it sees the same ticks); the first state comes from `result.action_done`.
 class CommAiSummaryView extends StatefulWidget {
-  const CommAiSummaryView({super.key, required this.result, this.sourceNote, this.showSource = true});
+  const CommAiSummaryView({super.key, required this.result, this.sourceNote, this.showSource = true, this.summaryId});
   final Map<String, dynamic> result;
   final String? sourceNote;
   final bool showSource;
+  final String? summaryId;
 
   @override
   State<CommAiSummaryView> createState() => _CommAiSummaryViewState();
 }
 
 class _CommAiSummaryViewState extends State<CommAiSummaryView> {
-  final _done = <String>{};
+  late final Set<int> _done = {
+    for (final x in (widget.result['action_done'] is List ? widget.result['action_done'] as List : const [])) ?(x is num ? x.toInt() : int.tryParse('$x')),
+  };
   bool _showLines = false;
   int? _focus;
 
@@ -155,6 +156,20 @@ class _CommAiSummaryViewState extends State<CommAiSummaryView> {
         _showLines = true;
         _focus = n;
       });
+
+  Future<void> _toggle(int index) async {
+    final next = !_done.contains(index);
+    setState(() => next ? _done.add(index) : _done.remove(index));
+    final id = widget.summaryId;
+    if (id == null || id.isEmpty || id == 'null') return;
+    try {
+      await context.read<AppConfig>().apiClient.setCommAiActionDone(id, index, next);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => next ? _done.remove(index) : _done.add(index));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -167,18 +182,19 @@ class _CommAiSummaryViewState extends State<CommAiSummaryView> {
       _Section(icon: NxI.listBullets, color: kIsaacIndigo, title: tr('ใจความสำคัญ'), children: [for (final t in _strings(r['key_points'])) _bullet(_RefText(t, onRef: _jump))]),
       _Section(icon: NxI.chatCircle, color: const Color(0xFFD97706), title: tr('ประเด็นที่เกิดขึ้น'), children: [for (final t in _strings(r['discussion_points'])) _bullet(_RefText(t, onRef: _jump))]),
       _Section(icon: NxI.checkSquare, color: const Color(0xFF059669), title: tr('สิ่งที่ต้องทำต่อ'), children: [
-        for (final a in actions)
+        for (final (i, a) in actions.indexed)
           InkWell(
+            key: ValueKey('comm-ai-action-$i'),
             borderRadius: BorderRadius.circular(8),
-            onTap: () => setState(() => _done.contains('${a['text']}') ? _done.remove('${a['text']}') : _done.add('${a['text']}')),
+            onTap: () => _toggle(i),
             child: Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Icon(_done.contains('${a['text']}') ? NxI.checkSquare : Icons.check_box_outline_blank_rounded, size: 18, color: const Color(0xFF059669)),
+                Icon(_done.contains(i) ? NxI.checkSquare : Icons.check_box_outline_blank_rounded, size: 18, color: const Color(0xFF059669)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text.rich(TextSpan(children: [
-                    TextSpan(text: '${a['text']}', style: TextStyle(decoration: _done.contains('${a['text']}') ? TextDecoration.lineThrough : null, color: _done.contains('${a['text']}') ? hint : null)),
+                    TextSpan(text: '${a['text']}', style: TextStyle(decoration: _done.contains(i) ? TextDecoration.lineThrough : null, color: _done.contains(i) ? hint : null)),
                     if (a['owner'] != null) TextSpan(text: '  ${a['owner']}', style: TextStyle(fontSize: 12, color: hint)),
                     if (a['due'] != null) TextSpan(text: '  ${a['due']}', style: const TextStyle(fontSize: 12, color: Color(0xFFE11D48))),
                   ])),
@@ -193,6 +209,7 @@ class _CommAiSummaryViewState extends State<CommAiSummaryView> {
       final wide = c.maxWidth >= 620;
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if ('${r['headline'] ?? ''}'.isNotEmpty) ...[CommAiHeadline('${r['headline']}'), const SizedBox(height: 12)],
+        if (r['sentiment'] is Map || _strings(r['topics']).isNotEmpty) ...[CommAiSentimentRow(result: r), const SizedBox(height: 12)],
         if (wide)
           for (var i = 0; i < cards.length; i += 2)
             Padding(
@@ -261,6 +278,40 @@ class _CommAiSummaryViewState extends State<CommAiSummaryView> {
         ],
       ]);
     });
+  }
+}
+
+/// Customer sentiment chip + topic chips under the headline (labelled, never colour alone).
+class CommAiSentimentRow extends StatelessWidget {
+  const CommAiSentimentRow({super.key, required this.result});
+  final Map<String, dynamic> result;
+
+  static (String, Color) labelOf(String? label) => switch (label) {
+        'positive' => ('😊 ลูกค้าพอใจ', const Color(0xFF047857)),
+        'negative' => ('😟 ลูกค้าไม่พอใจ', const Color(0xFFBE123C)),
+        _ => ('😐 ปกติ', const Color(0xFF475569)),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final s = result['sentiment'] is Map ? Map<String, dynamic>.from(result['sentiment'] as Map) : null;
+    final topics = _strings(result['topics']);
+    final reason = '${s?['reason'] ?? ''}';
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    Widget pill(String text, Color color, {Key? key}) => Container(
+          key: key,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          decoration: BoxDecoration(color: color.withValues(alpha: dark ? 0.22 : 0.1), borderRadius: BorderRadius.circular(999)),
+          child: Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: dark ? Color.lerp(color, Colors.white, 0.55) : color)),
+        );
+    final (label, color) = labelOf(s?['label']?.toString());
+    return Column(key: const ValueKey('comm-ai-sentiment'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 6, runSpacing: 6, children: [
+        if (s != null) pill(tr(label), color, key: ValueKey('comm-ai-sentiment-${s['label']}')),
+        for (final t in topics) pill('#$t', kIsaacIndigo),
+      ]),
+      if (reason.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4, left: 2), child: Text(reason, style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor))),
+    ]);
   }
 }
 
@@ -364,288 +415,5 @@ Future<void> _workspaceTask(BuildContext context, String title, String desc) asy
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างงานแล้ว'))));
   } catch (e) {
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
-  }
-}
-
-/// Share / export a conversation: device share (file), e-mail, external link (with expiry, password, revoke).
-Future<void> showCommAiShareSheet(BuildContext context, {required String kind, required String id, String? title}) {
-  return showAppBottomSheet<void>(context: context, title: tr('แชร์บทสนทนา'), child: CommAiShareSheet(kind: kind, id: id, title: title));
-}
-
-class CommAiShareSheet extends StatefulWidget {
-  const CommAiShareSheet({super.key, required this.kind, required this.id, this.title});
-  final String kind;
-  final String id;
-  final String? title;
-
-  @override
-  State<CommAiShareSheet> createState() => _CommAiShareSheetState();
-}
-
-class _CommAiShareSheetState extends State<CommAiShareSheet> {
-  String _tab = 'device';
-  final _include = <String>{'summary', 'actions', 'transcript'};
-  String _format = 'pdf';
-  String _lang = 'th';
-  String? _busy;
-  String? _msg;
-  bool _msgError = false;
-  String? _link;
-  int _days = 7;
-  Map<String, dynamic>? _settings;
-  List<Map<String, dynamic>> _links = const [];
-  final _to = TextEditingController();
-  final _cc = TextEditingController();
-  final _note = TextEditingController();
-  final _password = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    final api = context.read<AppConfig>().apiClient;
-    api.getCommAiSettings().then((r) {
-      if (mounted && r['settings'] is Map) setState(() => _settings = Map<String, dynamic>.from(r['settings'] as Map));
-    }).catchError((_) {});
-    _loadLinks();
-  }
-
-  @override
-  void dispose() {
-    _to.dispose();
-    _cc.dispose();
-    _note.dispose();
-    _password.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadLinks() async {
-    try {
-      final list = await context.read<AppConfig>().apiClient.listConversationLinks(widget.kind, widget.id);
-      if (mounted) setState(() => _links = list);
-    } catch (_) {}
-  }
-
-  bool get _emailOn => _settings?['share_email_enabled'] != false;
-  bool get _linkOn => _settings?['share_link_enabled'] != false;
-  int get _maxDays => (_settings?['share_link_max_days'] as num?)?.toInt() ?? 30;
-
-  List<String> _emails(String s) => s.split(RegExp(r'[,;\s]+')).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-
-  Future<void> _run(String what, Future<String?> Function() fn) async {
-    setState(() {
-      _busy = what;
-      _msg = null;
-    });
-    try {
-      final m = await fn();
-      if (mounted) {
-        setState(() {
-          _msg = m;
-          _msgError = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _msg = formatApiError(e);
-          _msgError = true;
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _busy = null);
-    }
-  }
-
-  Widget _spin() => const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));
-
-  @override
-  Widget build(BuildContext context) {
-    final api = context.read<AppConfig>().apiClient;
-    final theme = Theme.of(context);
-    final inc = _include.toList();
-    final tabs = <(String, String, IconData?)>[
-      ('device', 'แชร์ไฟล์', NxI.shareNetwork),
-      if (_emailOn) ('email', 'อีเมล', NxI.envelope),
-      if (_linkOn) ('link', 'ลิงก์', NxI.link),
-    ];
-    if (!tabs.any((t) => t.$1 == _tab)) _tab = 'device';
-    final includeOptions = [('summary', 'สรุป 4 หัวข้อ'), ('actions', 'งานที่ต้องทำต่อ'), ('transcript', 'บทสนทนา'), if (_tab == 'link' && widget.kind == 'call') ('audio', 'เสียง (ในลิงก์)')];
-    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const IsaacTip('ISAAC แนะนำ: แชร์ให้ลูกค้าเลือกแค่ "สรุป" และ "งานที่ต้องทำต่อ" — บทสนทนาเต็มเก็บไว้ใช้ภายในทีม'),
-      const SizedBox(height: 14),
-      NxSlidingSegmented<String>(value: _tab, options: tabs, onChanged: (v) => setState(() {
-            _tab = v;
-            _msg = null;
-            if (v != 'link') _include.remove('audio');
-          })),
-      const SizedBox(height: 14),
-      Text(tr('รวมอะไรบ้าง'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
-      const SizedBox(height: 6),
-      Wrap(spacing: 6, runSpacing: 6, children: [
-        for (final (k, label) in includeOptions)
-          FilterChip(
-            label: Text(tr(label)),
-            selected: _include.contains(k),
-            onSelected: (v) => setState(() => v ? _include.add(k) : _include.remove(k)),
-          ),
-      ]),
-      if (_tab != 'link') ...[
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              isExpanded: true,
-              initialValue: _format,
-              decoration: InputDecoration(labelText: tr('รูปแบบไฟล์')),
-              items: const [
-                DropdownMenuItem(value: 'pdf', child: Text('PDF')),
-                DropdownMenuItem(value: 'docx', child: Text('Word (.docx)')),
-                DropdownMenuItem(value: 'md', child: Text('Markdown')),
-                DropdownMenuItem(value: 'txt', child: Text('Text')),
-              ],
-              onChanged: (v) => setState(() => _format = v ?? _format),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              isExpanded: true,
-              initialValue: _lang,
-              decoration: InputDecoration(labelText: tr('ภาษาหัวข้อ')),
-              items: const [DropdownMenuItem(value: 'th', child: Text('ไทย')), DropdownMenuItem(value: 'en', child: Text('English'))],
-              onChanged: (v) => setState(() => _lang = v ?? _lang),
-            ),
-          ),
-        ]),
-      ],
-      const SizedBox(height: 14),
-      if (_tab == 'device')
-        FilledButton.icon(
-          key: const ValueKey('comm-ai-share-device'),
-          icon: _busy == 'device' ? _spin() : const Icon(NxI.shareNetwork),
-          label: Text(tr('แชร์ผ่านอุปกรณ์ (LINE, อีเมล, Drive…)')),
-          onPressed: _busy != null || _include.isEmpty
-              ? null
-              : () => _run('device', () async {
-                    final bytes = await api.exportConversation(widget.kind, widget.id, format: _format, include: inc, lang: _lang);
-                    final dir = await getTemporaryDirectory();
-                    final name = '${(widget.title ?? 'conversation').replaceAll(RegExp(r'[\\/:*?"<>|\n]'), ' ').trim()}.$_format';
-                    final f = File('${dir.path}/${name.length > 80 ? '${name.substring(0, 76)}.$_format' : name}');
-                    await f.writeAsBytes(bytes);
-                    await Share.shareXFiles([XFile(f.path)], subject: widget.title);
-                    return null;
-                  }),
-        ),
-      if (_tab == 'email') ...[
-        TextField(
-          key: const ValueKey('comm-ai-share-to'),
-          controller: _to,
-          keyboardType: TextInputType.emailAddress,
-          decoration: InputDecoration(labelText: tr('ถึง'), helperText: tr('คั่นหลายอีเมลด้วย ,'), prefixIcon: const Icon(NxI.envelope)),
-          onChanged: (_) => setState(() {}),
-        ),
-        const SizedBox(height: 10),
-        TextField(key: const ValueKey('comm-ai-share-cc'), controller: _cc, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'CC')),
-        const SizedBox(height: 10),
-        TextField(key: const ValueKey('comm-ai-share-note'), controller: _note, minLines: 2, maxLines: 5, decoration: InputDecoration(labelText: tr('ข้อความถึงผู้รับ'), hintText: tr('ไม่บังคับ'), alignLabelWithHint: true)),
-        const SizedBox(height: 14),
-        FilledButton.icon(
-          key: const ValueKey('comm-ai-share-email'),
-          icon: _busy == 'email' ? _spin() : const Icon(NxI.paperPlaneTilt),
-          label: Text(tr('ส่งอีเมล')),
-          onPressed: _busy != null || _emails(_to.text).isEmpty || _include.isEmpty
-              ? null
-              : () => _run('email', () async {
-                    await api.shareConversationEmail(widget.kind, widget.id, to: _emails(_to.text), cc: _emails(_cc.text), message: _note.text.trim(), include: inc, format: _format, lang: _lang);
-                    return tr('ส่งอีเมลแล้ว');
-                  }),
-        ),
-      ],
-      if (_tab == 'link') ...[
-        Row(children: [
-          Expanded(
-            child: DropdownButtonFormField<int>(
-              isExpanded: true,
-              initialValue: _days.clamp(1, _maxDays),
-              decoration: InputDecoration(labelText: tr('หมดอายุใน')),
-              items: [for (final d in {1, 3, 7, 14, 30, _maxDays}.where((d) => d <= _maxDays).toList()..sort()) DropdownMenuItem(value: d, child: Text('$d ${tr('วัน')}'))],
-              onChanged: (v) => setState(() => _days = v ?? _days),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              key: const ValueKey('comm-ai-share-password'),
-              controller: _password,
-              obscureText: true,
-              decoration: InputDecoration(labelText: tr('รหัสผ่าน'), hintText: tr('ไม่บังคับ')),
-            ),
-          ),
-        ]),
-        const SizedBox(height: 14),
-        FilledButton.icon(
-          key: const ValueKey('comm-ai-share-link'),
-          icon: _busy == 'link' ? _spin() : const Icon(NxI.link),
-          label: Text(tr('สร้างลิงก์ภายนอก')),
-          onPressed: _busy != null || _include.isEmpty
-              ? null
-              : () => _run('link', () async {
-                    final r = await api.createConversationLink(widget.kind, widget.id, include: inc, days: _days, password: _password.text.trim());
-                    final base = api.baseUrl.replaceAll(RegExp(r'/+$'), '');
-                    _link = '$base${r['url_path']}';
-                    await _loadLinks();
-                    return null;
-                  }),
-        ),
-        if (_link != null)
-          Container(
-            margin: const EdgeInsets.only(top: 10),
-            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
-            decoration: BoxDecoration(color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(14)),
-            child: Row(children: [
-              Expanded(child: SelectableText(_link!, key: const ValueKey('comm-ai-share-url'), maxLines: 2, style: const TextStyle(fontSize: 12.5))),
-              IconButton(
-                tooltip: tr('คัดลอก'),
-                icon: const Icon(NxI.copySimple),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: _link!));
-                  setState(() => _msg = tr('คัดลอกลิงก์แล้ว'));
-                },
-              ),
-              IconButton(tooltip: tr('แชร์'), icon: const Icon(NxI.shareNetwork), onPressed: () => Share.share(_link!, subject: widget.title)),
-            ]),
-          ),
-        if (_links.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(tr('ลิงก์ที่เคยสร้าง'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
-          for (final l in _links)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              leading: Icon(l['revoked'] == true ? NxI.x : NxI.link, color: l['revoked'] == true ? theme.hintColor : kIsaacIndigo, size: 18),
-              title: Text('${tr('หมดอายุ')} ${commAiWhen(l['expires_at'])}${l['has_password'] == true ? ' · ${tr('มีรหัสผ่าน')}' : ''}'),
-              subtitle: Text('${tr('เปิดดู')} ${l['view_count'] ?? 0} ${tr('ครั้ง')}${l['revoked'] == true ? ' · ${tr('ยกเลิกแล้ว')}' : ''}'),
-              trailing: l['revoked'] == true
-                  ? null
-                  : TextButton(
-                      onPressed: () async {
-                        try {
-                          await api.revokeConversationLink((l['id'] as num).toInt());
-                          await _loadLinks();
-                        } catch (e) {
-                          if (mounted) setState(() => _msg = formatApiError(e));
-                        }
-                      },
-                      child: Text(tr('ยกเลิกลิงก์'), style: const TextStyle(color: Color(0xFFE11D48))),
-                    ),
-            ),
-        ],
-      ],
-      if (_msg != null)
-        Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Text(_msg!, textAlign: TextAlign.center, style: TextStyle(color: _msgError ? theme.colorScheme.error : const Color(0xFF059669), fontWeight: FontWeight.w600)),
-        ),
-    ]);
   }
 }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
+import '../../core/menu_access.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../core/nx_page_route.dart';
@@ -18,13 +19,18 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
 import '../../widgets/nx_surface_card.dart';
 import 'call_summary_screen.dart';
+import 'comm_ai_access.dart';
 import 'comm_ai_isaac.dart';
 import 'comm_ai_widgets.dart';
 
 /// Communication → ประวัติ AI การสนทนา: every call ISAAC took notes on and every chat summary.
 /// Search inside transcripts and summaries, filter by type and Thai date range. Tablets: list + detail.
 class CommAiHistoryScreen extends StatefulWidget {
-  const CommAiHistoryScreen({super.key});
+  const CommAiHistoryScreen({super.key, this.initialUserId, this.initialQuery});
+
+  /// `?user=<id>` (from the insights "most active people") and `?q=` (a frequent topic).
+  final String? initialUserId;
+  final String? initialQuery;
 
   @override
   State<CommAiHistoryScreen> createState() => _CommAiHistoryScreenState();
@@ -36,8 +42,21 @@ const _typeGroup = NxFilterGroup(key: 'type', label: 'ประเภท', multi
   NxFilterOption('chat', 'สรุปแชท'),
 ]);
 
+const _scopeGroup = NxFilterGroup(key: 'scope', label: 'เดี่ยวและกลุ่ม', multi: false, options: [
+  NxFilterOption('single', 'คุยกัน 2 คน'),
+  NxFilterOption('group', 'กลุ่ม'),
+]);
+
+const _audioGroup = NxFilterGroup(key: 'audio', label: 'เสียง', multi: false, options: [NxFilterOption('1', 'มีเสียง')]);
+
 class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
-  NxListQuery _query = const NxListQuery();
+  late NxListQuery _query = NxListQuery(
+    q: widget.initialQuery ?? '',
+    filters: {if ((widget.initialUserId ?? '').isNotEmpty) 'person': {widget.initialUserId!}},
+  );
+  List<NxFilterOption> _people = const [];
+  List<NxFilterOption> _rooms = const [];
+  CommAiAccess _access = const CommAiAccess(insights: false);
   DateTimeRange? _range;
   final _items = <Map<String, dynamic>>[];
   String? _next;
@@ -53,7 +72,33 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
   void initState() {
     super.initState();
     _load();
+    final api = context.read<AppConfig>().apiClient;
+    CommAiAccess.of(api).then((a) {
+      if (mounted) setState(() => _access = a);
+    });
+    api.getCommAiHistoryFilters().then((r) {
+      if (!mounted) return;
+      setState(() {
+        _people = [for (final p in (r['people'] as List? ?? const [])) if (p is Map && p['user_id'] != null) NxFilterOption('${p['user_id']}', '${p['name'] ?? p['user_id']}')];
+        _rooms = [for (final x in (r['rooms'] as List? ?? const [])) if (x is Map && x['id'] != null) NxFilterOption('${x['id']}', '${x['name'] ?? '#${x['id']}'}')];
+      });
+    }).catchError((_) {});
   }
+
+  /// Person / room pickers; a person from a link shows even before the list arrives.
+  List<NxFilterGroup> get _groups {
+    final person = _query.single('person');
+    final people = [..._people, if (person != null && !_people.any((p) => p.value == person)) NxFilterOption(person, '#$person')];
+    return [
+      _typeGroup,
+      _scopeGroup,
+      if (people.isNotEmpty) NxFilterGroup(key: 'person', label: 'คนในสาย', multi: false, options: people),
+      if (_rooms.isNotEmpty) NxFilterGroup(key: 'room', label: 'ห้องแชท', multi: false, options: _rooms),
+      _audioGroup,
+    ];
+  }
+
+  String _filterSig(NxListQuery q) => [q.q, for (final k in const ['type', 'scope', 'person', 'room', 'audio']) q.single(k) ?? ''].join('|');
 
   String _ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
@@ -69,6 +114,10 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
             q: _query.q,
             from: _range == null ? null : _ymd(_range!.start),
             to: _range == null ? null : _ymd(_range!.end),
+            scope: _query.single('scope'),
+            userId: _query.single('person'),
+            roomId: _query.single('room'),
+            hasAudio: _query.single('audio') == '1',
             before: before,
           );
       if (my != _req || !mounted) return;
@@ -182,6 +231,10 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
         subtitle: 'ทุกสายที่ ISAAC จดไว้ และทุกสรุปแชท — ค้นหาได้ทั้งในบทสนทนาและในสรุป',
       ),
       const SizedBox(height: 8),
+      if (!_access.available) ...[
+        const IsaacTip('ธุรกิจนี้ยังไม่ได้เปิดแพ็กเกจ ISAAC AI การสื่อสาร — ดูประวัติเดิมได้ แต่สรุปหรือแชร์ใหม่ไม่ได้', mood: 'shrug', key: ValueKey('comm-ai-unavailable')),
+        const SizedBox(height: 8),
+      ],
     ];
     String? lastDay;
     for (final it in _items) {
@@ -207,7 +260,7 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
     } else if (_loading) {
       rows.add(const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())));
     } else if (_loaded && _items.isEmpty) {
-      final filtered = _query.q.isNotEmpty || _range != null || _type != 'all';
+      final filtered = _query.q.isNotEmpty || _range != null || _query.activeFilterCount > 0;
       rows.add(CommAiIsaacState(
         mood: filtered ? 'searching' : 'sleepy',
         title: filtered ? 'ISAAC ไม่พบรายการที่ตรงกัน' : 'ยังไม่มีประวัติ',
@@ -230,7 +283,7 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
       NxListToolbar(
         query: _query,
         searchHint: 'ค้นหาในบทสนทนาและสรุป เช่น ชื่อลูกค้า สินค้า',
-        groups: const [_typeGroup],
+        groups: _groups,
         quickGroup: 'type',
         allowSavedViews: false,
         leading: [
@@ -253,7 +306,7 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
           ),
         ],
         onChanged: (q) {
-          final reload = q.q != _query.q || q.single('type') != _query.single('type');
+          final reload = _filterSig(q) != _filterSig(_query);
           setState(() => _query = q);
           if (reload) _load();
         },
@@ -284,6 +337,13 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
         title: 'ประวัติ AI การสนทนา',
         subtitle: 'ISAAC AI',
         actions: [
+          if (_access.available && _access.insights && MenuAccess.allow(context.read<AppConfig>().session, MenuAccess.commAiInsights))
+            IconButton(
+              key: const ValueKey('comm-ai-open-insights'),
+              tooltip: tr('แดชบอร์ด ISAAC'),
+              icon: const Icon(NxI.chartBar),
+              onPressed: () => context.push(AppRoutes.commAiInsights),
+            ),
           IconButton(
             key: const ValueKey('comm-ai-open-settings'),
             tooltip: tr('ตั้งค่า ISAAC AI การสื่อสาร'),
@@ -326,11 +386,16 @@ class ChatSummaryDetailScreen extends StatelessWidget {
             subtitle: range,
             actions: [
               if (r != null)
-                IconButton(
-                  key: const ValueKey('chat-summary-share'),
-                  tooltip: tr('แชร์'),
-                  icon: const Icon(NxI.shareNetwork),
-                  onPressed: () => showCommAiShareSheet(context, kind: 'chat', id: id, title: '${r['headline'] ?? ''}'),
+                FutureBuilder<CommAiAccess>(
+                  future: CommAiAccess.of(context.read<AppConfig>().apiClient),
+                  builder: (context, a) => a.data?.available == false
+                      ? const SizedBox.shrink()
+                      : IconButton(
+                          key: const ValueKey('chat-summary-share'),
+                          tooltip: tr('แชร์'),
+                          icon: const Icon(NxI.shareNetwork),
+                          onPressed: () => showCommAiShareSheet(context, kind: 'chat', id: id, title: '${r['headline'] ?? ''}'),
+                        ),
                 ),
             ],
           ),
@@ -338,7 +403,7 @@ class ChatSummaryDetailScreen extends StatelessWidget {
               ? Center(child: CommAiIsaacState(mood: 'error', title: 'เปิดสรุปไม่ได้', message: formatApiError(snap.error!)))
               : r == null
                   ? const Center(child: CommAiIsaacState(mood: 'reading', title: 'ISAAC กำลังเปิดสรุป…', busy: true))
-                  : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [CommAiSummaryView(result: r)]),
+                  : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [CommAiSummaryView(result: r, summaryId: id)]),
         );
       },
     );

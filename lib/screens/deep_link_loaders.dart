@@ -10,6 +10,8 @@ import '../widgets/nx_cached_future.dart';
 import '../widgets/nx_skeleton.dart';
 import 'calendar/activity_detail_screen.dart';
 import 'chat/chat_room_screen.dart';
+import 'comm_ai/call_summary_screen.dart';
+import 'comm_ai/comm_ai_history_screen.dart';
 import 'crm/entity_detail_screen.dart';
 import 'crm/entity_list_screen.dart';
 import 'workspace/task_detail_screen.dart';
@@ -408,5 +410,7 @@ Widget? nxPaneForRoute(String route) {
     return EntityByIdLoader(module: seg[1], id: seg[2], tab: uri.queryParameters['tab']);
   }
   if (seg.length == 2 && seg[0] == 'calendar') return ActivityByIdLoader(id: seg[1]);
+  if (seg.length == 3 && seg[0] == 'comm-ai' && seg[1] == 'calls') return CallSummaryScreen(callId: seg[2]);
+  if (seg.length == 3 && seg[0] == 'comm-ai' && seg[1] == 'summaries') return ChatSummaryDetailScreen(id: seg[2]);
   return null;
 }

@@ -11,6 +11,7 @@ import '../../services/api_exceptions.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
+import 'comm_ai_access.dart';
 import 'comm_ai_isaac.dart';
 import 'comm_ai_widgets.dart';
 
@@ -75,10 +76,14 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
   List<Map<String, dynamic>> _history = const [];
   bool _posting = false;
   bool _posted = false;
+  bool _available = true;
 
   @override
   void initState() {
     super.initState();
+    CommAiAccess.of(context.read<AppConfig>().apiClient).then((a) {
+      if (mounted && !a.available) setState(() => _available = false);
+    });
     context.read<AppConfig>().apiClient.getChatSummaries(widget.roomId).then((l) {
       if (mounted) setState(() => _history = l.where((x) => x['status'] == 'done').toList());
     }).catchError((_) {});
@@ -256,24 +261,27 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
         Expanded(child: _dateField('ถึง', _range.$2, false)),
       ]),
       const SizedBox(height: 12),
-      Row(children: [
-        Expanded(
-          child: DecoratedBox(
-            decoration: BoxDecoration(gradient: busy ? null : kIsaacGradient, borderRadius: BorderRadius.circular(14)),
-            child: FilledButton.icon(
-              key: const ValueKey('chat-summary-run'),
-              style: FilledButton.styleFrom(backgroundColor: busy ? null : Colors.transparent, shadowColor: Colors.transparent, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              onPressed: busy ? null : () => _run(),
-              icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.sparkle),
-              label: Text(busy ? tr('ISAAC กำลังสรุป…') : tr('ให้ ISAAC สรุปช่วงเวลานี้')),
+      if (!_available)
+        const IsaacTip('ธุรกิจนี้ยังไม่ได้เปิดแพ็กเกจ ISAAC AI การสื่อสาร — ดูประวัติเดิมได้ แต่สรุปหรือแชร์ใหม่ไม่ได้', mood: 'shrug', key: ValueKey('comm-ai-unavailable'))
+      else
+        Row(children: [
+          Expanded(
+            child: DecoratedBox(
+              decoration: BoxDecoration(gradient: busy ? null : kIsaacGradient, borderRadius: BorderRadius.circular(14)),
+              child: FilledButton.icon(
+                key: const ValueKey('chat-summary-run'),
+                style: FilledButton.styleFrom(backgroundColor: busy ? null : Colors.transparent, shadowColor: Colors.transparent, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                onPressed: busy ? null : () => _run(),
+                icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.sparkle),
+                label: Text(busy ? tr('ISAAC กำลังสรุป…') : tr('ให้ ISAAC สรุปช่วงเวลานี้')),
+              ),
             ),
           ),
-        ),
-        if (_phase == 'done') ...[
-          const SizedBox(width: 8),
-          IconButton.outlined(tooltip: tr('สรุปใหม่'), icon: const Icon(NxI.arrowsClockwise, size: 18), onPressed: () => _run(force: true)),
-        ],
-      ]),
+          if (_phase == 'done') ...[
+            const SizedBox(width: 8),
+            IconButton.outlined(tooltip: tr('สรุปใหม่'), icon: const Icon(NxI.arrowsClockwise, size: 18), onPressed: () => _run(force: true)),
+          ],
+        ]),
       const SizedBox(height: 14),
       if (_phase == 'loading')
         CommAiIsaacState(
@@ -318,7 +326,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
           Expanded(
             child: Text('${tr('จาก')} ${_done!['message_count'] ?? '-'} ${tr('ข้อความ')}${_done!['cached'] == true ? ' · ${tr('ผลที่บันทึกไว้')}' : ''}', style: TextStyle(fontSize: 12, color: hint)),
           ),
-          if (_done!['summary_id'] != null)
+          if (_done!['summary_id'] != null && _available)
             TextButton.icon(
               icon: const Icon(NxI.shareNetwork, size: 16),
               label: Text(tr('แชร์')),
@@ -332,7 +340,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
           ),
         ]),
         const SizedBox(height: 6),
-        CommAiSummaryView(result: result, sourceNote: '${tr('จากสรุปแชท')}: ${widget.roomName}'),
+        CommAiSummaryView(key: ValueKey('chat-summary-view-${_done!['summary_id']}'), result: result, summaryId: _done!['summary_id']?.toString(), sourceNote: '${tr('จากสรุปแชท')}: ${widget.roomName}'),
       ],
       if (_phase == 'idle' && _history.isNotEmpty) ...[
         const CommAiSectionTitle('สรุปก่อนหน้า', icon: NxI.clockCounterClockwise),

@@ -56,16 +56,36 @@ String? notificationTab(String? extra) {
 }
 
 String notificationDeepLink(String path, {String? linkId, String? extra}) {
-  final link = _notificationDeepLink(path, linkId: linkId);
+  final link = _notificationDeepLink(path, linkId: linkId, extra: extra);
   final tab = notificationTab(extra);
   if (tab == null || !(link.startsWith('/crm/') || link.startsWith('/fsm/')) || link.contains('?')) return link;
   return '$link?tab=$tab';
 }
 
-String _notificationDeepLink(String path, {String? linkId}) {
+/// `/comm-ai/history?call=<id>` → that call's summary screen; `?summary=<id>` → that chat summary.
+/// Null when the link has neither (the history list itself).
+String? commAiHistoryRedirect(Uri uri) {
+  final call = uri.queryParameters['call'];
+  if (call != null && call.isNotEmpty) return AppRoutes.commAiCall(call);
+  final summary = uri.queryParameters['summary'];
+  if (summary != null && summary.isNotEmpty) return AppRoutes.commAiSummary(summary);
+  return null;
+}
+
+String _notificationDeepLink(String path, {String? linkId, String? extra}) {
   final uri = _asUri(path);
   final segs = uri?.pathSegments.where((s) => s.isNotEmpty).toList() ?? [];
   final open = uri?.queryParameters['open'];
+
+  // "ISAAC สรุปการโทรเสร็จแล้ว" (type ai, link_extra comm_ai_call): open the call summary.
+  if (segs.isNotEmpty && segs.first == 'comm-ai' && uri != null) {
+    final direct = commAiHistoryRedirect(uri);
+    if (direct != null) return direct;
+    if ((extra ?? '').toLowerCase() == 'comm_ai_call' && linkId != null && linkId.isNotEmpty) return AppRoutes.commAiCall(linkId);
+    if (segs.length >= 2 && segs[1] == 'history') return AppRoutes.commAi;
+    return uri.path;
+  }
+  if ((extra ?? '').toLowerCase() == 'comm_ai_call' && linkId != null && linkId.isNotEmpty) return AppRoutes.commAiCall(linkId);
 
   if (segs.length >= 2 && segs.first == 'modules') {
     final module = EntityModules.normalize(segs[1]);

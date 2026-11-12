@@ -59,6 +59,10 @@ class AppRoutes {
   static const String callLog = '/call-log';
   static const String commAi = '/comm-ai';
   static const String commAiSettings = '/comm-ai/settings';
+  static const String commAiInsights = '/comm-ai/insights';
+  static const String commAiHistory = '/comm-ai/history';
+  static String commAiCall(String callId) => '/comm-ai/calls/${Uri.encodeComponent(callId)}';
+  static String commAiSummary(String id) => '/comm-ai/summaries/${Uri.encodeComponent(id)}';
 
   /// One group of the menu page (web nav rail group), e.g. `/menu/service`.
   static String menuGroup(String id) => '/menu/$id';

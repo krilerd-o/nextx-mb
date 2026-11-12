@@ -2650,7 +2650,7 @@ class ApiClient {
 
   // ───────────── AI การสื่อสาร (/api/comm-ai) ─────────────
 
-  /// `{settings, defaults, can_edit, max_range_days}`
+  /// `{settings, defaults, can_edit, max_range_days, available, insights_available}` — `available` false = no Package.
   Future<Map<String, dynamic>> getCommAiSettings() async => _dataMap(await _send('GET', '/api/comm-ai/settings'));
 
   /// Chat summary of a room for a Thai-time range (`YYYY-MM-DD HH:mm`). Streams token / status / done / error.
@@ -2719,22 +2719,85 @@ class ApiClient {
   Future<List<int>> downloadCallRecording(String path) => _downloadBytes(path);
 
   /// `{list, next_before}` — type all|call|video|chat, from/to YYYY-MM-DD (Thai), q, before (ISO).
-  Future<Map<String, dynamic>> getCommAiHistory({String type = 'all', String? from, String? to, String? q, String? before, int limit = 30}) async =>
+  /// Extra filters: scope single|group, a person in the call, a chat room, has audio.
+  Future<Map<String, dynamic>> getCommAiHistory({String type = 'all', String? from, String? to, String? q, String? before, int limit = 30, String? scope, String? userId, String? roomId, bool hasAudio = false}) async =>
       _dataMap(await _send('GET', '/api/comm-ai/history', query: {
         'type': type,
         if (from != null && from.isNotEmpty) 'from': from,
         if (to != null && to.isNotEmpty) 'to': to,
         if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
-        if (before != null) 'before': before,
+        if (scope != null && scope.isNotEmpty) 'scope': scope,
+        if (userId != null && userId.isNotEmpty) 'user_id': userId,
+        if (roomId != null && roomId.isNotEmpty) 'room_id': roomId,
+        if (hasAudio) 'has_audio': 1,
+        'before': ?before,
         'limit': limit,
       }));
 
-  /// kind 'call' (id = call id) or 'chat' (id = summary id). format pdf|docx|md|txt.
+  /// People and chat rooms in my conversations (history pickers): `{people:[{user_id,name}], rooms:[{id,name}]}`.
+  Future<Map<String, dynamic>> getCommAiHistoryFilters() async => _dataMap(await _send('GET', '/api/comm-ai/history/filters'));
+
+  /// AI providers for summaries: `{providers:[{id,label,models,configured}], default_provider, stt_models, stt_ready}`.
+  Future<Map<String, dynamic>> getCommAiProviders() async => _dataMap(await _send('GET', '/api/comm-ai/providers'));
+
+  /// ISAAC summarises a call now (auto summary off, failed, or after editing) → `{summary_id, status}`.
+  Future<Map<String, dynamic>> summarizeCall(String callId) async => _dataMap(await _send('POST', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/summarize', data: const <String, dynamic>{}));
+
+  /// Fix a transcript line ISAAC misheard → `{seq, text, edited}`.
+  Future<Map<String, dynamic>> editCallSegment(String callId, int seq, String text) async =>
+      _dataMap(await _send('PATCH', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/segments/$seq', data: {'text': text}));
+
+  /// Tick / untick follow-up #[index] of summary [summaryId] (shared with everyone who can read it) → `{action_done}`.
+  Future<Map<String, dynamic>> setCommAiActionDone(String summaryId, int index, bool done) async =>
+      _dataMap(await _send('PATCH', '/api/comm-ai/summaries/$summaryId/actions/$index', data: {'done': done}));
+
+  /// Caption / transcript lines in another language (th en zh ja my lo km vi; ≤ 30 lines, cached on the server).
+  Future<List<String>> translateCommAi(List<String> texts, String to) async {
+    final d = _dataMap(await _send('POST', '/api/comm-ai/translate', data: {'texts': texts, 'to': to}, options: Options(receiveTimeout: const Duration(minutes: 1))));
+    final list = d['list'];
+    return list is List ? [for (final x in list) '${x ?? ''}'] : const [];
+  }
+
+  /// ISAAC insights over a Thai date range (default last 30 days).
+  Future<Map<String, dynamic>> getCommAiInsights({String? from, String? to}) async => _dataMap(await _send('GET', '/api/comm-ai/insights', query: {
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
+      }));
+
+  /// People in the call / room with an e-mail (quick picks): `[{user_id, name, email}]`.
+  Future<List<Map<String, dynamic>>> getShareRecipients(String kind, String id) async =>
+      extractMapList(_dataMap(await _send('GET', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/recipients'))['list']);
+
+  /// The summary as a direct message to each colleague → `{sent:[{user_id, room_id}]}`.
+  Future<Map<String, dynamic>> shareConversationToChat(String kind, String id, {required List<int> userIds, String message = ''}) async =>
+      _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/chat', data: {'user_ids': userIds, 'message': message}));
+
+  /// The summary as an Activity on a CRM record's timeline → `{activity_id, link, ...}`.
+  Future<Map<String, dynamic>> shareConversationToCrm(String kind, String id, {required String module, required String recordId, String? activityType, String note = ''}) async =>
+      _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/crm', data: {
+        'module': module,
+        'record_id': int.tryParse(recordId) ?? recordId,
+        'activitytype': ?activityType,
+        'note': note,
+      }));
+
+  /// kind 'call' (id = call id) or 'chat' (id = summary id). format pdf|docx|md|txt|zip.
   Future<List<int>> exportConversation(String kind, String id, {String format = 'pdf', List<String> include = const ['summary', 'actions', 'transcript'], String lang = 'th'}) =>
       _downloadBytes('/api/comm-ai/export/$kind/${Uri.encodeComponent(id)}?format=$format&include=${include.join(',')}&lang=$lang');
 
-  Future<Map<String, dynamic>> shareConversationEmail(String kind, String id, {required List<String> to, List<String> cc = const [], String message = '', List<String> include = const ['summary', 'actions', 'transcript'], String format = 'pdf', String lang = 'th'}) async =>
-      _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/email', data: {'to': to, 'cc': cc, 'message': message, 'include': include, 'format': format, 'lang': lang}));
+  /// format pdf|docx|md|txt|zip. [attachAudio]: the call tape rides along (big files go as a 7-day link).
+  /// [logTo] `{module, record_id}` keeps the e-mail on that CRM record as an Activity "Email".
+  Future<Map<String, dynamic>> shareConversationEmail(String kind, String id, {required List<String> to, List<String> cc = const [], String message = '', List<String> include = const ['summary', 'actions', 'transcript'], String format = 'pdf', String lang = 'th', bool attachAudio = false, Map<String, dynamic>? logTo}) async =>
+      _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/email', data: {
+        'to': to,
+        'cc': cc,
+        'message': message,
+        'include': include,
+        'format': format,
+        'lang': lang,
+        if (attachAudio) 'attach_audio': true,
+        'log_to': ?logTo,
+      }, options: Options(receiveTimeout: const Duration(minutes: 2))));
 
   /// `{token, url_path, expires_at}`
   Future<Map<String, dynamic>> createConversationLink(String kind, String id, {List<String> include = const ['summary', 'actions', 'transcript'], int days = 7, String? password}) async =>

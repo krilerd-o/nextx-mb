@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -111,9 +112,74 @@ class LiveCaptionsPanel extends StatefulWidget {
   State<LiveCaptionsPanel> createState() => _LiveCaptionsPanelState();
 }
 
+/// Off → English → ไทย → off. Only finished lines are translated (cached on the server).
+const kCaptionLangCycle = ['', 'en', 'th'];
+
 class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
   bool _open = true;
   static const _colors = [Color(0xFF7DD3FC), Color(0xFF6EE7B7), Color(0xFFFCD34D), Color(0xFFF9A8D4), Color(0xFFC4B5FD)];
+  String _lang = '';
+  final _tr = <String, String>{}; // '$lang:$captionKey' → text
+  final _asked = <String>{};
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.lt.captions.addListener(_schedule);
+  }
+
+  @override
+  void didUpdateWidget(LiveCaptionsPanel old) {
+    super.didUpdateWidget(old);
+    if (old.lt != widget.lt) {
+      old.lt.captions.removeListener(_schedule);
+      widget.lt.captions.addListener(_schedule);
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    widget.lt.captions.removeListener(_schedule);
+    super.dispose();
+  }
+
+  void _cycleLang() {
+    setState(() => _lang = kCaptionLangCycle[(kCaptionLangCycle.indexOf(_lang) + 1) % kCaptionLangCycle.length]);
+    _schedule();
+  }
+
+  void _schedule() {
+    if (_lang.isEmpty) return;
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), _translate);
+  }
+
+  Future<void> _translate() async {
+    final lang = _lang;
+    final api = widget.lt.api;
+    if (lang.isEmpty || api == null) return;
+    final todo = [for (final c in widget.lt.captions.value) if (c.isFinal && c.text.isNotEmpty && !_asked.contains('$lang:${c.key}')) c];
+    final batch = todo.length > 30 ? todo.sublist(todo.length - 30) : todo;
+    if (batch.isEmpty) return;
+    for (final c in batch) {
+      _asked.add('$lang:${c.key}');
+    }
+    try {
+      final out = await api.translateCommAi([for (final c in batch) c.text], lang);
+      if (!mounted) return;
+      setState(() {
+        for (var i = 0; i < batch.length; i++) {
+          _tr['$lang:${batch[i].key}'] = i < out.length ? out[i] : '';
+        }
+      });
+    } catch (_) {
+      for (final c in batch) {
+        _asked.remove('$lang:${c.key}');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,6 +231,22 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                       ),
                     if (lt.running)
                       IconButton(visualDensity: VisualDensity.compact, tooltip: tr('หยุดจดเสียงของฉัน'), icon: const Icon(NxI.stop, size: 16, color: Colors.white70), onPressed: lt.stop),
+                    Tooltip(
+                      message: tr('แปลคำบรรยาย'),
+                      child: TextButton.icon(
+                        key: const ValueKey('call-captions-translate'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          minimumSize: const Size(36, 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          foregroundColor: _lang.isEmpty ? Colors.white70 : Colors.white,
+                          backgroundColor: _lang.isEmpty ? null : const Color(0x4D0EA5E9),
+                        ),
+                        onPressed: _cycleLang,
+                        icon: const Icon(NxI.languages, size: 18),
+                        label: Text(_lang.isEmpty ? '' : _lang.toUpperCase(), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800)),
+                      ),
+                    ),
                     IconButton(
                       key: const ValueKey('call-captions-toggle'),
                       visualDensity: VisualDensity.compact,
@@ -203,10 +285,14 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                               duration: const Duration(milliseconds: 250),
                               child: Padding(
                                 padding: const EdgeInsets.only(top: 4, right: 8),
-                                child: Text.rich(TextSpan(children: [
-                                  TextSpan(text: '${c.userId == lt.myUserId ? tr('คุณ') : c.name}  ', style: TextStyle(color: _colors[ids.indexOf(c.userId) % _colors.length], fontWeight: FontWeight.w700, fontSize: 12)),
-                                  TextSpan(text: c.text, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35)),
-                                ])),
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text.rich(TextSpan(children: [
+                                    TextSpan(text: '${c.userId == lt.myUserId ? tr('คุณ') : c.name}  ', style: TextStyle(color: _colors[ids.indexOf(c.userId) % _colors.length], fontWeight: FontWeight.w700, fontSize: 12)),
+                                    TextSpan(text: c.text, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35)),
+                                  ])),
+                                  if (_lang.isNotEmpty && (_tr['$_lang:${c.key}'] ?? '').isNotEmpty)
+                                    Text(_tr['$_lang:${c.key}']!, key: ValueKey('call-caption-tr-${c.key}'), style: const TextStyle(color: Color(0xE6BAE6FD), fontSize: 13, fontStyle: FontStyle.italic, height: 1.3)),
+                                ]),
                               ),
                             ),
                         ]);
