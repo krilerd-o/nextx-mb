@@ -803,7 +803,7 @@ Future<void> showQrHowTo(BuildContext context) => showDialog<void>(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Image.asset('assets/how_to_scan_qr.gif', key: const ValueKey('qr-howto-gif'), fit: BoxFit.fitWidth, gaplessPlayback: true),
+                Image.asset('assets/how_to_scan_qr.webp', key: const ValueKey('qr-howto-gif'), fit: BoxFit.fitWidth, gaplessPlayback: true),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
                   child: Column(
