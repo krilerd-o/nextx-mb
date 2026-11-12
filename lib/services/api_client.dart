@@ -2699,9 +2699,19 @@ class ApiClient {
   /// Call: transcript (filtered by sharing), summary, recordings.
   Future<Map<String, dynamic>> getCommAiCall(String callId) async => _dataMap(await _send('GET', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}'));
 
-  Future<void> uploadCallRecording(String callId, String filePath, {int durationMs = 0, String mime = 'audio/mp4'}) async {
+  /// My consent choice remembered on the server for this Space (same on all my devices):
+  /// `{choice: {enabled, share, record} | null, updated_at}`.
+  Future<Map<String, dynamic>> getCommAiConsentChoice() async => _dataMap(await _send('GET', '/api/comm-ai/consent-choice'));
+
+  /// Remember ([choice]) or forget (null) the consent choice for all my devices.
+  Future<Map<String, dynamic>> saveCommAiConsentChoice(Map<String, dynamic>? choice) async =>
+      _dataMap(await _send('PUT', '/api/comm-ai/consent-choice', data: {'choice': choice}));
+
+  /// [deviceId]: stable install id, so a call that moved between my devices keeps one recording per device.
+  Future<void> uploadCallRecording(String callId, String filePath, {int durationMs = 0, String mime = 'audio/mp4', String deviceId = ''}) async {
     final form = FormData.fromMap({
       'duration_ms': '$durationMs',
+      'device_id': deviceId,
       'audio': await MultipartFile.fromFile(filePath, filename: 'call.${mime.contains('ogg') ? 'ogg' : mime.contains('wav') ? 'wav' : 'm4a'}', contentType: DioMediaType.parse(mime)),
     });
     await _send('POST', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/recording', data: form, options: Options(sendTimeout: const Duration(minutes: 5)));
@@ -2709,9 +2719,10 @@ class ApiClient {
 
   /// One part of a long call recording (parts are joined on the server when the final one arrives).
   Future<Map<String, dynamic>> uploadCallRecordingPart(String callId, String filePath,
-      {required int part, int parts = 0, bool isFinal = false, int durationMs = 0, String mime = 'audio/wav'}) async {
+      {required int part, int parts = 0, bool isFinal = false, int durationMs = 0, String mime = 'audio/wav', String deviceId = ''}) async {
     final form = FormData.fromMap({
       'part': '$part',
+      'device_id': deviceId,
       if (isFinal) 'final': '1',
       if (isFinal) 'parts': '$parts',
       'duration_ms': '$durationMs',

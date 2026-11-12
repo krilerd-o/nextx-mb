@@ -1,4 +1,7 @@
 
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -7,6 +10,7 @@ import '../../core/i18n.dart';
 import '../../core/nx_page_route.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_exceptions.dart';
+import '../../services/realtime_service.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
@@ -146,11 +150,44 @@ class CommAiSummaryView extends StatefulWidget {
 }
 
 class _CommAiSummaryViewState extends State<CommAiSummaryView> {
-  late final Set<int> _done = {
-    for (final x in (widget.result['action_done'] is List ? widget.result['action_done'] as List : const [])) ?(x is num ? x.toInt() : int.tryParse('$x')),
-  };
+  late final Set<int> _done = _ticks(widget.result['action_done']);
   bool _showLines = false;
   int? _focus;
+  StreamSubscription<RealtimeEvent>? _actionsSub;
+
+  static Set<int> _ticks(dynamic v) => {
+        for (final x in (v is List ? v : const [])) ?(x is num ? x.toInt() : int.tryParse('$x')),
+      };
+
+  @override
+  void initState() {
+    super.initState();
+    // Ticks made on another device (or by someone else) show here right away.
+    _actionsSub = RealtimeService.instance.on('ai:summary_actions').listen((e) {
+      final id = widget.summaryId;
+      if (!mounted || id == null || '${e.data['summary_id']}' != id || e.data['action_done'] is! List) return;
+      setState(() => _done
+        ..clear()
+        ..addAll(_ticks(e.data['action_done'])));
+    });
+  }
+
+  @override
+  void didUpdateWidget(CommAiSummaryView old) {
+    super.didUpdateWidget(old);
+    final next = _ticks(widget.result['action_done']);
+    if (!setEquals(_ticks(old.result['action_done']), next)) {
+      _done
+        ..clear()
+        ..addAll(next);
+    }
+  }
+
+  @override
+  void dispose() {
+    _actionsSub?.cancel();
+    super.dispose();
+  }
 
   void _jump(int n) => setState(() {
         _showLines = true;

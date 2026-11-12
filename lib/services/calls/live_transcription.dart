@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -41,6 +42,39 @@ class SttDecision {
   final bool share;
   final bool record;
   SttDecision withCall(String id) => SttDecision(callId: id, enabled: enabled, share: share, record: record);
+}
+
+/// Stable id of this install (`app-<uuid>`, generated once, kept in SharedPreferences): goes with
+/// `stt:start` and every recording upload so one account on several devices keeps one recording per device.
+class CommAiDevice {
+  static const key = 'commAi.deviceId';
+  static String? _id;
+
+  static Future<String> id() async {
+    if (_id != null) return _id!;
+    try {
+      final p = await SharedPreferences.getInstance();
+      final saved = p.getString(key);
+      if (saved != null && RegExp(r'^[A-Za-z0-9_.:-]{1,64}$').hasMatch(saved)) return _id = saved;
+      final fresh = 'app-${_uuid()}';
+      await p.setString(key, fresh);
+      return _id = fresh;
+    } catch (_) {
+      return _id ??= 'app-${_uuid()}'; // storage unavailable: stable for this run at least
+    }
+  }
+
+  @visibleForTesting
+  static void reset() => _id = null;
+
+  static String _uuid() {
+    final r = Random.secure();
+    final b = List<int>.generate(16, (_) => r.nextInt(256));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+    return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
+  }
 }
 
 /// Microphone → PCM16 mono 24 kHz in ~100 ms chunks while WebRTC keeps using the mic.
@@ -100,10 +134,11 @@ Stream<Uint8List> rechunk(Stream<Uint8List> input, int size) async* {
 /// Writes PCM16 mono 24 kHz into WAV parts of [partBytes] (~5 minutes) and hands each finished part
 /// to the upload queue, so a long call is never one huge file and nothing is lost if the app dies.
 class _WavParts {
-  _WavParts(this.dir, this.callId, {this.businessId});
+  _WavParts(this.dir, this.callId, {this.businessId, this.deviceId = ''});
   final Directory dir;
   final String callId;
   final String? businessId;
+  final String deviceId;
   static const partBytes = 48000 * 300; // 5 minutes of PCM16 24 kHz
   IOSink? _sink;
   File? _file;
@@ -155,6 +190,7 @@ class _WavParts {
       isFinal: isFinal,
       durationMs: durationMs,
       businessId: businessId,
+      deviceId: deviceId,
     ));
   }
 
@@ -272,6 +308,14 @@ class LiveTranscription extends ChangeNotifier {
 
   static const _choiceKey = 'commAi.sttChoice';
 
+  /// Remembered choice comes from the server (same on all my devices); SharedPreferences is only a cache.
+  bool _choiceLoaded = false;
+  bool _choiceTried = false; // one request per Space / reconnect, so an offline phone is not slowed down
+
+  /// Pause between re-sending `stt:start` after a reconnect (tests shorten it).
+  @visibleForTesting
+  Duration resumeDelay = const Duration(seconds: 1);
+
   bool get enabled => settings?['stt_enabled'] == true;
   bool get callerMode => settings?['consent_mode'] == 'caller';
   bool get anyoneTranscribed => speakers.values.any((s) => s.enabled);
@@ -285,7 +329,34 @@ class LiveTranscription extends ChangeNotifier {
     } catch (_) {
       settings = {'stt_enabled': false};
     }
+    _choiceLoaded = false;
+    _choiceTried = false;
+    if (enabled) await _loadServerChoice();
     notifyListeners();
+  }
+
+  /// Server value of "จำการเลือกนี้" → local cache. Offline: the cached value keeps working.
+  Future<void> _loadServerChoice() async {
+    if (_choiceLoaded || _choiceTried || api == null) return;
+    _choiceTried = true;
+    try {
+      final r = await api!.getCommAiConsentChoice();
+      if (r.containsKey('choice')) {
+        _choiceLoaded = true;
+        await _cacheChoice(r['choice'] is Map ? Map<String, dynamic>.from(r['choice'] as Map) : null);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _cacheChoice(Map<String, dynamic>? c) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      if (c == null) {
+        await p.remove(_choiceKey);
+      } else {
+        await p.setString(_choiceKey, [c['enabled'] == true ? 'on' : 'off', if (c['share'] == false) 'private', if (c['record'] == true) 'rec'].join(','));
+      }
+    } catch (_) {}
   }
 
   /// Follow the call: start when the call is live and the user agreed; clean up when it ends.
@@ -297,6 +368,7 @@ class LiveTranscription extends ChangeNotifier {
   }
 
   Future<SttDecision?> savedChoice() async {
+    await _loadServerChoice();
     final p = await SharedPreferences.getInstance();
     final v = p.getString(_choiceKey);
     if (v == null) return null;
@@ -308,6 +380,13 @@ class LiveTranscription extends ChangeNotifier {
   Future<bool> needsConsent(String callId) async {
     await ensureSettings();
     if (!enabled || decision?.callId == callId) return false;
+    // Picked up from another device of mine while I was being transcribed → continue, do not ask again.
+    final mine = callId == activeCallId ? await _syncMine(callId) : null;
+    if (decision?.callId == callId) return false;
+    if (mine != null) {
+      await decide(callId, enabled: true, share: mine['share'] != false, record: mine['record'] == true);
+      return false;
+    }
     if (settings?['ask_every_call'] == false) {
       final saved = await savedChoice();
       if (saved != null) {
@@ -318,11 +397,27 @@ class LiveTranscription extends ChangeNotifier {
     return true;
   }
 
+  /// My speaker entry from `stt:sync` when I am already transcribed in this call (from another device).
+  Future<Map<String, dynamic>?> _syncMine(String callId) async {
+    try {
+      final r = await _t.emitAck('stt:sync', {'call_id': callId});
+      final list = r['speakers'];
+      if (r['ok'] != true || list is! List) return null;
+      for (final s in list.whereType<Map>()) {
+        if ('${s['user_id']}' == myUserId && s['enabled'] == true) return Map<String, dynamic>.from(s);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> decide(String callId, {required bool enabled, bool share = true, bool record = false, bool remember = false}) async {
     decision = SttDecision(callId: callId, enabled: enabled, share: share, record: record);
     if (remember) {
-      final p = await SharedPreferences.getInstance();
-      await p.setString(_choiceKey, [enabled ? 'on' : 'off', if (!share) 'private', if (record) 'rec'].join(','));
+      final choice = {'enabled': enabled, 'share': share, 'record': record};
+      await _cacheChoice(choice);
+      try {
+        await api?.saveCommAiConsentChoice(choice);
+      } catch (_) {} // the cache still applies on this phone
     }
     notifyListeners();
     _onCall();
@@ -340,7 +435,7 @@ class LiveTranscription extends ChangeNotifier {
     if (id != null && decision != null && decision!.callId != id && c.call?['call_id']?.toString() == decision!.callId) {
       decision = decision!.withCall(id);
     }
-    if (id != null && !running && !_starting && decision?.callId == id && decision!.enabled && error == null) {
+    if (id != null && !running && !_starting && decision?.callId == id && decision!.enabled && error == null && id != _movedCallId) {
       start();
     }
   }
@@ -348,15 +443,18 @@ class LiveTranscription extends ChangeNotifier {
   Future<void> start({bool requested = false}) async {
     final id = activeCallId;
     if (id == null || running || _starting) return;
+    if (_movedCallId == id) _movedCallId = null; // asked again on this device → take it back
     _starting = true;
     error = null;
     try {
+      final deviceId = await CommAiDevice.id();
       final ack = await _t.emitAck('stt:start', {
         'call_id': id,
         if (businessId != null) 'business_id': int.tryParse(businessId!) ?? businessId,
         'share': decision?.share ?? true,
         'record': decision?.record ?? false,
         'requested': requested,
+        'device_id': deviceId,
       });
       if (ack['ok'] != true) {
         error = '${ack['error'] ?? 'error'}';
@@ -376,10 +474,14 @@ class LiveTranscription extends ChangeNotifier {
       }
       final ackSettings = ack['settings'];
       final serverAllows = ackSettings is Map && ackSettings['record'] == true;
+      if (ack['handoff'] == true) {
+        // Taken over from another device of mine: keep that device's choice (no consent sheet again).
+        decision = SttDecision(callId: id, enabled: true, share: ackSettings is Map ? ackSettings['share'] != false : (decision?.share ?? true), record: serverAllows);
+      }
       final record = serverAllows && (decision?.record ?? false);
       if (record) {
         try {
-          _wav = _WavParts(await RecordingUploadQueue.instance.folder(), id, businessId: businessId);
+          _wav = _WavParts(await RecordingUploadQueue.instance.folder(), id, businessId: businessId, deviceId: deviceId);
         } catch (_) {
           _wav = null;
         }
@@ -495,11 +597,64 @@ class LiveTranscription extends ChangeNotifier {
         start(requested: true);
       case 'ai:call_summary_ready':
         summaryReady.value = d;
+      case 'stt:moved':
+        _onMoved(d);
+      case 'ai:consent_choice':
+        if (businessId != null && d['business_id'] != null && '${d['business_id']}' != businessId) return;
+        if (!d.containsKey('choice')) return;
+        _choiceLoaded = true;
+        unawaited(_cacheChoice(d['choice'] is Map ? Map<String, dynamic>.from(d['choice'] as Map) : null));
+      case RealtimeService.connectedEvent:
+        _resumeAfterReconnect();
+        if (!_choiceLoaded && enabled) {
+          _choiceTried = false;
+          unawaited(_loadServerChoice());
+        }
     }
+  }
+
+  /// My call / captions moved to another device of mine: stop the mic + recorder here and upload what
+  /// was recorded (final part). No `stt:stop` — the other device continues the transcription.
+  void _onMoved(Map<String, dynamic> d) {
+    final id = '${d['call_id'] ?? ''}';
+    if (id.isEmpty || (id != activeCallId && !running)) return;
+    final wasActive = running || _mic != null || _wav != null;
+    _movedCallId = id; // do not start again here by itself (the other device has it now)
+    unawaited(_stopMic(upload: true, callId: id));
+    running = false;
+    _resumeTimer?.cancel();
+    if (wasActive) _call?.showNotice(callMovedNotice);
+    notifyListeners();
+  }
+
+  Timer? _resumeTimer;
+  String? _movedCallId;
+
+  /// Socket came back while transcribing (new socket id): take my transcription seat again, up to 3 tries.
+  void _resumeAfterReconnect() {
+    final id = activeCallId;
+    if (id == null || !running || decision?.enabled != true) return;
+    _resumeTimer?.cancel();
+    var tries = 0;
+    Future<void> again() async {
+      if (activeCallId != id || !running) return;
+      tries++;
+      final res = await _t.emitAck('stt:start', {
+        'call_id': id,
+        if (businessId != null) 'business_id': int.tryParse(businessId!) ?? businessId,
+        'requested': true,
+        'device_id': await CommAiDevice.id(),
+      });
+      if (res['ok'] == true || tries >= 3) return;
+      _resumeTimer = Timer(resumeDelay, () => unawaited(again()));
+    }
+
+    _resumeTimer = Timer(resumeDelay, () => unawaited(again()));
   }
 
   @override
   void dispose() {
+    _resumeTimer?.cancel();
     _sub?.cancel();
     _call?.removeListener(_onCall);
     captions.dispose();

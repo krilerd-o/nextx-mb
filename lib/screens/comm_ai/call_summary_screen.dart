@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../services/api_exceptions.dart';
+import '../../services/realtime_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
@@ -72,6 +73,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
   String _lang = '';
   final _translated = <String, String>{}; // '$lang:$seq' → text
   bool _translating = false;
+  StreamSubscription<RealtimeEvent>? _liveSub;
 
   /// Combined "meeting tape" (every shared voice on one timeline); played by the same player as id 'tape'.
   Map<String, dynamic>? get _tape => _data?['tape'] is Map ? {...Map<String, dynamic>.from(_data!['tape'] as Map), 'user_id': 'tape', 'mime': 'audio/mp4'} : null;
@@ -94,6 +96,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
       if (v != _q) setState(() => _q = v);
     });
     _load();
+    _liveSub = RealtimeService.instance.events.listen(_onLive);
     CommAiAccess.of(context.read<AppConfig>().apiClient).then((a) {
       if (mounted && !a.available) setState(() => _available = false);
     });
@@ -101,6 +104,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
 
   @override
   void dispose() {
+    _liveSub?.cancel();
     _editCtl.dispose();
     _poll?.cancel();
     _stateSub?.cancel();
@@ -133,6 +137,32 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
       _translateMissing();
     } catch (e) {
       if (mounted) setState(() => _error = formatApiError(e));
+    }
+  }
+
+  /// Changes made on another device / by another person in this call: summary status, fixed lines.
+  void _onLive(RealtimeEvent e) {
+    if (!mounted || '${e.data['call_id']}' != widget.callId) return;
+    switch (e.type) {
+      case 'ai:call_summary_status':
+      case 'ai:call_summary_ready':
+        _tries = 1;
+        _load();
+      case 'ai:call_segment_edited':
+        final seq = '${e.data['seq']}';
+        final text = '${e.data['text'] ?? ''}';
+        if (_data == null || text.isEmpty) return;
+        setState(() {
+          _data = {
+            ...?_data,
+            'transcript': [
+              for (final l in _list('transcript')) '${l['seq']}' == seq ? {...l, 'text': text, 'edited': true} : l,
+            ],
+          };
+          _translated.removeWhere((k, _) => k.endsWith(':$seq'));
+          _edited = true;
+        });
+        _translateMissing();
     }
   }
 
