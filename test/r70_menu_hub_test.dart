@@ -28,12 +28,18 @@ Future<void> _pump(
   Map<String, Object> prefs = const {},
   Size size = const Size(400, 900),
   bool resetPrefs = true,
+  // Most tests here drive the group cards; null = no saved view (the default, list).
+  MenuHubView? view = MenuHubView.groups,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   if (resetPrefs) SharedPreferences.setMockInitialValues(prefs);
   _config = AppConfig()..debugOverrideSession(_s(keys));
+  if (resetPrefs && view != null) {
+    final key = MenuHubPrefs.viewKey(_config.prefsScope);
+    await tester.runAsync(() async => (await SharedPreferences.getInstance()).setString(key, view.name));
+  }
   final router = GoRouter(routes: [
     GoRoute(path: '/', builder: (_, _) => const Scaffold(body: ModuleHubScreen())),
     GoRoute(path: '/menu/:group', builder: (_, st) => MenuGroupScreen(groupId: st.pathParameters['group']!)),
@@ -143,6 +149,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('menu-group-customers')), findsOneWidget);
       expect(prefs.getString(MenuHubPrefs.viewKey(_config.prefsScope)), 'groups');
+    });
+
+    testWidgets('no saved view: the list view is the default', (tester) async {
+      await _pump(tester, ['lead', 'deal'], view: null);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('menu-list-group-customers')), findsOneWidget);
+      expect(find.byKey(const ValueKey('menu-group-customers')), findsNothing);
+      expect(find.byTooltip('มุมมองกลุ่ม'), findsOneWidget);
     });
 
     testWidgets('another user keeps their own view', (tester) async {

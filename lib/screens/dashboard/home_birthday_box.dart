@@ -11,7 +11,7 @@ import '../../widgets/nx_icons.dart';
 import '../calendar/cal/cal_birthday_actions.dart';
 import '../calendar/cal/cal_birthdays.dart';
 import '../calendar/cal/cal_model.dart';
-import 'home_boxes.dart' show homeCardDecoration;
+import 'home_boxes.dart' show homeCardDecoration, kHomeWidgetGap;
 
 /// Home: "วันเกิดลูกค้าวันนี้" — today's customer birthdays (Lead / Contact /
 /// Account) with tomorrow's underneath, so nobody is missed. Tap a person for
@@ -83,7 +83,7 @@ class _HomeBirthdayBoxState extends State<HomeBirthdayBox> {
         );
     return Padding(
       key: const ValueKey('home-birthdays'),
-      padding: const EdgeInsets.only(top: 20),
+      padding: const EdgeInsets.only(top: kHomeWidgetGap),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: homeCardDecoration(context),

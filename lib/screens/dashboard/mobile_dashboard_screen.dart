@@ -759,7 +759,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
           final sections = <String, List<Widget>>{
             'today': [
               if (todayHasRows) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: kHomeWidgetGap),
                 _TodayCard(
                   showAttendance: todayAttendance,
                   clockIn: clockIn,
@@ -775,10 +775,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
             ],
             'pending': [
               if (_pendingItems().isNotEmpty) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: kHomeWidgetGap),
                 _PendingBox(items: _pendingItems(), total: _pendingTotal()),
               ] else if (_pendingLoaded) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: kHomeWidgetGap),
                 const _NoPending(),
               ],
             ],
@@ -787,7 +787,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
             // ISAAC summarises the day in place. Replaces the old "สรุปวันนี้" box.
             'ai': [
               if (aiAllowed) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: kHomeWidgetGap),
                 IsaacBriefCard(
                   key: ValueKey('home-isaac-card|${context.read<AppConfig>().businessScope}'),
                   suggestion: isaacSuggestion(_brief(counts, clockIn)),
@@ -797,19 +797,19 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
             ],
             'quick': [
               if (quick.isNotEmpty) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: kHomeWidgetGap),
                 _QuickGrid(actions: quick),
               ],
             ],
             'work': [
               if (MenuAccess.allow(session, MenuAccess.workspace)) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: kHomeWidgetGap),
                 MyWorkBox(revision: _revision),
               ],
             ],
             'upcoming': [
               if (_upcoming().length > 1) ...[
-                const SizedBox(height: 24),
+                const SizedBox(height: kHomeWidgetGap),
                 _SectionTitle(
                   'กิจกรรมถัดไป',
                   action: 'ปฏิทิน',
@@ -836,7 +836,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
             'recent': [const RecentStrip()],
             'stats': [
               if (statTiles.isNotEmpty) ...[
-                const SizedBox(height: 24),
+                const SizedBox(height: kHomeWidgetGap),
                 const _SectionTitle('ภาพรวม'),
                 HomeStatStrip(
                   children: [
@@ -860,7 +860,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
             ],
             'sales': [
               if (MenuAccess.any(session, const ['deal', 'quotation'])) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: kHomeWidgetGap),
                 SalesPeriodBox(
                   revision: _revision,
                   onOpen: () => context.push(AppRoutes.crmModule('deal')),
@@ -869,7 +869,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
             ],
             'cases': [
               if (MenuAccess.allow(session, 'case')) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: kHomeWidgetGap),
                 CasePeriodBox(
                   revision: _revision,
                   onOpen: () => context.push(AppRoutes.crmModule('case')),

@@ -10,6 +10,7 @@ import '../../core/app_config.dart';
 import '../../core/isaac_menu.dart';
 import 'menu_group_screen.dart';
 import '../../core/menu_groups.dart';
+import '../../core/app_theme.dart';
 import '../../core/menu_hub_prefs.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
@@ -42,7 +43,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
   /// Last view per user scope, so coming back to the tab does not flash the default.
   static final Map<String, MenuHubView> _viewCache = {};
 
-  MenuHubView _view = MenuHubView.groups;
+  MenuHubView _view = MenuHubView.list;
   List<String> _order = defaultMenuOrder;
   String? _viewScope;
   String? _orderScope;
@@ -354,10 +355,10 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
         key: interactive ? ValueKey('menu-group-${g.def.id}') : null,
         onTap: interactive ? (onTap ?? () => context.push(AppRoutes.menuGroup(g.def.id))) : null,
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-        child: DecoratedBox(
-          decoration: selected
-              ? BoxDecoration(border: Border(left: BorderSide(color: color, width: 3)))
-              : const BoxDecoration(),
+        // Two-pane: the open group is tinted in its colour (a side line used to run over the text).
+        color: selected ? Color.alphaBlend(color.withValues(alpha: 0.16), NxAtmosphereTokens.of(context).cardElevated) : null,
+        child: KeyedSubtree(
+          key: selected && interactive ? ValueKey('menu-group-selected-${g.def.id}') : null,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

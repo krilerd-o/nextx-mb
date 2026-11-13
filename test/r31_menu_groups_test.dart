@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nextx_mobile/core/app_config.dart';
+import 'package:nextx_mobile/core/menu_hub_prefs.dart';
 import 'package:nextx_mobile/core/isaac_menu.dart';
 import 'package:nextx_mobile/core/menu_groups.dart';
 import 'package:nextx_mobile/core/session_state.dart';
@@ -49,6 +50,9 @@ void main() {
     addTearDown(tester.view.reset);
     SharedPreferences.setMockInitialValues({});
     final config = AppConfig()..debugOverrideSession(_s(keys));
+    // These tests drive the group cards (the list view is the default).
+    final viewKey = MenuHubPrefs.viewKey(config.prefsScope);
+    await tester.runAsync(() async => (await SharedPreferences.getInstance()).setString(viewKey, 'groups'));
     final router = GoRouter(routes: [
       GoRoute(path: '/', builder: (_, _) => const Scaffold(body: ModuleHubScreen())),
       GoRoute(path: '/menu/:group', builder: (_, st) => MenuGroupScreen(groupId: st.pathParameters['group']!)),

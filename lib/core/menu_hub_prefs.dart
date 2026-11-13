@@ -6,10 +6,10 @@ import 'menu_groups.dart';
 
 /// How the "เมนู" page shows its groups.
 enum MenuHubView {
-  /// Group cards in a grid (default).
+  /// Group cards in a grid.
   groups,
 
-  /// Every menu as rows, grouped in rounded sections (Android Settings style).
+  /// Every menu as rows, grouped in rounded sections (Android Settings style). Default.
   list,
 }
 
@@ -26,9 +26,9 @@ class MenuHubPrefs {
   static Future<MenuHubView> loadView(String scope) async {
     try {
       final v = (await SharedPreferences.getInstance()).getString(viewKey(scope));
-      return v == 'list' ? MenuHubView.list : MenuHubView.groups;
+      return v == 'groups' ? MenuHubView.groups : MenuHubView.list;
     } catch (_) {
-      return MenuHubView.groups;
+      return MenuHubView.list;
     }
   }
 

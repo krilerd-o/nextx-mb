@@ -64,6 +64,9 @@ class HomePrefs {
 /// Corner radius of every Home card.
 const double kHomeCardRadius = 24;
 
+/// The one gap between Home widgets (every widget brings it above itself).
+const double kHomeWidgetGap = 16;
+
 /// Soft, wide shadow of the Home cards (dark mode: a deeper, tighter one). Always painted outside
 /// any clip (see [HomeCardShadow]) so it is never cut into a flat band.
 List<BoxShadow> homeCardShadows(bool dark) => dark
@@ -514,7 +517,7 @@ class RecentStrip extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 24),
+            const SizedBox(height: kHomeWidgetGap),
             Text(tr('เปิดล่าสุด'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             SizedBox(

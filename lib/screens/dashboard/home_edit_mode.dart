@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../core/home_layout.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_icons.dart';
+import 'home_boxes.dart' show kHomeWidgetGap;
 import 'home_widgets.dart';
 
 /// Columns of the Home grid: phone 2, tablet / open foldable 3, wide 4.
@@ -71,7 +72,7 @@ class _HomeWidgetGridState extends State<HomeWidgetGrid> {
           children.add(row[i]);
         }
         rows.add(Padding(
-          padding: const EdgeInsets.only(top: 14),
+          padding: const EdgeInsets.only(top: kHomeWidgetGap),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: children),
         ));
         row = [];
