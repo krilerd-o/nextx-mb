@@ -149,6 +149,7 @@ class NxI {
   static const hash = LucideIcons300.hash;
   static const textT = LucideIcons300.type;
   static const textAlignLeft = LucideIcons300.textAlignStart;
+  static const wrapText = LucideIcons300.wrapText;
   static const currencyCircleDollar = LucideIcons300.circleDollarSign;
   static const eyeSlash = LucideIcons300.eyeOff;
   static const sortAscending = LucideIcons300.arrowUpDown;

@@ -9,6 +9,7 @@ import '../core/html_display.dart';
 import 'nx_attachments.dart' show openNxImageViewer;
 import 'nx_icons.dart';
 import 'nx_media.dart';
+import 'nx_rich_code.dart';
 import '../core/i18n.dart';
 
 class NxHtmlView extends StatelessWidget {
@@ -42,6 +43,10 @@ class NxHtmlView extends StatelessWidget {
       if (looksLikeHtmlString(decoded) && decoded.contains('<')) html = decoded;
     }
     if (!looksLikeHtmlString(html)) {
+      final coded = backtickCodeToHtml(decodeHtmlEntities(html));
+      if (coded != null) {
+        return _HtmlBody(html: coded, style: bodyStyle, baseUrl: resolvedBase, onOpenUrl: (u) => (onOpenUrl ?? _launch)(u), selectable: selectable);
+      }
       final plain = decodeHtmlEntities(html);
       if (plain.trim().isEmpty) {
         return Text(tr('—'), style: bodyStyle?.copyWith(color: theme.colorScheme.onSurfaceVariant));
@@ -239,6 +244,10 @@ class _HtmlBody extends StatelessWidget {
             ),
           ),
         );
+      case 'pre':
+        return _codeBlock(node);
+      case 'table':
+        return _table(context, node);
       case 'video':
         var src = node.attrs['src'] ?? '';
         if (src.isEmpty) {
@@ -259,21 +268,130 @@ class _HtmlBody extends StatelessWidget {
     }
   }
 
+  /// `<pre><code class="language-sql" data-line-numbers data-word-wrap>` (TipTap) → web-style block.
+  Widget _codeBlock(_HtmlNode pre) {
+    _HtmlNode? code;
+    for (final c in pre.children) {
+      if (c.tag == 'code') {
+        code = c;
+        break;
+      }
+    }
+    String attr(String name) => (code?.attrs[name] ?? '').isNotEmpty ? code!.attrs[name]! : (pre.attrs[name] ?? '');
+    bool flag(String name, bool fallback) {
+      final v = attr(name).toLowerCase();
+      if (v == 'false' || v == '0') return false;
+      if (v == 'true' || v == '1') return true;
+      return fallback;
+    }
+
+    var lang = attr('data-saved-language');
+    if (lang.isEmpty) lang = attr('data-language');
+    if (lang.isEmpty) {
+      final m = RegExp(r'(?:^|\s)language-([\w#+.-]+)', caseSensitive: false).firstMatch('${code?.attrs['class'] ?? ''} ${pre.attrs['class'] ?? ''}');
+      lang = m?[1] ?? '';
+    }
+    final text = decodeHtmlEntities(_rawText(pre)).replaceAll(RegExp(r'\n$'), '');
+    if (text.trim().isEmpty) return const SizedBox.shrink();
+    return NxRichCodeBlock(
+      code: text,
+      language: lang,
+      lineNumbers: flag('data-line-numbers', true),
+      wordWrap: flag('data-word-wrap', false),
+    );
+  }
+
+  /// Text exactly as written (code keeps its spaces and line breaks).
+  static String _rawText(_HtmlNode n) {
+    if (n.tag == '#text') return n.text;
+    if (n.tag == 'br') return '\n';
+    final b = StringBuffer();
+    for (final c in n.children) {
+      b.write(_rawText(c));
+    }
+    if (n.tag == 'p' || n.tag == 'div') b.write('\n');
+    return b.toString();
+  }
+
+  /// `<table>` (TipTap table): header row tinted, cells wrap at a readable width,
+  /// wide tables scroll sideways.
+  Widget _table(BuildContext context, _HtmlNode table) {
+    final cs = Theme.of(context).colorScheme;
+    final rows = <(_HtmlNode, bool)>[];
+    void collect(_HtmlNode n, bool head) {
+      for (final c in n.children) {
+        if (c.tag == 'tr') {
+          rows.add((c, head || c.children.any((x) => x.tag == 'th') && !c.children.any((x) => x.tag == 'td')));
+        } else if (c.tag == 'thead' || c.tag == 'tbody' || c.tag == 'tfoot') {
+          collect(c, c.tag == 'thead');
+        }
+      }
+    }
+
+    collect(table, false);
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final cols = rows.map((r) => r.$1.children.where((c) => c.tag == 'td' || c.tag == 'th').length).fold<int>(0, (a, b) => b > a ? b : a);
+    if (cols == 0) return const SizedBox.shrink();
+    final line = cs.outlineVariant.withValues(alpha: 0.7);
+    return Padding(
+      key: const ValueKey('html-table'),
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), border: Border.all(color: line)),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Table(
+            defaultColumnWidth: const IntrinsicColumnWidth(),
+            border: TableBorder(horizontalInside: BorderSide(color: line), verticalInside: BorderSide(color: line)),
+            children: [
+              for (final (tr, head) in rows)
+                TableRow(
+                  decoration: head ? BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.8)) : null,
+                  children: [
+                    for (var i = 0; i < cols; i++)
+                      Builder(builder: (context) {
+                        final cells = tr.children.where((c) => c.tag == 'td' || c.tag == 'th').toList();
+                        final cell = i < cells.length ? cells[i] : null;
+                        return ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 64, maxWidth: 260),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            child: cell == null
+                                ? const SizedBox.shrink()
+                                : _inline(context, cell, heading: head || cell.tag == 'th'),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _inline(BuildContext context, _HtmlNode node, {bool heading = false}) {
     final theme = Theme.of(context);
     final base = heading
         ? (style ?? theme.textTheme.bodyMedium)?.copyWith(fontWeight: FontWeight.w600)
         : style;
     final spans = <InlineSpan>[];
-    _spans(node, base, spans, const _InlineStyle(), theme.colorScheme.primary);
+    _spans(node, base, spans, const _InlineStyle(), theme.colorScheme.primary, dark: theme.brightness == Brightness.dark);
     if (spans.isEmpty) return const SizedBox.shrink();
     return selectable ? SelectableText.rich(TextSpan(style: base, children: spans)) : Text.rich(TextSpan(style: base, children: spans));
   }
 
-  void _spans(_HtmlNode node, TextStyle? base, List<InlineSpan> out, _InlineStyle st, Color linkColor) {
+  void _spans(_HtmlNode node, TextStyle? base, List<InlineSpan> out, _InlineStyle st, Color linkColor, {required bool dark}) {
     if (node.tag == '#text') {
       final t = decodeHtmlEntities(node.text);
       if (t.isEmpty) return;
+      if (st.code) {
+        // Thin spaces stand in for the web chip's side padding.
+        out.add(TextSpan(text: '\u2009$t\u2009', style: webInlineCodeStyle(base, dark: dark)));
+        return;
+      }
       out.add(
         TextSpan(
           text: trn(t),
@@ -303,8 +421,11 @@ class _HtmlBody extends StatelessWidget {
     if (node.tag == 'i' || node.tag == 'em') next = st.copyWith(italic: true);
     if (node.tag == 'u') next = st.copyWith(underline: true);
     if (node.tag == 'a') next = st.copyWith(link: true, href: node.attrs['href'] ?? st.href);
+    if (node.tag == 'code') next = st.copyWith(code: true);
+    // Paragraphs inside one block (table cells, list items) each start a new line.
+    if ((node.tag == 'p' || node.tag == 'div') && out.isNotEmpty) out.add(TextSpan(text: tr('\n')));
     for (final c in node.children) {
-      _spans(c, base, out, next, linkColor);
+      _spans(c, base, out, next, linkColor, dark: dark);
     }
   }
 }
@@ -316,14 +437,17 @@ class _InlineStyle {
     this.underline = false,
     this.link = false,
     this.href,
+    this.code = false,
   });
+  final bool code;
   final bool bold;
   final bool italic;
   final bool underline;
   final bool link;
   final String? href;
-  _InlineStyle copyWith({bool? bold, bool? italic, bool? underline, bool? link, String? href}) {
+  _InlineStyle copyWith({bool? bold, bool? italic, bool? underline, bool? link, String? href, bool? code}) {
     return _InlineStyle(
+      code: code ?? this.code,
       bold: bold ?? this.bold,
       italic: italic ?? this.italic,
       underline: underline ?? this.underline,
@@ -341,7 +465,10 @@ class _HtmlNode {
   final List<_HtmlNode> children;
 }
 
-final _blockTags = {'p', 'div', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre'};
+final _blockTags = {'p', 'div', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'table'};
+
+/// Kept whole as one block (their inner structure matters).
+const _wholeBlocks = {'pre', 'table'};
 
 List<_HtmlNode> _parseHtmlBlocks(String html) {
   final root = _parseFragment(html);
@@ -349,7 +476,9 @@ List<_HtmlNode> _parseHtmlBlocks(String html) {
   void walk(_HtmlNode n, List<_HtmlNode> inlineAcc) {
     if (_blockTags.contains(n.tag)) {
       _flushInline(inlineAcc, blocks);
-      if (n.tag == 'ul' || n.tag == 'ol') {
+      if (_wholeBlocks.contains(n.tag)) {
+        blocks.add(n);
+      } else if (n.tag == 'ul' || n.tag == 'ol') {
         final items = n.children.where((c) => c.tag == 'li').toList();
         blocks.add(_HtmlNode(n.tag, children: items.isEmpty ? n.children : items));
       } else if (n.tag == 'li') {
@@ -359,7 +488,7 @@ List<_HtmlNode> _parseHtmlBlocks(String html) {
         final tag = n.tag == 'div' ? 'p' : n.tag;
         var run = <_HtmlNode>[];
         for (final c in n.children) {
-          if (c.tag == 'img' || c.tag == 'video') {
+          if (c.tag == 'img' || c.tag == 'video' || _wholeBlocks.contains(c.tag)) {
             if (run.isNotEmpty) blocks.add(_HtmlNode(tag, children: run, attrs: n.attrs));
             run = <_HtmlNode>[];
             blocks.add(c);
