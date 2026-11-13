@@ -247,6 +247,10 @@ class NxI {
   static const screencast = LucideIcons300.screenShare;
   static const minimize = LucideIcons300.minimize2;
   static const textItalic = LucideIcons300.italic;
+  static const textUnderline = LucideIcons300.underline;
+  static const listNumbers = LucideIcons300.listOrdered;
+  static const textTSlash = LucideIcons300.removeFormatting;
+  static const cornersOut = LucideIcons300.maximize2;
   static const quote = LucideIcons300.quote;
 }
 

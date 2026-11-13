@@ -36,6 +36,7 @@ import '../../core/journey_rules.dart';
 import '../../core/service_journey.dart';
 import '../journey/case_flows.dart';
 import '../docs/document_preview.dart';
+import '../docs/document_tab.dart';
 import '../../core/deal_stage.dart';
 import '../fsm/contract_flows.dart';
 import '../fsm/service_more.dart';
@@ -212,14 +213,19 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
 
   List<(String, String)> _allTabs() {
     const comments = 'คอมเม้นท์';
+    // เอกสาร: the web's template document (quotation / job), for users who have the menu.
+    final doc = _hasDocumentTab ? [('document', 'เอกสาร')] : const <(String, String)>[];
     if (_journey && widget.module == 'job') {
-      return [('summary', 'สรุป'), ('ops', 'ปฏิบัติงาน'), ('activities', 'กิจกรรม'), ('signatures', 'ลายเซ็น'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
+      return [('summary', 'สรุป'), ...doc, ('ops', 'ปฏิบัติงาน'), ('activities', 'กิจกรรม'), ('signatures', 'ลายเซ็น'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
     }
     if (_journey && widget.module == 'quotation') {
-      return [('summary', 'สรุป'), ('lines', 'รายการ'), ('approval', 'อนุมัติ'), ('activities', 'กิจกรรม'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
+      return [('summary', 'สรุป'), ...doc, ('lines', 'รายการ'), ('approval', 'อนุมัติ'), ('activities', 'กิจกรรม'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
     }
-    return [if (widget.module == 'inspection') ...[('insp-summary', 'สรุป'), ('checklist', 'รายการตรวจ')], ('info', 'ข้อมูล'), ('comments', comments), ('files', 'ไฟล์'), ('history', 'ประวัติ'), if (widget.module != 'activity') ('activities', 'กิจกรรม')];
+    return [if (widget.module == 'inspection') ...[('insp-summary', 'สรุป'), ('checklist', 'รายการตรวจ')], ('info', 'ข้อมูล'), ...doc, ('comments', comments), ('files', 'ไฟล์'), ('history', 'ประวัติ'), if (widget.module != 'activity') ('activities', 'กิจกรรม')];
   }
+
+  bool get _hasDocumentTab =>
+      (widget.module == 'quotation' || widget.module == 'job') && MenuAccess.allow(context.read<AppConfig>().session, widget.module);
 
   /// Case watchers: whether I follow this case (server supports cases only).
   bool? _following;
@@ -650,6 +656,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final people = entityPeopleLine(_row);
     final status = entityStatus(_row);
 
+    final loggedIn = context.select((AppConfig c) => c.isLoggedIn);
     final perms = EntityRowPerms.of(widget.module, _row);
     final canEdit = (_editableFields().isNotEmpty || _fields.isEmpty) && perms.canEdit;
     final canConvert = widget.module == 'lead' && perms.canEdit && !EntityRowPerms.leadLocked(_row) && !_loading;
@@ -785,6 +792,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
               key: ValueKey(bodyTab),
               child: switch (bodyTab) {
                 'summary' => _journeySummary(canEdit, session),
+                'document' => RecordDocumentTab(
+                  key: ValueKey('doc-tab-${widget.module}-$_id-${_row['modifiedtime'] ?? ''}'),
+                  module: widget.module,
+                  row: {..._row, 'id': _id},
+                  canEmail: perms.canEdit && loggedIn,
+                ),
                 'ops' => _jobOps(canEdit, session),
                 'signatures' => JobSignaturesTab(jobId: _id, ctrl: _jc!, canEdit: canEdit, row: _row, onChanged: _reload),
                 'lines' => _quotationLines(canEdit),
@@ -899,7 +912,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         automaticallyImplyLeading: !widget.embedded,
         actions: [
           if (widget.module == 'quotation' || widget.module == 'inspection' || widget.module == 'job') ...[
-            IconButton(tooltip: tr('ดูเอกสาร PDF'), icon: const Icon(NxI.filePdf), onPressed: () => openRecordDocument(context, widget.module, {..._row, 'id': _id})),
+            IconButton(
+              tooltip: tr('ดูเอกสาร PDF'),
+              icon: const Icon(NxI.filePdf),
+              // Quotation / job: the เอกสาร tab (template document + e-mail).
+              onPressed: _hasDocumentTab ? () => _goTab('document') : () => openRecordDocument(context, widget.module, {..._row, 'id': _id}),
+            ),
           ],
           if (canEdit) IconButton(tooltip: tr('แก้ไข'), icon: const Icon(NxI.pencilSimple), onPressed: () => _openEdit(context)),
         ],
@@ -1027,6 +1045,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     'approval': NxI.shieldCheck,
     'checklist': NxI.listChecks,
     'insp-summary': NxI.chartPie,
+    'document': NxI.fileText,
   };
 
   Widget _tabBar() {

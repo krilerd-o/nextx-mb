@@ -15,6 +15,7 @@ import '../crm/entity_detail_parts.dart' show commentAttachments;
 import 'job_journey.dart' show showPublicLinkSheet;
 import 'journey_controller.dart';
 import 'journey_photos.dart';
+import '../docs/doc_email_sheet.dart';
 import '../docs/document_preview.dart';
 import 'journey_widgets.dart';
 import 'quotation_versions.dart';
@@ -591,7 +592,9 @@ Future<bool> runQuotationAction(
         snack('ส่งอีเมลขออนุมัติซ้ำแล้ว');
         return false;
       case 'send_email':
-        return await QuotationFlows.sendEmail(context, id, to: (row['contact_email'] ?? row['email'] ?? '').toString());
+        // The web's compose window: template subject / body, To / CC, the
+        // BIRT document attached by the server, extra files.
+        return await showDocEmailSheet(context, kind: 'quotation', id: id, docNo: row['quotation_no']?.toString());
       case 'public_link':
         final r = await api.quotationPublicLink(id);
         if (context.mounted) {

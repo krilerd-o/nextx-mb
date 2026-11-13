@@ -75,8 +75,8 @@ void main() {
     return adapter;
   }
 
-  testWidgets('job: template (BIRT) down → standard PDF with a notice; download / print / share', (tester) async {
-    await pump(
+  testWidgets('job: template (BIRT) down → clear error, no silent switch; the fallback only when chosen', (tester) async {
+    final a = await pump(
       tester,
       DocumentPreviewScreen(source: jobDocumentSource({'id': 19, 'job_no': 'JOB-19', 'template_key': 'template1'})),
       {
@@ -84,6 +84,14 @@ void main() {
       },
       status: {'GET /api/field-service/jobs/19/birt-pdf': 503},
     );
+    // R68: the document must be the web's template — never another design behind the user's back.
+    expect(rendered, isEmpty);
+    expect(a.callKeys, isNot(contains('GET /api/field-service/jobs/19/pdf')));
+    expect(find.text('เปิดเอกสารไม่สำเร็จ'), findsOneWidget);
+    expect(find.byKey(const ValueKey('doc-retry')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('doc-show-fallback')));
+    await settle(tester);
     expect(find.byKey(const ValueKey('doc-fallback-notice')), findsOneWidget);
     expect(rendered, ['%PDF-1.4 std']);
     expect(find.byKey(const ValueKey('doc-page-0')), findsOneWidget);
@@ -102,28 +110,23 @@ void main() {
     expect(find.textContaining('บันทึกแล้ว'), findsOneWidget);
   });
 
-  testWidgets('quotation: languages × colours come from the template; picking one asks BIRT for it', (tester) async {
+  testWidgets('quotation: only the template report like the web (no language / colour reports that do not exist)', (tester) async {
     final a = await pump(
       tester,
-      DocumentPreviewScreen(source: quotationDocumentSource({'id': 7, 'quotation_no': 'QT-7', 'template_key': 'tpl_a', 'template_id': 3})),
+      DocumentPreviewScreen(source: quotationDocumentSource({'id': 7, 'quotation_no': 'QT-7', 'template_key': 'template2', 'template_id': 3})),
       {
-        'GET /api/quotation/7/birt-pdf?template=tpl_a': pdf('birt'),
-        'GET /api/quotation/7/birt-pdf?template=tpl_a&lang=en&color=bw': pdf('birt-en-bw'),
+        'GET /api/quotation/7/birt-pdf?template=template2': pdf('birt'),
         'GET /api/quotation/templates': {'list': [
           {'id': 3, 'name': '[QA] เทมเพลตหลัก', 'layout_json': {'variants': ['th', 'en'], 'colors': ['bw']}},
         ]},
       },
     );
     expect(rendered.first, '%PDF-1.4 birt');
-    expect(find.byKey(const ValueKey('doc-variant-birt-th-color')), findsNothing);
-    expect(find.byKey(const ValueKey('doc-variant-birt-th-bw')), findsOneWidget);
-    expect(find.textContaining('[QA] เทมเพลตหลัก'), findsOneWidget);
-
-    await tester.ensureVisible(find.byKey(const ValueKey('doc-variant-birt-en-bw')));
-    await tester.tap(find.byKey(const ValueKey('doc-variant-birt-en-bw')));
-    await settle(tester);
-    expect(a.callKeys, contains('GET /api/quotation/7/birt-pdf?template=tpl_a&lang=en&color=bw'));
-    expect(rendered.last, '%PDF-1.4 birt-en-bw');
+    expect(find.byKey(const ValueKey('doc-variant-birt-th-bw')), findsNothing);
+    expect(find.byKey(const ValueKey('doc-variant-birt-en-bw')), findsNothing);
+    expect(find.byKey(const ValueKey('doc-variant-std')), findsNothing);
+    expect(find.textContaining('เทมเพลต 2 · [QA] เทมเพลตหลัก'), findsOneWidget);
+    expect(a.callKeys.where((k) => k.contains('lang=') || k.contains('color=')), isEmpty);
     expect(find.byKey(const ValueKey('doc-fallback-notice')), findsNothing);
   });
 

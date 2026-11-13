@@ -292,7 +292,15 @@ class ApiClient {
     final res = e.response;
     if (res != null) {
       try {
-        return _envelopeError(res.statusCode ?? 0, res.data);
+        var raw = res.data;
+        // Byte downloads (PDF): the error envelope arrives as bytes — decode it
+        // so the server's message (e.g. the BIRT report error) reaches the user.
+        if (raw is List<int>) {
+          try {
+            raw = jsonDecode(utf8.decode(raw, allowMalformed: true));
+          } catch (_) {}
+        }
+        return _envelopeError(res.statusCode ?? 0, raw);
       } catch (err) {
         if (err is ApiEnvelopeException || err is ApiException) return err as Exception;
       }
