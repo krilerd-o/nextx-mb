@@ -2942,6 +2942,7 @@ const Map<String, String> enStrings = {
   'ลบสรุปแชทนี้': 'Delete this chat summary',
   'ลบข้อมูลของฉัน': 'Delete my data',
   'แพ็กเกจที่ใช้ปัจจุบัน': 'Current package',
+  'ข้อมูลส่วนตัว เบอร์โทร แก้ไขโปรไฟล์ ลบบัญชี': 'Personal info, phone, edit profile, close account',
   'ยังไม่ได้เลือกบริษัท': 'No company selected',
   'ยังไม่ได้เลือกแพ็กเกจ': 'No package selected',
   'เมนูที่เห็นจะเปลี่ยนตามแพ็กเกจและสิทธิ์ของคุณ': 'Menus follow your package and permissions',

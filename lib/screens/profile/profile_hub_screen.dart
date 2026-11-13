@@ -11,7 +11,7 @@ import '../../core/nx_page_route.dart';
 import '../../core/ui_font.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
-import '../../widgets/nx_app_header.dart' show NxLanguagePill;
+import '../../widgets/nx_app_header.dart' show NxThemePill;
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_logout.dart';
 import '../../widgets/settings_tiles.dart';
@@ -137,7 +137,7 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
     return ProfileSubPage(
       title: 'โปรไฟล์',
       actions: [
-        NxLanguagePill(code: config.uiLocaleCode, onChanged: config.setUiLocaleCode),
+        NxThemePill(mode: config.themeMode, onChanged: config.setThemeMode),
         IconButton(
           key: const ValueKey('profile-open-settings'),
           tooltip: tr('การตั้งค่า'),
@@ -147,6 +147,23 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
       ],
       children: [
         SettingsAppear(index: i++, child: _Hero(onPhoto: () => _photo(config))),
+
+        // ── โปรไฟล์: manage my profile (info, phone, close account, edit).
+        SettingsAppear(
+          index: i++,
+          child: SettingsGroup(title: 'โปรไฟล์', children: [
+            KeyedSubtree(
+              key: const ValueKey('profile-manage'),
+              child: SettingsTile(
+                icon: NxI.userCog,
+                tint: const Color(0xFF6366F1),
+                title: 'จัดการโปรไฟล์',
+                subtitle: 'ข้อมูลส่วนตัว เบอร์โทร แก้ไขโปรไฟล์ ลบบัญชี',
+                onTap: () => nxPush<void>(context, const ProfileManageScreen()),
+              ),
+            ),
+          ]),
+        ),
 
         // ── One row per area, each its own page.
         SettingsAppear(
@@ -230,26 +247,27 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
   }
 }
 
-/// Compact theme switch on the profile card: three icon segments with a
-/// sliding thumb (ระบบ / สว่าง / มืด), same height as "จัดการโปรไฟล์".
-class _ThemeToggle extends StatelessWidget {
-  const _ThemeToggle({required this.mode, required this.onChanged});
-  final ThemeMode mode;
-  final ValueChanged<ThemeMode> onChanged;
+/// Compact language switch on the profile card: TH | EN with a sliding
+/// thumb, same height as "จัดการโปรไฟล์".
+class _LanguageToggle extends StatelessWidget {
+  const _LanguageToggle({required this.code, required this.onChanged});
+  final String code;
+  final ValueChanged<String> onChanged;
 
-  static const _modes = [(ThemeMode.system, NxI.deviceMobile, 'ระบบ'), (ThemeMode.light, NxI.sun, 'สว่าง'), (ThemeMode.dark, NxI.moon, 'มืด')];
+  static const _langs = [('th', 'TH', 'ภาษาไทย'), ('en', 'EN', 'English')];
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final i = _modes.indexWhere((m) => m.$1 == mode).clamp(0, 2);
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final i = code == 'en' ? 1 : 0;
     return Container(
-      key: const ValueKey('profile-theme-toggle'),
+      key: const ValueKey('profile-lang-toggle'),
       height: 44,
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(99), border: Border.all(color: cs.outlineVariant)),
       padding: const EdgeInsets.all(3),
       child: LayoutBuilder(builder: (context, c) {
-        final w = c.maxWidth / 3;
+        final w = c.maxWidth / 2;
         return Stack(children: [
           AnimatedPositioned(
             duration: const Duration(milliseconds: 240),
@@ -258,27 +276,32 @@ class _ThemeToggle extends StatelessWidget {
             top: 0,
             bottom: 0,
             width: w,
-            child: DecoratedBox(decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(99))),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: cs.primary,
+                borderRadius: BorderRadius.circular(99),
+                boxShadow: [BoxShadow(color: cs.primary.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 3))],
+              ),
+            ),
           ),
           Row(children: [
-            for (final (m, icon, label) in _modes)
+            for (final (c, label, name) in _langs)
               Expanded(
-                child: Tooltip(
-                  message: tr(label),
-                  child: Semantics(
-                    button: true,
-                    selected: m == mode,
-                    label: tr(label),
-                    child: InkWell(
-                      key: ValueKey('profile-theme-${m.name}'),
-                      borderRadius: BorderRadius.circular(99),
-                      onTap: m == mode
-                          ? null
-                          : () {
-                              HapticFeedback.selectionClick();
-                              onChanged(m);
-                            },
-                      child: Center(child: Icon(icon, size: 18, color: m == mode ? cs.primary : cs.onSurfaceVariant)),
+                child: Semantics(
+                  button: true,
+                  selected: c == code,
+                  label: name,
+                  child: InkWell(
+                    key: ValueKey('profile-lang-$c'),
+                    borderRadius: BorderRadius.circular(99),
+                    onTap: c == code
+                        ? null
+                        : () {
+                            HapticFeedback.selectionClick();
+                            onChanged(c);
+                          },
+                    child: Center(
+                      child: Text(label, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800, color: c == code ? cs.onPrimary : cs.onSurfaceVariant)),
                     ),
                   ),
                 ),
@@ -487,21 +510,8 @@ class _Hero extends StatelessWidget {
           if ((s.businessName ?? '').isNotEmpty) chip(s.businessName!, cs.onSurfaceVariant, icon: NxI.buildings),
         ]),
         const SizedBox(height: 16),
-        // Two equal pills, one line each (the label never wraps to a taller button).
-        Row(children: [
-          Expanded(
-            child: FilledButton.icon(
-              key: const ValueKey('profile-manage'),
-              style: FilledButton.styleFrom(fixedSize: const Size.fromHeight(44), padding: const EdgeInsets.symmetric(horizontal: 12)),
-              onPressed: () => nxPush<void>(context, const ProfileManageScreen()),
-              icon: const Icon(NxI.userCog, size: 18),
-              label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('จัดการโปรไฟล์'), maxLines: 1)),
-            ),
-          ),
-          const SizedBox(width: 10),
-          // Theme right here: ระบบ / สว่าง / มืด.
-          Expanded(child: _ThemeToggle(mode: context.select((AppConfig c) => c.themeMode), onChanged: context.read<AppConfig>().setThemeMode)),
-        ]),
+        // Language right here: TH | EN (จัดการโปรไฟล์ lives in its own section below).
+        _LanguageToggle(code: context.select((AppConfig c) => c.uiLocaleCode), onChanged: context.read<AppConfig>().setUiLocaleCode),
       ]),
     );
   }

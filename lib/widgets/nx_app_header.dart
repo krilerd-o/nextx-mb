@@ -171,6 +171,65 @@ class NxLanguagePill extends NxHeaderPill {
   }
 }
 
+/// ระบบ / สว่าง / มืด switch for headers: a raised capsule with three icon
+/// segments; the active one is filled.
+class NxThemePill extends NxHeaderPill {
+  const NxThemePill({super.key, required this.mode, required this.onChanged});
+  final ThemeMode mode;
+  final ValueChanged<ThemeMode> onChanged;
+
+  static const _modes = [(ThemeMode.system, NxI.deviceMobile, 'ระบบ'), (ThemeMode.light, NxI.sun, 'สว่าง'), (ThemeMode.dark, NxI.moon, 'มืด')];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    return SizedBox(
+      key: const ValueKey('theme-pill'),
+      width: 112,
+      height: NxAppHeader.controlSize,
+      child: Material(
+        color: isDark ? const Color(0xFF2A2B36) : Colors.white,
+        shape: const StadiumBorder(),
+        elevation: isDark ? 4 : 3,
+        shadowColor: Colors.black.withValues(alpha: isDark ? 0.5 : 0.22),
+        child: Row(children: [
+          for (final (m, icon, label) in _modes)
+            Expanded(
+              child: Tooltip(
+                message: tr(label),
+                child: Semantics(
+                  button: true,
+                  selected: m == mode,
+                  label: tr(label),
+                  child: GestureDetector(
+                    key: ValueKey('theme-pill-${m.name}'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: m == mode
+                        ? null
+                        : () {
+                            HapticFeedback.selectionClick();
+                            onChanged(m);
+                          },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      margin: const EdgeInsets.all(3),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: m == mode ? cs.primary : Colors.transparent, shape: BoxShape.circle),
+                      child: Icon(icon, size: 16, color: m == mode ? cs.onPrimary : cs.onSurfaceVariant),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
 class _CircleBtn extends StatelessWidget {
   const _CircleBtn({
     super.key,

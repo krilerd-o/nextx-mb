@@ -29,7 +29,7 @@ final _routes = <String, Widget Function()>{
 };
 
 void main() {
-  testWidgets('first card: avatar + camera, name, email, chips, จัดการโปรไฟล์ and สลับพื้นที่ทำงาน', (tester) async {
+  testWidgets('first card: avatar + camera, name, email, chips, TH | EN; จัดการโปรไฟล์ in its own section', (tester) async {
     await pumpProfilePage(tester, const ProfileHubScreen(), _replies);
     final hero = find.byKey(const ValueKey('profile-hero'));
     for (final f in [
@@ -38,13 +38,16 @@ void main() {
       find.text('qa@example.com'),
       find.text('MEMBER'),
       find.text('QA Co'),
-      find.byKey(const ValueKey('profile-manage')),
-      find.byKey(const ValueKey('profile-theme-toggle')),
+      find.byKey(const ValueKey('profile-lang-toggle')),
     ]) {
       expect(find.descendant(of: hero, matching: f), findsOneWidget);
     }
     expect(find.descendant(of: hero, matching: find.byKey(const ValueKey('profile-edit'))), findsNothing, reason: 'no แก้ไขโปรไฟล์ on the hub');
     expect(find.text('ข้อมูลของฉัน'), findsNothing);
+    expect(find.descendant(of: hero, matching: find.byKey(const ValueKey('profile-manage'))), findsNothing, reason: 'จัดการโปรไฟล์ moved to its own section');
+    // โปรไฟล์ section (จัดการโปรไฟล์) comes before บัญชีและการตั้งค่า.
+    expect(tester.getTopLeft(find.byKey(const ValueKey('profile-manage'))).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('profile-menu-theme'))).dy));
+    expect(tester.getTopLeft(find.text('โปรไฟล์').last).dy, lessThan(tester.getTopLeft(find.text('บัญชีและการตั้งค่า')).dy));
     expect(find.text('พื้นที่ทำงานของฉัน'), findsOneWidget);
   });
 

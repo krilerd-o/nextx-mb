@@ -1,5 +1,5 @@
-// R88 — profile card: theme toggle (ระบบ / สว่าง / มืด) instead of the
-// workspace switch; header TH | EN switch next to settings.
+// R88 — profile: header theme switch (ระบบ / สว่าง / มืด) next to settings;
+// TH | EN switch on the profile card instead of the workspace switch.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,30 +11,28 @@ import 'support/profile_harness.dart';
 void main() {
   tearDown(() => L10n.set('th'));
 
-  testWidgets('theme toggle on the profile card changes the app theme', (tester) async {
+  testWidgets('header theme switch sits next to settings and changes the app theme', (tester) async {
     final (config, _) = await pumpProfilePage(tester, const ProfileHubScreen(), const {}, size: const Size(430, 2600));
-    expect(find.byKey(const ValueKey('profile-switch')), findsNothing, reason: 'replaced by the theme toggle');
-    expect(find.byKey(const ValueKey('profile-theme-toggle')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('profile-theme-dark')));
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    expect(config.themeMode, ThemeMode.dark);
-    await tester.tap(find.byKey(const ValueKey('profile-theme-light')));
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    expect(config.themeMode, ThemeMode.light);
-    await tester.tap(find.byKey(const ValueKey('profile-theme-system')));
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    expect(config.themeMode, ThemeMode.system);
-  });
-
-  testWidgets('header TH | EN switch sits next to settings and changes the language', (tester) async {
-    final (config, _) = await pumpProfilePage(tester, const ProfileHubScreen(), const {}, size: const Size(430, 2600));
-    final pill = find.byKey(const ValueKey('lang-pill'));
+    final pill = find.byKey(const ValueKey('theme-pill'));
     expect(pill, findsOneWidget);
     expect(tester.getTopLeft(pill).dx, lessThan(tester.getTopLeft(find.byKey(const ValueKey('profile-open-settings'))).dx));
+    expect(tester.getTopLeft(pill).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('profile-lang-toggle'))).dy), reason: 'in the header, above the card');
+    for (final m in [ThemeMode.dark, ThemeMode.light, ThemeMode.system]) {
+      await tester.tap(find.byKey(ValueKey('theme-pill-${m.name}')));
+      await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      expect(config.themeMode, m);
+    }
+  });
+
+  testWidgets('TH | EN switch on the profile card replaces the workspace switch', (tester) async {
+    final (config, _) = await pumpProfilePage(tester, const ProfileHubScreen(), const {}, size: const Size(430, 2600));
+    expect(find.byKey(const ValueKey('profile-switch')), findsNothing);
+    final toggle = find.byKey(const ValueKey('profile-lang-toggle'));
+    expect(toggle, findsOneWidget);
+    expect(tester.getCenter(toggle).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('profile-manage'))).dy), reason: 'on the card, above the โปรไฟล์ section');
     expect(config.uiLocaleCode, 'th');
-    await tester.tap(find.byKey(const ValueKey('lang-pill-en')));
+    await tester.tap(find.byKey(const ValueKey('profile-lang-en')));
     await tester.pumpAndSettle(const Duration(milliseconds: 600));
     expect(config.uiLocaleCode, 'en');
   });
 }
-
