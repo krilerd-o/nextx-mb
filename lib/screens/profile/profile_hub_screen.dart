@@ -150,25 +150,8 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
         SettingsAppear(
           index: i++,
           child: SettingsGroup(title: 'พื้นที่ทำงานของฉัน', children: [
-            KeyedSubtree(
-              key: const ValueKey('profile-ws-company'),
-              child: SettingsTile(
-                icon: NxI.buildings,
-                tint: const Color(0xFF0EA5E9),
-                title: 'บริษัท',
-                subtitle: config.session.businessName ?? 'ยังไม่ได้เลือกบริษัท',
-                onTap: () => showWorkspaceSwitcherSheet(context),
-              ),
-            ),
-            KeyedSubtree(
-              key: const ValueKey('profile-ws-package'),
-              child: SettingsTile(
-                icon: kPackageHints[config.session.packageCode]?.$2 ?? NxI.package,
-                tint: const Color(0xFF8B5CF6),
-                title: 'แพ็กเกจที่ใช้ปัจจุบัน',
-                subtitle: _packageLabel(config.session.packageCode),
-              ),
-            ),
+            // Company with the current package as a capsule under its name.
+            _CompanyPackageRow(onTap: () => showWorkspaceSwitcherSheet(context)),
             KeyedSubtree(
               key: const ValueKey('profile-ws-switch-package'),
               child: SettingsTile(
@@ -227,6 +210,72 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// พื้นที่ทำงานของฉัน → the company in use, its package as a capsule below.
+class _CompanyPackageRow extends StatelessWidget {
+  const _CompanyPackageRow({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final s = context.select((AppConfig c) => c.session);
+    final code = (s.packageCode ?? '').trim();
+    const tint = Color(0xFF0EA5E9);
+    const pkgTint = Color(0xFF8B5CF6);
+    return InkWell(
+      key: const ValueKey('profile-ws-company'),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+        child: Row(children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: tint.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(12)),
+            child: const Icon(NxI.buildings, size: 20, color: tint),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(tr('บริษัท'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text(
+                tr(s.businessName ?? 'ยังไม่ได้เลือกบริษัท'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                key: const ValueKey('profile-ws-package'),
+                padding: const EdgeInsets.fromLTRB(8, 3, 10, 3),
+                decoration: BoxDecoration(
+                  color: pkgTint.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: pkgTint.withValues(alpha: 0.35)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(kPackageHints[code]?.$2 ?? NxI.package, size: 13, color: pkgTint),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      tr(_packageLabel(code)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(color: pkgTint, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ]),
+              ),
+            ]),
+          ),
+          Icon(NxI.caretRight, size: 18, color: cs.onSurfaceVariant),
+        ]),
+      ),
     );
   }
 }

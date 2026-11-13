@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nextx_mobile/screens/app_shell.dart';
+import 'package:nextx_mobile/widgets/nx_icons.dart';
+import 'package:nextx_mobile/widgets/nx_tab_nav.dart';
 
 Widget _host(bool active, int dir, {bool reduce = false}) => MaterialApp(
       home: MediaQuery(
@@ -50,5 +52,32 @@ void main() {
     await tester.pumpWidget(_host(true, 1, reduce: true));
     await tester.pump(const Duration(milliseconds: 16));
     expect(_opacity(tester), isNull);
+  });
+
+  testWidgets('menu bar: one highlight slides to the tapped menu and stretches while moving', (tester) async {
+    const dests = [
+      NxTabDestination(icon: NxI.house, selectedIcon: NxI.house, label: 'หน้าหลัก'),
+      NxTabDestination(icon: NxI.calendarBlank, selectedIcon: NxI.calendarBlank, label: 'ปฏิทิน'),
+      NxTabDestination(icon: NxI.gear, selectedIcon: NxI.gear, label: 'เมนู'),
+    ];
+    Widget bar(int i) => MaterialApp(home: Scaffold(body: Center(child: SizedBox(width: 360, child: NxTabBarCard(destinations: dests, selectedIndex: i)))));
+    Rect pill() => tester.getRect(find.descendant(of: find.byKey(const ValueKey('nx-tab-sliding-dot')), matching: find.byType(Container)).first);
+    await tester.pumpWidget(bar(0));
+    final start = pill();
+    expect(start.width, NxTabNav.dot);
+    final iconStart = tester.getCenter(find.byIcon(NxI.house));
+    expect((start.center.dx - iconStart.dx).abs(), lessThan(1), reason: 'sits under the selected icon');
+    expect((start.center.dy - iconStart.dy).abs(), lessThan(1));
+
+    await tester.pumpWidget(bar(2));
+    await tester.pump(const Duration(milliseconds: 90));
+    final mid = pill();
+    expect(mid.center.dx, greaterThan(start.center.dx), reason: 'moving toward the new menu');
+    expect(mid.width, greaterThan(NxTabNav.dot), reason: 'stretches while moving');
+
+    await tester.pump(const Duration(milliseconds: 500));
+    final end = pill();
+    expect(end.width, NxTabNav.dot);
+    expect((end.center.dx - tester.getCenter(find.byIcon(NxI.gear)).dx).abs(), lessThan(1));
   });
 }

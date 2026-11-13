@@ -43,7 +43,7 @@ void main() {
     expect(find.text('โปรไฟล์'), findsWidgets);
     expect(find.text('QA User'), findsOneWidget);
     expect(find.text('ข้อมูลของฉัน'), findsNothing, reason: 'email / mobile rows moved to จัดการโปรไฟล์');
-    for (final t in ['พื้นที่ทำงานของฉัน', 'บริษัท', 'แพ็กเกจที่ใช้ปัจจุบัน', 'สลับแพ็กเกจ', 'เพิ่มพื้นที่ทำงาน', 'จัดการความปลอดภัย', 'จัดการโปรไฟล์', 'สลับพื้นที่ทำงาน']) {
+    for (final t in ['พื้นที่ทำงานของฉัน', 'บริษัท', 'สลับแพ็กเกจ', 'เพิ่มพื้นที่ทำงาน', 'จัดการความปลอดภัย', 'จัดการโปรไฟล์', 'สลับพื้นที่ทำงาน']) {
       expect(find.text(t), findsWidgets, reason: t);
     }
     expect(find.text('แก้ไขโปรไฟล์'), findsNothing, reason: 'removed from the hub; it lives in จัดการโปรไฟล์');
