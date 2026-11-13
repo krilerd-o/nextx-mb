@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/session_state.dart';
-import 'package:nextx_mobile/screens/profile/profile_hub_screen.dart';
+import 'package:nextx_mobile/screens/profile/theme_settings_screen.dart';
 import 'package:nextx_mobile/screens/settings_screen.dart';
 
 import 'support/fake_api.dart';
@@ -33,24 +33,24 @@ Future<AppConfig> _pump(WidgetTester tester, {Widget home = const SettingsScreen
 }
 
 void main() {
-  testWidgets('settings page: grouped settings, filtered by search (profile lives on its own page)', (tester) async {
+  testWidgets('settings page: what is left, grouped, filtered by search (profile lives on its own page)', (tester) async {
     await _pump(tester);
     expect(find.text('การตั้งค่า'), findsWidgets);
     expect(find.text('QA User'), findsNothing);
-    for (final g in ['รูปลักษณ์', 'เมนูและการใช้งาน', 'บัญชีและความปลอดภัย']) {
-      expect(find.text(g), findsOneWidget);
+    for (final g in ['การใช้งาน', 'ข้อมูลและพื้นที่จัดเก็บ', 'เกี่ยวกับแอป', 'ช่วยเหลือและวินิจฉัย']) {
+      expect(find.text(g.toUpperCase()), findsOneWidget, reason: g);
     }
-    expect(find.text('สีธีม'), findsOneWidget);
-    expect(find.text('แถบเมนูล่าง'), findsOneWidget);
+    expect(find.text('เสียงชัตเตอร์'), findsOneWidget);
+    expect(find.text('สีธีม'), findsNothing, reason: 'moved to จัดการธีม');
 
-    await tester.enterText(find.byType(TextField), 'รหัสผ่าน');
+    await tester.enterText(find.byType(TextField), 'บันทึกปัญหา');
     await tester.pumpAndSettle();
-    expect(find.text('เปลี่ยนรหัสผ่าน'), findsOneWidget);
-    expect(find.text('สีธีม'), findsNothing);
+    expect(find.byKey(const ValueKey('settings-diagnostics')), findsOneWidget);
+    expect(find.text('เสียงชัตเตอร์'), findsNothing);
   });
 
-  testWidgets('theme + language on the profile, colour in settings, all update AppConfig', (tester) async {
-    var config = await _pump(tester, home: const ProfileHubScreen());
+  testWidgets('theme page: theme, language and colour all update AppConfig', (tester) async {
+    final config = await _pump(tester, home: const ThemeSettingsScreen());
     await tester.tap(find.text('มืด'));
     await tester.pumpAndSettle();
     expect(config.themeMode, ThemeMode.dark);
@@ -59,9 +59,6 @@ void main() {
     expect(config.uiLocaleCode, 'en');
     await tester.tap(find.text('ไทย'));
     await tester.pumpAndSettle();
-
-    config = await _pump(tester);
-    expect(find.text('ตามเครื่อง'), findsNothing, reason: 'theme switch moved to the profile');
 
     await tester.tap(find.bySemanticsLabel('กุหลาบ'));
     await tester.pumpAndSettle();

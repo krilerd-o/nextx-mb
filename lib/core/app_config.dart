@@ -225,12 +225,28 @@ class AppConfig extends ChangeNotifier {
 
   /// After the account was deleted on the server: forget it on this device
   /// (recent-accounts list) and sign this Space out.
-  Future<void> signOutDeletedAccount() async {
+  Future<void> signOutDeletedAccount({String? notice}) async {
     final email = (_session.email ?? '').trim();
     if (email.isNotEmpty) {
       await forgetRecentAccount(RecentAccount(server: _apiBaseUrl, loginId: email));
     }
     await logout();
+    if (notice != null && notice.isNotEmpty) {
+      _loginNotice = notice;
+      notifyListeners();
+    }
+  }
+
+  String? _loginNotice;
+
+  /// One-time message for the login screen (e.g. "บัญชีถูกปิดแล้ว"), shown once.
+  String? get loginNotice => _loginNotice;
+
+  /// Returns [loginNotice] and clears it.
+  String? takeLoginNotice() {
+    final n = _loginNotice;
+    _loginNotice = null;
+    return n;
   }
 
   InviteLink? _pendingInvite;

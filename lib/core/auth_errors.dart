@@ -7,7 +7,8 @@ String authErrorMessage(Object e) {
   if (e is ApiEnvelopeException) {
     final code = e.errorCode.toUpperCase();
     if (code.contains('PENDING_APPROVAL')) return 'บัญชีของคุณกำลังรอผู้ดูแลระบบอนุมัติ';
-    if (code.contains('SUSPENDED')) return 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ';
+    // Closed (Inactive) accounts: NEXTX 403 AUTH_403_ACCOUNT_SUSPENDED with its own message.
+    if (code.contains('SUSPENDED')) return e.message.trim().isNotEmpty ? e.message.trim() : 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ';
     if (code.contains('RATE_LIMIT') || e.statusCode == 429) return 'ลองหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่';
     if (code.contains('INVALID_CREDENTIALS')) return 'อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง';
     if (code.contains('OTP')) return e.message.isNotEmpty ? e.message : 'รหัส OTP ไม่ถูกต้องหรือหมดอายุ';

@@ -421,11 +421,14 @@ class JobSignResult {
 /// scaled to fill the report box ([kSignExportSize], transparent PNG — the
 /// same kind of file the web's signature pad uploads).
 class JobSignPage extends StatefulWidget {
-  const JobSignPage({super.key, required this.title, this.subtitle, this.initialName = '', this.nameLabel = 'ชื่อผู้เซ็น'});
+  const JobSignPage({super.key, required this.title, this.subtitle, this.initialName = '', this.nameLabel = 'ชื่อผู้เซ็น', this.showName = true});
   final String title;
   final String? subtitle;
   final String initialName;
   final String nameLabel;
+
+  /// false: no signer-name field (personal signature, older job slots).
+  final bool showName;
 
   @override
   State<JobSignPage> createState() => _JobSignPageState();
@@ -546,7 +549,7 @@ class _JobSignPageState extends State<JobSignPage> {
                     SizedBox(
                       width: 240,
                       child: SingleChildScrollView(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [name, const SizedBox(height: 12), save]),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [if (widget.showName) ...[name, const SizedBox(height: 12)], save]),
                       ),
                     ),
                   ],
@@ -554,8 +557,7 @@ class _JobSignPageState extends State<JobSignPage> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    name,
-                    const SizedBox(height: 12),
+                    if (widget.showName) ...[name, const SizedBox(height: 12)],
                     Expanded(child: pad),
                     const SizedBox(height: 8),
                     Row(

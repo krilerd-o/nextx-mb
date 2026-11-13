@@ -36,19 +36,19 @@ Future<(AppConfig, FakeNextxAdapter)> _pump(WidgetTester tester, Widget home, Ma
 }
 
 void main() {
-  testWidgets('profile page: me, my phone, Spaces, security, and a way into settings', (tester) async {
+  testWidgets('profile page: me, my Spaces, the area menu, and a way into settings', (tester) async {
     await _pump(tester, const ProfileHubScreen(), {
       'GET /api/me/profile': {'profile': {'phone_mobile': '0811111111', 'title': 'Sales'}},
     });
     expect(find.text('โปรไฟล์'), findsWidgets);
     expect(find.text('QA User'), findsOneWidget);
-    expect(find.text('0811111111'), findsOneWidget);
-    for (final t in ['ข้อมูลของฉัน', 'SPACE ของฉัน', 'บัญชีและความปลอดภัย', 'เพิ่ม Space', 'เปลี่ยนรหัสผ่าน']) {
+    expect(find.text('ข้อมูลของฉัน'), findsNothing, reason: 'email / mobile rows moved to จัดการโปรไฟล์');
+    for (final t in ['SPACE ของฉัน', 'เพิ่ม Space', 'จัดการความปลอดภัย', 'จัดการโปรไฟล์', 'สลับ Space', 'แก้ไขโปรไฟล์']) {
       expect(find.text(t), findsWidgets, reason: t);
     }
-    expect(find.byKey(const ValueKey('profile-settings-row')), findsOneWidget);
+    expect(find.byKey(const ValueKey('profile-menu-settings')), findsOneWidget);
     expect(find.byTooltip('การตั้งค่า'), findsOneWidget);
-    // Theme / language are no longer on this page.
+    // Theme / colour controls live on จัดการธีม, not here.
     expect(find.text('สีธีม'), findsNothing);
   });
 

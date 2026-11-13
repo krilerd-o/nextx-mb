@@ -253,6 +253,20 @@ class NxI {
   static const textTSlash = LucideIcons300.removeFormatting;
   static const cornersOut = LucideIcons300.maximize2;
   static const quote = LucideIcons300.quote;
+  // Profile area (R84).
+  static const laptop = LucideIcons300.laptop;
+  static const tablet = LucideIcons300.tablet;
+  static const sunMoon = LucideIcons300.sunMoon;
+  static const swatchBook = LucideIcons300.swatchBook;
+  static const keyRound = LucideIcons300.keyRound;
+  static const lockKeyhole = LucideIcons300.lockKeyhole;
+  static const signature = LucideIcons300.signature;
+  static const userCog = LucideIcons300.userCog;
+  static const userPen = LucideIcons300.userPen;
+  static const database = LucideIcons300.database;
+  static const lifeBuoy = LucideIcons300.lifeBuoy;
+  static const history = LucideIcons300.history;
+  static const shieldAlert = LucideIcons300.shieldAlert;
 }
 
 /// Official brand colours for [NxI] brand icons (Simple Icons palette).

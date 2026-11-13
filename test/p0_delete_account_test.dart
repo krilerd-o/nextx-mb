@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/profile/delete_account_screen.dart';
-import 'package:nextx_mobile/screens/profile/profile_hub_screen.dart';
+import 'package:nextx_mobile/screens/profile/profile_manage_screen.dart';
 import 'package:nextx_mobile/screens/settings_screen.dart';
 
 import 'support/fake_api.dart';
@@ -59,27 +59,24 @@ Future<void> _walk(WidgetTester tester, {String word = 'ลบบัญชี'})
 }
 
 void main() {
-  testWidgets('"ลบบัญชี" lives in Settings → security; profile has theme + language instead', (tester) async {
-    await _pump(tester, const ProfileHubScreen(), {'GET /api/me/profile': {'profile': {}}});
-    expect(find.byKey(const ValueKey('profile-delete-account')), findsNothing);
-    expect(find.byKey(const ValueKey('profile-theme')), findsOneWidget);
-    expect(find.byKey(const ValueKey('profile-language')), findsOneWidget);
+  testWidgets('"ลบบัญชี" lives in จัดการโปรไฟล์ (not in settings any more)', (tester) async {
+    await _pump(tester, const ProfileManageScreen(), {'GET /api/me/profile': {'profile': {'first_name': 'QA'}}});
+    expect(find.byKey(const ValueKey('pm-delete-account')), findsOneWidget);
     await _pump(tester, const SettingsScreen(), const {});
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('settings-delete-account')), 300, scrollable: find.byType(Scrollable).first);
-    expect(find.byKey(const ValueKey('settings-delete-account')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-delete-account')), findsNothing);
   });
 
-  testWidgets('explains first; the delete button needs OTP and the typed word', (tester) async {
+  testWidgets('legacy server (no step-up): explains first; the delete button needs OTP and the typed word', (tester) async {
     await _pump(tester, const DeleteAccountScreen(), _otpReplies);
-    expect(find.text('สิ่งที่ถูกลบ'), findsOneWidget);
-    expect(find.text('สิ่งที่ยังอยู่กับธุรกิจ'), findsOneWidget);
+    expect(find.text('การลบบัญชีคือการปิดบัญชี'), findsOneWidget);
+    expect(find.text('ข้อมูลยังเก็บไว้ครบ'), findsOneWidget);
     expect(find.byKey(const ValueKey('del-send')), findsNothing, reason: 'tick "I understand" first');
     await _walk(tester, word: 'ลบ');
     final btn = tester.widget<ButtonStyleButton>(find.byKey(const ValueKey('del-submit')));
     expect(btn.onPressed, isNull, reason: 'wrong word → disabled');
   });
 
-  testWidgets('OTP token deletes the account, then this device signs out and forgets it', (tester) async {
+  testWidgets('legacy server (no step-up): OTP token deletes the account, then this device signs out and forgets it', (tester) async {
     final (config, adapter) = await _pump(tester, const DeleteAccountScreen(), {
       ..._otpReplies,
       'POST /api/me/delete-account': {'deleted': true},
@@ -95,7 +92,7 @@ void main() {
     expect(config.isLoggedIn, isFalse);
   });
 
-  testWidgets('older server without the endpoint → points to the web page', (tester) async {
+  testWidgets('legacy server: no delete endpoint → points to the web page', (tester) async {
     final (config, _) = await _pump(
       tester,
       const DeleteAccountScreen(),
@@ -109,7 +106,7 @@ void main() {
     expect(config.isLoggedIn, isTrue, reason: 'nothing was deleted');
   });
 
-  testWidgets('a refused OTP token does not sign the real session out', (tester) async {
+  testWidgets('legacy server (no step-up): a refused OTP token does not sign the real session out', (tester) async {
     final (config, _) = await _pump(
       tester,
       const DeleteAccountScreen(),

@@ -93,6 +93,17 @@ Map<String, dynamic>? asStringKeyedMap(dynamic raw) {
   return null;
 }
 
+/// A 401 that refuses one proof (a wrong code / password, a missing step-up),
+/// not the signed-in session itself — it must not sign the user out.
+/// Covers the step-up endpoints, the actions they guard, and the phone-bind
+/// OTP (NEXTX answers a wrong code there with 401 `AUTH_INVALID_CREDENTIALS`).
+bool isStepUpRefusal(String path, Object? body) {
+  const guarded = ['/api/me/verify/', '/api/me/password', '/api/me/delete-account', '/api/me/phone/otp/'];
+  if (guarded.any(path.contains)) return true;
+  final code = body is Map ? '${body['error_code'] ?? ''}'.toUpperCase() : '';
+  return code == 'STEP_UP_REQUIRED' || code.startsWith('VERIFY_');
+}
+
 class ModuleFieldSchema {
   ModuleFieldSchema({
     required this.fields,
@@ -178,7 +189,7 @@ class ApiClient {
           final isAuthCall = path.contains('/api/auth/');
           // A one-off OTP token was refused: the signed-in session itself is fine.
           final oneOffToken = err.requestOptions.extra['nx_token'] != null;
-          if (code == 401 && !isAuthCall && !oneOffToken) {
+          if (code == 401 && !isAuthCall && !oneOffToken && !isStepUpRefusal(path, err.response?.data)) {
             // Signed out from another device (NEXTX X-Session-Revoked) vs token simply expired.
             lastUnauthorizedRevoked = err.response?.headers.value('x-session-revoked') == '1';
             _onUnauthorized?.call();
@@ -322,7 +333,7 @@ class ApiClient {
           res.statusCode ?? 400,
           map['error_code']?.toString() ?? 'ERROR',
           map['message']?.toString() ?? res.statusMessage ?? 'Error',
-          details: asStringKeyedMap(map['details']),
+          details: asStringKeyedMap(map['details']) ?? asStringKeyedMap(map['data']),
         );
       }
       if ((res.statusCode ?? 200) >= 400) {
@@ -344,7 +355,7 @@ class ApiClient {
           statusCode,
           map['error_code']?.toString() ?? 'ERROR',
           map['message']?.toString() ?? 'Error',
-          details: asStringKeyedMap(map['details']),
+          details: asStringKeyedMap(map['details']) ?? asStringKeyedMap(map['data']),
         );
       }
     }
@@ -478,14 +489,54 @@ class ApiClient {
   }
 
   /// Devices signed in to this account (`GET /api/me/sessions`, feature `device_sessions`).
-  Future<({List<Map<String, dynamic>> list, String? currentSid})> getDeviceSessions() async {
+  /// `unavailable` = the server has no session table yet (needs an update).
+  Future<({List<Map<String, dynamic>> list, String? currentSid, bool unavailable})> getDeviceSessions() async {
     final env = await _send('GET', '/api/me/sessions');
     final data = env['data'];
     return (
       list: extractMapList(data),
       currentSid: data is Map ? data['current_sid']?.toString() : null,
+      unavailable: data is Map && (data['unavailable'] == true || data['available'] == false),
     );
   }
+
+  // ── Step-up verification (`/api/me/verify/*`): prove it is me before a
+  // sensitive change; the returned `verify_token` goes with that change.
+
+  /// `GET /api/me/verify/methods` → `{email:{available, masked}, sms:{available, masked}, password:{available}}`.
+  Future<Map<String, dynamic>> getVerifyMethods() async => _dataMap(await _send('GET', '/api/me/verify/methods'));
+
+  /// `POST /api/me/verify/request {channel}` → `{channel, destination_masked, expires_in, resend_after}`.
+  Future<Map<String, dynamic>> requestVerifyCode(String channel) async =>
+      _dataMap(await _send('POST', '/api/me/verify/request', data: {'channel': channel}));
+
+  /// `POST /api/me/verify/confirm {channel, code}` → `{verify_token, channel, expires_in}`.
+  Future<Map<String, dynamic>> confirmVerifyCode(String channel, String code) async =>
+      _dataMap(await _send('POST', '/api/me/verify/confirm', data: {'channel': channel, 'code': code}));
+
+  /// `POST /api/me/verify/password {password}` → `{verify_token, channel:'password', expires_in}`.
+  Future<Map<String, dynamic>> verifyCurrentPassword(String password) async =>
+      _dataMap(await _send('POST', '/api/me/verify/password', data: {'password': password}));
+
+  /// `PUT /api/me/password {new_password, verify_token}` (step-up proven).
+  Future<Map<String, dynamic>> changePasswordVerified(String newPassword, String verifyToken) async =>
+      _dataMap(await _send('PUT', '/api/me/password', data: {'new_password': newPassword, 'verify_token': verifyToken}));
+
+  /// `POST /api/me/delete-account {confirm:'DELETE', verify_tokens}` → `{deactivated:true, status:'Inactive'}`.
+  /// 401 `STEP_UP_REQUIRED` (details `{required, missing}`) when a proof is missing.
+  Future<Map<String, dynamic>> deactivateMyAccount(List<String> verifyTokens) async =>
+      _dataMap(await _send('POST', '/api/me/delete-account', data: {'confirm': 'DELETE', 'verify_tokens': verifyTokens}));
+
+  /// `GET /api/me/notification-preferences` → `{channels, push_paused, groups:[{key, label_*, events:[…]}]}`.
+  Future<Map<String, dynamic>> getNotificationPreferences() async =>
+      _dataMap(await _send('GET', '/api/me/notification-preferences'));
+
+  /// `PUT /api/me/notification-preferences {events?:{key:{in_app?, push?}}, push_paused?}` → same shape as GET.
+  Future<Map<String, dynamic>> updateNotificationPreferences({Map<String, Map<String, bool>>? events, bool? pushPaused}) async =>
+      _dataMap(await _send('PUT', '/api/me/notification-preferences', data: {
+        if (events != null && events.isNotEmpty) 'events': events,
+        'push_paused': ?pushPaused,
+      }));
 
   Future<void> revokeDeviceSession(String sid) async {
     await _send('DELETE', '/api/me/sessions/${Uri.encodeComponent(sid)}');
