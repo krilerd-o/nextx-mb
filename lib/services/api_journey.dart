@@ -368,6 +368,7 @@ extension JourneyApi on ApiClient {
     bool includeLink = false,
     String? templateId,
     List<MultipartFile> files = const [],
+    ProgressCallback? onSendProgress,
   }) async {
     final form = FormData.fromMap({
       'to': to.join(','),
@@ -383,7 +384,7 @@ extension JourneyApi on ApiClient {
     for (final f in files) {
       form.files.add(MapEntry('files', f));
     }
-    final env = await _send('POST', '${_composeBase(kind, id)}/compose-send', data: form, options: Options(sendTimeout: const Duration(minutes: 3), receiveTimeout: const Duration(minutes: 3)));
+    final env = await _send('POST', '${_composeBase(kind, id)}/compose-send', data: form, onSendProgress: onSendProgress, options: Options(sendTimeout: const Duration(minutes: 3), receiveTimeout: const Duration(minutes: 3)));
     return (data: _dataMap(env), message: env['message']?.toString() ?? env['messagestatus']?.toString() ?? '');
   }
 

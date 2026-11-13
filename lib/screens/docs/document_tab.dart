@@ -210,6 +210,9 @@ class _RecordDocumentTabState extends State<RecordDocumentTab> {
       // Size of the template document the server will attach (not the fallback).
       pdfSize: _shown?.birt == true ? _bytes?.length : null,
       prefill: prefill,
+      // Tap the auto attachment → the same document, no second report build.
+      document: _source()..templateLabel = _src.templateLabel,
+      prefetched: _bytes == null || _shown == null ? null : {_shown!.id: _bytes!},
     );
     if (sent && mounted) _loadLog();
   }

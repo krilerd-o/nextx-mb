@@ -465,22 +465,50 @@ class NxRichTextController extends TextEditingController {
   }
 }
 
-/// Toolbar + text area for [NxRichTextController] (bold, italic, underline,
-/// bullets, numbering, link, clear formatting).
-class NxRichTextEditor extends StatefulWidget {
-  const NxRichTextEditor({super.key, required this.controller, this.minLines = 6, this.hint, this.fieldKey});
-  final NxRichTextController controller;
-  final int minLines;
-  final String? hint;
-  final Key? fieldKey;
-
-  @override
-  State<NxRichTextEditor> createState() => _NxRichTextEditorState();
+/// Opens the link dialog for the caret / selection of [c].
+Future<void> nxRichEditLink(BuildContext context, NxRichTextController c, {FocusNode? focus}) async {
+  final ctrl = TextEditingController(text: c.linkAtCaret ?? 'https://');
+  final url = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(tr('ลิงก์')),
+      content: TextField(
+        key: const ValueKey('rte-link-url'),
+        controller: ctrl,
+        autofocus: true,
+        keyboardType: TextInputType.url,
+        decoration: const InputDecoration(hintText: 'https://…'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, ''), child: Text(tr('เอาลิงก์ออก'))),
+        FilledButton(key: const ValueKey('rte-link-ok'), onPressed: () => Navigator.pop(ctx, ctrl.text), child: Text(tr('ตกลง'))),
+      ],
+    ),
+  );
+  ctrl.dispose();
+  if (url == null) return;
+  final u = url.trim() == 'https://' ? '' : url.trim();
+  c.setLink(u.isEmpty || RegExp(r'^(https?:|mailto:|tel:)', caseSensitive: false).hasMatch(u) ? u : 'https://$u');
+  focus?.requestFocus();
 }
 
-class _NxRichTextEditorState extends State<NxRichTextEditor> {
-  final _focus = FocusNode();
+/// Formatting buttons for [NxRichTextController] (bold, italic, underline,
+/// bullets, numbering, link, clear formatting) — inside [NxRichTextEditor]
+/// or docked on its own (e.g. above the keyboard in a mail composer).
+class NxRichToolbar extends StatefulWidget {
+  const NxRichToolbar({super.key, required this.controller, this.focusNode, this.padding = const EdgeInsets.symmetric(horizontal: 4, vertical: 2), this.trailing});
+  final NxRichTextController controller;
 
+  /// Focus returned to the text after the link dialog.
+  final FocusNode? focusNode;
+  final EdgeInsets padding;
+  final List<Widget>? trailing;
+
+  @override
+  State<NxRichToolbar> createState() => _NxRichToolbarState();
+}
+
+class _NxRichToolbarState extends State<NxRichToolbar> {
   NxRichTextController get _c => widget.controller;
 
   @override
@@ -490,7 +518,7 @@ class _NxRichTextEditorState extends State<NxRichTextEditor> {
   }
 
   @override
-  void didUpdateWidget(NxRichTextEditor old) {
+  void didUpdateWidget(NxRichToolbar old) {
     super.didUpdateWidget(old);
     if (old.controller != widget.controller) {
       old.controller.removeListener(_changed);
@@ -501,38 +529,11 @@ class _NxRichTextEditorState extends State<NxRichTextEditor> {
   @override
   void dispose() {
     _c.removeListener(_changed);
-    _focus.dispose();
     super.dispose();
   }
 
   void _changed() {
     if (mounted) setState(() {});
-  }
-
-  Future<void> _link() async {
-    final ctrl = TextEditingController(text: _c.linkAtCaret ?? 'https://');
-    final url = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('ลิงก์')),
-        content: TextField(
-          key: const ValueKey('rte-link-url'),
-          controller: ctrl,
-          autofocus: true,
-          keyboardType: TextInputType.url,
-          decoration: const InputDecoration(hintText: 'https://…'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, ''), child: Text(tr('เอาลิงก์ออก'))),
-          FilledButton(key: const ValueKey('rte-link-ok'), onPressed: () => Navigator.pop(ctx, ctrl.text), child: Text(tr('ตกลง'))),
-        ],
-      ),
-    );
-    ctrl.dispose();
-    if (url == null) return;
-    final u = url.trim() == 'https://' ? '' : url.trim();
-    _c.setLink(u.isEmpty || RegExp(r'^(https?:|mailto:|tel:)', caseSensitive: false).hasMatch(u) ? u : 'https://$u');
-    _focus.requestFocus();
   }
 
   @override
@@ -550,46 +551,123 @@ class _NxRichTextEditorState extends State<NxRichTextEditor> {
       },
       icon: Icon(icon, size: 20),
     );
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: widget.padding,
+      child: Row(children: [
+        b('bold', NxI.textB, 'ตัวหนา', _c.isActive(NxRich.bold), () => _c.toggle(NxRich.bold)),
+        b('italic', NxI.textItalic, 'ตัวเอียง', _c.isActive(NxRich.italic), () => _c.toggle(NxRich.italic)),
+        b('underline', NxI.textUnderline, 'ขีดเส้นใต้', _c.isActive(NxRich.underline), () => _c.toggle(NxRich.underline)),
+        const SizedBox(width: 4),
+        b('ul', NxI.listBullets, 'รายการสัญลักษณ์', _c.lineIsList(ordered: false), () => _c.toggleList(ordered: false)),
+        b('ol', NxI.listNumbers, 'รายการลำดับเลข', _c.lineIsList(ordered: true), () => _c.toggleList(ordered: true)),
+        b('link', NxI.link, 'ลิงก์', _c.linkAtCaret != null, () => nxRichEditLink(context, _c, focus: widget.focusNode)),
+        b('clear', NxI.textTSlash, 'ล้างรูปแบบ', false, _c.clearFormatting),
+        ...?widget.trailing,
+      ]),
+    );
+  }
+}
+
+/// Toolbar + text area for [NxRichTextController]. [bordered] false and
+/// [showToolbar] false give a bare text area (the toolbar docked elsewhere).
+class NxRichTextEditor extends StatefulWidget {
+  const NxRichTextEditor({
+    super.key,
+    required this.controller,
+    this.minLines = 6,
+    this.hint,
+    this.fieldKey,
+    this.focusNode,
+    this.bordered = true,
+    this.showToolbar = true,
+    this.enabled = true,
+    this.contentPadding = const EdgeInsets.fromLTRB(12, 10, 12, 12),
+    this.style,
+  });
+  final NxRichTextController controller;
+  final int minLines;
+  final String? hint;
+  final Key? fieldKey;
+  final FocusNode? focusNode;
+  final bool bordered;
+  final bool showToolbar;
+  final bool enabled;
+  final EdgeInsets contentPadding;
+  final TextStyle? style;
+
+  @override
+  State<NxRichTextEditor> createState() => _NxRichTextEditorState();
+}
+
+class _NxRichTextEditorState extends State<NxRichTextEditor> {
+  FocusNode? _own;
+  FocusNode get _focus => widget.focusNode ?? (_own ??= FocusNode());
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(NxRichTextEditor old) {
+    super.didUpdateWidget(old);
+    if (old.focusNode != widget.focusNode) {
+      (old.focusNode ?? _own)?.removeListener(_changed);
+      _focus.addListener(_changed);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus.removeListener(_changed);
+    _own?.dispose();
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final field = TextField(
+      key: widget.fieldKey,
+      controller: widget.controller,
+      focusNode: _focus,
+      enabled: widget.enabled,
+      minLines: widget.minLines,
+      maxLines: null,
+      style: widget.style,
+      keyboardType: TextInputType.multiline,
+      textCapitalization: TextCapitalization.sentences,
+      onTap: () => setState(() {}),
+      decoration: InputDecoration(
+        hintText: widget.hint == null ? null : tr(widget.hint!),
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        disabledBorder: InputBorder.none,
+        filled: false,
+        contentPadding: widget.contentPadding,
+      ),
+    );
+    final body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (widget.showToolbar) ...[
+        NxRichToolbar(controller: widget.controller, focusNode: _focus),
+        Divider(height: 1, color: cs.outlineVariant),
+      ],
+      field,
+    ]);
+    if (!widget.bordered) return body;
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _focus.hasFocus ? cs.primary : cs.outlineVariant),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Row(children: [
-            b('bold', NxI.textB, 'ตัวหนา', _c.isActive(NxRich.bold), () => _c.toggle(NxRich.bold)),
-            b('italic', NxI.textItalic, 'ตัวเอียง', _c.isActive(NxRich.italic), () => _c.toggle(NxRich.italic)),
-            b('underline', NxI.textUnderline, 'ขีดเส้นใต้', _c.isActive(NxRich.underline), () => _c.toggle(NxRich.underline)),
-            const SizedBox(width: 4),
-            b('ul', NxI.listBullets, 'รายการสัญลักษณ์', _c.lineIsList(ordered: false), () => _c.toggleList(ordered: false)),
-            b('ol', NxI.listNumbers, 'รายการลำดับเลข', _c.lineIsList(ordered: true), () => _c.toggleList(ordered: true)),
-            b('link', NxI.link, 'ลิงก์', _c.linkAtCaret != null, _link),
-            b('clear', NxI.textTSlash, 'ล้างรูปแบบ', false, _c.clearFormatting),
-          ]),
-        ),
-        Divider(height: 1, color: cs.outlineVariant),
-        TextField(
-          key: widget.fieldKey,
-          controller: _c,
-          focusNode: _focus,
-          minLines: widget.minLines,
-          maxLines: null,
-          keyboardType: TextInputType.multiline,
-          textCapitalization: TextCapitalization.sentences,
-          onTap: () => setState(() {}),
-          decoration: InputDecoration(
-            hintText: widget.hint == null ? null : tr(widget.hint!),
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            filled: false,
-            contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-          ),
-        ),
-      ]),
+      child: body,
     );
   }
 }

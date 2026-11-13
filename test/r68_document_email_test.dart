@@ -317,21 +317,21 @@ void main() {
   testWidgets('e-mail sheet: prefilled like the web (subject, To, CC, template letter, auto PDF with size)', (tester) async {
     await pump(tester, opener(pdfSize: 1153434), {'GET /api/quotation/7/compose-defaults': defaults()}, size: const Size(420, 1000));
     await openSheet(tester);
-    expect(find.text('ส่งอีเมลใบเสนอราคา'), findsOneWidget);
-    expect(find.textContaining('QT-7 · บริษัท ลูกค้า'), findsOneWidget);
+    expect(find.text('ส่งอีเมล'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('compose-doc-chip')), matching: find.text('QT-7')), findsOneWidget);
+    expect(find.text('บริษัท ลูกค้า'), findsOneWidget);
     expect(tester.widget<TextField>(find.byKey(const ValueKey('compose-subject'))).controller!.text, 'ใบเสนอราคา_QT-7_บริษัท ลูกค้า_261113');
     expect(find.byKey(const ValueKey('chip-buyer@cust.test')), findsOneWidget);
     expect(find.byKey(const ValueKey('chip-owner@biz.test')), findsOneWidget);
-    expect(find.text('คุณลูกค้า · buyer@cust.test'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('chip-buyer@cust.test')), matching: find.text('คุณลูกค้า')), findsOneWidget);
     final body = tester.widget<TextField>(find.byKey(const ValueKey('compose-body'))).controller as NxRichTextController;
     expect(body.text, startsWith('เรียน คุณลูกค้า\n\nขอส่งเอกสารเลขที่ QT-7'));
     expect(find.text('ใบเสนอราคา_QT-7.pdf'), findsOneWidget);
-    expect(find.text('แนบอัตโนมัติจากรายงาน · 1.1 MB'), findsOneWidget);
-    expect(tester.widget<CheckboxListTile>(find.byKey(const ValueKey('compose-include-pdf'))).value, isTrue);
-    expect(find.byKey(const ValueKey('compose-bcc')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('compose-show-bcc')));
-    await settle(tester, 2);
+    expect(tester.widget<Text>(find.byKey(const ValueKey('compose-pdf-meta'))).data, '1.1 MB');
+    expect(find.descendant(of: find.byKey(const ValueKey('compose-pdf-card')), matching: find.text('แนบอัตโนมัติ')), findsOneWidget);
+    // CC prefilled → the Cc/Bcc lines are open.
     expect(find.byKey(const ValueKey('compose-bcc')), findsOneWidget);
+    expect(find.byKey(const ValueKey('compose-show-bcc')), findsNothing);
   });
 
   testWidgets('e-mail sheet: validation (subject, recipients, attachment) before calling the server', (tester) async {
@@ -363,7 +363,7 @@ void main() {
     await tester.enterText(toField, 'x@cust.test,');
     await settle(tester, 2);
     // No PDF, no files → asks for an attachment.
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('compose-include-pdf')), 200, scrollable: find.descendant(of: find.byType(DocEmailSheet), matching: find.byType(Scrollable)).first);
+    await tester.ensureVisible(find.byKey(const ValueKey('compose-include-pdf')));
     await tester.tap(find.byKey(const ValueKey('compose-include-pdf')));
     await settle(tester, 2);
     await tester.tap(find.byKey(const ValueKey('compose-send')));
@@ -404,7 +404,9 @@ void main() {
     await settle(tester, 2);
     expect(find.byKey(const ValueKey('chip-somsri@biz.test')), findsOneWidget);
 
-    // Bold the first word of the letter via the toolbar.
+    // Bold the first word of the letter via the toolbar (docked while writing the letter).
+    await tester.tap(find.byKey(const ValueKey('compose-body')));
+    await settle(tester, 1);
     final body = tester.widget<TextField>(find.byKey(const ValueKey('compose-body'))).controller as NxRichTextController;
     body.selection = const TextSelection(baseOffset: 0, extentOffset: 5);
     await tester.ensureVisible(find.byKey(const ValueKey('rte-bold')));
@@ -417,7 +419,9 @@ void main() {
     expect(find.text('สเปค.txt'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('compose-send')));
-    await settle(tester, 8);
+    await settle(tester, 4);
+    expect(find.byKey(const ValueKey('compose-success')), findsOneWidget);
+    await settle(tester, 14);
     final call = a.calls.lastWhere((c) => c.path == '/api/quotation/7/compose-send');
     expect(call.method, 'POST');
     final form = call.data as FormData;
@@ -445,13 +449,14 @@ void main() {
     );
     await openSheet(tester);
     expect(a.callKeys, contains('GET /api/field-service/jobs/5/compose-defaults'));
-    expect(find.text('ส่งอีเมลใบสั่งงาน'), findsOneWidget);
+    expect(find.text('ส่งอีเมล'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('compose-doc-chip')), matching: find.text('JOB-5')), findsOneWidget);
     expect(find.byKey(const ValueKey('compose-mail-not-ready')), findsOneWidget);
     expect(find.byKey(const ValueKey('compose-include-link')), findsNothing, reason: 'customer link option is quotation-only');
     expect(tester.widget<FilledButton>(find.byKey(const ValueKey('compose-send'))).onPressed, isNull);
-    // รีเฟรช reloads the defaults (e.g. after an admin set up e-mail).
+    // "ตรวจอีกครั้ง" asks for the defaults again (e.g. after an admin set up e-mail).
     a.replies['GET /api/field-service/jobs/5/compose-defaults'] = defaults(kind: 'job');
-    await tester.tap(find.byKey(const ValueKey('compose-refresh')));
+    await tester.tap(find.byKey(const ValueKey('compose-recheck')));
     await settle(tester, 6);
     expect(find.byKey(const ValueKey('compose-mail-not-ready')), findsNothing);
     expect(tester.widget<FilledButton>(find.byKey(const ValueKey('compose-send'))).onPressed, isNotNull);
