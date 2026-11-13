@@ -19,6 +19,7 @@ class RecordingPart {
     this.isFinal = false,
     this.durationMs = 0,
     this.businessId,
+    this.deviceId = '',
     this.mime = 'audio/wav',
     this.attempts = 0,
     this.createdAt,
@@ -35,6 +36,9 @@ class RecordingPart {
   /// Total duration of the whole recording (sent with the final part).
   final int durationMs;
   final String? businessId;
+
+  /// Install id of the phone that recorded it (sent with every part; '' for parts queued by older versions).
+  final String deviceId;
   final String mime;
   final int attempts;
   final DateTime? createdAt;
@@ -47,6 +51,7 @@ class RecordingPart {
         isFinal: isFinal,
         durationMs: durationMs,
         businessId: businessId,
+        deviceId: deviceId,
         mime: mime,
         attempts: attempts + 1,
         createdAt: createdAt,
@@ -60,6 +65,7 @@ class RecordingPart {
         'final': isFinal,
         'duration_ms': durationMs,
         if (businessId != null) 'business_id': businessId,
+        'device_id': deviceId,
         'mime': mime,
         'attempts': attempts,
         'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
@@ -78,6 +84,7 @@ class RecordingPart {
       isFinal: j['final'] == true,
       durationMs: (j['duration_ms'] as num?)?.toInt() ?? 0,
       businessId: j['business_id']?.toString(),
+      deviceId: '${j['device_id'] ?? ''}',
       mime: '${j['mime'] ?? 'audio/wav'}',
       attempts: (j['attempts'] as num?)?.toInt() ?? 0,
       createdAt: DateTime.tryParse('${j['created_at'] ?? ''}'),
@@ -188,6 +195,7 @@ class RecordingUploadQueue extends ChangeNotifier {
       isFinal: p.isFinal,
       durationMs: p.durationMs,
       businessId: p.businessId ?? businessId,
+      deviceId: p.deviceId,
       mime: p.mime,
       createdAt: p.createdAt ?? now(),
     ));
@@ -232,7 +240,7 @@ class RecordingUploadQueue extends ChangeNotifier {
         }
         try {
           await api!.uploadCallRecordingPart(next.callId, next.path,
-              part: next.part, parts: next.parts, isFinal: next.isFinal, durationMs: next.durationMs, mime: next.mime);
+              part: next.part, parts: next.parts, isFinal: next.isFinal, durationMs: next.durationMs, mime: next.mime, deviceId: next.deviceId);
           _items.remove(next);
           _deleteFile(next.path);
           await _save();

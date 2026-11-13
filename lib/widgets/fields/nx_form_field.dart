@@ -482,7 +482,9 @@ class NxFormField extends StatelessWidget {
       case FieldUiType.latLong:
         return _wrap(
           context,
-          isEmpty: parseLatLong(value).lat.isEmpty && parseLatLong(value).lng.isEmpty,
+          // Label always floats: these boxes carry their own hints (ละติจูด / ลองจิจูด), so a resting
+          // label would be drawn over the first one.
+          isEmpty: false,
           child: _LatLongBox(
             value: value,
             enabled: _on,
@@ -493,7 +495,7 @@ class NxFormField extends StatelessWidget {
       case FieldUiType.addressMap:
         return _wrap(
           context,
-          isEmpty: _addressFromMap(value).isEmpty,
+          isEmpty: false, // same: inner boxes have their own hints
           child: Column(
             children: [
               _TextBox(
@@ -1266,7 +1268,7 @@ class _DateTrigger extends StatelessWidget {
       enabled: enabled,
       onTap: onTap,
       prefixIcon: Icon(icon, size: 20, color: muted),
-      child: empty ? const SizedBox(height: NxFieldStyle.lineHeight) : Text(tr(text)),
+      child: empty ? const SizedBox.shrink() : Text(tr(text), maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }
 }
@@ -1304,9 +1306,9 @@ class _SelectTrigger extends StatelessWidget {
       enabled: enabled,
       onTap: onTap,
       prefixIcon: Icon(NxI.listBullets, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      suffixIcon: Icon(NxI.caretDown, color: Theme.of(context).colorScheme.onSurfaceVariant),
+      suffixIcon: nxTapFieldSuffix(context, onClear: empty ? null : onClear),
       child: empty
-          ? const SizedBox(height: NxFieldStyle.lineHeight)
+          ? const SizedBox.shrink()
           : Row(
               children: [
                 if (radio)
@@ -1321,13 +1323,7 @@ class _SelectTrigger extends StatelessWidget {
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
                   ),
-                Expanded(child: Text(tr(label), overflow: TextOverflow.ellipsis)),
-                if (onClear != null)
-                  IconButton(
-                    icon: const Icon(NxI.x, size: 18),
-                    onPressed: onClear,
-                    visualDensity: VisualDensity.compact,
-                  ),
+                Expanded(child: Text(tr(label), maxLines: 1, overflow: TextOverflow.ellipsis)),
               ],
             ),
     );
@@ -1362,24 +1358,13 @@ class _PersonTrigger extends StatelessWidget {
       isEmpty: empty,
       enabled: enabled,
       onTap: onTap,
-      // Filled: the avatar is the icon.
-      prefixIcon: empty ? Icon(NxI.user, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant) : null,
-      suffixIcon: Icon(NxI.caretDown, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      child: empty
-          ? const SizedBox(height: NxFieldStyle.lineHeight)
-          : Row(
-              children: [
-                NxAvatar(label: label, size: 28),
-                const SizedBox(width: 10),
-                Expanded(child: Text(tr(label), overflow: TextOverflow.ellipsis)),
-                if (onClear != null)
-                  IconButton(
-                    icon: const Icon(NxI.x, size: 18),
-                    onPressed: onClear,
-                    visualDensity: VisualDensity.compact,
-                  ),
-              ],
-            ),
+      // Filled: the avatar is the icon (same slot / size as the other fields'
+      // icons, so the field stays exactly as tall as a text input).
+      prefixIcon: empty
+          ? Icon(NxI.user, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant)
+          : NxAvatar(label: label, size: 22),
+      suffixIcon: nxTapFieldSuffix(context, onClear: empty ? null : onClear),
+      child: empty ? const SizedBox.shrink() : Text(tr(label), maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }
 }
@@ -1423,16 +1408,17 @@ class _ChipTrigger extends StatelessWidget {
       enabled: enabled,
       onTap: onTap,
       prefixIcon: Icon(NxI.tag, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      suffixIcon: Icon(NxI.caretDown, color: Theme.of(context).colorScheme.onSurfaceVariant),
+      suffixIcon: nxTapFieldSuffix(context),
+      multiLine: true,
       child: values.isEmpty
-          ? const SizedBox(height: NxFieldStyle.lineHeight)
+          ? const SizedBox.shrink()
           : Wrap(
               spacing: 6,
               runSpacing: 4,
               children: [
                 for (final v in values)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(12),
@@ -1444,7 +1430,7 @@ class _ChipTrigger extends StatelessWidget {
                           NxAvatar(label: lab(v), size: 18),
                           const SizedBox(width: 4),
                         ],
-                        Text(tr(lab(v)), style: Theme.of(context).textTheme.labelLarge),
+                        Text(tr(lab(v)), style: Theme.of(context).textTheme.labelLarge?.copyWith(height: 1.25)),
                       ],
                     ),
                   ),
@@ -1509,17 +1495,17 @@ class _ColorTrigger extends StatelessWidget {
       enabled: enabled,
       onTap: onTap,
       prefixIcon: Icon(NxI.palette, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      suffixIcon: Icon(NxI.caretDown, color: Theme.of(context).colorScheme.onSurfaceVariant),
+      suffixIcon: nxTapFieldSuffix(context),
       child: empty
-          ? const SizedBox(height: NxFieldStyle.lineHeight)
+          ? const SizedBox.shrink()
           : Row(
               children: [
                 Container(
-                  width: 22,
-                  height: 22,
+                  width: 20,
+                  height: 20,
                   decoration: BoxDecoration(
                     color: parsed ?? Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(7),
                     border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.4)),
                   ),
                 ),

@@ -5,8 +5,12 @@ import 'package:dio/dio.dart';
 
 /// Replies to `"METHOD /path"` with a NEXTX S/E envelope; records every call.
 class FakeNextxAdapter implements HttpClientAdapter {
-  FakeNextxAdapter(this.replies, {this.statusFor = const {}, this.headersFor = const {}, this.sseFor = const {}, Set<String>? offline})
-      : offline = offline ?? <String>{};
+  FakeNextxAdapter(this.replies, {this.statusFor = const {}, this.headersFor = const {}, this.sseFor = const {}, Set<String>? offline, Map<String, Map<String, Object?>>? errorsFor})
+      : offline = offline ?? <String>{},
+        errorsFor = errorsFor ?? <String, Map<String, Object?>>{};
+
+  /// `METHOD /path` that answer with an E envelope `{error_code, message, details?}` (status from [statusFor], default 400). Mutable.
+  final Map<String, Map<String, Object?>> errorsFor;
 
   /// `METHOD /path` that fail like a lost connection (no response). Mutable.
   final Set<String> offline;
@@ -34,6 +38,12 @@ class FakeNextxAdapter implements HttpClientAdapter {
       throw DioException(requestOptions: options, type: DioExceptionType.connectionError, message: 'offline');
     }
     final code = statusFor[key];
+    final err = errorsFor[key];
+    if (err != null) {
+      return ResponseBody.fromString(jsonEncode({'status': 'E', ...err}), code ?? 400, headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      });
+    }
     if (sseFor.containsKey(key)) {
       return ResponseBody.fromString(sseFor[key]!, code ?? 200, headers: {
         Headers.contentTypeHeader: ['text/event-stream'],

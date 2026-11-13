@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -36,6 +38,10 @@ class NxScrollTabs extends StatefulWidget {
 
   static const height = 44.0;
 
+  /// Extra paint room above / below the track for the selected pill's shadow
+  /// (the TabBar's horizontal scroll view clips to its own box).
+  static const shadowRoom = 10.0;
+
   @override
   State<NxScrollTabs> createState() => _NxScrollTabsState();
 }
@@ -70,18 +76,41 @@ class _NxScrollTabsState extends State<NxScrollTabs> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    const room = NxScrollTabs.shadowRoom;
+    // The track keeps its 44 px; the TabBar (its scroll view clips) reaches
+    // [room] past it above and below so the selected pill's shadow is not cut.
     return Padding(
       padding: widget.padding,
-      child: Container(
+      child: SizedBox(
         height: NxScrollTabs.height,
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(999),
+        child: Stack(
+          clipBehavior: Clip.none,
+          fit: StackFit.expand,
+          children: [
+            DecoratedBox(
+              key: const ValueKey('nx-tabs-track'),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: -room,
+              bottom: -room,
+              child: _tabBar(cs),
+            ),
+          ],
         ),
-        child: TabBar(
+      ),
+    );
+  }
+
+  Widget _tabBar(ColorScheme cs) => TabBar(
           controller: _ctrl,
           isScrollable: true,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4 + NxScrollTabs.shadowRoom),
           tabAlignment: TabAlignment.center,
           dividerColor: Colors.transparent,
           overlayColor: const WidgetStatePropertyAll(Colors.transparent),
@@ -133,10 +162,7 @@ class _NxScrollTabsState extends State<NxScrollTabs> with TickerProviderStateMix
                 ),
               ),
           ],
-        ),
-      ),
-    );
-  }
+        );
 }
 
 /// Shows a pinned copy of a page's tab row under the header once the real
@@ -165,6 +191,11 @@ class NxStickyTabs extends StatefulWidget {
 class _NxStickyTabsState extends State<NxStickyTabs> {
   bool _show = false;
 
+  /// While the pinned copy is shown, re-check a few times a second: content above the real row
+  /// can grow or shrink (late loads, another tab) without any scroll event. A timer (not a
+  /// ticker) so no frames are forced while nothing changes.
+  Timer? _watch;
+
   @override
   void initState() {
     super.initState();
@@ -178,11 +209,27 @@ class _NxStickyTabsState extends State<NxStickyTabs> {
       old.controller.removeListener(_check);
       widget.controller.addListener(_check);
     }
+    // The page rebuilt (e.g. another tab was picked): the content above / below the real row
+    // can change size and the scroll offset can be clamped without a scroll event, so the
+    // pinned copy could stay visible while the real row is on screen. Re-check after layout.
+    _recheckAfterLayout();
+  }
+
+  bool _recheckQueued = false;
+  void _recheckAfterLayout() {
+    if (_recheckQueued) return;
+    _recheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _recheckQueued = false;
+      if (!mounted) return;
+      _check(); // re-measures whenever the real row is laid out; otherwise keeps the last pin point
+    });
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_check);
+    _watch?.cancel();
     super.dispose();
   }
 
@@ -209,6 +256,14 @@ class _NxStickyTabsState extends State<NxStickyTabs> {
     if (at == null) return;
     final show = offset > at;
     if (show != _show) setState(() => _show = show);
+    if (_show && _watch == null) {
+      _watch = Timer.periodic(const Duration(milliseconds: 300), (_) {
+        if (mounted) _check();
+      });
+    } else if (!_show && _watch != null) {
+      _watch!.cancel();
+      _watch = null;
+    }
   }
 
   @override

@@ -8,9 +8,13 @@ import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_exceptions.dart';
+import '../../services/realtime_service.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
+import 'comm_ai_access.dart';
+import 'comm_ai_delete_sheet.dart';
+import 'comm_ai_errors.dart';
 import 'comm_ai_isaac.dart';
 import 'comm_ai_widgets.dart';
 
@@ -75,10 +79,19 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
   List<Map<String, dynamic>> _history = const [];
   bool _posting = false;
   bool _posted = false;
+  bool _available = true;
+
+  /// The open summary may be deleted by me (its creator, or an admin) — from GET /summaries/:id.
+  bool _canDelete = false;
+  StreamSubscription<RealtimeEvent>? _deletedSub;
 
   @override
   void initState() {
     super.initState();
+    _deletedSub = RealtimeService.instance.on('ai:summary_deleted').listen((e) => _forget('${e.data['summary_id']}'));
+    CommAiAccess.of(context.read<AppConfig>().apiClient).then((a) {
+      if (mounted && !a.available) setState(() => _available = false);
+    });
     context.read<AppConfig>().apiClient.getChatSummaries(widget.roomId).then((l) {
       if (mounted) setState(() => _history = l.where((x) => x['status'] == 'done').toList());
     }).catchError((_) {});
@@ -86,6 +99,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
 
   @override
   void dispose() {
+    _deletedSub?.cancel();
     _cancel?.cancel();
     _text.dispose();
     super.dispose();
@@ -128,6 +142,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
       _done = null;
       _error = null;
       _posted = false;
+      _canDelete = false;
     });
     _text.value = '';
     var acc = '';
@@ -157,7 +172,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
     } catch (e) {
       if (cancel.isCancelled || !mounted) return;
       setState(() {
-        _error = formatApiError(e);
+        _error = commAiErrorText(e);
         _phase = 'error';
       });
     }
@@ -177,6 +192,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
         _phase = r == null ? 'error' : 'done';
         _error = r == null ? tr('เปิดสรุปไม่ได้') : null;
         _posted = false;
+        _canDelete = s['can_delete'] == true;
       });
     } catch (e) {
       if (mounted) {
@@ -186,6 +202,26 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
         });
       }
     }
+  }
+
+  /// A summary was deleted (here or on another device): drop it from the list and close it if open.
+  void _forget(String id) {
+    if (!mounted) return;
+    setState(() {
+      _history = [for (final h in _history) if ('${h['id']}' != id) h];
+      if ('${_done?['summary_id']}' == id) {
+        _done = null;
+        _phase = 'idle';
+        _canDelete = false;
+      }
+    });
+  }
+
+  Future<void> _delete(String id) async {
+    final out = await showCommAiDeleteSheet(context, kind: 'chat', id: id);
+    if (out == null || !mounted) return;
+    _forget(id);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ลบสรุปแชทแล้ว'))));
   }
 
   Future<void> _postToChat(Map<String, dynamic> r) async {
@@ -225,7 +261,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              Text(tr('ISAAC สรุปแชท'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(tr('ไอแซคสรุปแชท'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const IsaacBadge(),
             ]),
             Text('${widget.roomName} · ${tr('เวลาประเทศไทย')}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: hint, fontSize: 12)),
@@ -256,31 +292,34 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
         Expanded(child: _dateField('ถึง', _range.$2, false)),
       ]),
       const SizedBox(height: 12),
-      Row(children: [
-        Expanded(
-          child: DecoratedBox(
-            decoration: BoxDecoration(gradient: busy ? null : kIsaacGradient, borderRadius: BorderRadius.circular(14)),
-            child: FilledButton.icon(
-              key: const ValueKey('chat-summary-run'),
-              style: FilledButton.styleFrom(backgroundColor: busy ? null : Colors.transparent, shadowColor: Colors.transparent, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              onPressed: busy ? null : () => _run(),
-              icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.sparkle),
-              label: Text(busy ? tr('ISAAC กำลังสรุป…') : tr('ให้ ISAAC สรุปช่วงเวลานี้')),
+      if (!_available)
+        const IsaacTip('ธุรกิจนี้ยังไม่ได้เปิดแพ็กเกจไอแซคเอไอ การสื่อสาร — ดูประวัติเดิมได้ แต่สรุปหรือแชร์ใหม่ไม่ได้', mood: 'shrug', key: ValueKey('comm-ai-unavailable'))
+      else
+        Row(children: [
+          Expanded(
+            child: DecoratedBox(
+              decoration: BoxDecoration(gradient: busy ? null : kIsaacGradient, borderRadius: BorderRadius.circular(14)),
+              child: FilledButton.icon(
+                key: const ValueKey('chat-summary-run'),
+                style: FilledButton.styleFrom(backgroundColor: busy ? null : Colors.transparent, shadowColor: Colors.transparent, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                onPressed: busy ? null : () => _run(),
+                icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.sparkle),
+                label: Text(busy ? tr('ไอแซคกำลังสรุป…') : tr('ให้ไอแซคสรุปช่วงเวลานี้')),
+              ),
             ),
           ),
-        ),
-        if (_phase == 'done') ...[
-          const SizedBox(width: 8),
-          IconButton.outlined(tooltip: tr('สรุปใหม่'), icon: const Icon(NxI.arrowsClockwise, size: 18), onPressed: () => _run(force: true)),
-        ],
-      ]),
+          if (_phase == 'done') ...[
+            const SizedBox(width: 8),
+            IconButton.outlined(tooltip: tr('สรุปใหม่'), icon: const Icon(NxI.arrowsClockwise, size: 18), onPressed: () => _run(force: true)),
+          ],
+        ]),
       const SizedBox(height: 14),
       if (_phase == 'loading')
         CommAiIsaacState(
           mood: 'reading',
           busy: true,
           size: 80,
-          title: _stage == 'map' ? 'ข้อความเยอะ ISAAC กำลังแบ่งอ่านทีละส่วน…' : _stage == 'reduce' ? 'ISAAC กำลังรวมสรุป…' : 'ISAAC กำลังอ่านข้อความ…',
+          title: _stage == 'map' ? 'ข้อความเยอะ ไอแซคกำลังแบ่งอ่านทีละส่วน…' : _stage == 'reduce' ? 'ไอแซคกำลังรวมสรุป…' : 'ไอแซคกำลังอ่านข้อความ…',
         ),
       if (_phase == 'streaming')
         ValueListenableBuilder<String>(
@@ -299,7 +338,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
         CommAiIsaacState(
           mood: 'searching',
           size: 80,
-          title: 'ISAAC ไม่พบข้อความในช่วงเวลานี้',
+          title: 'ไอแซคไม่พบข้อความในช่วงเวลานี้',
           action: _preset == '7d'
               ? null
               : OutlinedButton.icon(
@@ -312,13 +351,21 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
                   label: Text(tr('ลองดู 7 วันล่าสุด')),
                 ),
         ),
-      if (_phase == 'error') CommAiIsaacState(mood: 'error', size: 80, title: 'ISAAC สรุปไม่สำเร็จ', message: _error),
+      if (_phase == 'error') CommAiIsaacState(mood: 'error', size: 80, title: 'ไอแซคสรุปไม่สำเร็จ', message: _error),
       if (_phase == 'done' && result != null) ...[
         Row(children: [
           Expanded(
             child: Text('${tr('จาก')} ${_done!['message_count'] ?? '-'} ${tr('ข้อความ')}${_done!['cached'] == true ? ' · ${tr('ผลที่บันทึกไว้')}' : ''}', style: TextStyle(fontSize: 12, color: hint)),
           ),
-          if (_done!['summary_id'] != null)
+          if (_done!['summary_id'] != null && _canDelete)
+            IconButton(
+              key: const ValueKey('chat-summary-delete'),
+              tooltip: tr('ลบสรุปแชทนี้'),
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(NxI.trash, size: 18),
+              onPressed: () => _delete('${_done!['summary_id']}'),
+            ),
+          if (_done!['summary_id'] != null && _available)
             TextButton.icon(
               icon: const Icon(NxI.shareNetwork, size: 16),
               label: Text(tr('แชร์')),
@@ -332,7 +379,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
           ),
         ]),
         const SizedBox(height: 6),
-        CommAiSummaryView(result: result, sourceNote: '${tr('จากสรุปแชท')}: ${widget.roomName}'),
+        CommAiSummaryView(key: ValueKey('chat-summary-view-${_done!['summary_id']}'), result: result, summaryId: _done!['summary_id']?.toString(), sourceNote: '${tr('จากสรุปแชท')}: ${widget.roomName}'),
       ],
       if (_phase == 'idle' && _history.isNotEmpty) ...[
         const CommAiSectionTitle('สรุปก่อนหน้า', icon: NxI.clockCounterClockwise),

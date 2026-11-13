@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nextx_mobile/screens/calls/call_overlay.dart';
@@ -285,5 +286,53 @@ void main() {
     await tester.pump();
     expect(find.byKey(const ValueKey('call-screen')), findsNothing);
     await tester.pump(const Duration(seconds: 5)); // notice timers
+  });
+
+  testWidgets('overlay: an open keyboard is closed when ringing (callee) and when calling (caller)', (tester) async {
+    final focus = FocusNode();
+    Widget app() => MaterialApp(
+          home: Stack(children: [
+            Scaffold(body: Center(child: TextField(key: const ValueKey('chat-input'), focusNode: focus))),
+            Positioned.fill(child: CallOverlay(service: svc)),
+          ]),
+        );
+    final hides = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.textInput, (call) async {
+      hides.add(call.method);
+      return null;
+    });
+    await tester.pumpWidget(app());
+
+    // Callee: typing in the chat when the ring arrives.
+    await tester.tap(find.byKey(const ValueKey('chat-input')));
+    await tester.pump();
+    expect(focus.hasFocus, isTrue);
+    hides.clear();
+    sig.push('rtc:ring', {..._call(), 'caller_id': 4, 'caller_name': '[QA] Third'});
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('call-incoming')), findsOneWidget);
+    expect(focus.hasFocus, isFalse, reason: 'keyboard closed for the ringing screen');
+    expect(hides, contains('TextInput.hide'));
+    await tester.tap(find.byKey(const ValueKey('call-decline')));
+    await tester.pump();
+
+    // Caller: keyboard open, then starts a call.
+    await tester.tap(find.byKey(const ValueKey('chat-input')));
+    await tester.pump();
+    expect(focus.hasFocus, isTrue);
+    hides.clear();
+    sig.acks['rtc:start'] = {'ok': true, 'call': _call(media: 'audio')};
+    await svc.start(roomId: '1', roomTitle: '[QA] Second', video: false);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('call-screen')), findsOneWidget);
+    expect(focus.hasFocus, isFalse, reason: 'keyboard closed for the calling screen');
+    expect(hides, contains('TextInput.hide'));
+    await tester.tap(find.byKey(const ValueKey('call-end')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.textInput, null);
+    focus.dispose();
   });
 }

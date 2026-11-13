@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -33,8 +34,10 @@ import '../../core/recent_records.dart';
 import '../../core/detail_fields_pref.dart';
 import '../../core/journey_rules.dart';
 import '../../core/service_journey.dart';
+import '../../core/status_labels.dart';
 import '../journey/case_flows.dart';
 import '../docs/document_preview.dart';
+import '../docs/document_tab.dart';
 import '../../core/deal_stage.dart';
 import '../fsm/contract_flows.dart';
 import '../fsm/service_more.dart';
@@ -52,10 +55,13 @@ import 'package:share_plus/share_plus.dart';
 import '../../widgets/nx_refresh.dart';
 
 class EntityDetailScreen extends StatefulWidget {
-  const EntityDetailScreen({super.key, required this.module, required this.row, this.embedded = false, this.onDeleted, this.initialTab});
+  const EntityDetailScreen({super.key, required this.module, required this.row, this.embedded = false, this.onDeleted, this.initialTab, this.focusCommentId});
 
   /// Open on this tab (e.g. 'approval' from an approval notification).
   final String? initialTab;
+
+  /// Comment to highlight on the comments tab (mention notification).
+  final String? focusCommentId;
 
   final String module;
   final Map<String, dynamic> row;
@@ -91,11 +97,28 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   /// Current tab id (tabs differ per module / journey).
   late String _tabId = widget.initialTab ?? (widget.module == 'inspection' ? 'insp-summary' : 'info');
 
+  /// Comments tab: composer state (sticky at the bottom while the tab is open).
+  late final NxCommentsController _commentsCtl;
+
+  /// After posting / editing / deleting a comment: only the comments are fetched again.
+  Future<void> _reloadComments() async {
+    try {
+      final list = await context.read<AppConfig>().apiClient.getEntityComments(widget.module, _id);
+      if (mounted) setState(() => _comments = list);
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _row = Map<String, dynamic>.from(widget.row);
+    _commentsCtl = entityCommentsController(context, module: widget.module, id: _id, onChanged: _reloadComments);
     _reload();
+    // Opened straight on the history tab (deep link / "ดูประวัติ"): load it now,
+    // since only switching tabs loads it otherwise.
+    if (_tabId == 'history') WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _loadTimeline(); });
     _probeJourney();
     if (widget.module == 'case') _loadFollow();
     if (context.read<AppConfig>().isLoggedIn) {
@@ -123,6 +146,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     _paneScroll.dispose();
     _leftScroll.dispose();
     _jc?.dispose();
+    _commentsCtl.dispose();
     super.dispose();
   }
 
@@ -133,12 +157,26 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final ok = await ServiceJourney.supported(config.apiClient);
     if (!ok || !mounted) return;
     final jc = JourneyController(api: config.apiClient, module: widget.module, id: _id)..addListener(_onJourney);
+    final first = widget.initialTab ?? 'summary';
     setState(() {
       _journey = true;
       _jc = jc;
-      _tabId = widget.initialTab ?? 'summary';
+      _tabId = _jobSections.containsKey(first) && widget.module == 'job' ? 'summary' : first;
     });
     jc.load();
+    // Opened on a section that now lives in the job summary (old links).
+    if (widget.module == 'job' && _jobSections.containsKey(first)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => Future<void>.delayed(const Duration(milliseconds: 400), () => _scrollToSection(first)));
+    }
+  }
+
+  /// Job summary sections that used to be tabs (ปฏิบัติงาน / กิจกรรม / ลายเซ็น).
+  final Map<String, GlobalKey> _jobSections = {'ops': GlobalKey(), 'activities': GlobalKey(), 'signatures': GlobalKey()};
+
+  void _scrollToSection(String id) {
+    final ctx = _jobSections[id]?.currentContext;
+    if (ctx == null || !mounted) return;
+    Scrollable.ensureVisible(ctx, alignment: 0.06, duration: const Duration(milliseconds: 380), curve: Curves.easeOutCubic);
   }
 
   void _onJourney() {
@@ -146,6 +184,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   }
 
   void _goTab(String id) {
+    if (_journey && widget.module == 'job' && _jobSections.containsKey(id)) {
+      // Merged into the summary: stay there and scroll to the section.
+      if (!_wide) setState(() => _tabId = 'summary');
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSection(id));
+      return;
+    }
     setState(() => _tabId = id);
     if (id == 'history') _loadTimeline();
   }
@@ -208,14 +252,20 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
 
   List<(String, String)> _allTabs() {
     const comments = 'คอมเม้นท์';
+    // เอกสาร: the web's template document (quotation / job), for users who have the menu.
+    final doc = _hasDocumentTab ? [('document', 'เอกสาร')] : const <(String, String)>[];
     if (_journey && widget.module == 'job') {
-      return [('summary', 'สรุป'), ('ops', 'ปฏิบัติงาน'), ('activities', 'กิจกรรม'), ('signatures', 'ลายเซ็น'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
+      // ปฏิบัติงาน / กิจกรรม / ลายเซ็น are sections of the summary page.
+      return [('summary', 'สรุป'), ...doc, ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
     }
     if (_journey && widget.module == 'quotation') {
-      return [('summary', 'สรุป'), ('lines', 'รายการ'), ('approval', 'อนุมัติ'), ('activities', 'กิจกรรม'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
+      return [('summary', 'สรุป'), ...doc, ('lines', 'รายการ'), ('approval', 'อนุมัติ'), ('activities', 'กิจกรรม'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
     }
-    return [if (widget.module == 'inspection') ...[('insp-summary', 'สรุป'), ('checklist', 'รายการตรวจ')], ('info', 'ข้อมูล'), ('comments', comments), ('files', 'ไฟล์'), ('history', 'ประวัติ'), if (widget.module != 'activity') ('activities', 'กิจกรรม')];
+    return [if (widget.module == 'inspection') ...[('insp-summary', 'สรุป'), ('checklist', 'รายการตรวจ')], ('info', 'ข้อมูล'), ...doc, ('comments', comments), ('files', 'ไฟล์'), ('history', 'ประวัติ'), if (widget.module != 'activity') ('activities', 'กิจกรรม')];
   }
+
+  bool get _hasDocumentTab =>
+      (widget.module == 'quotation' || widget.module == 'job') && MenuAccess.allow(context.read<AppConfig>().session, widget.module);
 
   /// Case watchers: whether I follow this case (server supports cases only).
   bool? _following;
@@ -364,6 +414,14 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     return value;
   }
 
+  /// History field label from the module's field metadata ('' when unknown).
+  String _historyFieldLabel(String field) {
+    for (final f in _fields) {
+      if (fieldName(f) == field) return fieldLabel(f);
+    }
+    return '';
+  }
+
   /// Record names for ids in the history (`1591 → 1592` becomes account names).
   final Map<String, String> _refNames = {};
 
@@ -470,23 +528,43 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       _timelineLoaded = false;
       return;
     }
+    // Ask first (current → new, impact; deal "แพ้" needs a reason).
+    final options = EntityRecordActions.statusOptions(widget.module, key, _picklists, current: _row[key]?.toString());
+    final ok = await EntityRecordActions.confirmStatus(context, module: widget.module, row: _row, options: options, from: _row[key]?.toString(), to: value);
+    if (ok == null || !mounted) return;
     Map<String, dynamic> payload = {key: value};
-    if (widget.module == 'deal' && key == 'deal_stage') {
-      String? lost;
-      if (value == kDealClosedLost) {
-        lost = await askDealLostReason(context, current: '${_row['closed_reason'] ?? ''}');
-        if (lost == null || !mounted) return;
-      }
-      payload = dealStagePayload(value, lostReason: lost);
-    }
     final before = _row[key];
+    Map<String, dynamic> back = {key: before};
+    if (widget.module == 'deal' && key == 'deal_stage') {
+      payload = dealStagePayload(value, lostReason: value == kDealClosedLost ? ok.note : null);
+      if (before != null) back = {...dealStagePayload('$before'), if (_row.containsKey('probability')) 'probability': _row['probability']};
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    final api = context.read<AppConfig>().apiClient;
+    final label = options.where((o) => o.value == value).firstOrNull?.label ?? value;
     setState(() => _row = {..._row, ...payload});
     try {
-      await context.read<AppConfig>().apiClient.putEntity(widget.module, _id, payload);
+      await api.putEntity(widget.module, _id, payload);
       if (widget.module == 'deal' && value == kDealClosedWon && '${_row['related_board_id'] ?? ''}'.isEmpty && mounted) {
         // Like the web: offer a delivery board right after winning.
         showDealWorkspaceHandoff(context, _id, afterWon: true);
       }
+      showNxStatusChangedSnack(
+        messenger,
+        label: label,
+        undo: before == null
+            ? null
+            : () async {
+                if (mounted) setState(() => _row = {..._row, ...back});
+                try {
+                  await api.putEntity(widget.module, _id, back);
+                  _timelineLoaded = false;
+                } catch (e) {
+                  if (mounted) setState(() => _row = {..._row, ...payload});
+                  messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+                }
+              },
+      );
       _timelineLoaded = false;
       if (_tabId == 'history') _loadTimeline(force: true);
     } catch (e) {
@@ -626,6 +704,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final people = entityPeopleLine(_row);
     final status = entityStatus(_row);
 
+    final loggedIn = context.select((AppConfig c) => c.isLoggedIn);
     final perms = EntityRowPerms.of(widget.module, _row);
     final canEdit = (_editableFields().isNotEmpty || _fields.isEmpty) && perms.canEdit;
     final canConvert = widget.module == 'lead' && perms.canEdit && !EntityRowPerms.leadLocked(_row) && !_loading;
@@ -677,7 +756,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ],
-                if (status != null && statusOptions.isEmpty && !_journey) ...[const SizedBox(height: 10), Chip(label: Text(tr(status)), visualDensity: VisualDensity.compact)],
+                if (status != null && statusOptions.isEmpty && !_journey) ...[const SizedBox(height: 10), Chip(label: Text(statusValueLabel(status, module: widget.module)), visualDensity: VisualDensity.compact)],
                 const SizedBox(height: 12),
                 EntityQuickActions(row: _row, onDuplicate: canEdit ? _duplicate : null),
                 if (canConvert) ...[
@@ -761,8 +840,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
               key: ValueKey(bodyTab),
               child: switch (bodyTab) {
                 'summary' => _journeySummary(canEdit, session),
-                'ops' => _jobOps(canEdit, session),
-                'signatures' => JobSignaturesTab(jobId: _id, ctrl: _jc!, canEdit: canEdit, row: _row, onChanged: _reload),
+                'document' => RecordDocumentTab(
+                  key: ValueKey('doc-tab-${widget.module}-$_id-${_row['modifiedtime'] ?? ''}'),
+                  module: widget.module,
+                  row: {..._row, 'id': _id},
+                  canEmail: perms.canEdit && loggedIn,
+                ),
                 'lines' => _quotationLines(canEdit),
                 'approval' => QuotationApprovalTab(row: _row, ctrl: _jc!, meId: int.tryParse(session.userId ?? ''), canEdit: canEdit, onAction: _journeyAction),
                 'checklist' => InspectionLinesEditor(inspectionId: _id, canEdit: canEdit),
@@ -774,9 +857,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   onChangeStatus: canEdit ? _pickStatus : null,
                   statusLabel: _pickOptions('inspection_status').where((o) => o.value == '${_row['inspection_status'] ?? ''}').firstOrNull?.label,
                 ),
-                'comments' => EntityCommentsPanel(module: widget.module, id: _id, comments: _comments, onChanged: _reload),
+                'comments' => EntityCommentsPanel(
+                  module: widget.module,
+                  id: _id,
+                  comments: _comments,
+                  onChanged: _reloadComments,
+                  controller: loggedIn ? _commentsCtl : null,
+                  focusCommentId: widget.focusCommentId,
+                ),
                 'files' => EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
-                'history' => EntityHistoryPanel(events: _timeline, loading: _timelineLoading, valueLabel: _valueLabel),
+                'history' => EntityHistoryPanel(events: _timeline, loading: _timelineLoading, valueLabel: _valueLabel, fieldLabel: _historyFieldLabel, module: widget.module),
                 'activities' => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -870,12 +960,19 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
 
     return NxScrollScaffold(
       insetBody: false,
+      // Comments tab: the composer stays at the bottom and rises with the keyboard.
+      bottomNavigationBar: loggedIn && !_loading && _tabsResolved() == 'comments' ? NxCommentComposer(controller: _commentsCtl, sticky: true) : null,
       header: NxAppHeader(
         title: title,
         automaticallyImplyLeading: !widget.embedded,
         actions: [
           if (widget.module == 'quotation' || widget.module == 'inspection' || widget.module == 'job') ...[
-            IconButton(tooltip: tr('ดูเอกสาร PDF'), icon: const Icon(NxI.filePdf), onPressed: () => openRecordDocument(context, widget.module, {..._row, 'id': _id})),
+            IconButton(
+              tooltip: tr('ดูเอกสาร PDF'),
+              icon: const Icon(NxI.filePdf),
+              // Quotation / job: the เอกสาร tab (template document + e-mail).
+              onPressed: _hasDocumentTab ? () => _goTab('document') : () => openRecordDocument(context, widget.module, {..._row, 'id': _id}),
+            ),
           ],
           if (canEdit) IconButton(tooltip: tr('แก้ไข'), icon: const Icon(NxI.pencilSimple), onPressed: () => _openEdit(context)),
         ],
@@ -886,7 +983,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 NxHeaderMenuItem(label: 'แชร์ลิงก์', icon: NxI.shareNetwork, onTap: _shareLink),
                 NxHeaderMenuItem(label: 'แชร์ให้ผู้ใช้ / Role', icon: NxI.users, onTap: () => showEntityShareSheet(context, module: widget.module, id: _id, title: entityTitle(_row, module: widget.module))),
                 NxHeaderMenuItem(
-                  label: 'ถาม Isaac',
+                  label: 'ถามไอแซค',
                   icon: NxI.sparkle,
                   onTap: () => context.push(
                     AppRoutes.aiAsk(
@@ -1003,6 +1100,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     'approval': NxI.shieldCheck,
     'checklist': NxI.listChecks,
     'insp-summary': NxI.chartPie,
+    'document': NxI.fileText,
   };
 
   Widget _tabBar() {
@@ -1027,11 +1125,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       final cur = _row['job_status'];
       final allowed = jobWorkflowActions(cur);
       final cancelled = canonicalJobStatus(cur) == 'Cancelled';
+      // "ยกเลิกงาน" is the last, terminal stage of the row (not a chip below).
       return JourneyStageStrip(
         steps: jobSteps(),
         current: jobCurrentStep(_row),
-        side: cancelled ? 'cancelled' : null,
-        sideLabel: jobSideLabel(_row),
+        terminal: (
+          'Cancelled',
+          cancelled ? jobStatusLabel('Cancelled') : tr('ยกเลิกงาน'),
+          cancelled,
+          canEdit && !_jBusy && allowed.contains('cancel') ? () => _journeyAction('cancel') : null,
+        ),
         onPick: !canEdit || _jBusy
             ? null
             : (i) {
@@ -1042,7 +1145,6 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ขั้นนี้ทำต่อจากสถานะปัจจุบันไม่ได้'))));
                 }
               },
-        sideChips: [if (canEdit && allowed.contains('cancel')) ('cancel', tr('ยกเลิกงาน'), () => _journeyAction('cancel'))],
       );
     }
     final jc = _jc!;
@@ -1073,7 +1175,31 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final jc = _jc;
     if (jc == null) return const SizedBox.shrink();
     if (widget.module == 'job') {
-      return JobSummaryTab(row: _row, ctrl: jc, canEdit: canEdit, busy: _jBusy, onAction: _journeyAction, onGoTab: _goTab, onReload: _reload, onOpen: _openRecord);
+      return JobSummaryTab(
+        row: {..._row, 'id': _id},
+        ctrl: jc,
+        canEdit: canEdit,
+        busy: _jBusy,
+        onAction: _journeyAction,
+        onGoTab: _goTab,
+        onReload: _reload,
+        onOpen: _openRecord,
+        sectionKeys: _jobSections,
+        fieldOps: _jobOps(canEdit, session),
+        users: _users,
+        picklists: _picklists,
+        reloadToken: _row['modifiedtime'],
+        onCreateActivity: canEdit
+            ? () async {
+                final ok = await _createLinkedActivity();
+                if (ok == true) {
+                  await _reload();
+                  jc.load();
+                }
+              }
+            : null,
+        onSaveActivityTemplate: canEdit ? _saveActivitiesAsTemplate : null,
+      );
     }
     return QuotationSummaryTab(
       row: _row,
@@ -1090,17 +1216,25 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     );
   }
 
+  /// "งานสนาม" card of the job summary: PDF, schedule, matching technicians,
+  /// skills, parts, Workspace and the job's inspection.
   Widget _jobOps(bool canEdit, SessionState session) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        JobExtrasPanel(id: _id, row: _row, canEdit: canEdit, onOpen: (module, id, {row}) => _openRecord(module, id)),
-        if (canEdit) ...[const SizedBox(height: 12), JobWorkspaceButton(jobId: _id)],
+    return JobExtrasPanel(
+      id: _id,
+      row: {..._row, 'id': _id},
+      canEdit: canEdit,
+      sectioned: true,
+      onOpen: (module, id, {row}) => _openRecord(module, id),
+      extra: [
+        if (canEdit) ...[const SizedBox(height: 12), Align(alignment: Alignment.centerLeft, child: JobWorkspaceButton(jobId: _id))],
         if (MenuAccess.allow(session, MenuAccess.inspection)) ...[
-          const SizedBox(height: 16),
-          NxHeroCta(
-            label: 'ใบตรวจรับของงานนี้',
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            key: const ValueKey('job-inspection-cta'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
             onPressed: () => nxPush<void>(context, JobInspectionScreen(job: _row)),
+            icon: const Icon(NxI.clipboardText, size: 18),
+            label: Text(tr('ใบตรวจรับของงานนี้')),
           ),
         ],
       ],
@@ -1244,6 +1378,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         keys.add(k);
       }
     }
+    // Product / service discount: the type (บาท / %) is shown with the number, not as its own row.
+    keys.removeWhere((k) => RegExp(r'^(product|service)_discount_type$').hasMatch(k));
     _allFieldCount = keys.length;
     // Default: only fields that have a value; "ทั้งหมด" shows every field.
     if (!_showAllFields) {
@@ -1269,10 +1405,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
           if (related != null && uiType.entityModule == null) {
             uiType = _selectTypeForModule(related);
           }
+          final discount = catalogDiscountText(name, _row);
+          if (discount != null) uiType = FieldUiType.text;
           return NxFieldValueView(
             uiType: uiType,
             label: _labelFor(name),
-            value: _row[name],
+            value: discount ?? _row[name],
             fieldName: name,
             module: widget.module,
             relatedModule: related,
@@ -1387,4 +1525,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final saved = await EntityRecordActions.edit(context, module: widget.module, row: _row, fields: _fields, picklists: _picklists);
     if (saved && context.mounted) _reload();
   }
+}
+
+
+/// `product_discount` / `service_discount` with its type: "15%" or "฿100" (null for other fields).
+String? catalogDiscountText(String field, Map<String, dynamic> row) {
+  if (!RegExp(r'^(product|service)_discount$').hasMatch(field)) return null;
+  final raw = row[field];
+  if (raw == null || '$raw'.trim().isEmpty) return null;
+  final n = num.tryParse('$raw'.replaceAll(',', ''));
+  if (n == null) return null;
+  final text = n == n.roundToDouble() ? n.toInt().toString() : n.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
+  return '${row['${field}_type'] ?? ''}' == 'percent' ? '$text%' : '฿$text';
 }

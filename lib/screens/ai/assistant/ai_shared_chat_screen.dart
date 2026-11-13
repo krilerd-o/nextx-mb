@@ -58,7 +58,7 @@ class _AiSharedChatScreenState extends State<AiSharedChatScreen> {
         preferredSize: const Size.fromHeight(64),
         child: SafeArea(
           bottom: false,
-          child: NxAppHeader(title: title.isEmpty ? tr('แชทที่แชร์') : title, subtitle: tr('แชร์จาก ISAAC AI · อ่านอย่างเดียว')),
+          child: NxAppHeader(title: title.isEmpty ? tr('แชทที่แชร์') : title, subtitle: tr('แชร์จากไอแซคเอไอ · อ่านอย่างเดียว')),
         ),
       ),
       body: _error != null

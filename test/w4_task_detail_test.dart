@@ -109,7 +109,24 @@ void main() {
   testWidgets('tapping a status step updates status_id', (tester) async {
     final adapter = await pump(tester);
     await tester.tap(find.byKey(const ValueKey('ws-step-2')));
-    await tester.pump(const Duration(milliseconds: 300));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    // R66: asks first; cancel sends nothing.
+    expect(find.text('เปลี่ยนสถานะ?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('status-confirm-cancel')));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(adapter.callKeys, isNot(contains('PUT /api/boards/1/tasks/1')));
+    await tester.tap(find.byKey(const ValueKey('ws-step-2')));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.tap(find.byKey(const ValueKey('status-confirm-ok')));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     expect(_body(adapter, 'PUT /api/boards/1/tasks/1'), {'status_id': 2});
   });
 
@@ -128,6 +145,7 @@ void main() {
   testWidgets('comment send and like', (tester) async {
     final adapter = await pump(tester);
     await tester.enterText(find.byKey(const ValueKey('ws-comment-input')), '[QA] ความเห็นใหม่');
+    await tester.pump(); // send turns on once there is text (R72)
     await tester.tap(find.byKey(const ValueKey('ws-comment-send')));
     await tester.pump(const Duration(milliseconds: 300));
     expect('${_body(adapter, 'POST /api/boards/1/tasks/1/comments')['body']}', contains('[QA] ความเห็นใหม่'));

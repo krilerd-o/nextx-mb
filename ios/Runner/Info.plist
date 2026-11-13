@@ -61,7 +61,7 @@
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>แปลงเสียงพูดเป็นข้อความเมื่อถามผู้ช่วย AI</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>ใช้ไมโครโฟนอัดเสียงประชุมใน AI Minute Auto และข้อความเสียงถึงผู้ช่วย AI</string>
+	<string>ใช้ไมโครโฟนสำหรับโทรและวิดีโอคอล, ถอดเสียงสนทนาเป็นข้อความและบันทึกเสียงในสาย (เมื่อคุณยินยอม) เพื่อให้ ISAAC สรุปการโทร, อัดเสียงประชุมใน AI Minute Auto และข้อความเสียง</string>
 	<key>NSCameraUsageDescription</key>
 	<string>ใช้กล้องถ่ายหลักฐานเช็คอินและใบตรวจ</string>
 	<key>NSPhotoLibraryUsageDescription</key>

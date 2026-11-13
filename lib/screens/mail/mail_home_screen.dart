@@ -20,6 +20,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
 import '../../core/html_display.dart';
 import '../../widgets/nx_html_view.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_create_fab.dart';
 import 'mail_compose_screen.dart';
@@ -635,6 +636,18 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
                 );
                 return false;
               }
+              // Delete asks first (accidental swipe); cancel snaps the row back.
+              final subject = '${m['subject'] ?? ''}'.trim();
+              final ok = await showDeleteConfirm(
+                context,
+                name: subject.isEmpty ? tr('อีเมลนี้') : subject,
+                loses: _box == 'trash'
+                    ? const ['อีเมลและไฟล์แนบจะถูกลบถาวร กู้คืนไม่ได้']
+                    : const ['อีเมลจะย้ายไปถังขยะ (กู้คืนได้จากถังขยะ)'],
+                note: null,
+                confirmLabel: _box == 'trash' ? 'ลบถาวร' : 'ลบ',
+              );
+              if (!ok || !mounted) return false;
               _rowAction(
                 () => api.deleteMail(
                   id,

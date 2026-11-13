@@ -1,10 +1,9 @@
-import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/history_events.dart';
 import '../../core/html_display.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
@@ -14,10 +13,11 @@ import '../../widgets/nx_scroll_tabs.dart';
 import '../../widgets/nx_timeline.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_html_view.dart';
-import '../../widgets/nx_attachments.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
-import '../mail/mail_compose_screen.dart' show plainTextToHtml;
+import '../../widgets/comments/nx_comment_composer.dart';
+import '../../widgets/comments/nx_comment_thread.dart';
+import '../../widgets/comments/nx_comments_controller.dart';
 import 'ws_detail_parts.dart';
 
 /// Lookups the history uses to turn ids into names.
@@ -88,7 +88,7 @@ class WsLookups {
     case 'assignee_change':
       return (icon: NxI.user, text: tr('เปลี่ยนผู้รับผิดชอบ'), from: l.user(oldV), to: l.user(newV));
     case 'comment':
-      return (icon: NxI.chatCircle, text: tr('คอมเม้นท์'), from: null, to: val(newV));
+      return (icon: NxI.chatCircle, text: historyText('เพิ่มคอมเมนต์'), from: null, to: val(newV));
     case 'worklog':
       return (icon: NxI.clock, text: tr('ลงเวลา ${newV ?? ''}').trim(), from: null, to: null);
     case 'worklog_update':
@@ -100,8 +100,21 @@ class WsLookups {
     case 'field_change':
       if (field == 'description') return (icon: NxI.pencilSimple, text: tr('แก้ไขคำอธิบาย'), from: null, to: null);
       return (icon: NxI.pencilSimple, text: tr('แก้ไข ${wsFieldLabel(field)}'), from: val(oldV) ?? tr('ว่าง'), to: val(newV) ?? tr('ว่าง'));
+    // Jira import: summary / description edits.
+    case 'edit':
+      return (icon: NxI.pencilSimple, text: tr('แก้ไข ${wsFieldLabel(field)}'), from: null, to: null);
+    case 'delete' || 'deleted':
+      return (icon: NxI.trash, text: tr('ลบรายการ'), from: null, to: null);
+    // workspaceSoftDelete: new_value = the item's title.
+    case 'trash_delete':
+      return (icon: NxI.trash, text: historyText('ย้ายไปถังขยะ'), from: null, to: val(newV));
+    case 'trash_restore':
+      return (icon: NxI.arrowCounterClockwise, text: historyText('กู้คืนจากถังขยะ'), from: null, to: val(newV));
   }
-  return (icon: NxI.info, text: action.replaceAll('_', ' '), from: val(oldV), to: val(newV));
+  // Unknown action: a readable title, never the raw key.
+  final t = historyActionTitle(action);
+  if (!t.known && kDebugMode) debugPrint('[history] unknown workspace action "$action"');
+  return (icon: t.kind == HistoryKind.other ? NxI.info : kHistoryKindStyle[t.kind]!.$1, text: t.title, from: val(oldV), to: val(newV));
 }
 
 /// Activity area under the task: comments / time logs / change history.
@@ -136,12 +149,14 @@ class WsActivityPanelState extends State<WsActivityPanel> {
   List<Map<String, dynamic>>? _comments;
   List<Map<String, dynamic>>? _logs;
   List<Map<String, dynamic>>? _history;
-  final _composer = TextEditingController();
-  final _composerFocus = FocusNode();
-  Map<String, dynamic>? _replyTo;
-  Map<String, dynamic>? _editing;
-  List<Map<String, dynamic>> _pendingFiles = [];
-  bool _sending = false;
+
+  /// Comments: same composer / thread as record comments, with likes (the web's workspace thread).
+  late final NxCommentsController _comments$ = NxCommentsController(
+    api: NxCommentsApi.workspace(_api, widget.boardId, widget.kind, widget.itemId),
+    onChanged: () => Future.wait([_loadComments(), _loadHistory()]),
+    meId: widget.meId,
+    keyPrefix: 'ws-',
+  );
 
   ApiClient get _api => context.read<AppConfig>().apiClient;
   bool get _isTask => widget.kind != 'epic';
@@ -155,8 +170,7 @@ class WsActivityPanelState extends State<WsActivityPanel> {
 
   @override
   void dispose() {
-    _composer.dispose();
-    _composerFocus.dispose();
+    _comments$.dispose();
     super.dispose();
   }
 
@@ -204,95 +218,6 @@ class WsActivityPanelState extends State<WsActivityPanel> {
 
   void _snack(String t) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(t))));
-  }
-
-  // ── comments
-  Future<void> _attach() async {
-    final picked = await FilePicker.platform.pickFiles(withData: true, allowMultiple: true);
-    final files = [
-      for (final f in picked?.files ?? const <PlatformFile>[])
-        if (f.bytes != null) MultipartFile.fromBytes(f.bytes!, filename: f.name),
-    ];
-    if (files.isEmpty) return;
-    setState(() => _sending = true);
-    try {
-      final up = await _api.uploadBoardAttachments(widget.boardId, files);
-      if (mounted) setState(() => _pendingFiles = [..._pendingFiles, ...up]);
-    } catch (e) {
-      _snack(formatApiError(e));
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  Future<void> _send() async {
-    final text = _composer.text.trim();
-    if (text.isEmpty && _pendingFiles.isEmpty) return;
-    setState(() => _sending = true);
-    try {
-      final html = plainTextToHtml(text);
-      if (_editing != null) {
-        await _api.updateItemComment(widget.boardId, widget.kind, widget.itemId, '${_editing!['id']}', html);
-      } else {
-        await _api.addItemComment(
-          widget.boardId,
-          widget.kind,
-          widget.itemId,
-          html,
-          parentId: _replyTo == null ? null : '${_replyTo!['parent_id'] ?? _replyTo!['id']}',
-          attachments: _pendingFiles,
-        );
-      }
-      HapticFeedback.lightImpact();
-      _composer.clear();
-      setState(() {
-        _replyTo = null;
-        _editing = null;
-        _pendingFiles = [];
-      });
-      await Future.wait([_loadComments(), _loadHistory()]);
-    } catch (e) {
-      _snack(formatApiError(e));
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
-  Future<void> _like(Map<String, dynamic> c) async {
-    HapticFeedback.selectionClick();
-    final i = _comments!.indexOf(c);
-    final liked = c['liked_by_me'] == true;
-    final count = wsInt(c['like_count']) ?? 0;
-    setState(() => _comments![i] = {...c, 'liked_by_me': !liked, 'like_count': count + (liked ? -1 : 1)});
-    try {
-      final r = await _api.toggleItemCommentLike(widget.boardId, widget.kind, widget.itemId, '${c['id']}');
-      if (mounted && r.isNotEmpty) {
-        setState(() => _comments![i] = {..._comments![i], 'liked_by_me': r['liked'] ?? !liked, 'like_count': r['like_count'] ?? count});
-      }
-    } catch (e) {
-      if (mounted) setState(() => _comments![i] = c);
-      _snack(formatApiError(e));
-    }
-  }
-
-  Future<void> _deleteComment(Map<String, dynamic> c) async {
-    final ok = await _confirm('ลบคอมเม้นท์นี้?');
-    if (!ok) return;
-    try {
-      await _api.deleteItemComment(widget.boardId, widget.kind, widget.itemId, '${c['id']}');
-      await _loadComments();
-    } catch (e) {
-      _snack(formatApiError(e));
-    }
-  }
-
-  void _startEdit(Map<String, dynamic> c) {
-    setState(() {
-      _editing = c;
-      _replyTo = null;
-      _composer.text = stripHtmlPreview('${c['body'] ?? ''}', maxLen: 100000);
-    });
-    _composerFocus.requestFocus();
   }
 
   Future<bool> _confirm(String q) async =>
@@ -377,196 +302,21 @@ class WsActivityPanelState extends State<WsActivityPanel> {
   }
 
   Widget _commentsList(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
     final list = _comments;
-    final roots = [for (final c in list ?? const <Map<String, dynamic>>[]) if (c['parent_id'] == null) c];
-    final replies = <String, List<Map<String, dynamic>>>{};
-    for (final c in list ?? const <Map<String, dynamic>>[]) {
-      if (c['parent_id'] != null) (replies['${c['parent_id']}'] ??= []).add(c);
-    }
+    if (list == null) return const NxSkeletonList(rows: 2);
+    // Composer first (the web's workspace thread), then the threads.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _composerBox(context),
-        const SizedBox(height: 12),
-        if (list == null) const NxSkeletonList(rows: 2),
-        if (list != null && list.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: Center(child: Text(tr('ยังไม่มีคอมเม้นท์'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant))),
-          ),
-        for (final c in roots) ...[
-          _comment(context, c),
-          for (final r in replies['${c['id']}'] ?? const <Map<String, dynamic>>[])
-            Padding(padding: const EdgeInsets.only(left: 40), child: _comment(context, r)),
-        ],
-        // Replies whose parent is gone still show.
-        for (final e in replies.entries)
-          if (!roots.any((c) => '${c['id']}' == e.key))
-            for (final r in e.value) _comment(context, r),
+        NxCommentComposer(controller: _comments$, enabled: _live),
+        const SizedBox(height: 14),
+        NxCommentThreadView(
+          comments: list,
+          controller: _comments$,
+          nameOf: widget.lookups.user,
+          emptyHint: 'เขียนจากช่องด้านบน — พิมพ์ @ เพื่อกล่าวถึง แนบรูป ไฟล์ หรือลิงก์ได้',
+        ),
       ],
-    );
-  }
-
-  Widget _composerBox(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final banner = _editing != null
-        ? tr('กำลังแก้ไขคอมเม้นท์')
-        : _replyTo != null
-            ? tr('ตอบกลับ ${_replyTo!['user_name'] ?? ''}')
-            : null;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (banner != null)
-            Row(children: [
-              Icon(_editing != null ? NxI.pencilSimple : NxI.reply, size: 14, color: cs.primary),
-              const SizedBox(width: 6),
-              Expanded(child: Text(banner, style: theme.textTheme.labelMedium?.copyWith(color: cs.primary))),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: tr('ยกเลิก'),
-                icon: const Icon(NxI.x, size: 16),
-                onPressed: () => setState(() {
-                  if (_editing != null) _composer.clear();
-                  _editing = null;
-                  _replyTo = null;
-                }),
-              ),
-            ]),
-          // Files waiting to be sent: thumbnails / cards with remove (like the web).
-          if (_pendingFiles.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-              child: NxAttachmentStrip(
-                key: const ValueKey('ws-comment-pending'),
-                items: _pendingFiles,
-                thumb: 64,
-                onRemove: (f) => setState(() => _pendingFiles = [..._pendingFiles]..remove(f)),
-              ),
-            ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: TextField(
-                  key: const ValueKey('ws-comment-input'),
-                  controller: _composer,
-                  focusNode: _composerFocus,
-                  minLines: 1,
-                  maxLines: 5,
-                  enabled: _live,
-                  decoration: InputDecoration(hintText: tr('เขียนคอมเม้นท์…'), border: InputBorder.none, isDense: true),
-                ),
-              ),
-              if (_editing == null)
-                IconButton(tooltip: tr('แนบไฟล์'), onPressed: _sending || !_live ? null : _attach, icon: const Icon(NxI.paperclip, size: 20)),
-              IconButton.filled(
-                key: const ValueKey('ws-comment-send'),
-                tooltip: tr('ส่ง'),
-                onPressed: _sending || !_live ? null : _send,
-                icon: _sending
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(NxI.paperPlaneTilt, size: 18),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _comment(BuildContext context, Map<String, dynamic> c) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final mine = widget.meId != null && '${c['user_id']}' == widget.meId;
-    final liked = c['liked_by_me'] == true;
-    final likes = wsInt(c['like_count']) ?? 0;
-    final name = '${c['user_name'] ?? widget.lookups.user(c['user_id'])}';
-    final files = c['attachments'] is List ? (c['attachments'] as List).whereType<Map>().toList() : const <Map>[];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          NxAvatar(label: name, size: 32),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Flexible(child: Text(name, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
-                  const SizedBox(width: 6),
-                  Text(wsDateTime(c['created_at']), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                ]),
-                const SizedBox(height: 2),
-                if (nxCommentHasText('${c['body'] ?? ''}')) NxHtmlView(html: '${c['body'] ?? ''}', style: theme.textTheme.bodyMedium),
-                if (files.isNotEmpty || nxInlineImages('${c['body'] ?? ''}').isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6, bottom: 2),
-                    child: NxAttachmentStrip(
-                      key: ValueKey('ws-comment-files-${c['id']}'),
-                      items: [for (final f in files) Map<String, dynamic>.from(f), ...nxInlineImages('${c['body'] ?? ''}')],
-                      thumb: 96,
-                    ),
-                  ),
-                Row(children: [
-                  _miniAction(
-                    key: ValueKey('ws-like-${c['id']}'),
-                    icon: NxI.heart,
-                    label: likes > 0 ? '$likes' : tr('ถูกใจ'),
-                    color: liked ? const Color(0xFFE11D48) : null,
-                    onTap: _live ? () => _like(c) : null,
-                  ),
-                  _miniAction(
-                    icon: NxI.reply,
-                    label: tr('ตอบกลับ'),
-                    onTap: _live
-                        ? () {
-                            setState(() {
-                              _replyTo = c;
-                              _editing = null;
-                            });
-                            _composerFocus.requestFocus();
-                          }
-                        : null,
-                  ),
-                  if (mine) ...[
-                    _miniAction(icon: NxI.pencilSimple, label: tr('แก้ไข'), onTap: () => _startEdit(c)),
-                    _miniAction(icon: NxI.trash, label: tr('ลบ'), color: cs.error, onTap: () => _deleteComment(c)),
-                  ],
-                ]),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _miniAction({Key? key, required IconData icon, required String label, Color? color, VoidCallback? onTap}) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      key: key,
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 14, color: color ?? cs.onSurfaceVariant),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 12, color: color ?? cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
-        ]),
-      ),
     );
   }
 

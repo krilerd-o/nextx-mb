@@ -1,4 +1,5 @@
 import 'html_display.dart';
+import 'status_labels.dart';
 import 'thai_time.dart';
 
 String _plain(dynamic v) {
@@ -158,7 +159,7 @@ String? entitySubtitle(Map<String, dynamic> row, {String? module}) {
   switch (module) {
     case 'quotation':
       final parts = [
-        _plain(row['quotation_status'] ?? row['status']),
+        statusValueLabel(_plain(row['quotation_status'] ?? row['status']), module: 'quotation'),
         _plain(row['grand_total']),
       ].where((e) => e.isNotEmpty).toList();
       if (parts.isNotEmpty) return parts.join(' · ');
@@ -183,7 +184,8 @@ String? entitySubtitle(Map<String, dynamic> row, {String? module}) {
   }
   final parts = <String>[];
   for (final k in ['email', 'email1', 'status', 'phone', 'mobile', 'phone_mobile', 'company', 'accountname']) {
-    final v = _plain(row[k]);
+    // Stored status words read in the current language ("Planned" → "วางแผน").
+    final v = k == 'status' ? statusValueLabel(_plain(row[k]), module: module) : _plain(row[k]);
     if (v.isNotEmpty) parts.add(v);
   }
   if (parts.isEmpty) return null;

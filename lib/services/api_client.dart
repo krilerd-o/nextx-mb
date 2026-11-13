@@ -269,6 +269,7 @@ class ApiClient {
     Object? data,
     Options? options,
     CancelToken? cancel,
+    ProgressCallback? onSendProgress,
   }) async {
     try {
       final isForm = data is FormData;
@@ -277,6 +278,7 @@ class ApiClient {
         queryParameters: query,
         data: data,
         cancelToken: cancel,
+        onSendProgress: onSendProgress,
         options: (options ?? Options()).copyWith(
           method: method,
           contentType: isForm ? null : options?.contentType,
@@ -292,7 +294,15 @@ class ApiClient {
     final res = e.response;
     if (res != null) {
       try {
-        return _envelopeError(res.statusCode ?? 0, res.data);
+        var raw = res.data;
+        // Byte downloads (PDF): the error envelope arrives as bytes — decode it
+        // so the server's message (e.g. the BIRT report error) reaches the user.
+        if (raw is List<int>) {
+          try {
+            raw = jsonDecode(utf8.decode(raw, allowMalformed: true));
+          } catch (_) {}
+        }
+        return _envelopeError(res.statusCode ?? 0, raw);
       } catch (err) {
         if (err is ApiEnvelopeException || err is ApiException) return err as Exception;
       }
@@ -311,6 +321,7 @@ class ApiClient {
           res.statusCode ?? 400,
           map['error_code']?.toString() ?? 'ERROR',
           map['message']?.toString() ?? res.statusMessage ?? 'Error',
+          details: asStringKeyedMap(map['details']),
         );
       }
       if ((res.statusCode ?? 200) >= 400) {
@@ -332,6 +343,7 @@ class ApiClient {
           statusCode,
           map['error_code']?.toString() ?? 'ERROR',
           map['message']?.toString() ?? 'Error',
+          details: asStringKeyedMap(map['details']),
         );
       }
     }
@@ -773,6 +785,56 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  // ── Thai address (same endpoints as the web's ThaiAddressPicker:
+  // GET /api/thai-address/*). Lists are static, so they are cached per run.
+  final Map<String, Object> _thaiAddrCache = {};
+
+  /// จังหวัด (names, Thai-sorted).
+  Future<List<String>> getThaiProvinces() async {
+    final hit = _thaiAddrCache['p'];
+    if (hit is List<String>) return hit;
+    final data = _dataMap(await _send('GET', '/api/thai-address/provinces'));
+    final out = [for (final v in (data['provinces'] as List? ?? const [])) '$v'];
+    if (out.isNotEmpty) _thaiAddrCache['p'] = out;
+    return out;
+  }
+
+  /// อำเภอ/เขต of [province].
+  Future<List<String>> getThaiDistricts(String province) async {
+    final k = 'd|$province';
+    final hit = _thaiAddrCache[k];
+    if (hit is List<String>) return hit;
+    final data = _dataMap(await _send('GET', '/api/thai-address/districts', query: {'province': province}));
+    final out = [
+      for (final v in (data['districts'] as List? ?? const []))
+        if (v is Map) '${v['name'] ?? ''}' else '$v',
+    ].where((s) => s.isNotEmpty).toList();
+    if (out.isNotEmpty) _thaiAddrCache[k] = out;
+    return out;
+  }
+
+  /// ตำบล/แขวง of [district]: `{name, postal_code, postal_codes?}`.
+  Future<List<Map<String, dynamic>>> getThaiSubdistricts(String province, String district) async {
+    final k = 's|$province|$district';
+    final hit = _thaiAddrCache[k];
+    if (hit is List<Map<String, dynamic>>) return hit;
+    final data = _dataMap(await _send('GET', '/api/thai-address/subdistricts', query: {'province': province, 'district': district}));
+    final out = extractMapList(data['subdistricts']);
+    if (out.isNotEmpty) _thaiAddrCache[k] = out;
+    return out;
+  }
+
+  /// Areas for a 5-digit postcode: `{subdistrict, district, province, postal_code}`.
+  Future<List<Map<String, dynamic>>> getThaiAddressByPostalCode(String postalCode) async {
+    final k = 'z|$postalCode';
+    final hit = _thaiAddrCache[k];
+    if (hit is List<Map<String, dynamic>>) return hit;
+    final data = _dataMap(await _send('GET', '/api/thai-address/by-postal-code', query: {'postalCode': postalCode}));
+    final out = extractMapList(data['options']);
+    _thaiAddrCache[k] = out;
+    return out;
+  }
+
   ({DateTime at, String biz, List<Map<String, dynamic>> users})? _usersCache;
 
   /// Business users for id → name labels; cached 10 minutes per business.
@@ -845,6 +907,22 @@ class ApiClient {
         if (attachments != null) 'attachments': attachments,
       }));
 
+  /// People who can be @mentioned on a record: business users who can open it
+  /// (`GET /api/entity/:module/:id/mention-users`); servers without the route → all business users.
+  Future<List<Map<String, dynamic>>> getEntityMentionUsers(String module, String id) async {
+    try {
+      final env = await _send('GET', '/api/entity/$module/$id/mention-users');
+      return extractMapList(env['data']);
+    } catch (_) {
+      return getUsersCached();
+    }
+  }
+
+  /// Delete a record comment and its replies (author; business owner/admin may delete any).
+  Future<void> deleteEntityComment(String module, String id, Object commentId) async {
+    await _send('DELETE', '/api/entity/$module/$id/comments/$commentId');
+  }
+
   /// Unified history (`audit` / `field_change` / status / engagement events,
   /// newest first) — `GET /api/entity/:module/:id/timeline`.
   Future<List<Map<String, dynamic>>> getEntityTimeline(String module, String id, {int limit = 100}) async {
@@ -866,8 +944,8 @@ class ApiClient {
 
   /// Uploads to File Manager and returns comment-attachment maps
   /// (`{url, name, mime, size, file_id}`), the same shape the web sends.
-  Future<List<Map<String, dynamic>>> uploadCommentAttachments(List<MultipartFile> files) async {
-    final res = await uploadFiles(files);
+  Future<List<Map<String, dynamic>>> uploadCommentAttachments(List<MultipartFile> files, {ProgressCallback? onSendProgress}) async {
+    final res = await uploadFiles(files, onSendProgress: onSendProgress);
     final rows = extractMapList(res['list'] ?? res['files'] ?? res);
     return [
       for (final r in rows)
@@ -1118,6 +1196,12 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  /// `DELETE /api/activity/:id/photos/:photoId` — the visit photos left.
+  Future<List<Map<String, dynamic>>> deleteActivityPhoto(String id, String photoId) async {
+    final env = await _send('DELETE', '/api/activity/$id/photos/${Uri.encodeComponent(photoId)}');
+    return extractMapList(env['data']);
+  }
+
   Future<List<Map<String, dynamic>>> getBoards({String? q, bool writable = false}) async {
     final env = await _send('GET', '/api/boards', query: {
       if (q != null && q.isNotEmpty) 'q': q,
@@ -1166,12 +1250,12 @@ class ApiClient {
   }
 
   /// Uploads files to a board; returns `[{url, name, size, mime}]` to store on a task.
-  Future<List<Map<String, dynamic>>> uploadBoardAttachments(String boardId, List<MultipartFile> files) async {
+  Future<List<Map<String, dynamic>>> uploadBoardAttachments(String boardId, List<MultipartFile> files, {ProgressCallback? onSendProgress}) async {
     final form = FormData();
     for (final f in files) {
       form.files.add(MapEntry('files', f));
     }
-    final env = await _send('POST', '/api/boards/$boardId/attachments', data: form);
+    final env = await _send('POST', '/api/boards/$boardId/attachments', data: form, onSendProgress: onSendProgress);
     return extractMapList(env['data']);
   }
 
@@ -1753,6 +1837,10 @@ class ApiClient {
     return extractMapList(env['data']);
   }
 
+  /// One activity as a PDF (Thai font, Thai times) — same read access as the detail.
+  Future<List<int>> getActivityPdf(String id, {String lang = 'th'}) =>
+      _downloadBytes('/api/entity/activity/${Uri.encodeComponent(id)}/export?format=pdf&lang=$lang');
+
   Future<List<int>> getInspectionPdf(String inspectionId) =>
       _downloadBytes('/api/field-service/inspections/$inspectionId/pdf');
 
@@ -1843,9 +1931,12 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> scheduleJob(String id, {String? when}) async {
+  /// Appointment for the job (an activity in the calendar). The server reads
+  /// `date_start` / `date_end`; without them it uses the job's plan start / end.
+  Future<Map<String, dynamic>> scheduleJob(String id, {String? when, String? end}) async {
     return _dataMap(await _send('POST', '/api/field-service/jobs/$id/schedule', data: {
-      if (when != null) 'scheduled_at': when,
+      if (when != null) ...{'date_start': when, 'scheduled_at': when},
+      if (end != null) 'date_end': end,
     }));
   }
 
@@ -2280,13 +2371,33 @@ class ApiClient {
 
   Future<List<int>> downloadFile(String id) => _downloadBytes('/api/files/$id/download');
 
-  Future<Map<String, dynamic>> uploadFiles(List<MultipartFile> files, {String? folderId}) async {
+  Future<Map<String, dynamic>> uploadFiles(List<MultipartFile> files, {String? folderId, ProgressCallback? onSendProgress}) async {
     final form = FormData();
     if (folderId != null && folderId.isNotEmpty) form.fields.add(MapEntry('folder_id', folderId));
     for (final f in files) {
       form.files.add(MapEntry('files', f));
     }
-    return _dataMap(await _send('POST', '/api/files/upload', data: form));
+    return _dataMap(await _send('POST', '/api/files/upload', data: form, onSendProgress: onSendProgress));
+  }
+
+  /// Bytes of an uploaded file (`/uploads/...` or an absolute URL) — preview / share / save.
+  Future<List<int>> downloadFileBytes(String url) => _downloadBytes(url);
+
+  final Map<String, Future<Map<String, dynamic>>> _linkPreviews = {};
+
+  /// Open Graph card of a link (`GET /api/chat/unfurl?url=`, the web's unfurl; server-side
+  /// SSRF-safe + cached). `{url, title, description, image, siteName}`; cached per URL for the
+  /// session, failures are not cached.
+  Future<Map<String, dynamic>> getLinkPreview(String url) {
+    final hit = _linkPreviews[url];
+    if (hit != null) return hit;
+    final f = _send('GET', '/api/chat/unfurl', query: {'url': url}).then(_dataMap);
+    _linkPreviews[url] = f;
+    f.catchError((Object _) {
+      _linkPreviews.remove(url);
+      return const <String, dynamic>{};
+    });
+    return f;
   }
 
   Future<List<Map<String, dynamic>>> getMail({String box = 'inbox', int limit = 40}) async {
@@ -2650,7 +2761,7 @@ class ApiClient {
 
   // ───────────── AI การสื่อสาร (/api/comm-ai) ─────────────
 
-  /// `{settings, defaults, can_edit, max_range_days}`
+  /// `{settings, defaults, can_edit, max_range_days, available, insights_available}` — `available` false = no Package.
   Future<Map<String, dynamic>> getCommAiSettings() async => _dataMap(await _send('GET', '/api/comm-ai/settings'));
 
   /// Chat summary of a room for a Thai-time range (`YYYY-MM-DD HH:mm`). Streams token / status / done / error.
@@ -2695,9 +2806,19 @@ class ApiClient {
   /// Call: transcript (filtered by sharing), summary, recordings.
   Future<Map<String, dynamic>> getCommAiCall(String callId) async => _dataMap(await _send('GET', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}'));
 
-  Future<void> uploadCallRecording(String callId, String filePath, {int durationMs = 0, String mime = 'audio/mp4'}) async {
+  /// My consent choice remembered on the server for this Space (same on all my devices):
+  /// `{choice: {enabled, share, record} | null, updated_at}`.
+  Future<Map<String, dynamic>> getCommAiConsentChoice() async => _dataMap(await _send('GET', '/api/comm-ai/consent-choice'));
+
+  /// Remember ([choice]) or forget (null) the consent choice for all my devices.
+  Future<Map<String, dynamic>> saveCommAiConsentChoice(Map<String, dynamic>? choice) async =>
+      _dataMap(await _send('PUT', '/api/comm-ai/consent-choice', data: {'choice': choice}));
+
+  /// [deviceId]: stable install id, so a call that moved between my devices keeps one recording per device.
+  Future<void> uploadCallRecording(String callId, String filePath, {int durationMs = 0, String mime = 'audio/mp4', String deviceId = ''}) async {
     final form = FormData.fromMap({
       'duration_ms': '$durationMs',
+      'device_id': deviceId,
       'audio': await MultipartFile.fromFile(filePath, filename: 'call.${mime.contains('ogg') ? 'ogg' : mime.contains('wav') ? 'wav' : 'm4a'}', contentType: DioMediaType.parse(mime)),
     });
     await _send('POST', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/recording', data: form, options: Options(sendTimeout: const Duration(minutes: 5)));
@@ -2705,9 +2826,10 @@ class ApiClient {
 
   /// One part of a long call recording (parts are joined on the server when the final one arrives).
   Future<Map<String, dynamic>> uploadCallRecordingPart(String callId, String filePath,
-      {required int part, int parts = 0, bool isFinal = false, int durationMs = 0, String mime = 'audio/wav'}) async {
+      {required int part, int parts = 0, bool isFinal = false, int durationMs = 0, String mime = 'audio/wav', String deviceId = ''}) async {
     final form = FormData.fromMap({
       'part': '$part',
+      'device_id': deviceId,
       if (isFinal) 'final': '1',
       if (isFinal) 'parts': '$parts',
       'duration_ms': '$durationMs',
@@ -2719,22 +2841,85 @@ class ApiClient {
   Future<List<int>> downloadCallRecording(String path) => _downloadBytes(path);
 
   /// `{list, next_before}` — type all|call|video|chat, from/to YYYY-MM-DD (Thai), q, before (ISO).
-  Future<Map<String, dynamic>> getCommAiHistory({String type = 'all', String? from, String? to, String? q, String? before, int limit = 30}) async =>
+  /// Extra filters: scope single|group, a person in the call, a chat room, has audio.
+  Future<Map<String, dynamic>> getCommAiHistory({String type = 'all', String? from, String? to, String? q, String? before, int limit = 30, String? scope, String? userId, String? roomId, bool hasAudio = false}) async =>
       _dataMap(await _send('GET', '/api/comm-ai/history', query: {
         'type': type,
         if (from != null && from.isNotEmpty) 'from': from,
         if (to != null && to.isNotEmpty) 'to': to,
         if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
-        if (before != null) 'before': before,
+        if (scope != null && scope.isNotEmpty) 'scope': scope,
+        if (userId != null && userId.isNotEmpty) 'user_id': userId,
+        if (roomId != null && roomId.isNotEmpty) 'room_id': roomId,
+        if (hasAudio) 'has_audio': 1,
+        'before': ?before,
         'limit': limit,
       }));
 
-  /// kind 'call' (id = call id) or 'chat' (id = summary id). format pdf|docx|md|txt.
+  /// People and chat rooms in my conversations (history pickers): `{people:[{user_id,name}], rooms:[{id,name}]}`.
+  Future<Map<String, dynamic>> getCommAiHistoryFilters() async => _dataMap(await _send('GET', '/api/comm-ai/history/filters'));
+
+  /// AI providers for summaries: `{providers:[{id,label,models,configured}], default_provider, stt_models, stt_ready}`.
+  Future<Map<String, dynamic>> getCommAiProviders() async => _dataMap(await _send('GET', '/api/comm-ai/providers'));
+
+  /// ISAAC summarises a call now (auto summary off, failed, or after editing) → `{summary_id, status}`.
+  Future<Map<String, dynamic>> summarizeCall(String callId) async => _dataMap(await _send('POST', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/summarize', data: const <String, dynamic>{}));
+
+  /// Fix a transcript line ISAAC misheard → `{seq, text, edited}`.
+  Future<Map<String, dynamic>> editCallSegment(String callId, int seq, String text) async =>
+      _dataMap(await _send('PATCH', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/segments/$seq', data: {'text': text}));
+
+  /// Tick / untick follow-up #[index] of summary [summaryId] (shared with everyone who can read it) → `{action_done}`.
+  Future<Map<String, dynamic>> setCommAiActionDone(String summaryId, int index, bool done) async =>
+      _dataMap(await _send('PATCH', '/api/comm-ai/summaries/$summaryId/actions/$index', data: {'done': done}));
+
+  /// Caption / transcript lines in another language (th en zh ja my lo km vi; ≤ 30 lines, cached on the server).
+  Future<List<String>> translateCommAi(List<String> texts, String to) async {
+    final d = _dataMap(await _send('POST', '/api/comm-ai/translate', data: {'texts': texts, 'to': to}, options: Options(receiveTimeout: const Duration(minutes: 1))));
+    final list = d['list'];
+    return list is List ? [for (final x in list) '${x ?? ''}'] : const [];
+  }
+
+  /// ISAAC insights over a Thai date range (default last 30 days).
+  Future<Map<String, dynamic>> getCommAiInsights({String? from, String? to}) async => _dataMap(await _send('GET', '/api/comm-ai/insights', query: {
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
+      }));
+
+  /// People in the call / room with an e-mail (quick picks): `[{user_id, name, email}]`.
+  Future<List<Map<String, dynamic>>> getShareRecipients(String kind, String id) async =>
+      extractMapList(_dataMap(await _send('GET', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/recipients'))['list']);
+
+  /// The summary as a direct message to each colleague → `{sent:[{user_id, room_id}]}`.
+  Future<Map<String, dynamic>> shareConversationToChat(String kind, String id, {required List<int> userIds, String message = ''}) async =>
+      _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/chat', data: {'user_ids': userIds, 'message': message}));
+
+  /// The summary as an Activity on a CRM record's timeline → `{activity_id, link, ...}`.
+  Future<Map<String, dynamic>> shareConversationToCrm(String kind, String id, {required String module, required String recordId, String? activityType, String note = ''}) async =>
+      _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/crm', data: {
+        'module': module,
+        'record_id': int.tryParse(recordId) ?? recordId,
+        'activitytype': ?activityType,
+        'note': note,
+      }));
+
+  /// kind 'call' (id = call id) or 'chat' (id = summary id). format pdf|docx|md|txt|zip.
   Future<List<int>> exportConversation(String kind, String id, {String format = 'pdf', List<String> include = const ['summary', 'actions', 'transcript'], String lang = 'th'}) =>
       _downloadBytes('/api/comm-ai/export/$kind/${Uri.encodeComponent(id)}?format=$format&include=${include.join(',')}&lang=$lang');
 
-  Future<Map<String, dynamic>> shareConversationEmail(String kind, String id, {required List<String> to, List<String> cc = const [], String message = '', List<String> include = const ['summary', 'actions', 'transcript'], String format = 'pdf', String lang = 'th'}) async =>
-      _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/email', data: {'to': to, 'cc': cc, 'message': message, 'include': include, 'format': format, 'lang': lang}));
+  /// format pdf|docx|md|txt|zip. [attachAudio]: the call tape rides along (big files go as a 7-day link).
+  /// [logTo] `{module, record_id}` keeps the e-mail on that CRM record as an Activity "Email".
+  Future<Map<String, dynamic>> shareConversationEmail(String kind, String id, {required List<String> to, List<String> cc = const [], String message = '', List<String> include = const ['summary', 'actions', 'transcript'], String format = 'pdf', String lang = 'th', bool attachAudio = false, Map<String, dynamic>? logTo}) async =>
+      _dataMap(await _send('POST', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/email', data: {
+        'to': to,
+        'cc': cc,
+        'message': message,
+        'include': include,
+        'format': format,
+        'lang': lang,
+        if (attachAudio) 'attach_audio': true,
+        'log_to': ?logTo,
+      }, options: Options(receiveTimeout: const Duration(minutes: 2))));
 
   /// `{token, url_path, expires_at}`
   Future<Map<String, dynamic>> createConversationLink(String kind, String id, {List<String> include = const ['summary', 'actions', 'transcript'], int days = 7, String? password}) async =>
@@ -2763,11 +2948,65 @@ class ApiClient {
         options: Options(receiveTimeout: const Duration(minutes: 3)),
       ));
 
-  Future<List<int>> _downloadBytes(String path) async {
+  // ── operations: quotas, AI health, personal prefs (routes/commAiOps.js) ──
+
+  /// This month's usage vs the Package limits:
+  /// `{month, items:[{kind:'stt_minutes'|'summaries'|'translations', used, limit|null, unlimited, percent, exceeded, warn}]}`.
+  Future<Map<String, dynamic>> getCommAiUsage() async => _dataMap(await _send('GET', '/api/comm-ai/usage'));
+
+  /// Admins: AI problems `[{code, level:'error'|'warning', message, message_en, since}]` (403 for members).
+  Future<List<Map<String, dynamic>>> getCommAiHealth() async => extractMapList(_dataMap(await _send('GET', '/api/comm-ai/health'))['list']);
+
+  /// Settings page in one call: `{usage, prefs, is_admin, health (admins, else null), stt_enabled}`.
+  Future<Map<String, dynamic>> getCommAiOpsOverview() async => _dataMap(await _send('GET', '/api/comm-ai/ops/overview'));
+
+  /// My personal settings `{digest, digest_email}`.
+  Future<Map<String, dynamic>> getCommAiPrefs() async => asStringKeyedMap(_dataMap(await _send('GET', '/api/comm-ai/me/prefs'))['prefs']) ?? <String, dynamic>{};
+
+  /// Partial update of my personal settings → the saved `{digest, digest_email}`.
+  Future<Map<String, dynamic>> saveCommAiPrefs(Map<String, dynamic> patch) async =>
+      asStringKeyedMap(_dataMap(await _send('PUT', '/api/comm-ai/me/prefs', data: patch))['prefs']) ?? <String, dynamic>{};
+
+  /// Admins: who shared / exported / downloaded a conversation `[{id, at, action, channel, user_id, user_name, details}]`.
+  Future<List<Map<String, dynamic>>> getConversationShareHistory(String kind, String id) async =>
+      extractMapList(_dataMap(await _send('GET', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/history'))['list']);
+
+  /// ISAAC's guesses of the CRM record for a conversation `[{module, id, name, reason, reason_en, score}]` (best first).
+  Future<List<Map<String, dynamic>>> getConversationCrmSuggestions(String kind, String id) async =>
+      extractMapList(_dataMap(await _send('GET', '/api/comm-ai/share/$kind/${Uri.encodeComponent(id)}/crm-suggestions'))['list']);
+
+  // ── delete my data (PDPA) ──
+
+  /// Participant: delete my recording and/or my transcript lines → `{recordings, segments, summaries_marked}`.
+  Future<Map<String, dynamic>> deleteMyCallData(String callId, {bool recording = false, bool transcript = false}) async =>
+      _dataMap(await _send('DELETE', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}/mine', query: {
+        if (recording) 'recording': 1,
+        if (transcript) 'transcript': 1,
+      }));
+
+  /// Admin: delete the whole conversation (transcript, everyone's audio, tape, summaries, share links).
+  Future<Map<String, dynamic>> deleteCommAiCall(String callId) async => _dataMap(await _send('DELETE', '/api/comm-ai/calls/${Uri.encodeComponent(callId)}'));
+
+  /// A chat summary (its creator or an admin) / a call summary (admin).
+  Future<Map<String, dynamic>> deleteCommAiSummary(String id) async => _dataMap(await _send('DELETE', '/api/comm-ai/summaries/$id'));
+
+  // ── background exports (ZIP with audio, the call tape, e-mail with audio) ──
+
+  /// `{type:'file'|'tape'|'email', kind, id, ...}` → 202 `{job_id, status, progress, ...}`.
+  Future<Map<String, dynamic>> startCommAiExportJob(Map<String, dynamic> body) async => _dataMap(await _send('POST', '/api/comm-ai/export-jobs', data: body));
+
+  /// `{job_id, type, status:'pending'|'running'|'done'|'failed', progress, stage, filename, mime, download_url, result, error, error_code}`.
+  Future<Map<String, dynamic>> getCommAiExportJob(String jobId) async => _dataMap(await _send('GET', '/api/comm-ai/export-jobs/$jobId'));
+
+  /// The finished file of a job (only the person who started it).
+  Future<List<int>> downloadCommAiExportJob(String jobId) =>
+      _downloadBytes('/api/comm-ai/export-jobs/$jobId/download', receiveTimeout: const Duration(minutes: 10));
+
+  Future<List<int>> _downloadBytes(String path, {Duration? receiveTimeout}) async {
     try {
       final res = await _dio.get<List<int>>(
         path,
-        options: Options(responseType: ResponseType.bytes, method: 'GET'),
+        options: Options(responseType: ResponseType.bytes, method: 'GET', receiveTimeout: receiveTimeout),
       );
       return res.data ?? <int>[];
     } on DioException catch (e) {

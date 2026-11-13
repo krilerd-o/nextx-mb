@@ -4,6 +4,8 @@ import '../fsm/case_manday.dart';
 import '../fsm/service_more.dart';
 import 'lead_convert_sheet.dart';
 import '../journey/job_parts.dart';
+import '../journey/job_work_sections.dart' show jobSlaChip;
+import '../journey/journey_widgets.dart' show JourneySection;
 import '../fsm/inspection_lines.dart';
 import 'package:provider/provider.dart';
 
@@ -20,6 +22,7 @@ import '../../widgets/fields/nx_form_field.dart' show NxDecimalInputFormatter;
 import '../../widgets/fields/nx_lift_sheet.dart';
 import '../../widgets/fields/nx_pick_option.dart';
 import '../../widgets/nx_hero_cta.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../calendar/activity_detail_screen.dart';
@@ -31,6 +34,8 @@ import 'order_summary_screen.dart';
 import '../../core/error_reporting.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../core/status_labels.dart';
+import '../doc_form/doc_form_launcher.dart';
 
 typedef OpenEntityFn = void Function(String module, String id, {Map<String, dynamic>? row});
 
@@ -149,7 +154,8 @@ class EntityOpsSection extends StatelessWidget {
         if (module == 'service_contract') ...[
           CreateJobFromParentBar(
             label: 'สร้างใบสั่งงานจากสัญญา',
-            create: (api) => api.createJobFromContract(id),
+            parentModule: 'service_contract',
+            parent: row,
             onOpen: onOpen,
           ),
           const SizedBox(height: 12),
@@ -159,7 +165,8 @@ class EntityOpsSection extends StatelessWidget {
         if (module == 'case') ...[
           CreateJobFromParentBar(
             label: 'สร้างใบสั่งงานจากเคส',
-            create: (api) => api.createJobFromCase(id),
+            parentModule: 'case',
+            parent: row,
             onOpen: onOpen,
           ),
           const SizedBox(height: 12),
@@ -841,10 +848,19 @@ class QuotationMailApprovalBar extends StatelessWidget {
             Expanded(
               child: OutlinedButton(
                 onPressed: () async {
+                  final ok = await showStatusChangeConfirm(
+                    context,
+                    from: 'รออนุมัติ',
+                    fromColor: const Color(0xFFF59E0B),
+                    to: 'อนุมัติ',
+                    toColor: const Color(0xFF16A34A),
+                    confirmLabel: 'อนุมัติ',
+                  );
+                  if (ok == null || !context.mounted) return;
                   try {
                     await context.read<AppConfig>().apiClient.approveQuotation(id);
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('อนุมัติแล้ว'))));
+                      showNxStatusChangedSnack(ScaffoldMessenger.of(context), label: 'อนุมัติแล้ว');
                     }
                   } catch (e) {
                     if (context.mounted) {
@@ -859,10 +875,20 @@ class QuotationMailApprovalBar extends StatelessWidget {
             Expanded(
               child: OutlinedButton(
                 onPressed: () async {
+                  final ok = await showStatusChangeConfirm(
+                    context,
+                    from: 'รออนุมัติ',
+                    fromColor: const Color(0xFFF59E0B),
+                    to: 'ไม่อนุมัติ',
+                    requireReason: true,
+                    reasons: kNxRejectReasons,
+                    confirmLabel: 'ปฏิเสธ',
+                  );
+                  if (ok == null || !context.mounted) return;
                   try {
-                    await context.read<AppConfig>().apiClient.rejectQuotation(id);
+                    await context.read<AppConfig>().apiClient.rejectQuotation(id, reason: ok.note);
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ปฏิเสธแล้ว'))));
+                      showNxStatusChangedSnack(ScaffoldMessenger.of(context), label: 'ปฏิเสธแล้ว');
                     }
                   } catch (e) {
                     if (context.mounted) {
@@ -877,18 +903,13 @@ class QuotationMailApprovalBar extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         OutlinedButton(
+          // Revise in the step form (edit first, reason required) → POST /quotation/:id/revise.
           onPressed: () async {
-            try {
-              final data = await context.read<AppConfig>().apiClient.reviseQuotation(id);
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างฉบับแก้ไขแล้ว'))));
-              final nextId = pickRecordId(data, const ['quotation_id', 'id', 'new_id']);
-              if (nextId.isNotEmpty) onOpen('quotation', nextId, row: data);
-            } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-              }
-            }
+            final data = await openDocForm(context, module: 'quotation', mode: DocFormMode.revise, id: id);
+            if (data == null || !context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างฉบับแก้ไขแล้ว'))));
+            final nextId = pickRecordId(data, const ['quotation_id', 'id', 'new_id']);
+            if (nextId.isNotEmpty) onOpen('quotation', nextId, row: data);
           },
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           child: Text(tr('สร้างฉบับแก้ไข')),
@@ -959,12 +980,20 @@ class JobExtrasPanel extends StatefulWidget {
     required this.row,
     required this.onOpen,
     this.canEdit = true,
+    this.sectioned = false,
+    this.extra = const [],
   });
 
   final String id;
   final Map<String, dynamic> row;
   final OpenEntityFn onOpen;
   final bool canEdit;
+
+  /// Job summary: one "งานสนาม" card (SLA is shown by the work-info card).
+  final bool sectioned;
+
+  /// More rows at the end of the card (Workspace, inspection…).
+  final List<Widget> extra;
 
   @override
   State<JobExtrasPanel> createState() => _JobExtrasPanelState();
@@ -1008,7 +1037,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
       final parts = await api.getJobParts(widget.id);
       Map<String, dynamic> sla = {};
       try {
-        sla = await api.getJobSla(widget.id);
+        if (!widget.sectioned) sla = await api.getJobSla(widget.id); // summary: the work-info card shows SLA
       } catch (e, s) {
       ErrorReporting.report(e, s);
     }
@@ -1049,25 +1078,36 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final body = _body(context);
+    if (!widget.sectioned) return body;
+    return JourneySection(key: const ValueKey('job-field-ops'), title: tr('งานสนาม'), icon: NxI.wrench, child: body);
+  }
+
+  Widget _body(BuildContext context) {
     final theme = Theme.of(context);
+    // SLA as a chip (`{policy, response_due, resolve_due, breached_*}`); a job
+    // without an SLA policy shows nothing (no empty bar).
+    final sla = widget.sectioned ? null : jobSlaChip(_sla, widget.row);
+    final small = OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(tr('งานสนาม'), style: theme.textTheme.titleMedium),
-        const SizedBox(height: 8),
-        if (_sla.isNotEmpty)
+        if (!widget.sectioned) ...[
+          Text(tr('งานสนาม'), style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+        ],
+        if (sla != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Material(
-              color: theme.colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Text(
-                  tr(_sla['overdue'] == true || _sla['is_overdue'] == true
-                      ? 'SLA เกินกำหนด${_sla['message'] != null ? ' · ${_sla['message']}' : ''}'
-                      : (_sla['remaining_text'] ?? _sla['message'] ?? _sla['status'] ?? 'SLA').toString()),
-                ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Chip(
+                key: const ValueKey('job-sla-chip'),
+                avatar: Icon(sla.icon, size: 16, color: sla.color),
+                label: Text(sla.label),
+                side: BorderSide(color: sla.color.withValues(alpha: 0.4)),
+                backgroundColor: sla.color.withValues(alpha: 0.08),
+                visualDensity: VisualDensity.compact,
               ),
             ),
           ),
@@ -1081,11 +1121,14 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
           runSpacing: 8,
           children: [
             OutlinedButton.icon(
+              style: small,
               onPressed: () => openRecordDocument(context, 'job', {...widget.row, 'id': widget.id}),
               icon: const Icon(NxI.filePdf),
               label: Text(tr('PDF ใบสั่งงาน')),
             ),
             OutlinedButton.icon(
+              key: const ValueKey('job-ops-schedule'),
+              style: small,
               onPressed: _busy ? null : () => _schedule(context),
               icon: const Icon(NxI.calendarBlank),
               label: Text(tr('นัดหมาย')),
@@ -1112,7 +1155,10 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
                 icon: const Icon(NxI.kanban),
                 label: Text(tr('เปิดบอร์ด')),
               ),
-            OutlinedButton(
+            OutlinedButton.icon(
+              key: const ValueKey('job-ops-match'),
+              style: small,
+              icon: const Icon(NxI.users),
               onPressed: _busy
                   ? null
                   : () async {
@@ -1127,7 +1173,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
                         if (mounted) setState(() => _busy = false);
                       }
                     },
-              child: Text(tr('ช่างที่ตรงทักษะ')),
+              label: Text(tr('ช่างที่ตรงทักษะ')),
             ),
           ],
         ),
@@ -1172,6 +1218,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
         ],
         const SizedBox(height: 12),
         JobPartsSection(jobId: widget.id, parts: _parts, canEdit: widget.canEdit, onChanged: _load),
+        ...widget.extra,
       ],
     );
   }
@@ -1284,35 +1331,37 @@ class AssetGenerateJobsBar extends StatelessWidget {
   }
 }
 
+/// "สร้างใบสั่งงานจากเคส / สัญญา": the job step form pre-filled from the
+/// case / contract (same values the server's create-job writes), so the user
+/// reviews time, technician and place before the job exists.
 class CreateJobFromParentBar extends StatelessWidget {
   const CreateJobFromParentBar({
     super.key,
     required this.label,
-    required this.create,
+    required this.parentModule,
+    required this.parent,
     required this.onOpen,
   });
 
   final String label;
-  final Future<Map<String, dynamic>> Function(ApiClient api) create;
+  final String parentModule;
+  final Map<String, dynamic> parent;
   final OpenEntityFn onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return NxHeroCta(
-      label: label,
-      onPressed: () async {
-        try {
-          final data = await create(context.read<AppConfig>().apiClient);
-          if (!context.mounted) return;
+    return KeyedSubtree(
+      key: ValueKey('create-job-from-$parentModule'),
+      child: NxHeroCta(
+        label: label,
+        onPressed: () async {
+          final data = await openDocForm(context, module: 'job', parent: (module: parentModule, row: parent));
+          if (data == null || !context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('$labelแล้ว'))));
           final jobId = pickRecordId(data, const ['job_id', 'id']);
           if (jobId.isNotEmpty) onOpen('job', jobId, row: data);
-        } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-          }
-        }
-      },
+        },
+      ),
     );
   }
 }
@@ -2078,7 +2127,7 @@ class RelatedItemTile extends StatelessWidget {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
                             decoration: BoxDecoration(color: sc.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
-                            child: Text(tr(status), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall?.copyWith(color: sc, fontWeight: FontWeight.w700)),
+                            child: Text(statusValueLabel(status, module: module), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall?.copyWith(color: sc, fontWeight: FontWeight.w700)),
                           ),
                         ),
                       ],

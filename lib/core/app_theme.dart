@@ -65,6 +65,10 @@ class AppTheme {
             primary: primaryColor,
             onPrimary: Colors.white,
             primaryContainer: container,
+            // ColorScheme.light defaults this to onPrimary (white) — unreadable
+            // on the pale container (tip banners, avatar chips). Use a deep
+            // shade of the accent instead.
+            onPrimaryContainer: Color.lerp(primaryColor, Colors.black, 0.6)!,
             secondary: primaryColor,
             onSecondary: Colors.white,
             surface: lightCard,

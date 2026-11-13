@@ -4,6 +4,7 @@ import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../docs/document_preview.dart';
 import '../../core/entity_display.dart';
 import '../../services/api_client.dart';
 import '../../services/location_service.dart';
@@ -12,6 +13,7 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../core/error_reporting.dart';
 import '../../core/nx_page_route.dart';
 import '../crm/entity_detail_parts.dart';
@@ -20,17 +22,26 @@ import 'cal/cal_model.dart' show hm;
 import 'visit_check_sheet.dart';
 import '../../services/photo_pipeline.dart' show PhotoTarget;
 import 'visit_photo_flow.dart';
+import 'visit_photo_grid.dart';
+import 'activity_outcome_notes.dart';
 import '../../widgets/nx_place_panel.dart';
 import 'package:flutter/services.dart';
 import '../../core/thai_time.dart';
+import '../../core/activity_guests.dart' show activityStatusLabel, activityTypeLabel;
 import '../../core/i18n.dart';
 import '../../core/recent_records.dart';
 import '../../widgets/nx_refresh.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
-  const ActivityDetailScreen({super.key, required this.row});
+  const ActivityDetailScreen({super.key, required this.row, this.initialTab, this.focusCommentId});
   final Map<String, dynamic> row;
+
+  /// `comments` / `files` / `history` (deep link from a notification).
+  final String? initialTab;
+
+  /// Comment to highlight (mention notification).
+  final String? focusCommentId;
 
   @override
   State<ActivityDetailScreen> createState() => _ActivityDetailScreenState();
@@ -42,8 +53,20 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   bool _busy = false;
   Object? _error;
   late Map<String, dynamic> _row = Map<String, dynamic>.from(widget.row);
-  int _tab = 0;
+  late int _tab = switch (widget.initialTab) { 'comments' => 1, 'files' => 2, 'history' => 3, _ => 0 };
   List<Map<String, dynamic>> _comments = [];
+
+  /// Comments tab composer (sticky at the bottom while the tab is open).
+  late final NxCommentsController _commentsCtl;
+
+  Future<void> _reloadComments() async {
+    try {
+      final list = await context.read<AppConfig>().apiClient.getEntityComments('activity', _id);
+      if (mounted) setState(() => _comments = list);
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
+  }
   List<Map<String, dynamic>> _timeline = [];
   bool _timelineLoading = false;
   bool _timelineLoaded = false;
@@ -53,8 +76,17 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _commentsCtl = entityCommentsController(context, module: 'activity', id: _id, onChanged: _reloadComments);
     _loadVisit();
     _loadRecord();
+    if (_tab == 3) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _loadTimeline(); });
+  }
+
+  @override
+  void dispose() {
+    _commentsCtl.dispose();
+    _scroll.dispose();
+    super.dispose();
   }
 
   /// Callers often pass only `{id}` (FSM job, related lists) — load the full row.
@@ -119,6 +151,18 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     );
     if (saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างกิจกรรมใหม่จากการทำซ้ำแล้ว'))));
+    }
+  }
+
+  /// "สร้างนัดหมายต่อ" from the next-step card: a new activity with the same
+  /// customer / place / guests, titled with the next step.
+  Future<void> _followUp(String nextStep) async {
+    final saved = await nxPush<bool>(
+      context,
+      ActivityFormScreen(initial: activityFollowUpSeed(_row, nextStep), title: 'สร้างนัดหมายต่อ'),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างนัดหมายต่อแล้ว'))));
     }
   }
 
@@ -238,6 +282,28 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     }
   }
 
+  /// Deletes one visit photo on the server (already confirmed by the sheet);
+  /// the visit's photo list is replaced by what the server returns.
+  Future<bool> _deletePhoto(Map<String, dynamic> photo) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final photoId = '${photo['id'] ?? ''}';
+    if (photoId.isEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(tr('ลบรูปนี้ไม่ได้ — ไม่พบรหัสรูป'))));
+      return false;
+    }
+    try {
+      final left = await context.read<AppConfig>().apiClient.deleteActivityPhoto(_id, photoId);
+      if (!mounted) return true;
+      HapticFeedback.mediumImpact();
+      setState(() => _visit = {...?_visit, 'photos': left});
+      messenger.showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, content: Text(tr('ลบรูปแล้ว'))));
+      return true;
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      return false;
+    }
+  }
+
   Future<void> _retryPhotos() async {
     setState(() => _busy = true);
     try {
@@ -332,29 +398,29 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final me = context.read<AppConfig>().session.userId;
     final mine = '${row['approver_user_id'] ?? ''}' == '$me';
     Future<void> decide(bool approve) async {
-      String? note;
-      if (!approve) {
-        final ctrl = TextEditingController();
-        note = await showDialog<String>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text(tr('ไม่อนุมัติกิจกรรม')),
-            content: TextField(key: const ValueKey('act-reject-note'), controller: ctrl, autofocus: true, maxLines: 3, decoration: InputDecoration(labelText: tr('เหตุผล'))),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
-              FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('ไม่อนุมัติ'))),
-            ],
-          ),
-        );
-        if (note == null) return;
-      }
-      if (!mounted) return;
+      // Shared status confirm; rejecting needs a reason (the server keeps it).
+      final ok = await showStatusChangeConfirm(
+        context,
+        title: approve ? 'อนุมัติกิจกรรม?' : 'ไม่อนุมัติกิจกรรม?',
+        recordTitle: entityTitle(row, module: 'activity'),
+        from: 'รออนุมัติ',
+        fromColor: const Color(0xFFF59E0B),
+        to: approve ? 'อนุมัติ' : 'ไม่อนุมัติ',
+        toColor: approve ? const Color(0xFF16A34A) : kNxDangerRed,
+        impact: approve ? 'ผู้บันทึกกิจกรรมจะได้รับแจ้งผล' : 'ผู้บันทึกกิจกรรมจะได้รับแจ้งพร้อมเหตุผล',
+        requireReason: !approve,
+        reasons: approve ? const [] : kNxRejectReasons,
+        confirmLabel: approve ? 'อนุมัติ' : 'ไม่อนุมัติ',
+        noteKey: const ValueKey('act-reject-note'),
+      );
+      if (ok == null || !context.mounted) return;
+      final note = approve ? null : ok.note;
       final api = context.read<AppConfig>().apiClient;
       final messenger = ScaffoldMessenger.of(context);
       setState(() => _deciding = true);
       try {
         approve ? await api.approveActivity(_id) : await api.rejectActivity(_id, note: note);
-        messenger.showSnackBar(SnackBar(content: Text(tr(approve ? 'อนุมัติกิจกรรมแล้ว' : 'ไม่อนุมัติกิจกรรมแล้ว'))));
+        showNxStatusChangedSnack(messenger, label: approve ? 'อนุมัติกิจกรรมแล้ว' : 'ไม่อนุมัติกิจกรรมแล้ว');
         await _loadRecord();
       } catch (e) {
         messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
@@ -400,6 +466,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final photos = extractMapList(_visit?['photos']);
     return NxScrollScaffold(
       insetBody: false,
+      bottomNavigationBar: _tab == 1 && context.select((AppConfig c) => c.isLoggedIn) ? NxCommentComposer(controller: _commentsCtl, sticky: true) : null,
       header: NxAppHeader(
         title: entityTitle(row, module: 'activity'),
         actions: [
@@ -414,6 +481,11 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
             label: 'ทำซ้ำ',
             icon: NxI.copySimple,
             onTap: _duplicate,
+          ),
+          NxHeaderMenuItem(
+            label: 'ส่งออก PDF',
+            icon: NxI.filePdf,
+            onTap: () => openDocumentPreview(context, activityDocumentSource(_id, subject: '${_row['subject'] ?? ''}')),
           ),
           NxHeaderMenuItem(
             label: 'ส่งออก / แชร์',
@@ -467,7 +539,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   if ((row['location']?.toString() ?? '').isNotEmpty)
                     _line(context, NxI.mapPin, row['location'].toString()),
                   if ((row['status']?.toString() ?? '').isNotEmpty)
-                    _line(context, NxI.flag, row['status'].toString()),
+                    _line(context, NxI.flag, activityStatusLabel(row['status'].toString())),
                 ],
               ),
             ),
@@ -482,6 +554,17 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 child: NxHtmlView(html: row['description'].toString()),
               ),
             ],
+            if (_tab == 0) ...[
+              const SizedBox(height: 12),
+              ActivityOutcomeNotes(
+                activityId: _id,
+                row: row,
+                onSaved: (field, value) {
+                  if (mounted) setState(() => _row = {..._row, field: value});
+                },
+                onFollowUp: _followUp,
+              ),
+            ],
             const SizedBox(height: 14),
             KeyedSubtree(key: _tabsAnchor, child: _tabBar()),
             if (_tab == 1) ...[
@@ -490,7 +573,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 module: 'activity',
                 id: _id,
                 comments: _comments,
-                onChanged: _loadRecord,
+                onChanged: _reloadComments,
+                controller: context.select((AppConfig c) => c.isLoggedIn) ? _commentsCtl : null,
+                focusCommentId: widget.focusCommentId,
               ),
             ],
             if (_tab == 2) ...[
@@ -504,7 +589,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
             if (_tab == 0) ...[
               const SizedBox(height: 16),
               Text(
-                tr('การเยี่ยม'),
+                tr('การเข้าพบ'),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -570,7 +655,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                       )
                     else
                       Text(
-                        tr('เยี่ยมเสร็จแล้ว'),
+                        tr('เข้าพบเสร็จแล้ว'),
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: const Color(0xFF16A34A),
                         ),
@@ -651,15 +736,10 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   ),
                 )
               else
-                AttachmentStrip(
-                  items: [
-                    for (final p in photos)
-                      {
-                        'url': (p['url'] ?? '/uploads/${p['path']}').toString(),
-                        'name': p['name'],
-                        'mime': p['mime'] ?? 'image/jpeg',
-                      },
-                  ],
+                VisitPhotoGrid(
+                  key: const ValueKey('visit-photo-grid'),
+                  photos: photos,
+                  onDelete: _deletePhoto,
                 ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
@@ -860,8 +940,8 @@ String activityExportText(Map<String, dynamic> row, {required String when, Strin
   return [
     v('subject').isEmpty ? entityTitle(row, module: 'activity') : v('subject'),
     '${tr('เวลา')}: $when',
-    if (v('activitytype').isNotEmpty) '${tr('ประเภท')}: ${v('activitytype')}',
-    if (v('status').isNotEmpty) '${tr('สถานะ')}: ${v('status')}',
+    if (v('activitytype').isNotEmpty) '${tr('ประเภท')}: ${tr(activityTypeLabel(v('activitytype')))}',
+    if (v('status').isNotEmpty) '${tr('สถานะ')}: ${activityStatusLabel(v('status'))}',
     if (v('location').isNotEmpty) '${tr('สถานที่')}: ${v('location')}',
     if (who.isNotEmpty) '${tr('ลูกค้า')}: $who',
     if (v('video_conference_url').isNotEmpty) '${tr('ลิงก์')}: ${v('video_conference_url')}',

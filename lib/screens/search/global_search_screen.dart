@@ -524,7 +524,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
           Text(tr('ค้นหาอะไรได้บ้าง'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           for (final (icon, text) in const [
-            (NxI.userCircle, 'ลูกค้า ลีด ผู้ติดต่อ — ชื่อ บริษัท เบอร์โทร อีเมล'),
+            (NxI.userCircle, 'ลูกค้า ผู้มุ่งหวัง ผู้ติดต่อ — ชื่อ บริษัท เบอร์โทร อีเมล'),
             (NxI.receipt, 'เอกสาร — เลขใบเสนอราคา เลขเคส เลขงาน'),
             (NxI.kanban, 'งาน Workspace และกิจกรรม — ชื่องาน หัวข้อนัด'),
             (NxI.chatCircle, 'ข้อความแชท และอีเมล'),

@@ -5,6 +5,9 @@ import 'package:flutter/foundation.dart';
 import '../realtime_service.dart';
 import 'call_media.dart';
 
+/// Shown when my call / captions moved to another device of mine (rtc:ended / stt:moved reason 'moved').
+const callMovedNotice = 'สายนี้ย้ายไปอุปกรณ์อื่นแล้ว';
+
 /// Signaling transport (Socket.io `rtc:*`) — [RealtimeService] in the app, a fake in tests.
 abstract class CallSignaling {
   Stream<RealtimeEvent> get events;
@@ -133,6 +136,9 @@ class CallService extends ChangeNotifier {
     _noticeTimer?.cancel();
     super.dispose();
   }
+
+  /// Short notice over the app (e.g. "สายนี้ย้ายไปอุปกรณ์อื่นแล้ว").
+  void showNotice(String text) => _setNotice(text);
 
   void _setNotice(String text) {
     notice = text;
@@ -556,6 +562,8 @@ class CallService extends ChangeNotifier {
         }
         final wasOutgoing = phase == CallPhase.outgoing;
         await _cleanup();
+        // I picked the call up on another device of mine.
+        if (d['reason'] == 'moved') _setNotice(callMovedNotice);
         if (wasOutgoing) {
           final reason = d['reason'];
           if (reason == 'declined') _setNotice('ปลายสายปฏิเสธสาย');

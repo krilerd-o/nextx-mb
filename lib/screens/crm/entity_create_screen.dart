@@ -19,6 +19,7 @@ import '../../core/thai_time.dart';
 import '../../widgets/fields/field_validate.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/nx_unsaved_guard.dart';
+import '../doc_form/doc_form_launcher.dart';
 
 class EntityCreateScreen extends StatefulWidget {
   const EntityCreateScreen({
@@ -32,6 +33,7 @@ class EntityCreateScreen extends StatefulWidget {
     this.embedded = false,
     this.onFinished,
     this.autoScan = false,
+    this.genericForm = false,
   });
 
   final String module;
@@ -46,13 +48,34 @@ class EntityCreateScreen extends StatefulWidget {
   /// Opened from "สแกนนามบัตร": start the card scan once the form is ready.
   final bool autoScan;
 
+  /// Quotation / job open their step forms; true keeps the plain field list.
+  final bool genericForm;
+
   bool get isEdit => recordId != null && recordId!.isNotEmpty;
+
+  /// Quotation / job: every create / edit entry point lands on the step form.
+  bool get usesStepForm => kStepFormModules.contains(module) && !genericForm;
 
   @override
   State<EntityCreateScreen> createState() => _EntityCreateScreenState();
 }
 
 class _EntityCreateScreenState extends State<EntityCreateScreen> {
+  Widget _stepForm(BuildContext context) => docFormScreen(
+        module: widget.module,
+        mode: widget.isEdit ? DocFormMode.edit : DocFormMode.create,
+        id: widget.recordId,
+        initialValues: widget.isEdit ? null : widget.initialValues,
+        embedded: widget.embedded,
+        onFinished: (r) {
+          if (widget.embedded) {
+            widget.onFinished?.call(r != null);
+          } else {
+            Navigator.of(context).pop(r != null);
+          }
+        },
+      );
+
   List<Map<String, dynamic>> _fields = [];
   Map<String, List<Map<String, dynamic>>> _picklists = {};
   final _values = <String, dynamic>{};
@@ -96,6 +119,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.usesStepForm) return;
     if (widget.initialValues != null) {
       _values.addAll(widget.initialValues!);
     }
@@ -289,7 +313,9 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
 
   // Back / swipe asks before throwing away what was typed.
   @override
-  Widget build(BuildContext context) => NxUnsavedGuard(
+  Widget build(BuildContext context) => widget.usesStepForm
+      ? _stepForm(context)
+      : NxUnsavedGuard(
         enabled: !widget.embedded,
         snapshot: () => '$_values',
         child: _buildForm(context),

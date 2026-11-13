@@ -9,6 +9,8 @@ import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/crm/entity_create_screen.dart';
 import 'package:nextx_mobile/screens/crm/entity_list_screen.dart';
 import 'package:nextx_mobile/screens/crm/entity_record_actions.dart';
+import 'package:nextx_mobile/screens/doc_form/doc_form_launcher.dart';
+import 'package:nextx_mobile/screens/doc_form/quotation_step_form.dart';
 
 import 'support/fake_api.dart';
 
@@ -115,10 +117,14 @@ void main() {
     expect(find.byKey(const ValueKey('status-opt-Qualified')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('status-opt-Qualified')));
     await settle(tester);
+    // R66: confirm current → new first.
+    expect(find.text('เปลี่ยนสถานะ?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('status-confirm-ok')));
+    await settle(tester);
     final puts = adapter.calls.where((c) => c.method == 'PUT' && c.path == '/api/entity/lead/5').toList();
     expect(puts, hasLength(1));
     expect(puts.first.data, {'lead_status': 'Qualified'});
-    expect(find.textContaining('เปลี่ยนสถานะเป็น [QA] ผ่านเกณฑ์'), findsOneWidget);
+    expect(find.textContaining('เปลี่ยนสถานะแล้ว · [QA] ผ่านเกณฑ์'), findsOneWidget);
     await tester.tap(find.text('เลิกทำ'));
     await settle(tester);
     final puts2 = adapter.calls.where((c) => c.method == 'PUT' && c.path == '/api/entity/lead/5').toList();
@@ -134,6 +140,7 @@ void main() {
     expect(adapter.callKeys, contains('GET /api/entity/lead/5/comments'));
     expect(find.textContaining('[QA] คอมเมนต์เดิม'), findsOneWidget);
     await tester.enterText(find.byType(TextField).last, '[QA] อัปเดตจากรายการ');
+    await tester.pump(); // send turns on once there is text (R72)
     await tester.tap(find.byTooltip('ส่ง'));
     await settle(tester);
     final post = adapter.calls.where((c) => c.method == 'POST' && c.path == '/api/entity/lead/5/comments').toList();
@@ -162,25 +169,22 @@ void main() {
     expect(form.title, startsWith('ทำซ้ำ'));
   });
 
-  testWidgets('duplicate (quotation): confirm → server duplicate', (tester) async {
-    const q = {'id': 9, 'quotation_no': 'QT-QA-9', 'subject': '[QA] ใบเสนอราคา R43', 'quotation_status': 'Draft'};
+  testWidgets('duplicate (quotation): the quotation step form, pre-filled (no server copy)', (tester) async {
+    const q = {'id': 9, 'quotation_no': 'QT-QA-9', 'subject': '[QA] ใบเสนอราคา R43', 'title_th': '[QA] ใบเสนอราคา R43', 'quotation_status': 'Draft'};
     final (adapter, _) = await pumpList(
       tester,
       module: 'quotation',
       row: q,
       statusKey: 'quotation_status',
-      extra: {
-        'POST /api/entity/quotation/9/duplicate': {'id': 10},
-        'GET /api/entity/quotation/10': {'id': 10, 'subject': '[QA] ใบเสนอราคา R43 (copy)'},
-      },
+      extra: {'GET /api/quotation/9/lines': {'list': <Object>[]}},
     );
     await longPressRow(tester, '[QA] ใบเสนอราคา R43');
     await tester.tap(find.byKey(const ValueKey('row-act-duplicate')));
-    await settle(tester);
-    expect(find.text('ทำซ้ำรายการนี้?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'ทำซ้ำ'));
-    await settle(tester);
-    expect(adapter.callKeys, contains('POST /api/entity/quotation/9/duplicate'));
+    await settle(tester, 20);
+    expect(find.byType(QuotationStepForm), findsOneWidget);
+    expect(tester.widget<QuotationStepForm>(find.byType(QuotationStepForm)).mode, DocFormMode.duplicate);
+    expect(find.text('[QA] ใบเสนอราคา R43 (Copy)'), findsWidgets);
+    expect(adapter.callKeys, isNot(contains('POST /api/entity/quotation/9/duplicate')));
   });
 
   testWidgets('delete: confirm → row hidden with undo → DELETE after 5 s', (tester) async {
@@ -188,8 +192,8 @@ void main() {
     await longPressRow(tester, '[QA] ลูกค้าทดสอบ R43');
     await tester.tap(find.byKey(const ValueKey('row-act-delete')));
     await settle(tester);
-    expect(find.text('ลบรายการนี้?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'ลบ'));
+    expect(find.text('ลบ [QA] ลูกค้าทดสอบ R43?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('delete-confirm')));
     await settle(tester);
     expect(find.text('[QA] ลูกค้าทดสอบ R43'), findsNothing, reason: 'hidden while the undo window is open');
     expect(adapter.callKeys, isNot(contains('DELETE /api/entity/lead/5')));

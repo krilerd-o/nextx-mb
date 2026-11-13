@@ -43,13 +43,13 @@ void main() {
         body: Center(
           child: NxTabBarCard(selectedIndex: 0, destinations: [
             NxTabDestination(icon: NxI.squaresFour, selectedIcon: NxI.squaresFourFill, label: 'หน้าหลัก'),
-            NxTabDestination(icon: NxI.handshake, selectedIcon: NxI.handshake, label: 'ลีด/ดีล'),
+            NxTabDestination(icon: NxI.handshake, selectedIcon: NxI.handshake, label: 'ผู้มุ่งหวัง'),
           ]),
         ),
       ),
     ));
     expect(find.text('หน้าหลัก'), findsOneWidget);
-    expect(find.text('ลีด/ดีล'), findsOneWidget);
+    expect(find.text('ผู้มุ่งหวัง'), findsOneWidget);
   });
 
   testWidgets('app bottom sheet opens with title and closes on barrier', (tester) async {

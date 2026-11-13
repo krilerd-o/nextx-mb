@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import '../../core/i18n.dart';
 import '../../services/calls/live_transcription.dart';
 import '../../widgets/nx_icons.dart';
 import '../comm_ai/call_summary_screen.dart';
+import '../comm_ai/comm_ai_errors.dart';
 import '../comm_ai/comm_ai_isaac.dart';
 
 const _glass = Color(0xB3020617);
@@ -62,7 +64,7 @@ class _CallConsentPanelState extends State<CallConsentPanel> {
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Center(child: IsaacAvatar(mood: 'listening', size: 72)),
         const SizedBox(height: 10),
-        Text(tr('ให้ ISAAC ช่วยจดบทสนทนาไหม?'), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+        Text(tr('ให้ไอแซคช่วยจดบทสนทนาไหม?'), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
         Text(
           tr(widget.callerMode
@@ -111,9 +113,85 @@ class LiveCaptionsPanel extends StatefulWidget {
   State<LiveCaptionsPanel> createState() => _LiveCaptionsPanelState();
 }
 
+/// Off → English → ไทย → off. Only finished lines are translated (cached on the server).
+const kCaptionLangCycle = ['', 'en', 'th'];
+
 class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
   bool _open = true;
   static const _colors = [Color(0xFF7DD3FC), Color(0xFF6EE7B7), Color(0xFFFCD34D), Color(0xFFF9A8D4), Color(0xFFC4B5FD)];
+  String _lang = '';
+  final _tr = <String, String>{}; // '$lang:$captionKey' → text
+  final _asked = <String>{};
+  Timer? _debounce;
+  String? _trError;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.lt.captions.addListener(_schedule);
+  }
+
+  @override
+  void didUpdateWidget(LiveCaptionsPanel old) {
+    super.didUpdateWidget(old);
+    if (old.lt != widget.lt) {
+      old.lt.captions.removeListener(_schedule);
+      widget.lt.captions.addListener(_schedule);
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    widget.lt.captions.removeListener(_schedule);
+    super.dispose();
+  }
+
+  void _cycleLang() {
+    setState(() => _trError = null);
+    setState(() => _lang = kCaptionLangCycle[(kCaptionLangCycle.indexOf(_lang) + 1) % kCaptionLangCycle.length]);
+    _schedule();
+  }
+
+  void _schedule() {
+    if (_lang.isEmpty) return;
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), _translate);
+  }
+
+  Future<void> _translate() async {
+    final lang = _lang;
+    final api = widget.lt.api;
+    if (lang.isEmpty || api == null) return;
+    final todo = [for (final c in widget.lt.captions.value) if (c.isFinal && c.text.isNotEmpty && !_asked.contains('$lang:${c.key}')) c];
+    final batch = todo.length > 30 ? todo.sublist(todo.length - 30) : todo;
+    if (batch.isEmpty) return;
+    for (final c in batch) {
+      _asked.add('$lang:${c.key}');
+    }
+    try {
+      final out = await api.translateCommAi([for (final c in batch) c.text], lang);
+      if (!mounted) return;
+      setState(() {
+        for (var i = 0; i < batch.length; i++) {
+          _tr['$lang:${batch[i].key}'] = i < out.length ? out[i] : '';
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      if (isCommAiQuotaError(e)) {
+        // Used up for the month: say so once and stop asking (the call goes on).
+        setState(() {
+          _trError = commAiErrorText(e);
+          _lang = '';
+        });
+        return;
+      }
+      for (final c in batch) {
+        _asked.remove('$lang:${c.key}');
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -138,7 +216,7 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                   if (lt.request != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
-                      child: Text('🔴 ${tr('${lt.request!['by_name']} เปิดให้ ISAAC จดบทสนทนาในสายนี้')}', style: const TextStyle(color: Color(0xFFFDA4AF), fontSize: 12)),
+                      child: Text('🔴 ${tr('${lt.request!['by_name']} เปิดให้ไอแซคจดบทสนทนาในสายนี้')}', style: const TextStyle(color: Color(0xFFFDA4AF), fontSize: 12)),
                     ),
                   Row(children: [
                     Stack(clipBehavior: Clip.none, children: [
@@ -154,7 +232,7 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                       ),
                     ]),
                     const SizedBox(width: 8),
-                    Expanded(child: Text('${tr('ISAAC กำลังจดบทสนทนา')}${names.isEmpty ? '' : ' · $names'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                    Expanded(child: Text('${tr('ไอแซคกำลังจดบทสนทนา')}${names.isEmpty ? '' : ' · $names'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12))),
                     if (lt.status == 'reconnecting' || lt.status == 'connecting') const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFCD34D))),
                     if (lt.running)
                       IconButton(
@@ -165,6 +243,22 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                       ),
                     if (lt.running)
                       IconButton(visualDensity: VisualDensity.compact, tooltip: tr('หยุดจดเสียงของฉัน'), icon: const Icon(NxI.stop, size: 16, color: Colors.white70), onPressed: lt.stop),
+                    Tooltip(
+                      message: tr('แปลคำบรรยาย'),
+                      child: TextButton.icon(
+                        key: const ValueKey('call-captions-translate'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          minimumSize: const Size(36, 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          foregroundColor: _lang.isEmpty ? Colors.white70 : Colors.white,
+                          backgroundColor: _lang.isEmpty ? null : const Color(0x4D0EA5E9),
+                        ),
+                        onPressed: _cycleLang,
+                        icon: const Icon(NxI.languages, size: 18),
+                        label: Text(_lang.isEmpty ? '' : _lang.toUpperCase(), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800)),
+                      ),
+                    ),
                     IconButton(
                       key: const ValueKey('call-captions-toggle'),
                       visualDensity: VisualDensity.compact,
@@ -174,15 +268,12 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                   ]),
                   if (lt.error != null)
                     Text(
-                      tr(lt.error == 'stt_not_configured'
-                          ? 'ยังไม่ได้ตั้งค่า OpenAI API key สำหรับถอดเสียง'
-                          : lt.error == 'stt_disabled'
-                              ? 'ผู้ดูแลปิดการถอดเสียงไว้'
-                              : lt.error == 'mic'
-                                  ? 'เครื่องนี้แบ่งไมค์ให้ระบบถอดเสียงไม่ได้ — สายยังคุยต่อได้ตามปกติ'
-                                  : 'เริ่มถอดข้อความไม่สำเร็จ — สายยังคุยต่อได้ตามปกติ'),
+                      commAiSttErrorText(lt.error!, quota: lt.quota),
+                      key: const ValueKey('call-captions-error'),
                       style: const TextStyle(color: Color(0xFFFCD34D), fontSize: 12),
                     ),
+                  if (_trError != null)
+                    Text(_trError!, key: const ValueKey('call-captions-translate-error'), style: const TextStyle(color: Color(0xFFFCD34D), fontSize: 12)),
                   if (_open)
                     ValueListenableBuilder<List<LiveCaption>>(
                       valueListenable: lt.captions,
@@ -203,10 +294,14 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                               duration: const Duration(milliseconds: 250),
                               child: Padding(
                                 padding: const EdgeInsets.only(top: 4, right: 8),
-                                child: Text.rich(TextSpan(children: [
-                                  TextSpan(text: '${c.userId == lt.myUserId ? tr('คุณ') : c.name}  ', style: TextStyle(color: _colors[ids.indexOf(c.userId) % _colors.length], fontWeight: FontWeight.w700, fontSize: 12)),
-                                  TextSpan(text: c.text, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35)),
-                                ])),
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text.rich(TextSpan(children: [
+                                    TextSpan(text: '${c.userId == lt.myUserId ? tr('คุณ') : c.name}  ', style: TextStyle(color: _colors[ids.indexOf(c.userId) % _colors.length], fontWeight: FontWeight.w700, fontSize: 12)),
+                                    TextSpan(text: c.text, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35)),
+                                  ])),
+                                  if (_lang.isNotEmpty && (_tr['$_lang:${c.key}'] ?? '').isNotEmpty)
+                                    Text(_tr['$_lang:${c.key}']!, key: ValueKey('call-caption-tr-${c.key}'), style: const TextStyle(color: Color(0xE6BAE6FD), fontSize: 13, fontStyle: FontStyle.italic, height: 1.3)),
+                                ]),
                               ),
                             ),
                         ]);
@@ -299,7 +394,7 @@ class CallSummaryToast extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                    Text(tr('ISAAC สรุปการสนทนาเสร็จแล้ว'), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(tr('ไอแซคสรุปการสนทนาเสร็จแล้ว'), style: const TextStyle(fontWeight: FontWeight.w700)),
                     Text('${ready['headline'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
                   ]),
                 ),

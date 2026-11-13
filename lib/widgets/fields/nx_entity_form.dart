@@ -13,6 +13,7 @@ import 'field_ui_type.dart';
 import 'field_validate.dart';
 import 'nx_form_field.dart';
 import 'nx_pick_option.dart';
+import 'nx_thai_address_set.dart';
 import '../nx_shake.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
@@ -79,93 +80,7 @@ class NxEntityFormState extends State<NxEntityForm> {
   @override
   void initState() {
     super.initState();
-    _host = NxFieldHost(
-      loadUsers: widget.api == null
-          ? null
-          : (q) async {
-              final rows = await widget.api!.getUsers(q: q);
-              return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
-            },
-      loadEntities: widget.api == null
-          ? null
-          : (module, q) async {
-              final page = await widget.api!.getEntityList(module, limit: 30, q: q);
-              return [
-                for (final row in page.items)
-                  NxPickOption(
-                    value: strId(row['id']),
-                    label: entityTitle(row, module: module),
-                    subtitle: entitySubtitle(row),
-                  ),
-              ];
-            },
-      loadTags: widget.api == null
-          ? null
-          : (q) async {
-              final rows = await widget.api!.getTags(module: widget.module, q: q);
-              return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
-            },
-      loadPackages: widget.api == null
-          ? null
-          : () async {
-              final rows = await widget.api!.getBusinessPackages();
-              return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
-            },
-      loadPicklist: widget.api == null
-          ? null
-          : (name) async {
-              final rows = await widget.api!.getPicklistValues(name);
-              return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
-            },
-      pickMedia: widget.api == null ? null : _pickMedia,
-      uploadBytes: widget.api == null ? null : _uploadBytes,
-      captureGps: () async {
-        try {
-          final fix = await LocationService().currentFix();
-          return (lat: fix.latitude, lng: fix.longitude);
-        } catch (_) {
-          return null;
-        }
-      },
-    );
-  }
-
-  Future<String?> _uploadBytes(List<int> bytes, String filename) async {
-    try {
-      final data = await widget.api!.uploadFiles([
-        MultipartFile.fromBytes(bytes, filename: filename),
-      ]);
-      return extractUploadedMedia(data);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<String?> _pickMedia(NxMediaKind kind) async {
-    final api = widget.api!;
-    try {
-      MultipartFile? part;
-      if (kind == NxMediaKind.video) {
-        final file = await ImagePicker().pickVideo(source: ImageSource.gallery);
-        if (file == null) return null;
-        part = MultipartFile.fromBytes(await file.readAsBytes(), filename: file.name);
-      } else if (kind == NxMediaKind.image) {
-        final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-        if (file == null) return null;
-        part = MultipartFile.fromBytes(await file.readAsBytes(), filename: file.name);
-      } else {
-        final picked = await FilePicker.platform.pickFiles(withData: true);
-        final f = picked?.files.single;
-        if (f == null) return null;
-        final bytes = f.bytes;
-        if (bytes == null) return null;
-        part = MultipartFile.fromBytes(bytes, filename: f.name);
-      }
-      final data = await api.uploadFiles([part]);
-      return extractUploadedMedia(data);
-    } catch (_) {
-      return null;
-    }
+    _host = nxFieldHostFor(widget.api, module: widget.module);
   }
 
   List<NxPickOption> _optionsFor(Map<String, dynamic> field) {
@@ -193,8 +108,18 @@ class NxEntityFormState extends State<NxEntityForm> {
     return opts;
   }
 
+  /// Product / service discount: `<x>_discount` + `<x>_discount_type` ('amount' baht | 'percent').
+  /// The type is a บาท / % toggle next to the number (same as the web), not a field of its own.
+  static final _discountRe = RegExp(r'^(product|service)_discount$');
+  bool _hasDiscountType(String name) =>
+      _discountRe.hasMatch(name) && widget.fields.any((f) => fieldName(f) == '${name}_type');
+
   List<Map<String, dynamic>> _orderedFields() {
-    final list = [...widget.fields];
+    final names = {for (final f in widget.fields) fieldName(f)};
+    final list = [
+      for (final f in widget.fields)
+        if (!(fieldName(f).endsWith('_discount_type') && names.contains(fieldName(f).replaceFirst(RegExp(r'_type$'), '')))) f,
+    ];
     if (list.any((f) => fieldSequence(f) != 0)) {
       list.sort((a, b) => fieldSequence(a).compareTo(fieldSequence(b)));
     }
@@ -237,6 +162,32 @@ class NxEntityFormState extends State<NxEntityForm> {
     }
   }
 
+  /// Thai address sets (province / district / sub-district / postcode) in
+  /// this form — drawn as one easy group like the web, not 4 plain inputs.
+  List<ThaiAddressSetFields> _addressSets() => detectThaiAddressSets(widget.fields.map(fieldName));
+
+  Widget _addressSet(ThaiAddressSetFields set) {
+    final byName = {for (final f in widget.fields) fieldName(f): f};
+    final members = set.members.map((n) => byName[n]).whereType<Map<String, dynamic>>().toList();
+    return NxThaiAddressSet(
+      fields: set,
+      values: widget.values,
+      api: widget.api,
+      enabled: widget.enabled && !members.any(fieldIsReadonly),
+      labels: {for (final f in members) fieldName(f): fieldLabel(f)},
+      required: {for (final f in members) if (fieldIsRequired(f)) fieldName(f)},
+      errors: {
+        for (final n in set.members)
+          if (widget.errors[n] != null) n: widget.errors[n]!,
+      },
+      onChanged: widget.onChanged,
+      decorate: (name, child) => NxShake(
+        key: _shakers.putIfAbsent(name, GlobalKey<NxShakeState>.new),
+        child: KeyedSubtree(key: _keys.putIfAbsent(name, GlobalKey.new), child: child),
+      ),
+    );
+  }
+
   Widget _fieldAt(int i, Map<String, dynamic> f) {
     final name = fieldName(f);
     // Same key on every build, so revealErrors() can always find the field.
@@ -260,6 +211,28 @@ class NxEntityFormState extends State<NxEntityForm> {
         onChanged: (v) => widget.onChanged(name, v),
       ),
       ),
+    );
+  }
+
+  Widget _fieldOrDiscount(int i, Map<String, dynamic> f) {
+    final name = fieldName(f);
+    if (!_hasDiscountType(name)) return _fieldAt(i, f);
+    final typeKey = '${name}_type';
+    final percent = '${unwrapFieldValue(widget.values[typeKey]) ?? ''}' == 'percent';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _fieldAt(i, f)),
+        const SizedBox(width: 8),
+        Padding(
+          padding: const EdgeInsets.only(top: 22),
+          child: NxDiscountTypeToggle(
+            key: ValueKey('discount-type-$name'),
+            percent: percent,
+            onChanged: widget.enabled ? (p) => widget.onChanged(typeKey, p ? 'percent' : 'amount') : null,
+          ),
+        ),
+      ],
     );
   }
 
@@ -436,9 +409,28 @@ class NxEntityFormState extends State<NxEntityForm> {
     final theme = Theme.of(context);
     final pairShort = NxBreakpoint.of(context).twoPane;
     final children = <Widget>[];
+    final sets = _addressSets();
+    ThaiAddressSetFields? setOf(Map<String, dynamic>? f) {
+      if (f == null) return null;
+      final n = fieldName(f);
+      for (final s in sets) {
+        if (s.members.contains(n)) return s;
+      }
+      return null;
+    }
+
+    final drawnSets = <ThaiAddressSetFields>{};
     String? lastBlock;
     for (var i = 0; i < fields.length; i++) {
       final f = fields[i];
+      final set = setOf(f);
+      if (set != null) {
+        if (drawnSets.add(set)) {
+          children.add(_addressSet(set));
+          children.add(const SizedBox(height: 20));
+        }
+        continue;
+      }
       final block = widget.sectionOf == null ? fieldBlockLabel(f) : null;
       if (block != null && block != lastBlock) {
         lastBlock = block;
@@ -458,15 +450,18 @@ class NxEntityFormState extends State<NxEntityForm> {
       final next = i + 1 < fields.length ? fields[i + 1] : null;
       final canPair = pairShort &&
           next != null &&
+          setOf(next) == null &&
           (widget.sectionOf == null ? fieldBlockLabel(next) : null) == block &&
           _isShortField(resolveFieldUiType(f)) &&
-          _isShortField(resolveFieldUiType(next));
+          _isShortField(resolveFieldUiType(next)) &&
+          !_hasDiscountType(fieldName(f)) &&
+          !_hasDiscountType(fieldName(next));
       if (canPair) {
         children.add(
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _fieldAt(i, f)),
+              Expanded(child: _fieldOrDiscount(i, f)),
               const SizedBox(width: 12),
               Expanded(child: _fieldAt(i + 1, next)),
             ],
@@ -476,7 +471,7 @@ class NxEntityFormState extends State<NxEntityForm> {
         i += 1;
         continue;
       }
-      children.add(_fieldAt(i, f));
+      children.add(_fieldOrDiscount(i, f));
       children.add(const SizedBox(height: 20));
     }
     return Column(
@@ -484,6 +479,27 @@ class NxEntityFormState extends State<NxEntityForm> {
       children: children,
     );
   }
+}
+
+/// บาท / % switch next to a discount number (catalog discounts, quotation
+/// lines, end-of-bill discount): the same control everywhere in the app.
+class NxDiscountTypeToggle extends StatelessWidget {
+  const NxDiscountTypeToggle({super.key, required this.percent, this.onChanged});
+
+  final bool percent;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) => SegmentedButton<String>(
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        segments: [
+          ButtonSegment(value: 'amount', label: Text(tr('บาท'))),
+          const ButtonSegment(value: 'percent', label: Text('%')),
+        ],
+        selected: {percent ? 'percent' : 'amount'},
+        onSelectionChanged: onChanged == null ? null : (v) => onChanged!(v.first == 'percent'),
+      );
 }
 
 bool _isShortField(FieldUiType type) {
@@ -499,6 +515,85 @@ bool _isShortField(FieldUiType type) {
       return true;
     default:
       return false;
+  }
+}
+
+/// Pickers / uploads behind the shared field widgets (users, records, tags,
+/// packages, picklists, media, GPS) — what [NxEntityForm] gives its fields,
+/// for screens that draw [NxFormField]s themselves.
+NxFieldHost nxFieldHostFor(ApiClient? api, {String? module}) {
+  if (api == null) return const NxFieldHost(captureGps: _captureGps);
+  Future<String?> uploadBytes(List<int> bytes, String filename) async {
+    try {
+      final data = await api.uploadFiles([MultipartFile.fromBytes(bytes, filename: filename)]);
+      return extractUploadedMedia(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> pickMedia(NxMediaKind kind) async {
+    try {
+      MultipartFile? part;
+      if (kind == NxMediaKind.video) {
+        final file = await ImagePicker().pickVideo(source: ImageSource.gallery);
+        if (file == null) return null;
+        part = MultipartFile.fromBytes(await file.readAsBytes(), filename: file.name);
+      } else if (kind == NxMediaKind.image) {
+        final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+        if (file == null) return null;
+        part = MultipartFile.fromBytes(await file.readAsBytes(), filename: file.name);
+      } else {
+        final picked = await FilePicker.platform.pickFiles(withData: true);
+        final f = picked?.files.single;
+        if (f == null) return null;
+        final bytes = f.bytes;
+        if (bytes == null) return null;
+        part = MultipartFile.fromBytes(bytes, filename: f.name);
+      }
+      final data = await api.uploadFiles([part]);
+      return extractUploadedMedia(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  return NxFieldHost(
+    loadUsers: (q) async {
+      final rows = await api.getUsers(q: q);
+      return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
+    },
+    loadEntities: (m, q) async {
+      final page = await api.getEntityList(m, limit: 30, q: q);
+      return [
+        for (final row in page.items)
+          NxPickOption(value: strId(row['id']), label: entityTitle(row, module: m), subtitle: entitySubtitle(row)),
+      ];
+    },
+    loadTags: (q) async {
+      final rows = await api.getTags(module: module, q: q);
+      return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
+    },
+    loadPackages: () async {
+      final rows = await api.getBusinessPackages();
+      return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
+    },
+    loadPicklist: (name) async {
+      final rows = await api.getPicklistValues(name);
+      return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
+    },
+    pickMedia: pickMedia,
+    uploadBytes: uploadBytes,
+    captureGps: _captureGps,
+  );
+}
+
+Future<({double lat, double lng})?> _captureGps() async {
+  try {
+    final fix = await LocationService().currentFix();
+    return (lat: fix.latitude, lng: fix.longitude);
+  } catch (_) {
+    return null;
   }
 }
 

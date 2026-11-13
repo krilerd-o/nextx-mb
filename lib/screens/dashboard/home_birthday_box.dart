@@ -4,12 +4,14 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
+import '../../core/menu_access.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/thai_time.dart';
 import '../../widgets/nx_icons.dart';
 import '../calendar/cal/cal_birthday_actions.dart';
 import '../calendar/cal/cal_birthdays.dart';
 import '../calendar/cal/cal_model.dart';
+import 'home_boxes.dart' show homeCardDecoration;
 
 /// Home: "วันเกิดลูกค้าวันนี้" — today's customer birthdays (Lead / Contact /
 /// Account) with tomorrow's underneath, so nobody is missed. Tap a person for
@@ -60,8 +62,11 @@ class _HomeBirthdayBoxState extends State<HomeBirthdayBox> {
   Widget build(BuildContext context) {
     final today = calDay(thaiNow());
     final tomorrow = today.add(const Duration(days: 1));
-    final now = _b.on(today);
-    final next = _b.on(tomorrow);
+    // Only people from modules this user may open (Lead / Contact / Account).
+    final session = context.select((AppConfig c) => c.session);
+    bool ok(CalBirthday b) => MenuAccess.allow(session, b.module);
+    final now = _b.on(today).where(ok).toList();
+    final next = _b.on(tomorrow).where(ok).toList();
     if (now.isEmpty && next.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
@@ -81,15 +86,7 @@ class _HomeBirthdayBoxState extends State<HomeBirthdayBox> {
       padding: const EdgeInsets.only(top: 20),
       child: Container(
         clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color.alphaBlend(calBirthdayColor.withValues(alpha: 0.10), cs.surface), cs.surface],
-          ),
-          border: Border.all(color: calBirthdayColor.withValues(alpha: 0.22)),
-        ),
+        decoration: homeCardDecoration(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

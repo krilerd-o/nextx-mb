@@ -25,6 +25,7 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_attachments.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
@@ -307,10 +308,22 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   // ── status / title
   Future<void> _setStatus(WsStatus s) async {
+    if ('${_item['status_id'] ?? ''}' == s.id) return;
+    // Ask first; cancel leaves the stepper on the current status.
+    if (!await confirmWsStatus(context, item: _item, statuses: _statuses, to: s.id) || !mounted) return;
+    final before = _item['status_id'];
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final ok = await _update({'status_id': int.tryParse(s.id) ?? s.id});
     if (ok) {
-      HapticFeedback.mediumImpact();
-      if (s.isDone) _snack('ย้ายไป ${s.label} แล้ว');
+      showNxStatusChangedSnack(
+        messenger,
+        label: s.label,
+        undo: before == null
+            ? null
+            : () async {
+                if (mounted) await _update({'status_id': before});
+              },
+      );
     }
   }
 
@@ -500,11 +513,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         ? (_statuses.where((s) => s.isInitial).firstOrNull ?? _statuses.firstOrNull)
         : _statuses.where((s) => s.isDone).firstOrNull ?? _statuses.lastOrNull;
     if (target == null) return;
-    HapticFeedback.selectionClick();
+    // Ticking a subtask moves its status: confirm first (the box stays as it was on cancel).
+    if (!await confirmWsStatus(context, item: t, statuses: _statuses, to: target.id) || !mounted) return;
     final i = _tasks.indexOf(t);
+    if (i < 0) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
     setState(() => _tasks = [..._tasks]..[i] = {...t, 'status_id': int.tryParse(target.id) ?? target.id, 'is_completed': done ? 0 : 1});
     try {
       await _api.updateWorkspaceItem(_boardId, 'task', '${t['id']}', {'status_id': int.tryParse(target.id) ?? target.id});
+      showNxStatusChangedSnack(messenger, label: target.label);
     } catch (e) {
       if (mounted) setState(() => _tasks = [..._tasks]..[i] = t);
       _snack(formatApiError(e));
@@ -810,7 +827,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               item(NxI.arrowsLeftRight, 'ย้ายไปบอร์ดอื่น', _moveBoard),
               item(NxI.hash, 'คัดลอกรหัส', _copyKey),
               item(NxI.shareNetwork, 'แชร์ลิงก์', () => Share.share(wsShareText(_item, _webUrl, boardCode: _code))),
-              item(NxI.sparkle, 'ถาม Isaac', () => context.push(AppRoutes.aiAsk(module: 'workspace_item', id: _id, title: '${wsKey(_item, boardCode: _code)} ${_item['title'] ?? ''}'.trim()))),
+              item(NxI.sparkle, 'ถามไอแซค', () => context.push(AppRoutes.aiAsk(module: 'workspace_item', id: _id, title: '${wsKey(_item, boardCode: _code)} ${_item['title'] ?? ''}'.trim()))),
               item(NxI.trash, _isEpic ? 'ลบ Epic' : 'ลบงาน', _delete, color: cs.error),
             ],
           ),

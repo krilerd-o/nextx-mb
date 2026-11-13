@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'i18n.dart';
+
 /// Activity guests (`attendees` jsonb) — same shape as the NEXTX web
 /// (`frontend/src/constants/activityGuests.js`) so both sides read each other:
 /// `{id, kind: user|entity|email, user_id | module+entity_id | email, name, phone,
@@ -214,7 +216,7 @@ String reminderLabel(int m) => switch (m) {
 const kActivityTypes = ['Visit', 'Call', 'Meeting', 'Task', 'Education', 'Personal'];
 
 String activityTypeLabel(String t) => switch (t) {
-      'Visit' => 'เยี่ยมลูกค้า',
+      'Visit' => 'เข้าพบลูกค้า',
       'Call' => 'โทร',
       'Meeting' => 'ประชุม',
       'Task' => 'งาน',
@@ -222,6 +224,28 @@ String activityTypeLabel(String t) => switch (t) {
       'Personal' => 'ส่วนตัว',
       _ => t,
     };
+
+/// Activity statuses of the web (`ACTIVITY_STATUSES` in `calendarEventUtils.js`):
+/// stored value → Thai / English label.
+const kActivityStatuses = {
+  'Planned': ('วางแผน', 'Planned'),
+  'In Progress': ('กำลังดำเนินการ', 'In Progress'),
+  'Completed': ('เสร็จสิ้น', 'Completed'),
+  'Cancelled': ('ยกเลิก', 'Cancelled'),
+  // Older rows (vtiger style).
+  'Held': ('เสร็จสิ้น', 'Held'),
+  'Not Held': ('ไม่ได้จัด', 'Not held'),
+  'Not Started': ('ยังไม่เริ่ม', 'Not started'),
+};
+
+/// Label of an activity status in the current language (`In Progress` →
+/// `กำลังดำเนินการ`); unknown values pass through.
+String activityStatusLabel(String s) {
+  final hit = kActivityStatuses[s] ??
+      kActivityStatuses.entries.where((e) => e.key.toLowerCase() == s.trim().toLowerCase()).map((e) => e.value).firstOrNull;
+  if (hit == null) return s;
+  return L10n.isEn ? hit.$2 : hit.$1;
+}
 
 /// Which guest kind to suggest first for a type (web `defaultGuestMode`).
 String defaultGuestMode(String type) => switch (type) {

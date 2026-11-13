@@ -1,4 +1,6 @@
 import '../../core/nx_number.dart';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import '../../widgets/nx_skeleton.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +9,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_config.dart';
+import '../../core/app_theme.dart' show NxAtmosphereTokens;
+import '../../core/effects.dart';
 import '../../core/entity_modules.dart';
 import '../../core/i18n.dart';
 import '../../core/menu_access.dart';
@@ -52,6 +56,72 @@ class HomePrefs {
     try {
       await (await SharedPreferences.getInstance()).setString(k, value);
     } catch (_) {}
+  }
+}
+
+// ─────────────────────────── one card style ───────────────────────────
+
+/// Corner radius of every Home card.
+const double kHomeCardRadius = 24;
+
+/// Soft, wide shadow of the Home cards (dark mode: a deeper, tighter one). Always painted outside
+/// any clip (see [HomeCardShadow]) so it is never cut into a flat band.
+List<BoxShadow> homeCardShadows(bool dark) => dark
+    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.34), offset: const Offset(0, 8), blurRadius: 22, spreadRadius: -4)]
+    : const [
+        BoxShadow(color: Color(0x0A0F172A), offset: Offset(0, 1), blurRadius: 2),
+        BoxShadow(color: Color(0x120F172A), offset: Offset(0, 12), blurRadius: 30, spreadRadius: -8),
+      ];
+
+/// The one Home card look — frosted glass: a milky, slightly translucent fill that is brighter at
+/// the top, a light rim catching the light, 24 radius and the soft shadow.
+BoxDecoration homeCardDecoration(BuildContext context, {double radius = kHomeCardRadius}) {
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  final base = NxAtmosphereTokens.of(context).cardElevated;
+  return BoxDecoration(
+    color: base.withValues(alpha: dark ? 0.72 : 0.80),
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: dark
+          ? [Color.lerp(base, Colors.white, 0.07)!.withValues(alpha: 0.86), base.withValues(alpha: 0.70)]
+          : [Colors.white.withValues(alpha: 0.94), Colors.white.withValues(alpha: 0.72)],
+    ),
+    borderRadius: BorderRadius.circular(radius),
+    boxShadow: homeCardShadows(dark),
+    border: Border.all(color: Colors.white.withValues(alpha: dark ? 0.09 : 0.85), width: dark ? 1 : 1.2),
+  );
+}
+
+/// [homeCardDecoration] without its shadow, for an [Ink] inside a Material (ink is clipped to
+/// the Material's rectangle, so its shadow would show as a flat band). Pair with [HomeCardShadow].
+BoxDecoration homeCardFill(BuildContext context, {double radius = kHomeCardRadius}) =>
+    homeCardDecoration(context, radius: radius).copyWith(boxShadow: const []);
+
+/// Paints the Home card shadow outside a tappable (Material + Ink) card. With [frost] the card
+/// also blurs what is behind it (only the blur is clipped to the card; the shadow stays outside).
+class HomeCardShadow extends StatelessWidget {
+  const HomeCardShadow({super.key, required this.child, this.radius = kHomeCardRadius, this.frost = false});
+  final Widget child;
+  final double radius;
+  final bool frost;
+
+  @override
+  Widget build(BuildContext context) {
+    var body = child;
+    if (frost && Effects.of(context) != EffectsLevel.off) {
+      body = ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18), child: body),
+      );
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: homeCardShadows(Theme.of(context).brightness == Brightness.dark),
+      ),
+      child: body,
+    );
   }
 }
 
@@ -116,26 +186,19 @@ class HomeBoxHeader extends StatelessWidget {
   }
 }
 
-/// Box frame used by the home cards (tinted by [color]).
+/// Box frame used by the home cards: the shared [homeCardDecoration]; [color]
+/// is the box's accent (its header icon carries it).
 class HomeBoxFrame extends StatelessWidget {
-  const HomeBoxFrame({super.key, required this.color, required this.child});
+  const HomeBoxFrame({super.key, required this.color, required this.child, this.padding = const EdgeInsets.fromLTRB(16, 16, 16, 12)});
   final Color color;
   final Widget child;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color.alphaBlend(color.withValues(alpha: 0.08), cs.surface), cs.surface],
-        ),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-      ),
+      padding: padding,
+      decoration: homeCardDecoration(context),
       child: child,
     );
   }
@@ -455,8 +518,11 @@ class RecentStrip extends StatelessWidget {
             Text(tr('เปิดล่าสุด'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             SizedBox(
-              height: 112,
+              // Room for the cards' soft shadow; grows with the text size.
+              height: 112 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.4) + 24,
               child: ListView.separated(
+                clipBehavior: Clip.none,
+                padding: const EdgeInsets.only(bottom: 24),
                 scrollDirection: Axis.horizontal,
                 itemCount: allowed.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 10),
@@ -466,18 +532,14 @@ class RecentStrip extends StatelessWidget {
                   final c = colorOf(m);
                   return InkWell(
                     key: ValueKey('recent-$i'),
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(20),
                     onTap: () => context.push(
                       m == 'activity' ? AppRoutes.activity(r['id'] ?? '') : AppRoutes.crmRecord(m, r['id'] ?? ''),
                     ),
                     child: Container(
                       width: 148,
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: cs.surface,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: c.withValues(alpha: 0.25)),
-                      ),
+                      decoration: homeCardDecoration(context, radius: 20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

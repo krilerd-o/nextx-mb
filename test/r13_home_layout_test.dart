@@ -9,18 +9,18 @@ void main() {
     });
     final h = HomeLayout.instance;
     await h.load('u1');
-    expect(h.order.first, 'sales');
+    // ไอแซคแนะนำ (id `ai`) goes on top once; the rest keeps the saved order.
+    expect(h.order.take(2), ['ai', 'sales']);
     expect(h.order.toSet(), HomeLayout.defaultOrder.toSet());
-    expect(h.visibleOrder.contains('ai'), isFalse);
     await h.save('u1', ['pending', ...HomeLayout.defaultOrder.where((k) => k != 'pending')], {});
     await h.load('u2'); // another user: defaults
     expect(h.order, HomeLayout.defaultOrder);
   });
 
-  test('default Home order: ลงเวลา · AI · งานวันนี้ · งานค้าง · ทางลัด · เปิดล่าสุด · ยอดขาย · เคส · ภาพรวม', () {
+  test('default Home order: ไอแซคแนะนำ · ลงเวลา · งานวันนี้ · งานค้าง · ทางลัด · เปิดล่าสุด · ยอดขาย · เคส · ภาพรวม', () {
     expect(HomeLayout.defaultOrder.take(9), [
-      'today',
       'ai',
+      'today',
       'work',
       'pending',
       'quick',
@@ -32,7 +32,7 @@ void main() {
     expect(HomeLayout.sections.keys.toSet(), HomeLayout.defaultOrder.toSet());
     expect(
       [for (final k in HomeLayout.defaultOrder.take(9)) HomeLayout.sections[k]!.$1],
-      ['ลงเวลา', 'สรุปโดย AI', 'งานวันนี้', 'งานค้าง', 'ทางลัด', 'เปิดล่าสุด', 'ยอดขาย', 'เคส', 'ภาพรวม'],
+      ['ไอแซคแนะนำ', 'ลงเวลา', 'งานวันนี้', 'งานค้าง', 'ทางลัด', 'เปิดล่าสุด', 'ยอดขาย', 'เคส', 'ภาพรวม'],
     );
   });
 }

@@ -34,7 +34,7 @@ class CallSummaryBubble extends StatelessWidget {
                 const SizedBox(width: 10),
                 Flexible(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                    Text(tr(video ? 'ISAAC สรุปวิดีโอคอล' : 'ISAAC สรุปการโทร'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5))),
+                    Text(tr(video ? 'ไอแซคสรุปวิดีโอคอล' : 'ไอแซคสรุปการโทร'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5))),
                     Text(headline, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
                     if (actions > 0) Text(tr('$actions งานที่ต้องทำต่อ'), style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
                   ]),

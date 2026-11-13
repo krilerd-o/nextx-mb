@@ -3,25 +3,26 @@ import '../../widgets/nx_status_stepper.dart';
 import 'package:dio/dio.dart' show MultipartFile;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_config.dart';
 import '../../services/api_exceptions.dart';
-import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_timeline.dart';
-import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_attachments.dart';
+import '../../widgets/comments/nx_link_preview.dart' show openCommentFile, showCommentFileActions;
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
-import '../notifications/notification_center_screen.dart' show relativeTime;
+import '../../core/activity_guests.dart' show activityStatusLabel, activityTypeLabel;
 import '../../core/i18n.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../core/thai_time.dart';
 import '../../core/entity_display.dart';
+import '../../core/history_events.dart';
 import '../../widgets/nx_overlay_panel.dart';
+
+export 'entity_comments_panel.dart';
 
 /// Field that holds a record's status / stage for [module] (first one present).
 String? entityStatusKey(Map<String, dynamic> row, String module) {
@@ -218,280 +219,6 @@ String commentPlainText(String body) {
   return s.trim();
 }
 
-/// Threaded comments with reply + attachments (camera / gallery / file).
-class EntityCommentsPanel extends StatefulWidget {
-  const EntityCommentsPanel({
-    super.key,
-    required this.module,
-    required this.id,
-    required this.comments,
-    required this.onChanged,
-  });
-
-  final String module;
-  final String id;
-  final List<Map<String, dynamic>> comments;
-  final Future<void> Function() onChanged;
-
-  @override
-  State<EntityCommentsPanel> createState() => _EntityCommentsPanelState();
-}
-
-class _EntityCommentsPanelState extends State<EntityCommentsPanel> {
-  final _text = TextEditingController();
-  final _focus = FocusNode();
-  final List<Map<String, dynamic>> _pending = [];
-  Map<String, dynamic>? _replyTo;
-  bool _busy = false;
-
-  @override
-  void dispose() {
-    _text.dispose();
-    _focus.dispose();
-    super.dispose();
-  }
-
-  Future<void> _attach() async {
-    final files = await pickAttachments(context);
-    if (files.isEmpty || !mounted) return;
-    setState(() => _busy = true);
-    try {
-      final atts = await context.read<AppConfig>().apiClient.uploadCommentAttachments(files);
-      if (mounted) setState(() => _pending.addAll(atts));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _send() async {
-    final body = _text.text.trim();
-    if (body.isEmpty && _pending.isEmpty) return;
-    setState(() => _busy = true);
-    try {
-      await context.read<AppConfig>().apiClient.postEntityComment(
-            widget.module,
-            widget.id,
-            body,
-            attachments: List.of(_pending),
-            parentId: _replyTo?['id'],
-          );
-      _text.clear();
-      _pending.clear();
-      _replyTo = null;
-      HapticFeedback.lightImpact();
-      await widget.onChanged();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  bool _canEdit(Map<String, dynamic> c) {
-    final s = context.read<AppConfig>().session;
-    return '${c['user_id']}' == '${s.userId}' || s.isBusinessAdmin || s.isSuperadmin;
-  }
-
-  Future<void> _edit(Map<String, dynamic> c) async {
-    final next = await showDialog<String>(context: context, builder: (_) => _CommentEditDialog(initial: commentPlainText('${c['body'] ?? ''}')));
-    if (next == null || !mounted) return;
-    if (next.isEmpty && commentAttachments(c).isEmpty) return;
-    setState(() => _busy = true);
-    try {
-      // Inline images are not editable here: keep them after the new text.
-      final imgs = RegExp(r'<img[^>]*>', caseSensitive: false).allMatches('${c['body'] ?? ''}').map((m) => m.group(0)).join();
-      await context.read<AppConfig>().apiClient.updateEntityComment(widget.module, widget.id, c['id'] as Object, next + imgs);
-      await widget.onChanged();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final threads = threadComments(widget.comments);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        NxSurfaceCard(
-          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_replyTo != null)
-                Row(
-                  children: [
-                    Icon(NxI.arrowRight, size: 14, color: cs.primary),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        tr('ตอบกลับ ${_replyTo!['user_name'] ?? ''}'),
-                        style: theme.textTheme.labelMedium?.copyWith(color: cs.primary),
-                      ),
-                    ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(NxI.x, size: 16),
-                      onPressed: () => setState(() => _replyTo = null),
-                    ),
-                  ],
-                ),
-              if (_pending.isNotEmpty)
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final a in _pending)
-                      InputChip(
-        deleteIcon: const Icon(NxI.x, size: 16),
-                        avatar: Icon(isImageAttachment(a) ? NxI.image : NxI.paperclip, size: 16),
-                        label: Text(tr(a['name']?.toString() ?? 'file'), overflow: TextOverflow.ellipsis),
-                        onDeleted: () => setState(() => _pending.remove(a)),
-                      ),
-                  ],
-                ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  IconButton(tooltip: tr('แนบไฟล์ / ถ่ายรูป'), icon: const Icon(NxI.paperclip), onPressed: _busy ? null : _attach),
-                  Expanded(
-                    child: TextField(
-                      controller: _text,
-                      focusNode: _focus,
-                      minLines: 1,
-                      maxLines: 5,
-                      decoration: InputDecoration(hintText: tr('เขียนคอมเม้นท์'), border: InputBorder.none, filled: false),
-                    ),
-                  ),
-                  _busy
-                      ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                      : IconButton.filled(tooltip: tr('ส่ง'), icon: const Icon(NxI.paperPlaneTilt, size: 18), onPressed: _send),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (threads.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Text(tr('ยังไม่มีคอมเม้นท์'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-          ),
-        for (final (root, replies) in threads)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: NxSurfaceCard(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _CommentTile(c: root, onEdit: _canEdit(root) ? () => _edit(root) : null),
-                  for (final r in replies)
-                    Container(
-                      margin: const EdgeInsets.only(left: 18, top: 8),
-                      padding: const EdgeInsets.only(left: 12),
-                      decoration: BoxDecoration(border: Border(left: BorderSide(color: cs.outlineVariant, width: 2))),
-                      child: _CommentTile(c: r, small: true, onEdit: _canEdit(r) ? () => _edit(r) : null),
-                    ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () {
-                        setState(() => _replyTo = root);
-                        _focus.requestFocus();
-                      },
-                      child: Text(tr(replies.isEmpty ? 'ตอบกลับ' : 'ตอบกลับ (${replies.length})')),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Edit box for one comment; owns its controller (disposed with the dialog).
-class _CommentEditDialog extends StatefulWidget {
-  const _CommentEditDialog({required this.initial});
-  final String initial;
-
-  @override
-  State<_CommentEditDialog> createState() => _CommentEditDialogState();
-}
-
-class _CommentEditDialogState extends State<_CommentEditDialog> {
-  late final _ctrl = TextEditingController(text: widget.initial);
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(tr('แก้ไขคอมเม้นท์')),
-        content: TextField(
-          key: const ValueKey('comment-edit-field'),
-          controller: _ctrl,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 8,
-          decoration: InputDecoration(hintText: tr('เขียนคอมเม้นท์')),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('ยกเลิก'))),
-          FilledButton(key: const ValueKey('comment-edit-save'), onPressed: () => Navigator.pop(context, _ctrl.text.trim()), child: Text(tr('บันทึก'))),
-        ],
-      );
-}
-
-class _CommentTile extends StatelessWidget {
-  const _CommentTile({required this.c, this.small = false, this.onEdit});
-  final Map<String, dynamic> c;
-  final bool small;
-  final VoidCallback? onEdit;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final name = c['user_name']?.toString().trim();
-    final atts = [...commentAttachments(c), ...nxInlineImages('${c['body'] ?? ''}')];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            NxAvatar(label: name?.isNotEmpty == true ? name! : '?', size: small ? 24 : 30),
-            const SizedBox(width: 8),
-            Expanded(child: Text(tr(name?.isNotEmpty == true ? name! : 'ผู้ใช้'), style: theme.textTheme.titleSmall)),
-            Text(tr(relativeTime(c['created_at'])), style: theme.textTheme.bodySmall),
-            if (onEdit != null)
-              IconButton(
-                key: ValueKey('comment-edit-${c['id']}'),
-                tooltip: tr('แก้ไข'),
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(NxI.pencilSimple, size: 16),
-                onPressed: onEdit,
-              ),
-          ],
-        ),
-        if (nxCommentHasText('${c['body'] ?? ''}'))
-          Padding(padding: const EdgeInsets.only(top: 6), child: NxHtmlView(html: c['body'].toString())),
-        if (atts.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: AttachmentStrip(items: atts)),
-      ],
-    );
-  }
-}
-
 /// Image thumbnails (tap = full screen) + file cards (tap = preview) — shared
 /// [NxAttachmentStrip], same look in every menu.
 class AttachmentStrip extends StatelessWidget {
@@ -499,7 +226,12 @@ class AttachmentStrip extends StatelessWidget {
   final List<Map<String, dynamic>> items;
 
   @override
-  Widget build(BuildContext context) => NxAttachmentStrip(items: items);
+  Widget build(BuildContext context) => NxAttachmentStrip(
+        items: items,
+        // PDFs in the document preview; long press = open / share / save.
+        onOpenFile: (a) => openCommentFile(context, a),
+        onFileActions: (a) => showCommentFileActions(context, a),
+      );
 }
 
 Future<void> openImageViewer(BuildContext context, List<String> urls, int initial) => openNxImageViewer(context, urls, initial);
@@ -535,70 +267,32 @@ class EntityFilesPanel extends StatelessWidget {
   }
 }
 
-/// Plain-language line for one timeline event.
+/// Plain-language line for one timeline event (see [describeHistoryEvent]).
 ({IconData icon, String title, String? detail}) describeTimelineEvent(
   Map<String, dynamic> e, {
+  String? module,
   String Function(String field, String value)? valueLabel,
+  String Function(String field)? fieldLabel,
 }) {
-  final field = e['field_name']?.toString() ?? '';
-  String plain(dynamic v) {
-    final s = v?.toString() ?? '';
-    if (s.isEmpty || s == 'null') return '—';
-    final clean = stripTags(s);
-    return valueLabel == null || field.isEmpty ? clean : valueLabel(field, clean);
-  }
-
-  switch (e['type']?.toString()) {
-    case 'field_change':
-      final label = e['field_label_th']?.toString() ?? e['field_name']?.toString() ?? 'ฟิลด์';
-      return (icon: NxI.pencilSimple, title: 'แก้ $label', detail: '${plain(e['old_value'])} → ${plain(e['new_value'])}');
-    case 'audit':
-      final action = e['action']?.toString() ?? '';
-      final t = switch (action.toLowerCase()) {
-        final a when a.contains('create') => 'สร้างรายการ',
-        final a when a.contains('delete') => 'ลบรายการ',
-        final a when a.contains('update') || a.contains('edit') => 'แก้ไขรายการ',
-        final a when a.contains('duplicate') => 'ทำซ้ำรายการ',
-        final a when a.contains('convert') => 'แปลงรายการ',
-        _ => action.isEmpty ? 'กิจกรรม' : action,
-      };
-      final d = e['details'];
-      return (icon: NxI.clockCounterClockwise, title: t, detail: d is String && d.isNotEmpty && d.length < 160 ? d : null);
-    case 'engagement':
-      final kind = (e['event_type'] ?? e['source'])?.toString() ?? '';
-      const names = {
-        'comment': 'คอมเม้นท์',
-        'email_open': 'เปิดอีเมล',
-        'email_click': 'คลิกลิงก์ในอีเมล',
-        'email_sent': 'ส่งอีเมล',
-        'call': 'โทรหา',
-        'meeting': 'นัดประชุม',
-        'activity': 'กิจกรรม',
-        'web_visit': 'เข้าชมเว็บไซต์',
-        'form_submit': 'กรอกฟอร์ม',
-      };
-      return (icon: NxI.chatCircle, title: names[kind] ?? 'การมีส่วนร่วม', detail: null);
-    case 'status':
-    case 'status_change':
-      return (icon: NxI.flag, title: 'เปลี่ยนสถานะ', detail: '${plain(e['from_status'] ?? e['old_value'])} → ${plain(e['to_status'] ?? e['new_value'])}');
-    default:
-      return (
-        icon: NxI.info,
-        title: e['title']?.toString() ?? e['label']?.toString() ?? e['type']?.toString() ?? 'กิจกรรม',
-        detail: e['description']?.toString() ?? e['summary']?.toString(),
-      );
-  }
+  final d = describeHistoryEvent(e, module: module, valueLabel: valueLabel, fieldLabel: fieldLabel);
+  return (icon: d.icon, title: d.title, detail: d.detail);
 }
 
 String stripTags(String s) => s.replaceAll(RegExp(r'<[^>]*>'), '').trim();
 
 class EntityHistoryPanel extends StatelessWidget {
-  const EntityHistoryPanel({super.key, required this.events, required this.loading, this.valueLabel});
+  const EntityHistoryPanel({super.key, required this.events, required this.loading, this.valueLabel, this.fieldLabel, this.module});
   final List<Map<String, dynamic>> events;
   final bool loading;
 
   /// Maps stored picklist values to their Thai labels (`Contacted` → `ติดต่อแล้ว`).
   final String Function(String field, String value)? valueLabel;
+
+  /// Field label from the module's field metadata (`title` → `ชื่องาน`).
+  final String Function(String field)? fieldLabel;
+
+  /// Record module (status words differ: a job "Completed" is "ปิดงาน").
+  final String? module;
 
   @override
   Widget build(BuildContext context) {
@@ -616,13 +310,18 @@ class EntityHistoryPanel extends StatelessWidget {
       child: NxTimeline(entries: [
         for (final e in events)
           () {
-            final d = describeTimelineEvent(e, valueLabel: valueLabel);
-            final who = e['user_name']?.toString();
+            final d = describeHistoryEvent(e, module: module, valueLabel: valueLabel, fieldLabel: fieldLabel);
+            final who = e['user_name']?.toString().trim();
+            final at = parseThai(e['at'] ?? e['created_at'] ?? e['createdtime']);
+            final time = at == null ? null : '${NxTimeline.two(at.hour)}:${NxTimeline.two(at.minute)}';
             return NxTimelineEntry(
-              at: parseThai(e['at'] ?? e['created_at'] ?? e['createdtime']),
+              at: at,
               icon: d.icon,
-              title: Text(tr(d.title)),
-              body: d.detail == null || d.detail!.trim().isEmpty ? null : Text(tr(d.detail!)),
+              color: d.color,
+              // Already in the current language.
+              title: Text(d.title),
+              body: d.detail == null || d.detail!.trim().isEmpty ? null : Text(d.detail!),
+              chip: time == null && (who ?? '').isEmpty ? null : [?time, if (who != null && who.isNotEmpty) who].join(' · '),
               who: who,
               whoImage: e['user_avatar']?.toString() ?? e['avatar']?.toString(),
             );
@@ -797,8 +496,8 @@ class _EntityActivitiesPanelState extends State<EntityActivitiesPanel> {
                         Text(
                           [
                             _activityWhen(r['date_start']),
-                            if ('${r['status'] ?? ''}'.isNotEmpty) '${r['status']}',
-                            if ('${r['activitytype'] ?? ''}'.isNotEmpty) '${r['activitytype']}',
+                            if ('${r['status'] ?? ''}'.isNotEmpty) activityStatusLabel('${r['status']}'),
+                            if ('${r['activitytype'] ?? ''}'.isNotEmpty) tr(activityTypeLabel('${r['activitytype']}')),
                           ].where((e) => e.isNotEmpty).join(' · '),
                           style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                         ),

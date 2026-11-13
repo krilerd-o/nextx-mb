@@ -10,6 +10,8 @@ import '../widgets/nx_cached_future.dart';
 import '../widgets/nx_skeleton.dart';
 import 'calendar/activity_detail_screen.dart';
 import 'chat/chat_room_screen.dart';
+import 'comm_ai/call_summary_screen.dart';
+import 'comm_ai/comm_ai_history_screen.dart';
 import 'crm/entity_detail_screen.dart';
 import 'crm/entity_list_screen.dart';
 import 'workspace/task_detail_screen.dart';
@@ -27,12 +29,15 @@ class EntityListRoute extends StatelessWidget {
 }
 
 class EntityByIdLoader extends StatefulWidget {
-  const EntityByIdLoader({super.key, required this.module, required this.id, this.tab});
+  const EntityByIdLoader({super.key, required this.module, required this.id, this.tab, this.comment});
   final String module;
   final String id;
 
   /// Tab to open (from a notification).
   final String? tab;
+
+  /// Comment to highlight on the comments tab (mention notification).
+  final String? comment;
 
   @override
   State<EntityByIdLoader> createState() => _EntityByIdLoaderState();
@@ -63,6 +68,7 @@ class _EntityByIdLoaderState extends State<EntityByIdLoader> {
           module: EntityModules.normalize(widget.module),
           row: row,
           initialTab: widget.tab,
+          focusCommentId: widget.comment,
         );
       },
     );
@@ -70,8 +76,10 @@ class _EntityByIdLoaderState extends State<EntityByIdLoader> {
 }
 
 class ActivityByIdLoader extends StatefulWidget {
-  const ActivityByIdLoader({super.key, required this.id});
+  const ActivityByIdLoader({super.key, required this.id, this.tab, this.comment});
   final String id;
+  final String? tab;
+  final String? comment;
 
   @override
   State<ActivityByIdLoader> createState() => _ActivityByIdLoaderState();
@@ -95,7 +103,7 @@ class _ActivityByIdLoaderState extends State<ActivityByIdLoader> {
           return const _LoaderPage(child: NxSkeletonDetail());
         }
         final row = {...?snap.data, 'id': widget.id};
-        return ActivityDetailScreen(row: row);
+        return ActivityDetailScreen(row: row, initialTab: widget.tab, focusCommentId: widget.comment);
       },
     );
   }
@@ -408,5 +416,7 @@ Widget? nxPaneForRoute(String route) {
     return EntityByIdLoader(module: seg[1], id: seg[2], tab: uri.queryParameters['tab']);
   }
   if (seg.length == 2 && seg[0] == 'calendar') return ActivityByIdLoader(id: seg[1]);
+  if (seg.length == 3 && seg[0] == 'comm-ai' && seg[1] == 'calls') return CallSummaryScreen(callId: seg[2]);
+  if (seg.length == 3 && seg[0] == 'comm-ai' && seg[1] == 'summaries') return ChatSummaryDetailScreen(id: seg[2]);
   return null;
 }

@@ -521,7 +521,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         if (!_isThread && MenuAccess.allow(context.read<AppConfig>().session, MenuAccess.commAi))
           IconButton(
             key: const ValueKey('chat-ai-summary'),
-            tooltip: tr('ISAAC สรุปแชท'),
+            tooltip: tr('ไอแซคสรุปแชท'),
             icon: const Icon(NxI.sparkle, color: Color(0xFF7C3AED)),
             onPressed: () => showChatSummarySheet(context, roomId: _id, roomName: chatRoomTitle(_room)),
           ),

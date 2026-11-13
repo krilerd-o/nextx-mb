@@ -25,15 +25,18 @@ void main() {
   });
 
   test('timeline field change reads as old → new', () {
+    // A status field reads as a status change with Thai status words.
     final d = describeTimelineEvent({'type': 'field_change', 'field_label_th': 'สถานะ', 'old_value': 'New', 'new_value': 'Qualified'});
-    expect(d.title, 'แก้ สถานะ');
-    expect(d.detail, 'New → Qualified');
+    expect(d.title, 'เปลี่ยนสถานะ');
+    expect(d.detail, 'จาก ใหม่ เป็น มีคุณสมบัติ');
     final th = describeTimelineEvent(
       {'type': 'field_change', 'field_name': 'lead_status', 'old_value': 'New', 'new_value': 'Qualified'},
       valueLabel: (f, v) => {'New': 'ใหม่', 'Qualified': 'ผ่านเกณฑ์'}[v] ?? v,
     );
-    expect(th.detail, 'ใหม่ → ผ่านเกณฑ์');
-    expect(describeTimelineEvent({'type': 'engagement', 'event_type': 'comment'}).title, 'คอมเม้นท์');
+    expect(th.detail, 'จาก ใหม่ เป็น ผ่านเกณฑ์');
+    final other = describeTimelineEvent({'type': 'field_change', 'field_name': 'phone', 'field_label_th': 'โทรศัพท์', 'old_value': '1', 'new_value': '2'});
+    expect((other.title, other.detail), ('แก้ไข โทรศัพท์', '1 → 2'));
+    expect(describeTimelineEvent({'type': 'engagement', 'event_type': 'comment'}).title, 'เพิ่มคอมเมนต์');
   });
 
   test('status key picks module field first', () {
@@ -119,6 +122,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(adapter.callKeys, contains('GET /api/entity/lead/5/timeline'));
-    expect(find.text('ใหม่ → ผ่านเกณฑ์'), findsOneWidget);
+    expect(find.text('จาก ใหม่ เป็น ผ่านเกณฑ์'), findsOneWidget); // status change, picklist labels
   });
 }

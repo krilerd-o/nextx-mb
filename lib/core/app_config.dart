@@ -54,6 +54,7 @@ const String _keyUiScale = 'ui_scale';
 const String _keyNavDock = 'nav_dock';
 const String _keyDateFormat = 'date_format_pattern';
 const String _keyProfileAvatarB64 = 'profile_avatar_base64';
+const String _keyProfileImagename = 'profile_imagename';
 const String _keyServerConfirmed = 'server_confirmed';
 const String _keyRecentServers = 'recent_servers';
 const String _keyPackageId = 'session_package_id';
@@ -176,6 +177,35 @@ class AppConfig extends ChangeNotifier {
   NxNavDock get navDock => _navDock;
   String get dateFormatPattern => _dateFormatPattern;
   String? get profileAvatarBase64 => _profileAvatarBase64;
+
+  /// The profile picture saved on the server (users.imagename) — the same one the web shows.
+  String? _profileImagename;
+  String? get profileImagename => _profileImagename;
+
+  /// URL of [profileImagename], built like the web's buildUploadsFileUrl (absolute URLs as-is,
+  /// otherwise `<api>/uploads/<encoded path>`).
+  String? get profileAvatarUrl {
+    final raw = (_profileImagename ?? '').trim();
+    if (raw.isEmpty || raw == 'null' || raw == 'undefined') return null;
+    if (RegExp(r'^https?://', caseSensitive: false).hasMatch(raw)) return raw;
+    final path = raw.replaceFirst(RegExp(r'^/+'), '').replaceFirst(RegExp(r'^(uploads/)+', caseSensitive: false), '');
+    final segs = path.split('/').where((e) => e.isNotEmpty).map(Uri.encodeComponent).join('/');
+    if (segs.isEmpty) return null;
+    return apiClient.absoluteUrl('/uploads/$segs');
+  }
+
+  /// Picture for avatars: the server one (same as the web) first, else the copy saved on this phone.
+  ImageProvider? get profileAvatarImage {
+    final url = profileAvatarUrl;
+    if (url != null) return NetworkImage(url);
+    final b64 = _profileAvatarBase64;
+    if (b64 == null || b64.isEmpty) return null;
+    try {
+      return MemoryImage(base64Decode(b64.contains(',') ? b64.split(',').last : b64));
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// The user picked/confirmed a NEXTX server (first-run step).
   bool get serverConfirmed => _serverConfirmed;
@@ -446,6 +476,12 @@ class AppConfig extends ChangeNotifier {
       );
 
   @visibleForTesting
+  @visibleForTesting
+  void debugSetProfileImagename(String? v) {
+    _profileImagename = v;
+    notifyListeners();
+  }
+
   void debugOverrideSession(SessionState session) {
     _session = session;
     notifyListeners();
@@ -529,6 +565,7 @@ class AppConfig extends ChangeNotifier {
     }
     _jsonSearchHistory(prefs.getString(_keySearchHistory));
     _profileAvatarBase64 = prefs.getString(_keyProfileAvatarB64);
+    _profileImagename = prefs.getString(_keyProfileImagename);
     _session = SessionState(
       accessToken: token,
       userId: uid,
@@ -764,12 +801,17 @@ class AppConfig extends ChangeNotifier {
     );
     if (x == null) return;
     final bytes = await x.readAsBytes();
-    await apiClient.uploadAvatar(
+    final res = await apiClient.uploadAvatar(
       MultipartFile.fromBytes(bytes, filename: x.name),
     );
     _profileAvatarBase64 = base64Encode(bytes);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyProfileAvatarB64, _profileAvatarBase64!);
+    final saved = res['imagename']?.toString();
+    if (saved != null && saved.isNotEmpty) {
+      _profileImagename = saved;
+      await prefs.setString(_keyProfileImagename, saved);
+    }
     notifyListeners();
   }
 
@@ -1031,6 +1073,16 @@ class AppConfig extends ChangeNotifier {
     final business = asStringKeyedMap(me['business']);
     final uid = user?['id']?.toString() ?? me['userId']?.toString() ?? _session.userId;
     final email = user?['email1']?.toString() ?? _session.email;
+    if (user != null && user.containsKey('imagename')) {
+      final img = user['imagename']?.toString().trim();
+      _profileImagename = (img == null || img.isEmpty || img == 'null') ? null : img;
+      final p = await SharedPreferences.getInstance();
+      if (_profileImagename == null) {
+        await p.remove(_keyProfileImagename);
+      } else {
+        await p.setString(_keyProfileImagename, _profileImagename!);
+      }
+    }
     final bid = business?['id']?.toString() ?? me['businessId']?.toString() ?? _session.businessId;
     final bname = business?['business_name']?.toString() ?? _session.businessName;
     List<String>? menus;
@@ -1043,7 +1095,10 @@ class AppConfig extends ChangeNotifier {
     if (pkg != null && pkg.isNotEmpty && bid != null) {
       try {
         menus = await _api.getMenuKeys(packageCode: pkg);
-      } catch (_) {}
+      } catch (_) {
+        // Offline / server error: keep the last known menus (never fall back to "everything").
+        menus = _session.menuKeys ?? const <String>[];
+      }
     }
     final allowed = me['allowed_menu_keys'];
     if (menus == null && allowed is List) {
@@ -1238,6 +1293,11 @@ class AppConfig extends ChangeNotifier {
     await prefs.remove(_keyPackageCode);
     await prefs.remove(_keyPackageId);
     await prefs.remove(_keyMenuKeys);
+    // The next account must not see this one's picture.
+    await prefs.remove(_keyProfileAvatarB64);
+    await prefs.remove(_keyProfileImagename);
+    _profileAvatarBase64 = null;
+    _profileImagename = null;
     _packageId = null;
     _shell = null;
     _session = const SessionState();

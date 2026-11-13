@@ -16,14 +16,9 @@ import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../services/api_client.dart';
 import '../../services/unread_service.dart';
-import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
-import '../../widgets/nx_workspace_switcher.dart';
-import '../../widgets/nx_surface_card.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
-import '../../widgets/nx_markdown.dart';
-import '../../widgets/nx_streaming_text.dart';
 import '../../core/thai_time.dart';
 import '../../core/workspace_models.dart';
 import '../../core/i18n.dart';
@@ -36,6 +31,8 @@ import 'home_birthday_box.dart';
 import 'home_boxes.dart';
 import 'home_charts.dart';
 import 'home_edit_mode.dart';
+import 'home_hero.dart';
+import 'home_isaac.dart';
 import 'home_widgets.dart';
 import 'widget_gallery_sheet.dart';
 import '../hr/attendance_punch_sheet.dart';
@@ -71,6 +68,15 @@ const _thaiDays = [
   'เสาร์',
   'อาทิตย์',
 ];
+
+/// Short date for the hero greeting: "พฤ. 12 พ.ย." / "Thu, 12 Nov".
+String thaiShortDate(DateTime d) {
+  const th = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'];
+  const thM = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  const en = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const enM = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return L10n.isEn ? '${en[d.weekday - 1]}, ${d.day} ${enM[d.month - 1]}' : '${th[d.weekday - 1]} ${d.day} ${thM[d.month - 1]}';
+}
 
 String thaiLongDate(DateTime d) => L10n.isEn
     ? '${tr(_thaiDays[d.weekday - 1])}, ${d.day} ${tr(_thaiMonths[d.month - 1])} ${d.year}'
@@ -110,9 +116,21 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
   bool _refreshing = false;
   Object? _error;
 
+  /// Header blur shows once the hero photo has scrolled away.
+  final ValueNotifier<bool> _pastHero = ValueNotifier(false);
+  final GlobalKey _heroKey = GlobalKey(debugLabel: 'home-hero');
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final h = _heroKey.currentContext?.size?.height ?? 300;
+    final limit = h - HomeHero.overlapDepth - MediaQuery.paddingOf(context).top - 8;
+    _pastHero.value = _scroll.offset > limit;
+  }
+
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_onScroll);
     _load();
     RecentRecords.instance.load(context.read<AppConfig>().businessScope);
     HomeLayout.instance.addListener(_onLayout);
@@ -309,6 +327,8 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
   @override
   void dispose() {
     HomeLayout.instance.removeListener(_onLayout);
+    _scroll.removeListener(_onScroll);
+    _pastHero.dispose();
     _wiggle.dispose();
     _scroll.dispose();
     _autoScroll?.cancel();
@@ -555,6 +575,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
       int.tryParse(m?[key]?.toString() ?? '') ?? 0;
 
   List<Map<String, dynamic>> _upcoming() {
+    // Appointments are calendar data: none for users without a calendar menu.
+    if (!MenuAccess.anyCalendar(context.read<AppConfig>().session)) {
+      return const [];
+    }
     final now = thaiNow().subtract(const Duration(hours: 1));
     final all = extractMapList(_summary?['activities']);
     return all
@@ -589,8 +613,58 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
       );
     }
     if (parts.isEmpty)
-      return 'วันนี้ยังไม่มีงานค้างหรือนัดหมาย ลองถาม AI ให้ช่วยวางแผนหรือสรุปลูกค้าที่ควรติดตาม';
+      return 'วันนี้ยังไม่มีงานค้างหรือนัดหมาย — แตะให้ไอแซคช่วยวางแผนวันนี้';
     return parts.join(' · ');
+  }
+
+  /// What ISAAC is told about today (from the data Home already loaded):
+  /// clock-in, work counts, overdue work and the next appointments — each
+  /// record with its route so a bullet about it opens it.
+  List<IsaacFact> _isaacFacts(Map<String, dynamic>? counts, dynamic clockIn, dynamic clockOut) {
+    final session = context.read<AppConfig>().session;
+    final out = <IsaacFact>[];
+    if (MenuAccess.allow(session, MenuAccess.attendance)) {
+      out.add(IsaacFact(
+        clockIn == null
+            ? 'ยังไม่ได้ลงเวลาเข้างาน'
+            : clockOut == null
+                ? 'ลงเวลาเข้างานแล้ว ${_hhmm(clockIn)} (ยังไม่ลงเวลาออก)'
+                : 'ลงเวลาเข้า ${_hhmm(clockIn)} ออก ${_hhmm(clockOut)} แล้ว',
+        route: clockIn == null || clockOut == null ? AppRoutes.attendance : null,
+      ));
+    }
+    if (counts != null) {
+      out.add(IsaacFact('งาน Workspace: ครบกำหนดวันนี้ ${_count(counts, 'today')} · เลยกำหนด ${_count(counts, 'overdue')} · กำลังมา ${_count(counts, 'upcoming')}'));
+    }
+    final pending = _pendingItems();
+    if (pending.isNotEmpty) out.add(IsaacFact('งานค้าง/เลยกำหนดทั้งหมด ${_pendingTotal()} รายการ'));
+    for (final p in pending.take(6)) {
+      final d = p.due;
+      final due = d == null ? '' : ' (กำหนด ${d.day}/${d.month} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')})';
+      out.add(IsaacFact(
+        '${p.kind == 'task' ? 'งานเลยกำหนด' : 'กิจกรรมเลยกำหนด'}: ${p.title}${p.detail.isEmpty ? '' : ' — ${p.detail}'}$due',
+        route: p.route,
+      ));
+    }
+    for (final a in _upcoming()) {
+      final where = '${a['location'] ?? ''}';
+      final who = '${a['account_name'] ?? ''}';
+      out.add(IsaacFact(
+        'นัดหมาย ${_hhmm(a['date_start'])}: ${a['subject'] ?? entityTitle(a, module: 'activity')}'
+        '${where.isEmpty ? '' : ' @ $where'}${who.isEmpty ? '' : ' · $who'}',
+        route: a['id'] == null ? null : AppRoutes.activity('${a['id']}'),
+      ));
+    }
+    return out;
+  }
+
+  Future<void> _punch(dynamic clockIn) async {
+    final r = await showAttendancePunchSheet(
+      context,
+      clockIn: clockIn == null,
+      clockedInAt: parseThai(clockIn),
+    );
+    if (r != null && mounted) _load();
   }
 
   @override
@@ -611,14 +685,19 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
     final stats = _summary?['stats'] is Map
         ? Map<String, dynamic>.from(_summary!['stats'] as Map)
         : const <String, dynamic>{};
+    final aiAllowed = MenuAccess.allow(session, MenuAccess.ai);
 
     final quick = <_QuickAction>[
       if (MenuAccess.allow(session, MenuAccess.attendance))
         const _QuickAction(NxI.clock, 'ลงเวลา', AppRoutes.attendance),
       if (MenuAccess.allow(session, MenuAccess.leave))
         const _QuickAction(NxI.calendarCheck, 'ขอลา', AppRoutes.leaveRequest),
-      if (MenuAccess.allow(session, MenuAccess.quotation) ||
-          MenuAccess.allow(session, MenuAccess.leaveManagement))
+      // Same menus as the รออนุมัติ page / tab.
+      if (MenuAccess.any(session, const [
+        MenuAccess.quotation,
+        MenuAccess.leaveManagement,
+        MenuAccess.pendingApprovals,
+      ]))
         const _QuickAction(NxI.checkCircle, 'รออนุมัติ', AppRoutes.approvals),
       if (MenuAccess.allow(session, MenuAccess.chat))
         const _QuickAction(NxI.chatCircle, 'แชท', AppRoutes.chatHome),
@@ -628,8 +707,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
         const _QuickAction(NxI.wrench, 'งานบริการ', AppRoutes.jobs),
       if (MenuAccess.allow(session, MenuAccess.mailbox))
         const _QuickAction(NxI.envelope, 'เมล', AppRoutes.mail),
-      if (MenuAccess.allow(session, MenuAccess.ai))
-        const _QuickAction(NxI.robot, 'AI', AppRoutes.aiChat),
+      if (aiAllowed) const _QuickAction(NxI.robot, 'AI', AppRoutes.aiChat),
     ];
 
     final statTiles = [
@@ -639,51 +717,61 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
           (e.key, e.value, _mine[e.key]),
     ];
 
-    // Glass header floats over the page; content scrolls up beneath it.
+    // The photo only greets (avatar, greeting + date, search, bell); clock-in
+    // stays in the today card.
+    final todayAttendance = MenuAccess.allow(session, MenuAccess.attendance);
+    final next = _upcoming().isEmpty ? null : _upcoming().first;
+    final todayHasRows = todayAttendance || next != null || counts != null;
+
     final pad = bp.scrollPadding(context, inShell: true);
+    const maxContent = 1100.0;
+    Widget limit(Widget child) => Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: maxContent),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: pad.left),
+          child: child,
+        ),
+      ),
+    );
+
+    final hero = HomeHero(
+      key: _heroKey,
+      greeting: greetingFor(now),
+      name: session.displayName,
+      date: thaiShortDate(now),
+      now: now,
+      gutter: pad.left,
+      maxContentWidth: maxContent,
+    );
+
+    // The hero is the page's header: the floating header is empty and its
+    // blur only shows once the photo has scrolled away.
     return NxScrollScaffold(
       insetBody: false,
-      header: NxAppHeader.hub(
-        actions: [
-          // Search everything (customers, documents, tasks, chat, mail, menus).
-          IconButton(
-            key: const ValueKey('home-search'),
-            tooltip: tr('ค้นหาทุกอย่าง'),
-            icon: const Icon(NxI.magnifyingGlass),
-            onPressed: () => context.push(AppRoutes.globalSearch),
-          ),
-        ],
+      headerBlur: _pastHero,
+      header: const PreferredSize(
+        preferredSize: Size.zero,
+        child: SizedBox.shrink(),
       ),
       body: Builder(
         builder: (context) {
-          final listPad = pad.copyWith(
-            // +12: greeting starts clear of the header's blur tail.
-            top: pad.top + 12 + NxScrollScaffold.topInset(context),
-          );
           final sections = <String, List<Widget>>{
             'today': [
-              const SizedBox(height: 12),
-              _TodayCard(
-                showAttendance: MenuAccess.allow(
-                  session,
-                  MenuAccess.attendance,
+              if (todayHasRows) ...[
+                const SizedBox(height: 12),
+                _TodayCard(
+                  showAttendance: todayAttendance,
+                  clockIn: clockIn,
+                  clockOut: clockOut,
+                  onPunch: (_) => _punch(clockIn),
+                  next: next,
+                  overdue: _count(counts, 'overdue'),
+                  today: _count(counts, 'today'),
+                  upcoming: _count(counts, 'upcoming'),
+                  hasWork: counts != null,
                 ),
-                clockIn: clockIn,
-                clockOut: clockOut,
-                onPunch: (inn) async {
-                  final r = await showAttendancePunchSheet(
-                    context,
-                    clockIn: inn,
-                    clockedInAt: parseThai(clockIn),
-                  );
-                  if (r != null && mounted) _load();
-                },
-                next: _upcoming().isEmpty ? null : _upcoming().first,
-                overdue: _count(counts, 'overdue'),
-                today: _count(counts, 'today'),
-                upcoming: _count(counts, 'upcoming'),
-                hasWork: counts != null,
-              ),
+              ],
             ],
             'pending': [
               if (_pendingItems().isNotEmpty) ...[
@@ -695,10 +783,16 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
               ],
             ],
             'birthdays': [HomeBirthdayBox(revision: _revision)],
+            // ไอแซคแนะนำ: a normal widget (follows the user's order); tap =
+            // ISAAC summarises the day in place. Replaces the old "สรุปวันนี้" box.
             'ai': [
-              if (MenuAccess.allow(session, MenuAccess.ai)) ...[
+              if (aiAllowed) ...[
                 const SizedBox(height: 12),
-                _AiBriefCard(text: _brief(counts, clockIn)),
+                IsaacBriefCard(
+                  key: ValueKey('home-isaac-card|${context.read<AppConfig>().businessScope}'),
+                  suggestion: isaacSuggestion(_brief(counts, clockIn)),
+                  facts: () => _isaacFacts(counts, clockIn, clockOut),
+                ),
               ],
             ],
             'quick': [
@@ -744,14 +838,16 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
               if (statTiles.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 const _SectionTitle('ภาพรวม'),
-                _StatGrid(
+                HomeStatStrip(
                   children: [
                     for (final (module, icon, n) in statTiles)
-                      _StatCard(
+                      HomeStatCard(
+                        key: ValueKey('home-stat-$module'),
                         label: EntityModules.titleOf(module),
                         value: n,
                         icon: icon,
-                        spark: _sparks[module],
+                        color: RecentStrip.colorOf(module),
+                        added: _sparks[module]?.fold<int>(0, (a, b) => a + b),
                         onTap: () => context.push(
                           EntityModules.isFsm(module)
                               ? AppRoutes.fsmModule(module)
@@ -781,6 +877,92 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
               ],
             ],
           };
+          final content = <Widget>[
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  tr(formatApiError(_error!)),
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+                ),
+              ),
+            if (_whatsNew > 0) ...[
+              const SizedBox(height: 12),
+              _WhatsNewCard(
+                count: _whatsNew,
+                onTap: () async {
+                  await context.push(AppRoutes.whatsNew);
+                  if (mounted) _load();
+                },
+              ),
+            ],
+            // Widgets in the user's order; long-press one to arrange.
+            HomeWidgetGrid(
+              // Widgets this user may not see stay in the saved layout (they
+              // return with the permission) but are never shown.
+              entries: [
+                for (final e
+                    in _editing ? _draft : HomeLayout.instance.entries)
+                  if (homeWidgetAllowed(session, e.id)) e,
+              ],
+              editing: _editing,
+              wiggle: _wiggle,
+              onStartEditing: _startEditing,
+              onMove: _move,
+              onHide: _hide,
+              onResize: _resize,
+              onDragUpdate: _onDragUpdate,
+              onDragEnd: _onDragEnd,
+              build: (e) {
+                if (!homeWidgetAllowed(session, e.id)) return null;
+                if (HomeLayout.isChart(e.id)) {
+                  return HomeChartCard(
+                    key: ValueKey('chart-${e.id}'),
+                    entry: e,
+                    revision: _revision,
+                    editing: _editing,
+                    onEntryChanged: _entryChanged,
+                  );
+                }
+                final w = sections[e.id];
+                if (w == null || w.isEmpty) return null;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: w,
+                );
+              },
+            ),
+            if (_editing) HomeAddWidgetCard(onTap: _addWidget),
+            const SizedBox(height: 20),
+            if (!_editing)
+              Center(
+                child: Wrap(
+                  spacing: 4,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      key: const ValueKey('home-arrange'),
+                      onPressed: _startEditing,
+                      icon: const Icon(NxI.squaresFour, size: 18),
+                      label: Text(tr('จัดวางหน้าหลัก')),
+                    ),
+                    TextButton.icon(
+                      key: const ValueKey('home-add-widget-link'),
+                      onPressed: _addWidget,
+                      icon: const Icon(NxI.plus, size: 18),
+                      label: Text(tr('เพิ่มวิดเจ็ต')),
+                    ),
+                    TextButton.icon(
+                      onPressed: _openHomeEditor,
+                      icon: const Icon(NxI.gear, size: 18),
+                      label: Text(tr('ตั้งค่า')),
+                    ),
+                  ],
+                ),
+              ),
+            if (_editing) const SizedBox(height: 72),
+          ];
+          final listPad = EdgeInsets.only(bottom: pad.bottom);
           return PopScope(
             canPop: !_editing,
             onPopInvokedWithResult: (didPop, _) {
@@ -788,193 +970,53 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
             },
             child: Stack(
               children: [
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 360,
-                  child: _PastelHero(),
-                ),
-                Column(
-                  children: [
-                    if (_refreshing)
-                      SizedBox(height: NxScrollScaffold.topInset(context)),
-                    if (_refreshing)
-                      const LinearProgressIndicator(minHeight: 2),
-                    Expanded(
-                      child: _loading
-                          ? ListView(
+                Positioned.fill(
+                  child: _loading
+                      ? ListView(
+                          padding: listPad,
+                          children: [
+                            hero,
+                            const SizedBox(height: 12),
+                            limit(const NxSkeletonKpiGrid()),
+                          ],
+                        )
+                      : NxRefresh(
+                          edgeOffset: NxScrollScaffold.topInset(context),
+                          color: cs.primary,
+                          onRefresh: _load,
+                          child: GestureDetector(
+                            // Tap on empty space while arranging = leave edit mode.
+                            behavior: HitTestBehavior.translucent,
+                            onTap: _editing ? _confirmExit : null,
+                            child: ListView(
+                              controller: _scroll,
+                              physics: const AlwaysScrollableScrollPhysics(),
                               padding: listPad,
-                              children: const [NxSkeletonKpiGrid()],
-                            )
-                          : NxRefresh(
-                              edgeOffset: NxScrollScaffold.topInset(context),
-                              color: cs.primary,
-                              onRefresh: _load,
-                              child: GestureDetector(
-                                // Tap on empty space while arranging = leave edit mode.
-                                behavior: HitTestBehavior.translucent,
-                                onTap: _editing ? _confirmExit : null,
-                                child: ListView(
-                                  controller: _scroll,
-                                  physics:
-                                      const AlwaysScrollableScrollPhysics(),
-                                  padding: _refreshing ? pad : listPad,
-                                  children: [
-                                    Text(
-                                      '${tr(greetingFor(now))}${session.displayName != null ? ' ${session.displayName}' : ''}',
-                                      style: theme.textTheme.headlineSmall
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      tr(thaiLongDate(now)),
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(
-                                            color: cs.onSurfaceVariant,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    const NxWorkspaceSwitcher(),
-                                    if (_error != null)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 12),
-                                        child: Text(
-                                          tr(formatApiError(_error!)),
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(color: cs.error),
-                                        ),
-                                      ),
-                                    if (_whatsNew > 0) ...[
-                                      const SizedBox(height: 12),
-                                      NxSurfaceCard(
-                                        radius: 20,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 12,
-                                        ),
-                                        onTap: () async {
-                                          await context.push(
-                                            AppRoutes.whatsNew,
-                                          );
-                                          if (mounted) _load();
-                                        },
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              NxI.sparkleFill,
-                                              color: cs.primary,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Text(
-                                                tr(
-                                                  'มีอะไรใหม่ $_whatsNew รายการ',
-                                                ),
-                                                style:
-                                                    theme.textTheme.titleSmall,
-                                              ),
-                                            ),
-                                            Icon(
-                                              NxI.caretRight,
-                                              size: 16,
-                                              color: cs.onSurfaceVariant,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    const SizedBox(height: 4),
-                                    // Widgets in the user's order; long-press one to arrange.
-                                    HomeWidgetGrid(
-                                      entries: _editing
-                                          ? _draft
-                                          : HomeLayout.instance.entries,
-                                      editing: _editing,
-                                      wiggle: _wiggle,
-                                      onStartEditing: _startEditing,
-                                      onMove: _move,
-                                      onHide: _hide,
-                                      onResize: _resize,
-                                      onDragUpdate: _onDragUpdate,
-                                      onDragEnd: _onDragEnd,
-                                      build: (e) {
-                                        if (HomeLayout.isChart(e.id)) {
-                                          if (!homeWidgetAllowed(session, e.id))
-                                            return null;
-                                          return HomeChartCard(
-                                            key: ValueKey('chart-${e.id}'),
-                                            entry: e,
-                                            revision: _revision,
-                                            editing: _editing,
-                                            onEntryChanged: _entryChanged,
-                                          );
-                                        }
-                                        final w = sections[e.id];
-                                        if (w == null || w.isEmpty) return null;
-                                        return Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: w,
-                                        );
-                                      },
-                                    ),
-                                    if (_editing)
-                                      HomeAddWidgetCard(onTap: _addWidget),
-                                    const SizedBox(height: 20),
-                                    if (!_editing)
-                                      Center(
-                                        child: Wrap(
-                                          spacing: 4,
-                                          alignment: WrapAlignment.center,
-                                          children: [
-                                            TextButton.icon(
-                                              key: const ValueKey(
-                                                'home-arrange',
-                                              ),
-                                              onPressed: _startEditing,
-                                              icon: const Icon(
-                                                NxI.squaresFour,
-                                                size: 18,
-                                              ),
-                                              label: Text(tr('จัดวางหน้าหลัก')),
-                                            ),
-                                            TextButton.icon(
-                                              key: const ValueKey(
-                                                'home-add-widget-link',
-                                              ),
-                                              onPressed: _addWidget,
-                                              icon: const Icon(
-                                                NxI.plus,
-                                                size: 18,
-                                              ),
-                                              label: Text(tr('เพิ่มวิดเจ็ต')),
-                                            ),
-                                            TextButton.icon(
-                                              onPressed: _openHomeEditor,
-                                              icon: const Icon(
-                                                NxI.gear,
-                                                size: 18,
-                                              ),
-                                              label: Text(tr('ตั้งค่า')),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    if (_editing) const SizedBox(height: 72),
-                                  ],
+                              children: [
+                                hero,
+                                limit(
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: content,
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
-                    ),
-                  ],
+                          ),
+                        ),
                 ),
+                if (_refreshing)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: NxScrollScaffold.topInset(context),
+                    child: const LinearProgressIndicator(minHeight: 2),
+                  ),
                 Positioned(
                   left: 16,
                   right: 16,
-                  // Top, under the glass header: the undo snackbar uses the bottom.
+                  // Top, under the status bar: the undo snackbar uses the bottom.
                   top: NxScrollScaffold.topInset(context) + 6,
                   child: IgnorePointer(
                     ignoring: !_editing,
@@ -1008,61 +1050,73 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
   }
 }
 
-/// Soft pastel cloud behind the greeting (reference: onboarding video).
-class _PastelHero extends StatelessWidget {
-  const _PastelHero();
+/// "มีอะไรใหม่ N รายการ" banner under the hero.
+class _WhatsNewCard extends StatelessWidget {
+  const _WhatsNewCard({required this.count, required this.onTap});
+  final int count;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final bg = Theme.of(context).scaffoldBackgroundColor;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final a = dark ? 0.22 : 0.32;
-    return IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [bg.withValues(alpha: 0), bg],
-            stops: const [0.45, 1],
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return _HomeCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Icon(NxI.sparkleFill, color: cs.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              tr('มีอะไรใหม่ $count รายการ'),
+              style: theme.textTheme.titleSmall,
+            ),
           ),
-        ),
-        position: DecorationPosition.foreground,
-        child: Stack(
-          children: [
-            Positioned(
-              top: -80,
-              left: -60,
-              child: _blob(280, const Color(0xFFF9A8D4).withValues(alpha: a)),
-            ),
-            Positioned(
-              top: -40,
-              right: -70,
-              child: _blob(260, cs.primary.withValues(alpha: a * 0.9)),
-            ),
-            Positioned(
-              top: 120,
-              left: 80,
-              child: _blob(
-                220,
-                const Color(0xFF93C5FD).withValues(alpha: a * 0.8),
-              ),
-            ),
-          ],
-        ),
+          Icon(NxI.caretRight, size: 16, color: cs.onSurfaceVariant),
+        ],
       ),
     );
   }
+}
 
-  static Widget _blob(double size, Color c) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      gradient: RadialGradient(colors: [c, c.withValues(alpha: 0)]),
-    ),
-  );
+/// The shared Home card ([homeCardDecoration]) with an optional tap.
+class _HomeCard extends StatelessWidget {
+  const _HomeCard({
+    required this.child,
+    this.onTap,
+    this.padding = const EdgeInsets.all(16),
+    this.radius = kHomeCardRadius,
+  });
+  final Widget child;
+  final VoidCallback? onTap;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    // The shadow is painted outside the Material: ink drawn on a Material is clipped to its
+    // rectangle, which cut the soft shadow into a flat band under the card.
+    final deco = homeCardDecoration(context, radius: radius);
+    final box = Ink(
+      padding: padding,
+      decoration: deco.copyWith(boxShadow: const []),
+      child: child,
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(borderRadius: deco.borderRadius, boxShadow: deco.boxShadow),
+      child: Material(
+        type: MaterialType.transparency,
+        child: onTap == null
+            ? box
+            : InkWell(
+                borderRadius: BorderRadius.circular(radius),
+                onTap: onTap,
+                child: box,
+              ),
+      ),
+    );
+  }
 }
 
 /// One card for "today": attendance, next appointment and work counts.
@@ -1222,12 +1276,18 @@ class _TodayCard extends StatelessWidget {
       );
     }
     if (rows.isEmpty) return const SizedBox.shrink();
-    return NxSurfaceCard(
-      radius: 24,
-      padding: const EdgeInsets.all(16),
+    return _HomeCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: rows,
+        children: [
+          const HomeBoxHeader(
+            icon: NxI.sun,
+            title: 'วันนี้',
+            color: Color(0xFFF59E0B),
+          ),
+          const SizedBox(height: 14),
+          ...rows,
+        ],
       ),
     );
   }
@@ -1241,69 +1301,6 @@ class _TodayCard extends StatelessWidget {
     ),
     child: Icon(icon, color: c, size: 20),
   );
-}
-
-/// Day summary that streams in word by word, with a shortcut to the AI chat.
-class _AiBriefCard extends StatelessWidget {
-  const _AiBriefCard({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return NxSurfaceCard(
-      radius: 24,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-      onTap: () => context.push(AppRoutes.aiChat),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              ShaderMask(
-                shaderCallback: (r) => const LinearGradient(
-                  colors: [Color(0xFFEC4899), Color(0xFF6366F1)],
-                ).createShader(r),
-                child: const Icon(
-                  NxI.sparkleFill,
-                  color: Colors.white,
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                tr('สรุปวันนี้'),
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                tr('ถาม AI'),
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: cs.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Icon(NxI.caretRight, size: 14, color: cs.primary),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Summaries from the AI are markdown: show headings / bold / lists
-          // like the chat; plain text keeps the word-by-word effect.
-          if (looksLikeMarkdown(text))
-            NxRevealMarkdown(data: text)
-          else
-            NxStreamingText(
-              tr(text),
-              style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-            ),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
 }
 
 class _QuickAction {
@@ -1336,6 +1333,27 @@ class _QuickGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    return _HomeCard(
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: HomeBoxHeader(
+              icon: NxI.lightning,
+              title: 'ทางลัด',
+              color: Color(0xFF0EA5E9),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _grid(theme, cs),
+        ],
+      ),
+    );
+  }
+
+  Widget _grid(ThemeData theme, ColorScheme cs) {
     return LayoutBuilder(
       builder: (context, c) {
         final cols = c.maxWidth >= 560 ? 8 : 4;
@@ -1474,8 +1492,9 @@ class _ListRow extends StatelessWidget {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: NxSurfaceCard(
+      child: _HomeCard(
         onTap: onTap,
+        radius: 20,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
@@ -1514,155 +1533,6 @@ class _ListRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _StatGrid extends StatelessWidget {
-  const _StatGrid({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final cols = c.maxWidth >= 720 ? 4 : (c.maxWidth >= 340 ? 2 : 1);
-        const gap = 12.0;
-        final w = (c.maxWidth - gap * (cols - 1)) / cols;
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: [
-            for (final child in children) SizedBox(width: w, child: child),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    this.onTap,
-    this.spark,
-  });
-  final String label;
-
-  /// null while my count is loading.
-  final int? value;
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  /// New per day, oldest → today (7 values).
-  final List<int>? spark;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return NxSurfaceCard(
-      onTap: onTap,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.12),
-            child: Icon(icon, size: 20, color: theme.colorScheme.primary),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value == null ? '…' : nxInt(value),
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  tr(label),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                if (spark != null && spark!.any((v) => v > 0))
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 54,
-                          height: 18,
-                          child: CustomPaint(
-                            painter: _SparkPainter(
-                              spark!,
-                              theme.colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            '+${nxInt(spark!.fold<int>(0, (a, b) => a + b))}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Tiny line chart for a stat tile.
-class _SparkPainter extends CustomPainter {
-  _SparkPainter(this.values, this.color);
-  final List<int> values;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (values.length < 2) return;
-    final maxV = values.reduce((a, b) => a > b ? a : b).clamp(1, 1 << 30);
-    final dx = size.width / (values.length - 1);
-    final path = Path();
-    for (var i = 0; i < values.length; i++) {
-      final p = Offset(
-        i * dx,
-        size.height - 2 - (values[i] / maxV) * (size.height - 4),
-      );
-      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
-    }
-    final fill = Path.from(path)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(fill, Paint()..color = color.withValues(alpha: 0.12));
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..strokeWidth = 1.6
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _SparkPainter old) =>
-      old.values != values || old.color != color;
 }
 
 class _PendingItem {
@@ -1739,19 +1609,8 @@ class _PendingBoxState extends State<_PendingBox> {
       ),
     );
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color.alphaBlend(cs.error.withValues(alpha: 0.08), cs.surface),
-            cs.surface,
-          ],
-        ),
-        border: Border.all(color: cs.error.withValues(alpha: 0.18)),
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      decoration: homeCardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1917,14 +1776,18 @@ class _NoPending extends StatelessWidget {
     const green = Color(0xFF10B981);
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: green.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: green.withValues(alpha: 0.2)),
-      ),
+      decoration: homeCardDecoration(context),
       child: Row(
         children: [
-          const Icon(NxI.checkCircle, color: green),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: green.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(NxI.checkCircle, color: green, size: 19),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

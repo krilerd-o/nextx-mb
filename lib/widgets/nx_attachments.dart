@@ -81,8 +81,14 @@ Future<void> openNxFile(String url) async {
 }
 
 class NxAttachmentStrip extends StatelessWidget {
-  const NxAttachmentStrip({super.key, required this.items, this.onRemove, this.thumb = 84});
+  const NxAttachmentStrip({super.key, required this.items, this.onRemove, this.thumb = 84, this.onOpenFile, this.onFileActions});
   final List<Map<String, dynamic>> items;
+
+  /// Tap on a file card (default: video player / preview browser).
+  final ValueChanged<Map<String, dynamic>>? onOpenFile;
+
+  /// Long press on any item (open / share / save sheet).
+  final ValueChanged<Map<String, dynamic>>? onFileActions;
 
   /// Shows a remove button on each item.
   final ValueChanged<Map<String, dynamic>>? onRemove;
@@ -113,6 +119,7 @@ class NxAttachmentStrip extends StatelessWidget {
                     GestureDetector(
                       key: ValueKey('nx-att-img-$i'),
                       onTap: () => openNxImageViewer(context, urls, i, names: names),
+                      onLongPress: onFileActions == null ? null : () => onFileActions!(images[i]),
                       child: Hero(
                         tag: 'nx-att-${urls[i]}-$i',
                         child: ClipRRect(
@@ -147,7 +154,9 @@ class NxAttachmentStrip extends StatelessWidget {
               child: InkWell(
                 key: ValueKey('nx-att-file-${nxAttachmentName(f)}'),
                 borderRadius: BorderRadius.circular(12),
+                onLongPress: onFileActions == null ? null : () => onFileActions!(f),
                 onTap: () {
+                  if (onOpenFile != null) return onOpenFile!(f);
                   final url = api.absoluteUrl(nxAttachmentUrl(f));
                   // Videos play in the app; other files open in the preview browser.
                   nxIsVideoUrl(url) || nxIsVideoUrl(nxAttachmentName(f)) || '${f['mime'] ?? f['mime_type'] ?? ''}'.startsWith('video/')
@@ -229,13 +238,16 @@ class NxAttachmentStrip extends StatelessWidget {
   );
 }
 
-Future<void> openNxImageViewer(BuildContext context, List<String> urls, int initial, {List<String>? names}) {
+/// Full-screen photo viewer. [onDelete] (optional) adds a trash button: it gets
+/// the index of the shown photo in [urls] and returns true once the photo was
+/// deleted (it asks for confirmation itself); the photo then leaves the viewer.
+Future<void> openNxImageViewer(BuildContext context, List<String> urls, int initial, {List<String>? names, Future<bool> Function(int index)? onDelete}) {
   return Navigator.of(context, rootNavigator: true).push(
     PageRouteBuilder<void>(
       opaque: false,
       transitionDuration: const Duration(milliseconds: 320),
       reverseTransitionDuration: const Duration(milliseconds: 260),
-      pageBuilder: (context, _, _) => _NxImageViewer(urls: urls, initial: initial, names: names),
+      pageBuilder: (context, _, _) => _NxImageViewer(urls: urls, initial: initial, names: names, onDelete: onDelete),
       transitionsBuilder: (context, a, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: a, curve: Curves.easeOut),
         child: child,
@@ -245,10 +257,11 @@ Future<void> openNxImageViewer(BuildContext context, List<String> urls, int init
 }
 
 class _NxImageViewer extends StatefulWidget {
-  const _NxImageViewer({required this.urls, required this.initial, this.names});
+  const _NxImageViewer({required this.urls, required this.initial, this.names, this.onDelete});
   final List<String> urls;
   final int initial;
   final List<String>? names;
+  final Future<bool> Function(int index)? onDelete;
 
   @override
   State<_NxImageViewer> createState() => _NxImageViewerState();
@@ -257,6 +270,12 @@ class _NxImageViewer extends StatefulWidget {
 class _NxImageViewerState extends State<_NxImageViewer> {
   late final PageController _page = PageController(initialPage: widget.initial);
   late int _i = widget.initial;
+  // Local copies: a deleted photo leaves the pager; [_orig] maps a page back to
+  // its index in the caller's list.
+  late final List<String> _urls = [...widget.urls];
+  late final List<String>? _names = widget.names == null ? null : [...widget.names!];
+  late final List<int> _orig = [for (var i = 0; i < widget.urls.length; i++) i];
+  bool _deleting = false;
   final _zoom = TransformationController();
   double _dragY = 0;
   bool _zoomed = false;
@@ -289,9 +308,37 @@ class _NxImageViewerState extends State<_NxImageViewer> {
       ..scaleByDouble(2.5, 2.5, 1, 1);
   }
 
+  Future<void> _delete() async {
+    final onDelete = widget.onDelete;
+    if (onDelete == null || _deleting || _urls.isEmpty) return;
+    final at = _i;
+    setState(() => _deleting = true);
+    var ok = false;
+    try {
+      ok = await onDelete(_orig[at]);
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+    if (!ok || !mounted) return;
+    if (_urls.length <= 1) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() {
+      _urls.removeAt(at);
+      _names?.removeAt(at);
+      _orig.removeAt(at);
+      _i = at.clamp(0, _urls.length - 1);
+      _zoom.value = Matrix4.identity();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _page.hasClients) _page.jumpToPage(_i);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final name = widget.names != null && _i < widget.names!.length ? widget.names![_i] : '';
+    final name = _names != null && _i < _names.length ? _names[_i] : '';
     // Drag down to close: the photo follows the finger and the black fades.
     final fade = (1 - (_dragY.abs() / 400)).clamp(0.0, 1.0);
     return Scaffold(
@@ -304,13 +351,22 @@ class _NxImageViewerState extends State<_NxImageViewer> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (name.isNotEmpty) Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15)),
-            if (widget.urls.length > 1) Text('${_i + 1} / ${widget.urls.length}', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+            if (_urls.length > 1) Text('${_i + 1} / ${_urls.length}', style: const TextStyle(fontSize: 12, color: Colors.white70)),
           ],
         ),
         actions: [
-          IconButton(key: const ValueKey('image-download'), tooltip: tr('ดาวน์โหลด'), icon: const Icon(NxI.downloadSimple), onPressed: () => nxSaveMedia(context, widget.urls[_i], video: false)),
-          IconButton(tooltip: tr('เปิดในเบราว์เซอร์'), icon: const Icon(NxI.arrowSquareOut), onPressed: () => openNxFile(widget.urls[_i])),
-          IconButton(tooltip: tr('แชร์'), icon: const Icon(NxI.shareNetwork), onPressed: () => Share.share(widget.urls[_i])),
+          IconButton(key: const ValueKey('image-download'), tooltip: tr('ดาวน์โหลด'), icon: const Icon(NxI.downloadSimple), onPressed: () => nxSaveMedia(context, _urls[_i], video: false)),
+          IconButton(tooltip: tr('เปิดในเบราว์เซอร์'), icon: const Icon(NxI.arrowSquareOut), onPressed: () => openNxFile(_urls[_i])),
+          IconButton(tooltip: tr('แชร์'), icon: const Icon(NxI.shareNetwork), onPressed: () => Share.share(_urls[_i])),
+          if (widget.onDelete != null)
+            IconButton(
+              key: const ValueKey('image-delete'),
+              tooltip: tr('ลบรูป'),
+              icon: _deleting
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(NxI.trash),
+              onPressed: _deleting ? null : _delete,
+            ),
         ],
       ),
       body: GestureDetector(
@@ -335,7 +391,7 @@ class _NxImageViewerState extends State<_NxImageViewer> {
           child: PageView.builder(
             controller: _page,
             physics: _zoomed ? const NeverScrollableScrollPhysics() : null,
-            itemCount: widget.urls.length,
+            itemCount: _urls.length,
             onPageChanged: (i) {
               _zoom.value = Matrix4.identity();
               setState(() => _i = i);
@@ -346,9 +402,9 @@ class _NxImageViewerState extends State<_NxImageViewer> {
               maxScale: 5,
               child: Center(
                 child: Hero(
-                  tag: 'nx-att-${widget.urls[i]}-$i',
+                  tag: 'nx-att-${_urls[i]}-${_orig[i]}',
                   child: Image(
-                    image: CachedNetworkImageProvider(widget.urls[i]),
+                    image: CachedNetworkImageProvider(_urls[i]),
                     fit: BoxFit.contain,
                     loadingBuilder: (c, child, p) => p == null ? child : const Center(child: CircularProgressIndicator(color: Colors.white)),
                     errorBuilder: (_, _, _) => const Icon(NxI.image, color: Colors.white54, size: 48),

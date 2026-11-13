@@ -44,16 +44,17 @@ const _sales = {
 
 void main() {
   group('layout v2', () {
-    test('v1 order/hidden moves over: order kept, hidden left out, charts after เคส', () async {
+    test('v1 order/hidden moves over: order kept, hidden left out, charts after เคส, ไอแซคแนะนำ on top', () async {
       SharedPreferences.setMockInitialValues({
         'nx_home_layout_u1': '{"order":["sales","today","cases","quick"],"hidden":["ai"]}',
       });
       final h = HomeLayout.instance;
       await h.load('u1|b1', legacyScope: 'u1', force: true);
       final ids = h.visibleOrder;
-      expect(ids.first, 'sales');
-      expect(ids.contains('ai'), isFalse);
-      expect(h.hidden, {'ai'});
+      // The old "สรุปโดย AI" box is now "ไอแซคแนะนำ" (it used to sit on the hero
+      // for everyone with AI): it comes back on top once.
+      expect(ids.take(2), ['ai', 'sales']);
+      expect(h.hidden, isEmpty);
       final iCases = ids.indexOf('cases');
       expect(ids.sublist(iCases + 1, iCases + 1 + HomeLayout.defaultCharts.length), HomeLayout.defaultCharts);
       expect(h.entry('chart_won')!.size, HomeSize.half);
@@ -73,7 +74,8 @@ void main() {
       });
       final h = HomeLayout.instance;
       await h.load('u1|b2', force: true);
-      expect(h.visibleOrder, ['chart_pipeline', 'chart_won', 'today']);
+      // Saved before ISAAC was a widget → put on top once.
+      expect(h.visibleOrder, ['ai', 'chart_pipeline', 'chart_won', 'today']);
       expect(h.entry('chart_pipeline')!.size, HomeSize.full);
       expect(h.entry('chart_won'), const HomeEntry('chart_won', size: HomeSize.full, period: 'quarter', team: true));
 
@@ -207,7 +209,11 @@ void main() {
     expect(homeWidgetAllowed(s, 'chart_won'), isFalse);
     expect(homeWidgetAllowed(s, 'chart_closing'), isFalse);
     expect(homeWidgetAllowed(s, 'chart_leave'), isFalse);
-    expect(homeWidgetAllowed(s, 'today'), isTrue);
+    // Classic sections follow their menus too: lead → birthdays, not clock-in/work.
+    expect(homeWidgetAllowed(s, 'birthdays'), isTrue);
+    expect(homeWidgetAllowed(s, 'stats'), isTrue);
+    expect(homeWidgetAllowed(s, 'today'), isFalse);
+    expect(homeWidgetAllowed(s, 'recent'), isTrue);
   });
 
   group('edit mode grid', () {
@@ -333,6 +339,8 @@ void main() {
     expect(find.byKey(const ValueKey('widget-gallery')), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const ValueKey('gallery-add-chart_lead_source')), 300,
         scrollable: find.descendant(of: find.byKey(const ValueKey('widget-gallery')), matching: find.byType(Scrollable)).first);
+    await tester.ensureVisible(find.byKey(const ValueKey('gallery-add-chart_lead_source')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('gallery-add-chart_lead_source')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('editor-chart_lead_source')), findsOneWidget);

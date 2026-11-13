@@ -6,6 +6,7 @@ import '../../core/thai_time.dart';
 import '../../core/workspace_models.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import 'ws_bulk_change.dart';
 
@@ -179,8 +180,21 @@ class _WsBulkDockState extends State<WsBulkDock> {
               onTap: () => Navigator.pop(ctx, s.id),
             ),
         ]));
-    if (id == null) return;
+    if (id == null || !mounted) return;
     final s = widget.statuses.firstWhere((x) => x.id == id);
+    final now = {for (final r in widget.items) '${r['status_id'] ?? ''}'};
+    final from = now.length == 1 ? widget.statuses.where((x) => x.id == now.first).firstOrNull : null;
+    final ok = await showStatusChangeConfirm(
+      context,
+      recordTitle: tr('${widget.items.length} รายการ'),
+      from: from?.label ?? 'หลายสถานะ',
+      fromColor: from?.color,
+      to: s.label,
+      toColor: s.color,
+      impact: s.isDone ? 'นับเป็นงานเสร็จ และแจ้งผู้ที่ติดตามงานนี้' : (s.isCancelled ? 'งานนี้จะถูกปิดโดยไม่นับว่าเสร็จ' : null),
+      destructive: s.isCancelled,
+    );
+    if (ok == null || !mounted) return;
     await _apply({'status_id': int.tryParse(id) ?? id}, '${tr('สถานะ')}: ${s.label}');
   }
 

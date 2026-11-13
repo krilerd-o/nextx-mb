@@ -85,6 +85,7 @@ void main() {
     await settle(tester, 2);
     expect(a.callKeys.where((k) => k.endsWith('/reject')), isEmpty);
     await tester.enterText(find.byKey(const ValueKey('manday-reject-reason')), '[QA] เกินขอบเขต');
+    await tester.pump(); // R66: the confirm turns on once a reason is typed
     await tester.tap(find.byKey(const ValueKey('manday-reject-ok')));
     await settle(tester, 4);
     expect(bodyOf(a.calls.lastWhere((c) => c.path.endsWith('/reject')))['reason'], '[QA] เกินขอบเขต');
@@ -112,6 +113,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('contract-action-reject')));
     await settle(tester, 3);
     await tester.enterText(find.byKey(const ValueKey('contract-reason')), '[QA] เอกสารไม่ครบ');
+    await tester.pump(); // R66: the confirm turns on once a reason is typed
     await tester.tap(find.byKey(const ValueKey('contract-reason-ok')));
     await settle(tester, 4);
     await f;

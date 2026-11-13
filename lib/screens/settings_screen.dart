@@ -222,10 +222,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onTap: () => context.push(AppRoutes.roleEditor),
       )),
       if (MenuAccess.allow(session, MenuAccess.commAi))
-        _Entry('เมนูและการใช้งาน', ['ISAAC', 'AI', 'ถอดเสียง', 'สรุป', 'prompt', 'โทร', 'แชท'], SettingsTile(
+        _Entry('เมนูและการใช้งาน', ['ไอแซค', 'ISAAC', 'AI', 'ถอดเสียง', 'สรุป', 'prompt', 'โทร', 'แชท'], SettingsTile(
           icon: NxI.sparkle,
           tint: const Color(0xFF7C3AED),
-          title: 'ISAAC AI การสื่อสาร',
+          title: 'ไอแซคเอไอ การสื่อสาร',
           subtitle: session.isBusinessAdmin ? 'ถอดเสียงในสาย สรุปการโทร/แชท และ Prompt' : 'ดูการตั้งค่าการถอดเสียงและการสรุป',
           onTap: () => context.push(AppRoutes.commAiSettings),
         )),

@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/activity_guests.dart' show activityTypeLabel;
 import '../../core/approval_queue.dart';
+import '../../core/journey_rules.dart' show jobPriorityLabel;
 import '../../core/entity_display.dart';
 import '../../core/menu_access.dart';
 import '../../core/service_journey.dart';
@@ -17,6 +19,7 @@ import '../deep_link_loaders.dart';
 import '../../services/api_client.dart';
 import '../../widgets/dense_card_tile.dart';
 import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../core/i18n.dart';
@@ -79,32 +82,11 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     _prefs.saveQuery(q.copyWith(q: ''));
   }
 
-  Future<String?> _askReason() async {
-    final ctrl = TextEditingController();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('เหตุผลที่ไม่อนุมัติ')),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          maxLines: 3,
-          decoration: InputDecoration(hintText: tr('ไม่บังคับ')),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: Text(tr('ไม่อนุมัติ'))),
-        ],
-      ),
-    );
-    return reason;
-  }
-
   Future<void> _run(Future<void> Function() action, String done) async {
     try {
       await action();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(done))));
+      showNxStatusChangedSnack(ScaffoldMessenger.of(context), label: done);
       final config = context.read<AppConfig>();
       PendingApprovals.instance.refresh(config.apiClient, userId: config.session.userId);
       setState(() {
@@ -118,15 +100,33 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
     }
   }
 
-  Future<void> _decide(String kind, Map<String, dynamic> row, bool approve) async {
+  Future<void> _decide(String kind, Map<String, dynamic> row, bool approve, [String title = '']) async {
     final api = context.read<AppConfig>().apiClient;
     final id = row['id']?.toString() ?? '';
     if (id.isEmpty) return;
-    String? reason;
-    if (!approve && kind != 'join') {
-      reason = await _askReason();
-      if (reason == null) return;
+    if (!approve && kind == 'job') {
+      // "ไม่อนุมัติ" a job = open it to forward / cancel there (its own windows).
+      context.push(AppRoutes.crmRecord('job', id));
+      return;
     }
+    // Ask first: รออนุมัติ → อนุมัติ / ไม่อนุมัติ. A reason is required to
+    // reject where the server keeps one (quotation, leave, activity).
+    final takesReason = !approve && kind != 'join';
+    final ok = await showStatusChangeConfirm(
+      context,
+      recordTitle: title,
+      from: kind == 'job' ? 'รอการตอบรับ' : 'รออนุมัติ',
+      fromColor: const Color(0xFFF59E0B),
+      to: approve ? (kind == 'job' ? 'กำลังดำเนินการ' : 'อนุมัติ') : 'ไม่อนุมัติ',
+      toColor: approve ? const Color(0xFF16A34A) : kNxDangerRed,
+      impact: approve ? (kind == 'join' ? 'ผู้ขอจะเข้าใช้งานธุรกิจนี้ได้ทันที' : 'ผู้ขอจะได้รับแจ้งผลการอนุมัติ') : 'ผู้ขอจะได้รับแจ้งว่าไม่อนุมัติ',
+      requireReason: takesReason,
+      reasons: takesReason ? kNxRejectReasons : const [],
+      confirmLabel: approve ? (kind == 'job' ? 'รับงาน' : 'อนุมัติ') : 'ไม่อนุมัติ',
+      destructive: !approve,
+    );
+    if (ok == null || !mounted) return;
+    final reason = takesReason ? ok.note : null;
     final label = approve ? 'อนุมัติแล้ว' : 'ไม่อนุมัติแล้ว';
     switch (kind) {
       case 'quotation':
@@ -141,12 +141,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       case 'activity':
         await _run(() async => approve ? await api.approveActivity(id) : await api.rejectActivity(id, note: reason), label);
       case 'job':
-        // "อนุมัติ" = รับงาน; "ไม่อนุมัติ" = เปิดงานเพื่อส่งต่อ/ยกเลิกเอง
-        if (approve) {
-          await _run(() async => api.jobWorkflowAction(id, 'accept'), 'รับงานแล้ว');
-        } else if (mounted) {
-          context.push(AppRoutes.crmRecord('job', id));
-        }
+        // "อนุมัติ" = รับงาน ("ไม่อนุมัติ" opened the job above).
+        // No customer e-mail unless asked (same default as the รับงาน sheet).
+        await _run(() async => api.jobWorkflowAction(id, 'accept', skipEmail: true), 'รับงานแล้ว');
     }
   }
 
@@ -243,7 +240,7 @@ class _ApprovalSection extends StatefulWidget {
   final String kind;
   final NxListQuery query;
   final _Section section;
-  final Future<void> Function(String kind, Map<String, dynamic> row, bool approve) onDecide;
+  final Future<void> Function(String kind, Map<String, dynamic> row, bool approve, String title) onDecide;
   final void Function(String kind, String id)? onOpen;
 
   @override
@@ -270,12 +267,17 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
       case 'activity':
         return (
           (r['subject'] ?? r['title'] ?? 'กิจกรรม').toString(),
-          [r['owner_name'], r['activitytype'], r['date_start']].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
+          [
+            r['owner_name'],
+            if ('${r['activitytype'] ?? ''}'.isNotEmpty) tr(activityTypeLabel('${r['activitytype']}')),
+            if (r['date_start'] != null) formatThaiField(r['date_start'], 'date_start', module: 'activity', year: uiYear),
+          ].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
         );
       case 'job':
         return (
           '${r['job_no'] ?? ''} ${r['job_name'] ?? ''}'.trim(),
-          [r['customer_name'], r['job_priority'], if (r['plan_start'] != null) thaiDate(r['plan_start'], year: uiYear)].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
+          // Priority in Thai like the web (Normal → ปกติ).
+          [r['customer_name'], jobPriorityLabel(r['job_priority']), if (r['plan_start'] != null) thaiDate(r['plan_start'], year: uiYear)].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
         );
       case 'leave':
         return (
@@ -350,7 +352,7 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
                   final busy = _busy.contains(id);
                   Future<void> act(bool approve) async {
                     setState(() => _busy.add(id));
-                    await widget.onDecide(widget.kind, r, approve);
+                    await widget.onDecide(widget.kind, r, approve, title);
                     if (mounted) setState(() => _busy.remove(id));
                   }
 

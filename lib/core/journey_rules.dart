@@ -337,7 +337,71 @@ String? jobStepAction(Object? from, Object? to) {
 Map<String, dynamic> _map(Object? v) => v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
 int _int(Object? v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? 0;
 
-NextAction jobNextAction(Map<String, dynamic>? r, Map<String, dynamic>? overview, {bool canEdit = true}) {
+/// The two signatures the job report prints (BIRT job_template2 page 2):
+/// "Serviced by / ผู้ให้บริการ" and "Customer accepted by / ลูกค้าเซ็นรับทราบ".
+/// Stored on the job row: `{role}_signature` (upload path), `{role}_signed_by_name`,
+/// `{role}_signed_at` with role `technician` | `customer`.
+const kJobReportSigners = ['technician', 'customer'];
+
+bool jobReportSigned(Map<String, dynamic>? r, String role) => _norm(r?['${role}_signature']).isNotEmpty && _norm(r?['${role}_signature']) != 'null';
+
+/// Report signers still missing (`technician`, `customer`).
+List<String> jobReportMissing(Map<String, dynamic>? r) => [for (final k in kJobReportSigners) if (!jobReportSigned(r, k)) k];
+
+/// Job priority as on the web (`picklistLabel(job_priority)` — the seeded
+/// values Urgent / High / Normal / Low); unknown values pass through.
+const kJobPriorityLabels = {
+  'urgent': ['เร่งด่วน', 'Urgent'],
+  'high': ['สูง', 'High'],
+  'normal': ['ปกติ', 'Normal'],
+  'medium': ['ปกติ', 'Normal'],
+  'low': ['ต่ำ', 'Low'],
+};
+
+String jobPriorityLabel(Object? v, {List<Map<String, dynamic>> options = const []}) {
+  final s = _norm(v);
+  if (s.isEmpty || s == 'null') return '';
+  for (final o in options) {
+    if (_norm(o['value']) == s) {
+      final l = L10n.isEn ? (o['value_en'] ?? o['label_en']) : (o['value_th'] ?? o['label_th']);
+      if (_norm(l).isNotEmpty) return _norm(l);
+    }
+  }
+  final l = kJobPriorityLabels[s.toLowerCase()];
+  if (l == null) return s;
+  return L10n.isEn ? l[1] : l[0];
+}
+
+/// Job type / category labels of the seeded picklists (web `picklistLabel`,
+/// `value_th` — the seed keeps job types as "Service Job" / "Request Job").
+const kJobTypeLabels = {
+  'service': ['Service Job', 'Service Job'],
+  'request': ['Request Job', 'Request Job'],
+  'installation': ['ติดตั้ง', 'Installation'],
+  'pm': ['ตรวจเช็คสภาพ (PM)', 'PM'],
+  'check': ['ตรวจสอบ', 'Check'],
+  'repair': ['ซ่อมแซม', 'Repair'],
+  'calibration': ['การปรับเทียบ', 'Calibration'],
+  'other': ['อื่นๆ', 'Others'],
+};
+
+String jobPickLabel(Object? v, {List<Map<String, dynamic>> options = const []}) {
+  final s = _norm(v);
+  if (s.isEmpty || s == 'null') return '';
+  for (final o in options) {
+    if (_norm(o['value']) == s) {
+      final l = L10n.isEn ? (o['value_en'] ?? o['label_en']) : (o['value_th'] ?? o['label_th']);
+      if (_norm(l).isNotEmpty) return _norm(l);
+    }
+  }
+  final l = kJobTypeLabels[s.toLowerCase()];
+  if (l == null) return s;
+  return L10n.isEn ? l[1] : l[0];
+}
+
+/// [requireReportSignatures]: the app's rule "ทุกใบงานจะต้องมีลายเซ็น" — both
+/// report signatures (ผู้ให้บริการ + ลูกค้า) before the job can be closed.
+NextAction jobNextAction(Map<String, dynamic>? r, Map<String, dynamic>? overview, {bool canEdit = true, bool requireReportSignatures = false}) {
   final status = canonicalJobStatus(r?['job_status']);
   final ov = overview ?? const {};
   final sig = _map(ov['signatures']);
@@ -361,6 +425,7 @@ NextAction jobNextAction(Map<String, dynamic>? r, Map<String, dynamic>? overview
   if (_int(acts['total']) == 0) return const NextAction('gen_activity', 'primary', 'gen_activity', ['wait']);
   if (_int(acts['open']) > 0) return const NextAction('work_activities', 'primary', 'open_activities', ['wait']);
   if (_int(sig['total']) > _int(sig['signed'])) return const NextAction('collect_signatures', 'warning', 'open_signatures');
+  if (requireReportSignatures && jobReportMissing(r).isNotEmpty) return const NextAction('report_signatures', 'warning', 'open_signatures');
   if (ov['can_close'] == true) return const NextAction('ready_to_close', 'success', 'close');
   return const NextAction('owner_closes', 'neutral', null);
 }
@@ -373,7 +438,7 @@ class ChecklistItem {
   final bool info;
 }
 
-List<ChecklistItem> jobCloseChecklist(Map<String, dynamic>? r, Map<String, dynamic>? overview) {
+List<ChecklistItem> jobCloseChecklist(Map<String, dynamic>? r, Map<String, dynamic>? overview, {bool requireReportSignatures = false}) {
   final ov = overview ?? const {};
   final sig = _map(ov['signatures']);
   final acts = _map(ov['activities']);
@@ -382,7 +447,9 @@ List<ChecklistItem> jobCloseChecklist(Map<String, dynamic>? r, Map<String, dynam
   return [
     ChecklistItem('owner', (ov['has_owner'] ?? (_int(r?['smownerid']) > 0)) == true),
     ChecklistItem('activities', open == 0, value: '${total - open}/$total'),
-    ChecklistItem('signatures', st == 0 || ss >= st, value: '$ss/$st'),
+    if (requireReportSignatures)
+      ChecklistItem('report_signatures', jobReportMissing(r).isEmpty, value: '${2 - jobReportMissing(r).length}/2'),
+    if (!requireReportSignatures || st > 0) ChecklistItem('signatures', st == 0 || ss >= st, value: '$ss/$st'),
     ChecklistItem('parts', _int(ov['parts']) > 0, value: '${_int(ov['parts'])}', info: true),
   ];
 }

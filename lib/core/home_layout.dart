@@ -90,8 +90,8 @@ class HomeLayout extends ChangeNotifier {
 
   /// Classic Home sections → Thai label (translated by tr()) and a short hint.
   static const Map<String, (String, String)> sections = {
+    'ai': ('ไอแซคแนะนำ', 'แตะแล้วไอแซคสรุปวันนี้ให้เป็นข้อๆ ตรงนี้เลย'),
     'today': ('ลงเวลา', 'ลงเวลาเข้า-ออก งานเลยกำหนด นัดถัดไป'),
-    'ai': ('สรุปโดย AI', 'สรุปวันนี้แบบสั้นๆ'),
     'work': ('งานวันนี้', 'งาน Workspace ของฉัน (ค่าเริ่มต้นวันนี้)'),
     'pending': ('งานค้าง', 'กิจกรรมค้าง + งาน Workspace ค้าง'),
     'quick': ('ทางลัด', 'ลงเวลา ขอลา แชท ปฏิทิน …'),
@@ -103,10 +103,11 @@ class HomeLayout extends ChangeNotifier {
     'upcoming': ('กิจกรรมถัดไป', 'นัดหมายที่กำลังมา'),
   };
 
-  /// Default classic order: ลงเวลา · สรุป AI · งานวันนี้ · งานค้าง · ทางลัด ·
-  /// เปิดล่าสุด · ยอดขาย · เคส · ภาพรวม, then birthdays and upcoming activities.
+  /// Default classic order: ไอแซคแนะนำ (the day summary; only users with the AI
+  /// menu see it) · ลงเวลา · งานวันนี้ · งานค้าง · ทางลัด · เปิดล่าสุด · ยอดขาย ·
+  /// เคส · ภาพรวม, then birthdays and upcoming activities.
   static const List<String> defaultOrder = [
-    'today', 'ai', 'work', 'pending', 'quick', 'recent', 'sales', 'cases', 'stats', 'birthdays', 'upcoming',
+    'ai', 'today', 'work', 'pending', 'quick', 'recent', 'sales', 'cases', 'stats', 'birthdays', 'upcoming',
   ];
 
   /// Chart widgets (gallery order).
@@ -121,7 +122,7 @@ class HomeLayout extends ChangeNotifier {
     HomeChartMeta(id: 'chart_lead_conv', title: 'Conversion rate', hint: 'Lead ที่แปลงเป็นลูกค้าแล้ว', group: 'customer', defaultSize: HomeSize.half, resizable: true),
     HomeChartMeta(id: 'chart_case_status', title: 'เคสตามสถานะ', hint: 'เคสแต่ละสถานะในช่วงนี้', group: 'service', defaultSize: HomeSize.half, resizable: true),
     HomeChartMeta(id: 'chart_case_sla', title: 'SLA เคส', hint: 'เคสที่ปิดทันเวลา (ของฉัน)', group: 'service', defaultSize: HomeSize.half, resizable: true, periods: ['d7', 'd30', 'd90'], defaultPeriod: 'd30', teamable: false),
-    HomeChartMeta(id: 'chart_activity', title: 'กิจกรรม / เยี่ยมลูกค้า', hint: 'เสร็จ · พลาด · กำลังมา รายวัน', group: 'work', defaultSize: HomeSize.full, periods: ['week', 'month'], defaultPeriod: 'week'),
+    HomeChartMeta(id: 'chart_activity', title: 'กิจกรรม / เข้าพบลูกค้า', hint: 'เสร็จ · พลาด · กำลังมา รายวัน', group: 'work', defaultSize: HomeSize.full, periods: ['week', 'month'], defaultPeriod: 'week'),
     HomeChartMeta(id: 'chart_work', title: 'งาน: สร้าง vs เคลียร์', hint: 'งาน Workspace ของฉัน รายสัปดาห์', group: 'work', defaultSize: HomeSize.full, periods: ['d30', 'd90'], defaultPeriod: 'd30', teamable: false),
     HomeChartMeta(id: 'chart_leave', title: 'วันลาคงเหลือ', hint: 'สิทธิ์ลาที่เหลือปีนี้ แต่ละประเภท', group: 'hr', defaultSize: HomeSize.half, resizable: true, periods: [], defaultPeriod: 'year', teamable: false),
   ];
@@ -190,12 +191,18 @@ class HomeLayout extends ChangeNotifier {
       final raw = prefs.getString(_v2Key(scope));
       if (raw != null) {
         final j = jsonDecode(raw);
-        final list = <HomeEntry>[];
+        var list = <HomeEntry>[];
         for (final r in (j is Map ? j['entries'] : j) as List? ?? const []) {
           final e = HomeEntry.fromJson(r);
           if (e != null && !list.any((x) => x.id == e.id)) list.add(e);
         }
-        _entries = list;
+        if (!(j is Map && j[_isaacFlag] == true)) {
+          // Saved before ISAAC became a widget: put it on top once (it used to
+          // sit on the hero), then the user's own choice wins.
+          list = isaacFirst(list);
+          await prefs.setString(_v2Key(scope), _encode(list));
+        }
+        if (_scope == scope) _entries = list;
       } else {
         final v1 = prefs.getString(_v1Key(legacyScope ?? scope));
         if (v1 != null) _entries = migrateV1(jsonDecode(v1) as Map<String, dynamic>);
@@ -205,8 +212,8 @@ class HomeLayout extends ChangeNotifier {
   }
 
   /// v1 `{order, hidden}` → v2 entries: the saved order stays, sections added
-  /// later go where the default puts them, hidden ones are left out, and the
-  /// default charts come after "เคส" (or at the end).
+  /// later go where the default puts them, hidden ones are left out, the
+  /// default charts come after "เคส" (or at the end), and "ไอแซคแนะนำ" goes on top.
   static List<HomeEntry> migrateV1(Map<String, dynamic> j) {
     final saved = [for (final k in (j['order'] as List? ?? const [])) '$k'].where(sections.containsKey).toList();
     for (final k in defaultOrder) {
@@ -216,8 +223,21 @@ class HomeLayout extends ChangeNotifier {
     final out = [for (final k in saved) if (!hidden.contains(k)) HomeEntry(k)];
     final i = out.indexWhere((e) => e.id == 'cases');
     out.insertAll(i < 0 ? out.length : i + 1, [for (final c in defaultCharts) HomeEntry(c, size: defaultSizeOf(c))]);
-    return out;
+    return isaacFirst(out);
   }
+
+  /// Marks a saved v2 layout that already had "ไอแซคแนะนำ" placed (see [isaacFirst]).
+  static const String _isaacFlag = 'isaac';
+
+  /// "ไอแซคแนะนำ" (`ai`, which also replaced the old "สรุปโดย AI" box) moved
+  /// or added to the top — done once for layouts saved before it was a widget.
+  static List<HomeEntry> isaacFirst(List<HomeEntry> entries) => [
+        entries.firstWhere((e) => e.id == 'ai', orElse: () => const HomeEntry('ai')),
+        ...entries.where((e) => e.id != 'ai'),
+      ];
+
+  static String _encode(List<HomeEntry> entries) =>
+      jsonEncode({'v': 2, _isaacFlag: true, 'entries': [for (final e in entries) e.toJson()]});
 
   Future<void> saveEntries(String scope, List<HomeEntry> entries) async {
     _scope = scope;
@@ -225,8 +245,7 @@ class HomeLayout extends ChangeNotifier {
     _entries = [for (final e in entries) if (isKnown(e.id) && seen.add(e.id)) e];
     notifyListeners();
     try {
-      await (await SharedPreferences.getInstance())
-          .setString(_v2Key(scope), jsonEncode({'v': 2, 'entries': [for (final e in _entries) e.toJson()]}));
+      await (await SharedPreferences.getInstance()).setString(_v2Key(scope), _encode(_entries));
     } catch (_) {}
   }
 

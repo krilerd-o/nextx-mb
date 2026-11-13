@@ -35,19 +35,19 @@ const kMaxCustomTabs = 4;
 
 const shellTabCatalog = <ShellTabDef>[
   ShellTabDef(id: 'dashboard', label: 'หน้าหลัก', icon: NxI.house, selectedIcon: NxI.houseFill, description: 'ภาพรวมงานวันนี้'),
-  ShellTabDef(id: 'leads', label: 'ลีด/ดีล', icon: NxI.handshake, selectedIcon: NxI.handshake, anyMenu: ['lead', 'deal'], description: 'ผู้มุ่งหวังและดีล'),
-  ShellTabDef(id: 'quotation', label: 'ใบเสนอ', icon: NxI.receipt, selectedIcon: NxI.receipt, anyMenu: ['quotation'], description: 'ใบเสนอราคา'),
+  ShellTabDef(id: 'leads', label: 'ผู้มุ่งหวัง', icon: NxI.flag, selectedIcon: NxI.flag, anyMenu: ['lead'], description: 'ผู้มุ่งหวังที่กำลังติดตาม'),
+  ShellTabDef(id: 'quotation', label: 'ใบเสนอราคา', icon: NxI.receipt, selectedIcon: NxI.receipt, anyMenu: ['quotation'], description: 'ใบเสนอราคา'),
   ShellTabDef(id: 'crm', label: 'ลูกค้า', icon: NxI.users, selectedIcon: NxI.users, anyMenu: MenuAccess.crmKeys, description: 'CRM ทั้งหมด'),
   ShellTabDef(id: 'cases', label: 'เคส', icon: NxI.headset, selectedIcon: NxI.headsetFill, anyMenu: ['case'], description: 'เคสบริการลูกค้า'),
   ShellTabDef(id: 'calendar', label: 'ปฏิทิน', icon: NxI.calendarBlank, selectedIcon: NxI.calendarCheck, anyMenu: [MenuAccess.calendar, MenuAccess.incoming, MenuAccess.pending], description: 'นัดหมายและเช็คอิน'),
-  ShellTabDef(id: 'chat', label: 'แชท', icon: NxI.chatCircle, selectedIcon: NxI.chatCircle, anyMenu: [MenuAccess.chat], description: 'แชททีม'),
-  ShellTabDef(id: 'mail', label: 'เมล', icon: NxI.envelope, selectedIcon: NxI.envelope, anyMenu: [MenuAccess.mailbox], description: 'เมลภายใน'),
-  ShellTabDef(id: 'workspace', label: 'งาน', icon: NxI.kanban, selectedIcon: NxI.kanban, anyMenu: [MenuAccess.workspace], description: 'บอร์ดงาน Workspace'),
-  ShellTabDef(id: 'approvals', label: 'อนุมัติ', icon: NxI.checkCircle, selectedIcon: NxI.checkCircleFill, anyMenu: [MenuAccess.quotation, MenuAccess.leaveManagement, MenuAccess.pendingApprovals], description: 'รายการรออนุมัติ'),
+  ShellTabDef(id: 'chat', label: 'แชททีม', icon: NxI.chatCircle, selectedIcon: NxI.chatCircle, anyMenu: [MenuAccess.chat], description: 'แชททีม'),
+  ShellTabDef(id: 'mail', label: 'กล่องจดหมาย', icon: NxI.envelope, selectedIcon: NxI.envelope, anyMenu: [MenuAccess.mailbox], description: 'อ่าน เขียน และตอบกลับเมล'),
+  ShellTabDef(id: 'workspace', label: 'เวิร์กสเปซ', icon: NxI.kanban, selectedIcon: NxI.kanban, anyMenu: [MenuAccess.workspace], description: 'บอร์ดงาน Workspace'),
+  ShellTabDef(id: 'approvals', label: 'รออนุมัติ', icon: NxI.checkCircle, selectedIcon: NxI.checkCircleFill, anyMenu: [MenuAccess.quotation, MenuAccess.leaveManagement, MenuAccess.pendingApprovals], description: 'รายการรออนุมัติ'),
   ShellTabDef(id: 'hr', label: 'HR', icon: NxI.briefcase, selectedIcon: NxI.briefcaseFill, anyMenu: [MenuAccess.attendance, MenuAccess.leave, MenuAccess.leaveManagement], description: 'ลงเวลาและการลา'),
   ShellTabDef(id: 'jobs', label: 'งานช่าง', icon: NxI.wrench, selectedIcon: NxI.wrench, anyMenu: [MenuAccess.job], description: 'งานบริการภาคสนาม'),
   ShellTabDef(id: 'commerce', label: 'ร้านค้า', icon: NxI.package, selectedIcon: NxI.package, anyMenu: [MenuAccess.storeOrders, MenuAccess.storeStock], description: 'ออเดอร์และสต็อก'),
-  ShellTabDef(id: 'files', label: 'ไฟล์', icon: NxI.folder, selectedIcon: NxI.folder, anyMenu: [MenuAccess.files], description: 'ไฟล์ของธุรกิจ'),
+  ShellTabDef(id: 'files', label: 'จัดการไฟล์', icon: NxI.folder, selectedIcon: NxI.folder, anyMenu: [MenuAccess.files], description: 'ไฟล์ของธุรกิจ'),
   ShellTabDef(id: 'ai', label: 'AI', icon: NxI.robot, selectedIcon: NxI.robot, anyMenu: [MenuAccess.ai], description: 'ผู้ช่วย AI'),
   ShellTabDef(id: 'search', label: 'ค้นหา', icon: NxI.magnifyingGlass, selectedIcon: NxI.magnifyingGlassFill, description: 'ค้นหาทุกโมดูล'),
   ShellTabDef(id: 'notifications', label: 'แจ้งเตือน', icon: NxI.bell, selectedIcon: NxI.bellFill, description: 'การแจ้งเตือน'),
@@ -71,7 +71,7 @@ class WorkRole {
 }
 
 const workRoles = <WorkRole>[
-  WorkRole('sales', 'ทีมขาย', 'ลีด ดีล ใบเสนอราคา นัดลูกค้า', NxI.handshake, ['dashboard', 'leads', 'quotation', 'calendar']),
+  WorkRole('sales', 'ทีมขาย', 'ผู้มุ่งหวัง ดีล ใบเสนอราคา นัดลูกค้า', NxI.handshake, ['dashboard', 'leads', 'quotation', 'calendar']),
   WorkRole('service', 'ทีมบริการลูกค้า', 'เคส แชท ติดตามลูกค้า', NxI.headset, ['dashboard', 'cases', 'chat', 'calendar']),
   WorkRole('field', 'ช่างภาคสนาม', 'งานช่าง เช็คอินหน้างาน ลงเวลา', NxI.wrench, ['jobs', 'calendar', 'hr', 'chat']),
   WorkRole('marketing', 'ทีมการตลาด', 'ลูกค้า แคมเปญ เมล', NxI.flag, ['dashboard', 'crm', 'mail', 'chat']),

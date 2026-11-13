@@ -12,6 +12,7 @@ import '../../core/i18n.dart';
 import '../../core/nx_number.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
+import 'home_boxes.dart' show HomeCardShadow, homeCardFill, kHomeCardRadius;
 import 'home_chart_data.dart';
 import 'home_widgets.dart';
 
@@ -21,8 +22,7 @@ import 'home_widgets.dart';
 const _seriesLight = [Color(0xFF2A78D6), Color(0xFFEB6834), Color(0xFF1BAF7A), Color(0xFFEDA100), Color(0xFFE87BA4), Color(0xFF6250D6)];
 const _seriesDark = [Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500), Color(0xFFD55181), Color(0xFF9085E9)];
 
-List<Color> chartSeries(BuildContext context) =>
-    Theme.of(context).brightness == Brightness.dark ? _seriesDark : _seriesLight;
+List<Color> chartSeries(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? _seriesDark : _seriesLight;
 
 /// Status colours (good / critical) — reserved, always shipped with a label.
 Color chartGood(BuildContext c) => Theme.of(c).brightness == Brightness.dark ? const Color(0xFF34C77B) : const Color(0xFF0F9D58);
@@ -65,14 +65,7 @@ void resetHomeChartMemory() => _lastData.clear();
 
 /// One chart widget on Home: header, period · scope pill, chart, states.
 class HomeChartCard extends StatefulWidget {
-  const HomeChartCard({
-    super.key,
-    required this.entry,
-    this.revision = 0,
-    this.editing = false,
-    this.onEntryChanged,
-    this.sample,
-  });
+  const HomeChartCard({super.key, required this.entry, this.revision = 0, this.editing = false, this.onEntryChanged, this.sample});
 
   final HomeEntry entry;
 
@@ -119,13 +112,7 @@ class _HomeChartCardState extends State<HomeChartCard> {
 
   ChartRequest _request() {
     final config = context.read<AppConfig>();
-    return ChartRequest(
-      api: config.apiClient,
-      session: config.session,
-      entry: widget.entry,
-      scope: config.businessScope,
-      now: chartNow(),
-    );
+    return ChartRequest(api: config.apiClient, session: config.session, entry: widget.entry, scope: config.businessScope, now: chartNow());
   }
 
   Future<void> _load({required bool force}) async {
@@ -148,55 +135,53 @@ class _HomeChartCardState extends State<HomeChartCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
     final info = HomeWidgetInfo.of(widget.entry.id);
     final half = widget.entry.size == HomeSize.half;
     final body = _error != null && _data == null
         ? _ErrorState(onRetry: () => _load(force: true))
         : _data == null
-            ? const Padding(padding: EdgeInsets.only(top: 6), child: NxSkeletonBox(rows: 2))
-            : ChartBody(id: widget.entry.id, data: _data!, half: half);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: ValueKey('home-chart-${widget.entry.id}'),
-        borderRadius: BorderRadius.circular(24),
-        onTap: widget.editing || widget.sample != null || info.route == null
-            ? null
-            : () => context.push(info.route!),
-        child: Ink(
-          height: half ? kHalfChartHeight : kFullChartHeight,
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color.alphaBlend(info.color.withValues(alpha: 0.07), cs.surface), cs.surface],
+        ? const Padding(padding: EdgeInsets.only(top: 6), child: NxSkeletonBox(rows: 2))
+        : ChartBody(id: widget.entry.id, data: _data!, half: half);
+    return HomeCardShadow(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: ValueKey('home-chart-${widget.entry.id}'),
+          borderRadius: BorderRadius.circular(kHomeCardRadius),
+          onTap: widget.editing || widget.sample != null || info.route == null ? null : () => context.push(info.route!),
+          child: Ink(
+            height: half ? kHalfChartHeight : kFullChartHeight,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            decoration: homeCardFill(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(color: info.color.withValues(alpha: 0.14), shape: BoxShape.circle),
+                      child: Icon(info.icon, size: 15, color: info.color),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        tr(info.title),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                _PeriodPill(entry: widget.entry, enabled: !widget.editing && widget.sample == null, onChanged: widget.onEntryChanged),
+                const SizedBox(height: 8),
+                // Fixed card height: cap the text size inside the chart.
+                Expanded(child: MediaQuery.withClampedTextScaling(maxScaleFactor: 1.15, child: body)),
+              ],
             ),
-            border: Border.all(color: info.color.withValues(alpha: 0.16)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(color: info.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(9)),
-                  child: Icon(info.icon, size: 15, color: info.color),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(tr(info.title),
-                      maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                ),
-              ]),
-              const SizedBox(height: 6),
-              _PeriodPill(entry: widget.entry, enabled: !widget.editing && widget.sample == null, onChanged: widget.onEntryChanged),
-              const SizedBox(height: 8),
-              Expanded(child: body),
-            ],
           ),
         ),
       ),
@@ -225,17 +210,22 @@ class _PeriodPill extends StatelessWidget {
       if (team) tr(entry.team ? 'ทีม' : 'ของฉัน') else if (meta.teamable) tr('ของฉัน'),
     ];
     final canOpen = enabled && onChanged != null && (meta.periods.length > 1 || team);
-    final label = Text(parts.join(' · '),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant));
+    final label = Text(
+      parts.join(' · '),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
+    );
     final pill = Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(99)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Flexible(child: label),
-        if (canOpen) ...[const SizedBox(width: 2), Icon(NxI.caretDown, size: 12, color: cs.onSurfaceVariant)],
-      ]),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(child: label),
+          if (canOpen) ...[const SizedBox(width: 2), Icon(NxI.caretDown, size: 12, color: cs.onSurfaceVariant)],
+        ],
+      ),
     );
     if (!canOpen) return Align(alignment: Alignment.centerLeft, child: pill);
     return Align(
@@ -256,8 +246,7 @@ class _PeriodPill extends StatelessWidget {
           }
         },
         itemBuilder: (_) => [
-          for (final p in meta.periods)
-            CheckedPopupMenuItem(value: p, checked: p == period, child: Text(tr(kChartPeriodLabels[p] ?? p))),
+          for (final p in meta.periods) CheckedPopupMenuItem(value: p, checked: p == period, child: Text(tr(kChartPeriodLabels[p] ?? p))),
           if (team) ...[
             const PopupMenuDivider(),
             CheckedPopupMenuItem(key: const ValueKey('chart-scope-me'), value: 'scope:me', checked: !entry.team, child: Text(tr('ของฉัน'))),
@@ -278,10 +267,13 @@ class _ErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(tr('โหลดไม่สำเร็จ'), style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13)),
-        TextButton.icon(onPressed: onRetry, icon: const Icon(NxI.arrowClockwise, size: 16), label: Text(tr('ลองใหม่'))),
-      ]),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(tr('โหลดไม่สำเร็จ'), style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13)),
+          TextButton.icon(onPressed: onRetry, icon: const Icon(NxI.arrowClockwise, size: 16), label: Text(tr('ลองใหม่'))),
+        ],
+      ),
     );
   }
 }
@@ -294,11 +286,18 @@ class _Empty extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(NxI.chartBar, size: 26, color: cs.onSurfaceVariant.withValues(alpha: 0.45)),
-        const SizedBox(height: 6),
-        Text(tr(text), textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
-      ]),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(NxI.chartBar, size: 26, color: cs.onSurfaceVariant.withValues(alpha: 0.45)),
+          const SizedBox(height: 6),
+          Text(
+            tr(text),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -343,7 +342,7 @@ class ChartBody extends StatelessWidget {
       case 'chart_lead_conv':
         return _RingBody(d as RateData, half: half, semi: true, empty: 'ยังไม่มี Lead ในช่วงนี้');
       case 'chart_sales_trend':
-        return _LineBody(d as SeriesData, baht: true, area: true, empty: 'ยังไม่มียอดปิดการขาย');
+        return ColumnsChart(d as SeriesData, baht: true, empty: 'ยังไม่มียอดปิดการขาย');
       case 'chart_work':
         return _LineBody(d as SeriesData, empty: 'ยังไม่มีงานในช่วงนี้');
       case 'chart_activity':
@@ -386,36 +385,51 @@ class _WonBody extends StatelessWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(chartCompact(d.amount * t, baht: true),
-                key: const ValueKey('won-amount'),
-                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+            child: Text(
+              chartCompact(d.amount * t, baht: true),
+              key: const ValueKey('won-amount'),
+              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.5),
+            ),
           ),
           const SizedBox(height: 4),
-          Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            if (delta != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: (up ? chartGood(context) : chartBad(context)).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Transform.scale(
-                    scaleY: up ? 1 : -1,
-                    child: Icon(NxI.trendUp, size: 13, color: up ? chartGood(context) : chartBad(context)),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (delta != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (up ? chartGood(context) : chartBad(context)).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(99),
                   ),
-                  const SizedBox(width: 3),
-                  Text('${up ? '+' : '−'}${delta.abs().round()}%',
-                      key: const ValueKey('won-delta'),
-                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: up ? chartGood(context) : chartBad(context))),
-                ]),
-              ),
-            Text(tr('${nxInt(d.count)} ดีล'), style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-            if (delta != null && !half) Text(tr('เทียบช่วงก่อน'), style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-          ]),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Transform.scale(
+                        scaleY: up ? 1 : -1,
+                        child: Icon(NxI.trendUp, size: 13, color: up ? chartGood(context) : chartBad(context)),
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${up ? '+' : '−'}${delta.abs().round()}%',
+                        key: const ValueKey('won-delta'),
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: up ? chartGood(context) : chartBad(context)),
+                      ),
+                    ],
+                  ),
+                ),
+              Text(tr('${nxInt(d.count)} ดีล'), style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+              if (delta != null && !half) Text(tr('เทียบช่วงก่อน'), style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+            ],
+          ),
           const Spacer(),
           if (spark != null)
-            SizedBox(height: half ? 38 : 64, child: _Sparkline(values: spark, t: t, color: chartSeries(context)[2]))
+            SizedBox(
+              height: half ? 38 : 64,
+              child: _Sparkline(values: spark, t: t, color: chartSeries(context)[2]),
+            )
           else if (d.amount == 0)
             Text(tr('ยังไม่มีดีลที่ปิดได้ในช่วงนี้'), style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
         ],
@@ -478,52 +492,73 @@ class _RingBody extends StatelessWidget {
     final cs = theme.colorScheme;
     if (d.rate == null) return _Empty(empty);
     final color = chartSeries(context)[semi ? 2 : 0];
-    Widget legend(Color c, String label, double v) => Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text('${tr(label)} ${nxInt(v)}',
-                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+    Widget legend(Color c, String label, double v) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            '${tr(label)} ${nxInt(v)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
           ),
-        ]);
+        ),
+      ],
+    );
     return _Appear(
       data: d,
       builder: (t) {
-        final ring = LayoutBuilder(builder: (context, c) {
-          final side = math.min(c.maxWidth, semi ? c.maxHeight * 2 : c.maxHeight);
-          return Center(
-            child: SizedBox(
-              width: side,
-              height: semi ? side / 2 + 8 : side,
-              child: CustomPaint(
-                painter: _RingPainter(value: (d.rate! * t).clamp(0, 1), color: color, track: cs.surfaceContainerHighest, semi: semi),
-                child: Align(
-                  alignment: semi ? const Alignment(0, 0.9) : Alignment.center,
-                  child: Text(_pct(d.rate! * t),
+        final ring = LayoutBuilder(
+          builder: (context, c) {
+            final side = math.min(c.maxWidth, semi ? c.maxHeight * 2 : c.maxHeight);
+            return Center(
+              child: SizedBox(
+                width: side,
+                height: semi ? side / 2 + 8 : side,
+                child: CustomPaint(
+                  painter: _RingPainter(value: (d.rate! * t).clamp(0, 1), color: color, track: cs.surfaceContainerHighest, semi: semi),
+                  child: Align(
+                    alignment: semi ? const Alignment(0, 0.9) : Alignment.center,
+                    child: Text(
+                      _pct(d.rate! * t),
                       key: ValueKey('rate-${d.aLabel}'),
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, fontSize: half ? 18 : 22)),
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, fontSize: half ? 18 : 22),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          );
-        });
+            );
+          },
+        );
         final legends = [legend(color, d.aLabel, d.a), legend(cs.outlineVariant, d.bLabel, d.b)];
         if (half) {
-          return Column(children: [
-            Expanded(child: ring),
-            const SizedBox(height: 6),
-            Wrap(spacing: 10, runSpacing: 2, alignment: WrapAlignment.center, children: legends),
-          ]);
+          return Column(
+            children: [
+              Expanded(child: ring),
+              const SizedBox(height: 6),
+              Wrap(spacing: 10, runSpacing: 2, alignment: WrapAlignment.center, children: legends),
+            ],
+          );
         }
-        return Row(children: [
-          Expanded(child: ring),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              for (final l in legends) Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: l),
-            ]),
-          ),
-        ]);
+        return Row(
+          children: [
+            Expanded(child: ring),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [for (final l in legends) Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: l)],
+              ),
+            ),
+          ],
+        );
       },
     );
   }
@@ -557,10 +592,8 @@ class _RingPainter extends CustomPainter {
 }
 
 class _LineBody extends StatelessWidget {
-  const _LineBody(this.d, {this.baht = false, this.area = false, required this.empty});
+  const _LineBody(this.d, {required this.empty});
   final SeriesData d;
-  final bool baht;
-  final bool area;
   final String empty;
 
   @override
@@ -571,92 +604,95 @@ class _LineBody extends StatelessWidget {
     final names = d.series.keys.toList();
     final maxY = d.series.values.expand((e) => e).fold<double>(0, math.max);
     final step = (d.labels.length / 6).ceil().clamp(1, 99);
-    return Column(children: [
-      if (names.length > 1) _Legend(names: names, colors: colors),
-      if (names.length > 1) const SizedBox(height: 6),
-      Expanded(
-        child: _Appear(
-          data: d,
-          builder: (t) => LineChart(
-            duration: Duration.zero,
-            LineChartData(
-              minY: 0,
-              maxY: maxY <= 0 ? 1 : maxY * 1.15,
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                getDrawingHorizontalLine: (_) => FlLine(color: cs.outlineVariant.withValues(alpha: 0.35), strokeWidth: 1),
-              ),
-              borderData: FlBorderData(show: false),
-              titlesData: FlTitlesData(
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 40,
-                    getTitlesWidget: (v, meta) => v == meta.max
-                        ? const SizedBox.shrink()
-                        : Text(chartCompact(v), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
-                  ),
+    return Column(
+      children: [
+        if (names.length > 1) _Legend(names: names, colors: colors),
+        if (names.length > 1) const SizedBox(height: 6),
+        Expanded(
+          child: _Appear(
+            data: d,
+            builder: (t) => LineChart(
+              duration: Duration.zero,
+              LineChartData(
+                minY: 0,
+                maxY: maxY <= 0 ? 1 : maxY * 1.15,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (_) => FlLine(color: cs.outlineVariant.withValues(alpha: 0.35), strokeWidth: 1),
                 ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 20,
-                    interval: 1,
-                    getTitlesWidget: (v, meta) {
-                      final i = v.round();
-                      if (i < 0 || i >= d.labels.length || i % step != 0) return const SizedBox.shrink();
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(tr(d.labels[i]), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              lineTouchData: LineTouchData(
-                handleBuiltInTouches: true,
-                touchTooltipData: LineTouchTooltipData(
-                  getTooltipColor: (_) => cs.inverseSurface,
-                  fitInsideHorizontally: true,
-                  fitInsideVertically: true,
-                  getTooltipItems: (spots) => [
-                    for (final s in spots)
-                      LineTooltipItem(
-                        '${s.barIndex == 0 ? '${tr(d.labels[s.x.round()])}\n' : ''}${tr(names[s.barIndex])} ${baht ? nxBaht(d.series[names[s.barIndex]]![s.x.round()]) : nxInt(d.series[names[s.barIndex]]![s.x.round()])}',
-                        TextStyle(color: cs.onInverseSurface, fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                  ],
-                ),
-              ),
-              lineBarsData: [
-                for (var si = 0; si < names.length; si++)
-                  LineChartBarData(
-                    spots: [
-                      for (var i = 0; i < d.labels.length; i++) FlSpot(i.toDouble(), d.series[names[si]]![i] * t),
-                    ],
-                    isCurved: true,
-                    preventCurveOverShooting: true,
-                    color: colors[si % colors.length],
-                    barWidth: 2,
-                    dotData: FlDotData(show: d.labels.length <= 8, getDotPainter: (_, _, _, _) => FlDotCirclePainter(radius: 3, color: colors[si % colors.length], strokeWidth: 2, strokeColor: cs.surface)),
-                    belowBarData: BarAreaData(
-                      show: area || names.length == 1,
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [colors[si % colors.length].withValues(alpha: 0.25), colors[si % colors.length].withValues(alpha: 0)],
-                      ),
+                borderData: FlBorderData(show: false),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      getTitlesWidget: (v, meta) =>
+                          v == meta.max ? const SizedBox.shrink() : Text(chartCompact(v), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
                     ),
                   ),
-              ],
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 20,
+                      interval: 1,
+                      getTitlesWidget: (v, meta) {
+                        final i = v.round();
+                        if (i < 0 || i >= d.labels.length || i % step != 0) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(tr(d.labels[i]), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                lineTouchData: LineTouchData(
+                  handleBuiltInTouches: true,
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => cs.inverseSurface,
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipItems: (spots) => [
+                      for (final s in spots)
+                        LineTooltipItem(
+                          '${s.barIndex == 0 ? '${tr(d.labels[s.x.round()])}\n' : ''}${tr(names[s.barIndex])} ${nxInt(d.series[names[s.barIndex]]![s.x.round()])}',
+                          TextStyle(color: cs.onInverseSurface, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                    ],
+                  ),
+                ),
+                lineBarsData: [
+                  for (var si = 0; si < names.length; si++)
+                    LineChartBarData(
+                      spots: [for (var i = 0; i < d.labels.length; i++) FlSpot(i.toDouble(), d.series[names[si]]![i] * t)],
+                      isCurved: true,
+                      preventCurveOverShooting: true,
+                      color: colors[si % colors.length],
+                      barWidth: 2,
+                      dotData: FlDotData(
+                        show: d.labels.length <= 8,
+                        getDotPainter: (_, _, _, _) =>
+                            FlDotCirclePainter(radius: 3, color: colors[si % colors.length], strokeWidth: 2, strokeColor: cs.surface),
+                      ),
+                      belowBarData: BarAreaData(
+                        show: names.length == 1,
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [colors[si % colors.length].withValues(alpha: 0.25), colors[si % colors.length].withValues(alpha: 0)],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 }
 
@@ -668,14 +704,25 @@ class _Legend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Wrap(spacing: 12, runSpacing: 2, children: [
-      for (var i = 0; i < names.length; i++)
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 10, height: 3, decoration: BoxDecoration(color: colors[i % colors.length], borderRadius: BorderRadius.circular(2))),
-          const SizedBox(width: 5),
-          Text(tr(names[i]), style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant)),
-        ]),
-    ]);
+    return Wrap(
+      spacing: 12,
+      runSpacing: 2,
+      children: [
+        for (var i = 0; i < names.length; i++)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 10,
+                height: 3,
+                decoration: BoxDecoration(color: colors[i % colors.length], borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(width: 5),
+              Text(tr(names[i]), style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant)),
+            ],
+          ),
+      ],
+    );
   }
 }
 
@@ -693,90 +740,104 @@ class _StackBody extends StatelessWidget {
     final totals = [for (var i = 0; i < d.labels.length; i++) names.fold<double>(0, (a, n) => a + d.series[n]![i])];
     final maxY = totals.fold<double>(0, math.max);
     final step = (d.labels.length / 7).ceil().clamp(1, 99);
-    final barW = d.labels.length > 20 ? 5.0 : d.labels.length > 10 ? 8.0 : 14.0;
-    return Column(children: [
-      _Legend(names: names, colors: colors),
-      const SizedBox(height: 6),
-      Expanded(
-        child: _Appear(
-          data: d,
-          builder: (t) => BarChart(
-            duration: Duration.zero,
-            BarChartData(
-              maxY: maxY <= 0 ? 1 : maxY * 1.15,
-              alignment: BarChartAlignment.spaceAround,
-              borderData: FlBorderData(show: false),
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                getDrawingHorizontalLine: (_) => FlLine(color: cs.outlineVariant.withValues(alpha: 0.35), strokeWidth: 1),
-              ),
-              titlesData: FlTitlesData(
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 28,
-                    getTitlesWidget: (v, meta) => v == meta.max || v != v.roundToDouble()
-                        ? const SizedBox.shrink()
-                        : Text(nxInt(v), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
-                  ),
+    final barW = d.labels.length > 20
+        ? 5.0
+        : d.labels.length > 10
+        ? 8.0
+        : 14.0;
+    return Column(
+      children: [
+        _Legend(names: names, colors: colors),
+        const SizedBox(height: 6),
+        Expanded(
+          child: _Appear(
+            data: d,
+            builder: (t) => BarChart(
+              duration: Duration.zero,
+              BarChartData(
+                maxY: maxY <= 0 ? 1 : maxY * 1.15,
+                alignment: BarChartAlignment.spaceAround,
+                borderData: FlBorderData(show: false),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (_) => FlLine(color: cs.outlineVariant.withValues(alpha: 0.35), strokeWidth: 1),
                 ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 20,
-                    getTitlesWidget: (v, meta) {
-                      final i = v.round();
-                      if (i < 0 || i >= d.labels.length || i % step != 0) return const SizedBox.shrink();
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(d.labels[i], style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              barTouchData: BarTouchData(
-                touchTooltipData: BarTouchTooltipData(
-                  getTooltipColor: (_) => cs.inverseSurface,
-                  fitInsideHorizontally: true,
-                  fitInsideVertically: true,
-                  getTooltipItem: (g, gi, rod, ri) => BarTooltipItem(
-                    '${d.labels[g.x]}\n${[for (final n in names) '${tr(n)} ${nxInt(d.series[n]![g.x])}'].join('\n')}',
-                    TextStyle(color: cs.onInverseSurface, fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-              barGroups: [
-                for (var i = 0; i < d.labels.length; i++)
-                  BarChartGroupData(x: i, barRods: [
-                    BarChartRodData(
-                      toY: totals[i] * t,
-                      width: barW,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                      color: Colors.transparent,
-                      rodStackItems: () {
-                        var acc = 0.0;
-                        return [
-                          for (var n = 0; n < names.length; n++)
-                            () {
-                              final v = d.series[names[n]]![i] * t;
-                              final item = BarChartRodStackItem(acc, acc + v, colors[n], borderSide: BorderSide(color: cs.surface, width: v > 0 ? 1 : 0));
-                              acc += v;
-                              return item;
-                            }(),
-                        ];
-                      }(),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (v, meta) => v == meta.max || v != v.roundToDouble()
+                          ? const SizedBox.shrink()
+                          : Text(nxInt(v), style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
                     ),
-                  ]),
-              ],
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 20,
+                      getTitlesWidget: (v, meta) {
+                        final i = v.round();
+                        if (i < 0 || i >= d.labels.length || i % step != 0) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(d.labels[i], style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => cs.inverseSurface,
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipItem: (g, gi, rod, ri) => BarTooltipItem(
+                      '${d.labels[g.x]}\n${[for (final n in names) '${tr(n)} ${nxInt(d.series[n]![g.x])}'].join('\n')}',
+                      TextStyle(color: cs.onInverseSurface, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                barGroups: [
+                  for (var i = 0; i < d.labels.length; i++)
+                    BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: totals[i] * t,
+                          width: barW,
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(barW / 2)),
+                          color: Colors.transparent,
+                          rodStackItems: () {
+                            var acc = 0.0;
+                            return [
+                              for (var n = 0; n < names.length; n++)
+                                () {
+                                  final v = d.series[names[n]]![i] * t;
+                                  final item = BarChartRodStackItem(
+                                    acc,
+                                    acc + v,
+                                    colors[n],
+                                    borderSide: BorderSide(color: cs.surface, width: v > 0 ? 1 : 0),
+                                  );
+                                  acc += v;
+                                  return item;
+                                }(),
+                            ];
+                          }(),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 }
 
@@ -803,41 +864,48 @@ class _BarsBody extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           for (var i = 0; i < shown.length; i++)
-            Row(children: [
-              SizedBox(
-                width: 84,
-                child: Text(tr(shown[i].label), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-              ),
-              Expanded(
-                child: Tooltip(
-                  message: '${tr(shown[i].label)}: ${nxInt(shown[i].value)}${showAmount ? ' · ${nxBaht(shown[i].amount)}' : ''}',
-                  child: LayoutBuilder(
-                    builder: (_, c) => Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        height: 14,
-                        width: math.max(shown[i].value > 0 ? 4.0 : 0.0, c.maxWidth * (maxV <= 0 ? 0 : shown[i].value / maxV) * t),
-                        decoration: BoxDecoration(
-                          color: firstIsBad && i == 0 ? chartBad(context) : base.withValues(alpha: 1 - i * 0.1),
-                          borderRadius: const BorderRadius.horizontal(right: Radius.circular(4)),
+            Row(
+              children: [
+                SizedBox(
+                  width: 84,
+                  child: Text(
+                    tr(shown[i].label),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                ),
+                Expanded(
+                  child: Tooltip(
+                    message: '${tr(shown[i].label)}: ${nxInt(shown[i].value)}${showAmount ? ' · ${nxBaht(shown[i].amount)}' : ''}',
+                    child: LayoutBuilder(
+                      builder: (_, c) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          height: 14,
+                          width: math.max(shown[i].value > 0 ? 4.0 : 0.0, c.maxWidth * (maxV <= 0 ? 0 : shown[i].value / maxV) * t),
+                          decoration: BoxDecoration(
+                            color: firstIsBad && i == 0 ? chartBad(context) : base.withValues(alpha: 1 - i * 0.1),
+                            borderRadius: const BorderRadius.horizontal(right: Radius.circular(4)),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: showAmount ? 76 : 34,
-                child: Text(
-                  showAmount ? '${nxInt(shown[i].value)} · ${chartCompact(shown[i].amount, baht: true)}' : nxInt(shown[i].value),
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: cs.onSurface),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: showAmount ? 76 : 34,
+                  child: Text(
+                    showAmount ? '${nxInt(shown[i].value)} · ${chartCompact(shown[i].amount, baht: true)}' : nxInt(shown[i].value),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: cs.onSurface),
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
         ],
       ),
     );
@@ -865,92 +933,126 @@ class _DonutBodyState extends State<_DonutBody> {
     final cs = theme.colorScheme;
     final colors = chartSeries(context);
     final sel = _touched != null && _touched! < d.slices.length ? d.slices[_touched!] : null;
-    final donut = LayoutBuilder(builder: (context, c) {
-      final side = math.min(c.maxWidth, c.maxHeight);
-      return Center(
-        child: SizedBox(
-          width: side,
-          height: side,
-          child: _Appear(
-            data: d,
-            builder: (t) => Stack(alignment: Alignment.center, children: [
-              PieChart(
-                duration: Duration.zero,
-                PieChartData(
-                  startDegreeOffset: -90,
-                  centerSpaceRadius: side * 0.3,
-                  sectionsSpace: 2,
-                  pieTouchData: PieTouchData(touchCallback: (e, r) {
-                    if (!e.isInterestedForInteractions) return;
-                    final i = r?.touchedSection?.touchedSectionIndex;
-                    if (i != null && i >= 0 && i != _touched) setState(() => _touched = i);
-                  }),
-                  sections: [
-                    for (var i = 0; i < d.slices.length; i++)
-                      PieChartSectionData(
-                        value: d.slices[i].value,
-                        color: colors[i % colors.length],
-                        radius: side * (i == _touched ? 0.2 : 0.17),
-                        showTitle: false,
+    final donut = LayoutBuilder(
+      builder: (context, c) {
+        final side = math.min(c.maxWidth, c.maxHeight);
+        return Center(
+          child: SizedBox(
+            width: side,
+            height: side,
+            child: _Appear(
+              data: d,
+              builder: (t) => Stack(
+                alignment: Alignment.center,
+                children: [
+                  PieChart(
+                    duration: Duration.zero,
+                    PieChartData(
+                      startDegreeOffset: -90,
+                      centerSpaceRadius: side * 0.3,
+                      sectionsSpace: 2,
+                      pieTouchData: PieTouchData(
+                        touchCallback: (e, r) {
+                          if (!e.isInterestedForInteractions) return;
+                          final i = r?.touchedSection?.touchedSectionIndex;
+                          if (i != null && i >= 0 && i != _touched) setState(() => _touched = i);
+                        },
                       ),
-                    if (t < 1) PieChartSectionData(value: d.total * (1 - t) / math.max(t, 0.001), color: Colors.transparent, radius: 1, showTitle: false),
-                  ],
-                ),
-              ),
-              Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(nxInt(sel?.value ?? d.total),
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, fontSize: widget.half ? 15 : 18)),
-                if (!widget.half || sel != null)
-                  SizedBox(
-                    width: side * 0.5,
-                    child: Text(sel == null ? tr('ทั้งหมด') : tr(sel.label),
-                        textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, color: cs.onSurfaceVariant)),
+                      sections: [
+                        for (var i = 0; i < d.slices.length; i++)
+                          PieChartSectionData(
+                            value: d.slices[i].value,
+                            color: colors[i % colors.length],
+                            radius: side * (i == _touched ? 0.2 : 0.17),
+                            showTitle: false,
+                          ),
+                        if (t < 1) PieChartSectionData(value: d.total * (1 - t) / math.max(t, 0.001), color: Colors.transparent, radius: 1, showTitle: false),
+                      ],
+                    ),
                   ),
-              ]),
-            ]),
-          ),
-        ),
-      );
-    });
-    Widget legendRow(int i) => InkWell(
-          onTap: () => setState(() => _touched = i),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 1.5),
-            child: Row(children: [
-              Container(width: 8, height: 8, decoration: BoxDecoration(color: colors[i % colors.length], borderRadius: BorderRadius.circular(2))),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(tr(d.slices[i].label),
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant)),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        nxInt(sel?.value ?? d.total),
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, fontSize: widget.half ? 15 : 18),
+                      ),
+                      if (!widget.half || sel != null)
+                        SizedBox(
+                          width: side * 0.5,
+                          child: Text(
+                            sel == null ? tr('ทั้งหมด') : tr(sel.label),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 10.5, color: cs.onSurfaceVariant),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-              Text(nxInt(d.slices[i].value), style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: cs.onSurface)),
-            ]),
+            ),
           ),
         );
-    if (widget.half) {
-      return Row(children: [
-        Expanded(flex: 5, child: donut),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 6,
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            for (var i = 0; i < math.min(3, d.slices.length); i++) legendRow(i),
-            if (d.slices.length > 3)
-              Text(tr('+${d.slices.length - 3} อื่นๆ'), style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
-          ]),
+      },
+    );
+    Widget legendRow(int i) => InkWell(
+      onTap: () => setState(() => _touched = i),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1.5),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: colors[i % colors.length], borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                tr(d.slices[i].label),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5, color: cs.onSurfaceVariant),
+              ),
+            ),
+            Text(
+              nxInt(d.slices[i].value),
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: cs.onSurface),
+            ),
+          ],
         ),
-      ]);
-    }
-    return Row(children: [
-      Expanded(flex: 4, child: donut),
-      const SizedBox(width: 14),
-      Expanded(
-        flex: 5,
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          for (var i = 0; i < d.slices.length; i++) legendRow(i),
-        ]),
       ),
-    ]);
+    );
+    if (widget.half) {
+      return Row(
+        children: [
+          Expanded(flex: 5, child: donut),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 6,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < math.min(3, d.slices.length); i++) legendRow(i),
+                if (d.slices.length > 3) Text(tr('+${d.slices.length - 3} อื่นๆ'), style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(flex: 4, child: donut),
+        const SizedBox(width: 14),
+        Expanded(
+          flex: 5,
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [for (var i = 0; i < d.slices.length; i++) legendRow(i)]),
+        ),
+      ],
+    );
   }
 }
 
@@ -971,23 +1073,39 @@ class _LeaveBody extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           for (final r in shown)
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-              Row(children: [
-                Expanded(child: Text(tr(r.name), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant))),
-                const SizedBox(width: 6),
-                Text(tr('เหลือ ${_days(r.left)}/${_days(r.total)}'), style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: cs.onSurface)),
-              ]),
-              const SizedBox(height: 3),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: (r.total <= 0 ? 0 : r.left / r.total) * t,
-                  minHeight: 6,
-                  color: color,
-                  backgroundColor: cs.surfaceContainerHighest,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        tr(r.name),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      tr('เหลือ ${_days(r.left)}/${_days(r.total)}'),
+                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: cs.onSurface),
+                    ),
+                  ],
                 ),
-              ),
-            ]),
+                const SizedBox(height: 3),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: (r.total <= 0 ? 0 : r.left / r.total) * t,
+                    minHeight: 6,
+                    color: color,
+                    backgroundColor: cs.surfaceContainerHighest,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -1011,15 +1129,29 @@ Object sampleChartData(String id) {
     case 'chart_lead_conv':
       return const RateData(rate: 0.34, a: 17, b: 50, aLabel: 'แปลงแล้ว', bLabel: 'Lead ใหม่');
     case 'chart_sales_trend':
-      return const SeriesData(labels: months, series: {'ยอดปิดการขาย': [420000, 610000, 380000, 890000, 760000, 1250000]});
+      return const SeriesData(
+        labels: months,
+        series: {
+          'ยอดปิดการขาย': [420000, 610000, 380000, 890000, 760000, 1250000],
+        },
+      );
     case 'chart_work':
-      return const SeriesData(labels: ['5/10', '12/10', '19/10', '26/10', '2/11', '9/11'], series: {'สร้าง': [6, 9, 7, 11, 8, 10], 'เคลียร์': [4, 7, 8, 9, 10, 9]});
+      return const SeriesData(
+        labels: ['5/10', '12/10', '19/10', '26/10', '2/11', '9/11'],
+        series: {
+          'สร้าง': [6, 9, 7, 11, 8, 10],
+          'เคลียร์': [4, 7, 8, 9, 10, 9],
+        },
+      );
     case 'chart_activity':
-      return const SeriesData(labels: ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'], series: {
-        'เสร็จ': [3, 4, 2, 5, 4, 1, 0],
-        'พลาด': [1, 0, 1, 0, 1, 0, 0],
-        'กำลังมา': [0, 0, 0, 1, 2, 1, 0],
-      });
+      return const SeriesData(
+        labels: ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'],
+        series: {
+          'เสร็จ': [3, 4, 2, 5, 4, 1, 0],
+          'พลาด': [1, 0, 1, 0, 1, 0, 0],
+          'กำลังมา': [0, 0, 0, 1, 2, 1, 0],
+        },
+      );
     case 'chart_pipeline':
       return const SlicesData([
         ChartSlice('Qualification', 14, amount: 2800000),
@@ -1045,4 +1177,198 @@ Object sampleChartData(String id) {
       return const [LeaveRow('ลาป่วย', 30, 4), LeaveRow('ลากิจ', 3, 1), LeaveRow('ลาพักร้อน', 6, 2)];
   }
   return const SlicesData([]);
+}
+
+/// Index a column chart selects first: the latest column with a value
+/// (else the last one); -1 when there are no columns.
+int defaultColumnIndex(List<double> values) {
+  for (var i = values.length - 1; i >= 0; i--) {
+    if (values[i] > 0) return i;
+  }
+  return values.length - 1;
+}
+
+/// Modern single-series column chart: rounded pill columns on a soft track;
+/// the selected column is filled with a gradient and carries a floating value
+/// label. Tap a column to select it. Respects reduced motion (via [_Appear]).
+class ColumnsChart extends StatefulWidget {
+  const ColumnsChart(this.d, {super.key, this.baht = false, required this.empty});
+  final SeriesData d;
+  final bool baht;
+  final String empty;
+
+  @override
+  State<ColumnsChart> createState() => _ColumnsChartState();
+}
+
+class _ColumnsChartState extends State<ColumnsChart> {
+  int? _selected;
+
+  @override
+  void didUpdateWidget(ColumnsChart old) {
+    super.didUpdateWidget(old);
+    if (old.d != widget.d) _selected = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.d;
+    if (d.labels.isEmpty || d.isEmpty) return _Empty(widget.empty);
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final values = d.series.values.first;
+    final n = math.min(values.length, d.labels.length);
+    final maxV = values.take(n).fold<double>(0, math.max);
+    final sel = (_selected ?? defaultColumnIndex(values.take(n).toList())).clamp(0, n - 1);
+    final base = chartSeries(context)[0];
+    final dark = theme.brightness == Brightness.dark;
+    final top = Color.lerp(base, Colors.white, dark ? 0.25 : 0.35)!;
+    final step = (n / 7).ceil().clamp(1, 99);
+    String fmt(double v) => widget.baht ? chartCompact(v, baht: true) : chartCompact(v);
+    return _Appear(
+      data: d,
+      builder: (t) => LayoutBuilder(
+        builder: (context, c) {
+          const labelH = 18.0;
+          const tipH = 26.0;
+          final gap = n > 8 ? 6.0 : 10.0;
+          final colW = ((c.maxWidth - gap * (n - 1)) / n).clamp(4.0, 34.0);
+          final barArea = math.max(0.0, c.maxHeight - labelH - tipH);
+          final usedW = colW * n + gap * (n - 1);
+          final left = (c.maxWidth - usedW) / 2;
+          final selH = maxV <= 0 ? 0.0 : barArea * values[sel] / maxV * t;
+          final tipCenter = left + sel * (colW + gap) + colW / 2;
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                top: tipH,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (var i = 0; i < n; i++) ...[
+                      if (i > 0) SizedBox(width: gap),
+                      Semantics(
+                        button: true,
+                        selected: i == sel,
+                        label: '${tr(d.labels[i])} ${widget.baht ? nxBaht(values[i]) : nxInt(values[i])}',
+                        child: GestureDetector(
+                          key: ValueKey('col-$i'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _selected = i);
+                          },
+                          child: SizedBox(
+                            width: colW,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                SizedBox(
+                                  height: barArea,
+                                  child: Stack(
+                                    alignment: Alignment.bottomCenter,
+                                    children: [
+                                      // Track: the full height, very light.
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: cs.onSurface.withValues(alpha: dark ? 0.06 : 0.045),
+                                          borderRadius: BorderRadius.circular(colW / 2),
+                                        ),
+                                      ),
+                                      Container(
+                                        height: maxV <= 0 ? 0 : math.max(values[i] > 0 ? colW * 0.6 : 0, barArea * values[i] / maxV * t),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(colW / 2),
+                                          color: i == sel ? null : base.withValues(alpha: dark ? 0.32 : 0.22),
+                                          gradient: i == sel
+                                              ? LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [top, base])
+                                              : null,
+                                          boxShadow: i == sel
+                                              ? [BoxShadow(color: base.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 4))]
+                                              : null,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: labelH,
+                                  child: (i % step == 0 || i == sel)
+                                      ? Padding(
+                                          padding: const EdgeInsets.only(top: 4),
+                                          child: Text(
+                                            tr(d.labels[i]),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.visible,
+                                            softWrap: false,
+                                            textScaler: TextScaler.noScaling,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: i == sel ? FontWeight.w700 : FontWeight.w500,
+                                              color: i == sel ? cs.onSurface : cs.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // Floating value label above the selected column.
+              Positioned(
+                left: 0,
+                right: 0,
+                top: math.max(0.0, tipH + barArea - selH - tipH - 4),
+                height: tipH,
+                child: CustomSingleChildLayout(
+                  delegate: _TipLayout(centerX: tipCenter),
+                  child: Container(
+                    key: const ValueKey('col-tip'),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: cs.inverseSurface,
+                      borderRadius: BorderRadius.circular(99),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 8, offset: const Offset(0, 3))],
+                    ),
+                    child: Text(
+                      fmt(values[sel]),
+                      maxLines: 1,
+                      textScaler: TextScaler.noScaling,
+                      style: TextStyle(color: cs.onInverseSurface, fontSize: 11.5, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Centres the tooltip on [centerX], kept inside the chart.
+class _TipLayout extends SingleChildLayoutDelegate {
+  _TipLayout({required this.centerX});
+  final double centerX;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) => constraints.loosen();
+
+  @override
+  Offset getPositionForChild(Size size, Size child) {
+    final x = (centerX - child.width / 2).clamp(0.0, math.max(0.0, size.width - child.width)).toDouble();
+    return Offset(x, (size.height - child.height) / 2);
+  }
+
+  @override
+  bool shouldRelayout(_TipLayout old) => old.centerX != centerX;
 }

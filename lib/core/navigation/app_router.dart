@@ -25,7 +25,9 @@ import '../../screens/jobs/my_jobs_screen.dart';
 import '../../screens/module/module_hub_screen.dart';
 import '../../screens/module/menu_group_screen.dart';
 import '../../screens/crm/call_log_screen.dart';
+import '../../screens/comm_ai/call_summary_screen.dart';
 import '../../screens/comm_ai/comm_ai_history_screen.dart';
+import '../../screens/comm_ai/comm_ai_insights_screen.dart';
 import '../../screens/comm_ai/comm_ai_settings_screen.dart';
 import '../../screens/notifications/notification_center_screen.dart';
 import '../../screens/whats_new/whats_new_screen.dart';
@@ -61,6 +63,7 @@ import '../qr_login.dart';
 import 'route_access.dart';
 import '../i18n.dart';
 import '../../screens/profile/profile_hub_screen.dart';
+import '../../screens/doc_form/doc_form_launcher.dart';
 
 GoRouter createAppRouter(AppConfig config) {
   return GoRouter(
@@ -245,7 +248,25 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: AppRoutes.commAi,
-        builder: (_, _) => const CommAiHistoryScreen(),
+        redirect: (_, state) => commAiHistoryRedirect(state.uri),
+        builder: (_, state) => CommAiHistoryScreen(initialUserId: state.uri.queryParameters['user'], initialQuery: state.uri.queryParameters['q']),
+      ),
+      // Web links (notifications, DMs): /comm-ai/history?call=<id> | ?summary=<id>
+      GoRoute(
+        path: AppRoutes.commAiHistory,
+        redirect: (_, state) => commAiHistoryRedirect(state.uri) ?? Uri(path: AppRoutes.commAi, queryParameters: state.uri.queryParameters.isEmpty ? null : state.uri.queryParameters).toString(),
+      ),
+      GoRoute(
+        path: '/comm-ai/calls/:id',
+        builder: (_, state) => CallSummaryScreen(callId: state.pathParameters['id'] ?? ''),
+      ),
+      GoRoute(
+        path: '/comm-ai/summaries/:id',
+        builder: (_, state) => ChatSummaryDetailScreen(id: state.pathParameters['id'] ?? ''),
+      ),
+      GoRoute(
+        path: AppRoutes.commAiInsights,
+        builder: (_, _) => const CommAiInsightsScreen(),
       ),
       GoRoute(
         path: AppRoutes.commAiSettings,
@@ -334,11 +355,24 @@ GoRouter createAppRouter(AppConfig config) {
         redirect: (_, state) => notificationDeepLink(state.uri.toString()),
       ),
       GoRoute(
+        path: '/modules/:module/:id/edit',
+        redirect: (_, state) => notificationDeepLink(state.uri.toString()),
+      ),
+      // Quotation / job step forms (web form links + in-app links).
+      GoRoute(
+        path: '/form/:module',
+        builder: (_, state) {
+          final q = state.uri.queryParameters;
+          return DocFormRoutePage(module: state.pathParameters['module'] ?? 'quotation', mode: docFormModeOf(q['mode']), id: q['id']);
+        },
+      ),
+      GoRoute(
         path: '/crm/:module/:id',
         builder: (_, state) => EntityByIdLoader(
           module: state.pathParameters['module'] ?? 'lead',
           id: state.pathParameters['id'] ?? '',
           tab: state.uri.queryParameters['tab'],
+          comment: state.uri.queryParameters['comment'],
         ),
       ),
       GoRoute(
@@ -351,6 +385,7 @@ GoRouter createAppRouter(AppConfig config) {
           module: state.pathParameters['module'] ?? 'job',
           id: state.pathParameters['id'] ?? '',
           tab: state.uri.queryParameters['tab'],
+          comment: state.uri.queryParameters['comment'],
         ),
       ),
       GoRoute(
@@ -359,7 +394,11 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: '/calendar/:id',
-        builder: (_, state) => ActivityByIdLoader(id: state.pathParameters['id'] ?? ''),
+        builder: (_, state) => ActivityByIdLoader(
+          id: state.pathParameters['id'] ?? '',
+          tab: state.uri.queryParameters['tab'],
+          comment: state.uri.queryParameters['comment'],
+        ),
       ),
       GoRoute(
         path: '/jobs/:id',

@@ -12,7 +12,11 @@ import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_status_stepper.dart';
+import '../../core/entity_display.dart' show userDisplayName;
+import '../calendar/activity_outcome_notes.dart';
 import '../profile/my_signatures_screen.dart' show SignaturePadScreen;
+import 'job_report_signatures.dart';
+import 'job_work_sections.dart';
 import 'journey_controller.dart';
 import 'journey_photos.dart';
 import '../docs/document_preview.dart';
@@ -41,8 +45,13 @@ String _fmt(Object? v) {
 int _n(Object? v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? 0;
 Map<String, dynamic> _m(Object? v) => v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
 
-/// Summary tab of a job: next step, KPIs, today's work, photos, close
-/// checklist, journey trail — everything to finish a job on one page.
+/// Summary of a job — ONE scrolling page with everything to do the work:
+/// next step, KPIs, work info (customer / site / asset / SLA), the activities
+/// (ปฏิบัติงาน), job photos, the report write-ups (Problem / Action Taken /
+/// Suggestions / Remark), the two report signatures, field work (skills,
+/// parts, Workspace, inspection), close checklist and the journey trail.
+/// [sectionKeys] (`activities`, `signatures`, `ops`) let the page scroll to a
+/// section instead of switching tabs.
 class JobSummaryTab extends StatelessWidget {
   const JobSummaryTab({
     super.key,
@@ -54,6 +63,13 @@ class JobSummaryTab extends StatelessWidget {
     required this.onReload,
     required this.onOpen,
     this.busy = false,
+    this.sectionKeys = const {},
+    this.fieldOps,
+    this.users = const [],
+    this.picklists = const {},
+    this.onCreateActivity,
+    this.onSaveActivityTemplate,
+    this.reloadToken,
   });
 
   final Map<String, dynamic> row;
@@ -64,33 +80,59 @@ class JobSummaryTab extends StatelessWidget {
   final ValueChanged<String> onGoTab;
   final VoidCallback onReload;
   final void Function(String module, String id) onOpen;
+  final Map<String, GlobalKey> sectionKeys;
+
+  /// "งานสนาม" (skills, parts, matching technicians, Workspace, inspection).
+  final Widget? fieldOps;
+  final List<Map<String, dynamic>> users;
+  final Map<String, List<Map<String, dynamic>>> picklists;
+  final VoidCallback? onCreateActivity;
+  final VoidCallback? onSaveActivityTemplate;
+  final Object? reloadToken;
+
+  Widget _anchor(String id, Widget child) {
+    final k = sectionKeys[id];
+    return k == null ? child : KeyedSubtree(key: k, child: child);
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final ov = ctrl.overview;
-    final next = jobNextAction(row, ov, canEdit: canEdit);
+    final next = jobNextAction(row, ov, canEdit: canEdit, requireReportSignatures: true);
     final acts = _m(ov['activities']);
     final sig = _m(ov['signatures']);
     final hasOwner = ov['has_owner'] ?? (_n(row['smownerid']) > 0);
     final owner = (row['smownerid_name'] ?? row['owner_name'] ?? row['assigned_user_name'] ?? '').toString();
     final planStart = row['plan_start'] ?? row['planned_start'] ?? row['date_start'];
     final nextAt = acts['next_at'];
-    final checklist = jobCloseChecklist(row, ov);
+    final checklist = jobCloseChecklist(row, ov, requireReportSignatures: true);
     final status = canonicalJobStatus(row['job_status']);
     final qt = _m(ov['quotation']);
     final account = (row['account_name'] ?? row['accountid_name'] ?? '').toString();
     final activities = ctrl.linked('activities');
     final photos = jobEvidencePhotos(row);
+    final reportSigned = 2 - jobReportMissing(row).length;
+    final sigSigned = reportSigned + _n(sig['signed']);
+    final sigTotal = 2 + _n(sig['total']);
+    final ownerName = () {
+      if (owner.isNotEmpty) return owner;
+      final id = '${row['smownerid'] ?? ''}';
+      for (final u in users) {
+        if ('${u['user_id'] ?? u['id']}' == id) return userDisplayName(u);
+      }
+      return '';
+    }();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         NextActionCard(
           module: 'job',
+          compact: true,
           next: next,
           onAction: onAction,
           busy: busy,
-          params: {'signed': _n(sig['signed']), 'total': _n(sig['total']), 'open': _n(acts['open']), 'n': _n(acts['open'])},
+          params: {'signed': next.key == 'report_signatures' ? reportSigned : _n(sig['signed']), 'total': _n(sig['total']), 'open': _n(acts['open']), 'n': _n(acts['open'])},
         ),
         const SizedBox(height: 12),
         KpiGrid(tiles: [
@@ -107,7 +149,7 @@ class JobSummaryTab extends StatelessWidget {
             id: 'owner',
             icon: NxI.userCircle,
             label: tr('ช่าง / ผู้รับผิดชอบ'),
-            value: hasOwner == true ? (owner.isEmpty ? tr('มอบหมายแล้ว') : owner) : tr('ยังไม่มอบหมาย'),
+            value: hasOwner == true ? (ownerName.isEmpty ? tr('มอบหมายแล้ว') : ownerName) : tr('ยังไม่มอบหมาย'),
             tone: hasOwner == true ? 'neutral' : 'warning',
             onTap: () => onGoTab('ops'),
           ),
@@ -116,6 +158,7 @@ class JobSummaryTab extends StatelessWidget {
             icon: NxI.calendarCheck,
             label: tr('กิจกรรมเสร็จ'),
             value: '${_n(acts['done'])}/${_n(acts['total'])}',
+            hint: _n(acts['open']) > 0 ? tr('ค้าง ${_n(acts['open'])} รายการ') : null,
             tone: _n(acts['open']) > 0 ? 'primary' : 'success',
             onTap: () => onGoTab('activities'),
           ),
@@ -123,40 +166,82 @@ class JobSummaryTab extends StatelessWidget {
             id: 'signatures',
             icon: NxI.penLine,
             label: tr('ลายเซ็น'),
-            value: '${_n(sig['signed'])}/${_n(sig['total'])}',
-            tone: _n(sig['total']) > _n(sig['signed']) ? 'warning' : 'success',
+            value: '$sigSigned/$sigTotal',
+            hint: reportSigned < 2 ? tr('ต้องมีลายเซ็น 2 รายการ') : null,
+            tone: sigTotal > sigSigned ? 'warning' : 'success',
             onTap: () => onGoTab('signatures'),
           ),
         ]),
-        if (activities.isNotEmpty && (status == 'In Progress' || status == 'Open' || status == 'Waiting')) ...[
-          const SizedBox(height: 12),
-          JourneySection(
-            title: tr('ปฏิบัติงาน'),
-            icon: NxI.mapPinned,
-            trailing: TextButton(onPressed: () => onGoTab('activities'), child: Text(tr('ทั้งหมด'))),
-            child: Column(
-              children: [
-                for (final a in activities.take(3))
-                  ListTile(
-                    key: ValueKey('job-act-${a['id']}'),
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(NxI.calendarCheck),
-                    title: Text((a['title'] ?? a['subject'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text([a['subtitle'], a['status']].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
-                    trailing: const Icon(NxI.caretRight, size: 16),
-                    onTap: () => onOpen('activity', '${a['id']}'),
-                  ),
-              ],
-            ),
+        const SizedBox(height: 12),
+        JobWorkInfoCard(row: row, onOpen: onOpen, picklists: picklists),
+        const SizedBox(height: 12),
+        _anchor(
+          'activities',
+          JobActivitiesList(
+            jobId: '${row['id']}',
+            linked: activities,
+            users: users,
+            canEdit: canEdit && status != 'Cancelled' && status != 'Completed',
+            onOpen: (id) => onOpen('activity', id),
+            onGenerate: () => onAction('gen_activity'),
+            onCreate: onCreateActivity,
+            onSaveTemplate: onSaveActivityTemplate,
+            reloadToken: reloadToken,
           ),
-        ],
+        ),
         const SizedBox(height: 12),
         JourneyPhotosSection(
           module: 'job',
           id: '${row['id']}',
           photos: photos,
           onChanged: onReload,
+          compact: true,
           canEdit: canEdit && status != 'Cancelled',
+        ),
+        const SizedBox(height: 12),
+        JourneySection(
+          key: const ValueKey('job-report-section'),
+          title: tr('บันทึกรายงานงาน'),
+          icon: NxI.clipboardText,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(tr('พิมพ์แล้วบันทึกเอง — ขึ้นในใบรายงานงานทันที'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 10),
+              ActivityOutcomeNotes(
+                key: ValueKey('job-report-notes-${row['id']}'),
+                activityId: '${row['id']}',
+                module: 'job',
+                sections: kJobReportSections,
+                row: row,
+                readOnly: !canEdit || status == 'Cancelled',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _anchor(
+          'signatures',
+          JourneySection(
+            key: const ValueKey('job-signatures-section'),
+            title: tr('ลายเซ็น'),
+            icon: NxI.penLine,
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+              decoration: BoxDecoration(
+                color: (reportSigned == 2 ? const Color(0xFF16A34A) : const Color(0xFFD97706)).withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Text('$reportSigned/2', style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w800, color: reportSigned == 2 ? const Color(0xFF16A34A) : const Color(0xFFD97706))),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                JobReportSignatures(jobId: '${row['id']}', row: row, canEdit: canEdit, onChanged: onReload),
+                JobSignaturesTab(jobId: '${row['id']}', ctrl: ctrl, canEdit: canEdit, row: row, onChanged: onReload, embedded: true),
+              ],
+            ),
+          ),
         ),
         if (status == 'In Progress' || status == 'Completed') ...[
           const SizedBox(height: 12),
@@ -175,6 +260,7 @@ class JobSummaryTab extends StatelessWidget {
                     label: switch (c.key) {
                       'owner' => tr('มีผู้รับผิดชอบ'),
                       'activities' => tr('กิจกรรมเสร็จครบ'),
+                      'report_signatures' => tr('ลายเซ็นผู้ให้บริการ + ลูกค้า'),
                       'signatures' => tr('ลายเซ็นครบ'),
                       _ => tr('อะไหล่ที่ใช้'),
                     },
@@ -186,13 +272,17 @@ class JobSummaryTab extends StatelessWidget {
             ),
           ),
         ],
+        if (fieldOps != null) ...[
+          const SizedBox(height: 12),
+          _anchor('ops', fieldOps!),
+        ],
         const SizedBox(height: 12),
         JourneySection(
           title: tr('เส้นทางงาน'),
           icon: NxI.arrowsLeftRight,
           child: JourneyTrail(nodes: [
-            (NxI.buildings, account.isEmpty ? tr('ลูกค้า') : account, tr('ลูกค้า'), false,
-                row['account_id'] != null ? () => onOpen('account', '${row['account_id']}') : null),
+            (NxI.buildings, account.isEmpty ? ((row['customer_name'] ?? '').toString().isEmpty ? tr('ลูกค้า') : row['customer_name'].toString()) : account, tr('ลูกค้า'), false,
+                (row['account_id'] ?? row['related_account_id']) != null ? () => onOpen('account', '${row['account_id'] ?? row['related_account_id']}') : null),
             if (qt.isNotEmpty)
               (
                 NxI.receipt,
@@ -221,8 +311,11 @@ class JobSummaryTab extends StatelessWidget {
 }
 
 /// Signature slots: sign on screen, "use my signature", clear.
+/// [embedded] (job summary): only the settings' extra slots (if any) and the
+/// customer link — no empty-state card, no document card.
 class JobSignaturesTab extends StatefulWidget {
-  const JobSignaturesTab({super.key, required this.jobId, required this.ctrl, required this.canEdit, required this.onChanged, required this.row});
+  const JobSignaturesTab({super.key, required this.jobId, required this.ctrl, required this.canEdit, required this.onChanged, required this.row, this.embedded = false});
+  final bool embedded;
   final String jobId;
   final JourneyController ctrl;
   final bool canEdit;
@@ -338,7 +431,12 @@ class _JobSignaturesTabState extends State<JobSignaturesTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (slots.isEmpty)
+        if (widget.embedded && slots.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text(tr('ลายเซ็นตามตั้งค่างาน'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800, color: cs.onSurfaceVariant)),
+          const SizedBox(height: 8),
+        ],
+        if (slots.isEmpty && !widget.embedded)
           JourneySection(title: tr('ลายเซ็น'), icon: NxI.penLine, child: Text(tr('งานประเภทนี้ไม่ต้องเก็บลายเซ็น'), style: theme.textTheme.bodyMedium)),
         for (final s in slots) ...[
           JourneySection(
@@ -392,6 +490,24 @@ class _JobSignaturesTabState extends State<JobSignaturesTab> {
           ),
           const SizedBox(height: 12),
         ],
+        if (widget.embedded) ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: Text(
+                '${tr('ลิงก์ให้ลูกค้าตอบรับ / เซ็นเอง')} · ${_ackLabel(ack)}',
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ),
+            TextButton.icon(
+              key: const ValueKey('job-public-link'),
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              onPressed: _customerLink,
+              icon: const Icon(NxI.link, size: 16),
+              label: Text(tr('สร้างลิงก์')),
+            ),
+          ]),
+        ] else ...[
         DocumentCard(source: () => jobDocumentSource(widget.row)),
         const SizedBox(height: 12),
         JourneySection(
@@ -403,6 +519,7 @@ class _JobSignaturesTabState extends State<JobSignaturesTab> {
             child: OutlinedButton.icon(key: const ValueKey('job-public-link'), onPressed: _customerLink, icon: const Icon(NxI.link, size: 18), label: Text(tr('สร้างลิงก์ลูกค้า'))),
           ),
         ),
+        ],
       ],
     );
   }
@@ -573,6 +690,12 @@ Future<bool> runJobAction(
   switch (action) {
     case 'gen_activity':
       return showJobActivityGenSheet(context, jobId: id);
+    case 'close':
+      // "ทุกใบงานจะต้องมีลายเซ็น": both report signatures before closing.
+      if (jobReportMissing(row).isNotEmpty) {
+        await showJobSignaturesRequired(context, jobId: id, row: row);
+        return true; // reload: a signature may have been added
+      }
     case 'open_activities':
       goTab('activities');
       return false;

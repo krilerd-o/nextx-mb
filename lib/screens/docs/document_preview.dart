@@ -18,16 +18,20 @@ import '../journey/job_journey.dart' show showPublicLinkSheet;
 
 /// One way to produce the document, e.g. "ตามเทมเพลต · ไทย · สี".
 class DocVariant {
-  const DocVariant({required this.id, required this.label, required this.fetch, this.fallback, this.birt = true, this.suffix = ''});
+  const DocVariant({required this.id, required this.label, required this.fetch, this.fallback, this.birt = true, this.suffix = '', this.hidden = false});
 
   final String id;
   final String label;
   final Future<List<int>> Function(ApiClient api) fetch;
 
-  /// Variant to show instead when this one cannot be built (e.g. the BIRT
-  /// report server is down) — the user is told which one they see.
+  /// Variant the user may open instead when this one cannot be built (e.g. the
+  /// BIRT report server is down). Never shown on its own: the document must be
+  /// the web's template, so the user picks the fallback knowingly.
   final String? fallback;
   final bool birt;
+
+  /// Not offered as a chip (only reachable as a [fallback]).
+  final bool hidden;
 
   /// Added to the file name (`-th-bw`, `-standard`).
   final String suffix;
@@ -66,13 +70,23 @@ class DocPreviewHooks {
   static Future<void> Function(List<int> bytes, String name)? share;
 }
 
-Stream<ui.Image> _renderPages(Uint8List bytes, double dpi) {
+Stream<ui.Image> renderDocumentPages(Uint8List bytes, double dpi) {
   final hook = DocPreviewHooks.render;
   if (hook != null) return hook(bytes, dpi);
   return Printing.raster(bytes, dpi: dpi).asyncMap((r) => r.toImage());
 }
 
-bool _looksLikePdf(List<int> b) => b.length > 4 && b[0] == 0x25 && b[1] == 0x50 && b[2] == 0x44 && b[3] == 0x46; // %PDF
+bool looksLikePdf(List<int> b) => b.length > 4 && b[0] == 0x25 && b[1] == 0x50 && b[2] == 0x44 && b[3] == 0x46; // %PDF
+
+/// Print dialog for PDF bytes (hook in tests).
+Future<void> printDocumentBytes(List<int> b, String name) async {
+  final hook = DocPreviewHooks.print;
+  if (hook != null) return hook(b, name);
+  await Printing.layoutPdf(name: name, onLayout: (_) async => Uint8List.fromList(b));
+}
+
+/// File name for a document variant.
+String docFileName(DocumentSource src, DocVariant v) => '${src.fileBase}${v.suffix}.pdf'.replaceAll(RegExp(r'[\\/:*?"<>|\s]+'), '_');
 
 // ---------------------------------------------------------------- sources
 
@@ -87,11 +101,22 @@ DocumentSource jobDocumentSource(Map<String, dynamic> row) {
     templateLabel: tk == 'template2' ? tr('เทมเพลต 2') : tr('เทมเพลต 1'),
     variants: [
       DocVariant(id: 'birt', label: tr('ตามเทมเพลต'), fetch: (api) => api.getJobBirtPdf(id), fallback: 'std'),
-      DocVariant(id: 'std', label: tr('แบบมาตรฐาน'), birt: false, suffix: '-standard', fetch: (api) => api.getJobStandardPdf(id)),
+      DocVariant(id: 'std', label: tr('แบบสำรอง'), birt: false, hidden: true, suffix: '-standard', fetch: (api) => api.getJobStandardPdf(id)),
     ],
     publicLink: (api) => api.jobPublicLink(id),
   );
 }
+
+/// One activity (visit / meeting / call …) as a PDF: Thai and English.
+DocumentSource activityDocumentSource(String id, {String? subject}) => DocumentSource(
+  title: tr('กิจกรรม'),
+  subtitle: subject,
+  fileBase: 'activity-$id',
+  variants: [
+    DocVariant(id: 'th', label: tr('ภาษาไทย'), birt: false, suffix: '-th', fetch: (api) => api.getActivityPdf(id)),
+    DocVariant(id: 'en', label: 'English', birt: false, suffix: '-en', fetch: (api) => api.getActivityPdf(id, lang: 'en')),
+  ],
+);
 
 DocumentSource inspectionDocumentSource(String id, {String? no}) => DocumentSource(
   title: tr('ใบตรวจรับ'),
@@ -99,45 +124,22 @@ DocumentSource inspectionDocumentSource(String id, {String? no}) => DocumentSour
   fileBase: 'inspection-${no ?? id}',
   variants: [
     DocVariant(id: 'birt', label: tr('ตามเทมเพลต'), fetch: (api) => api.getInspectionBirtPdf(id), fallback: 'std'),
-    DocVariant(id: 'std', label: tr('แบบมาตรฐาน'), birt: false, suffix: '-standard', fetch: (api) => api.getInspectionPdf(id)),
+    DocVariant(id: 'std', label: tr('แบบสำรอง'), birt: false, hidden: true, suffix: '-standard', fetch: (api) => api.getInspectionPdf(id)),
   ],
 );
 
-/// Quotation variants like the web: the template, then its languages ×
-/// colours (from the template layout; th/en × color/bw when not set), then
-/// the standard PDF.
-List<DocVariant> quotationVariants(String id, String? template, {List<String>? langs, List<String>? colors}) {
-  final ls = (langs == null || langs.isEmpty) ? const ['th', 'en'] : langs;
-  final cs = (colors == null || colors.isEmpty) ? const ['color', 'bw'] : colors;
-  String langLabel(String l) => switch (l) {
-    'th' => tr('ไทย'),
-    'en' => 'English',
-    _ => l.toUpperCase(),
-  };
-  String colorLabel(String c) => switch (c) {
-    'color' => tr('สี'),
-    'bw' => tr('ขาวดำ'),
-    _ => c,
-  };
-  return [
-    DocVariant(id: 'birt', label: tr('ตามเทมเพลต'), fetch: (api) => api.getQuotationBirtPdf(id, template: template), fallback: 'std'),
-    for (final l in ls)
-      for (final c in cs) ...[
-        DocVariant(
-          id: 'birt-$l-$c',
-          label: '${langLabel(l)} · ${colorLabel(c)}',
-          suffix: '-$l${c == 'bw' ? '-bw' : ''}',
-          fetch: (api) => api.getQuotationBirtPdf(id, lang: l, color: c, template: template),
-          fallback: 'std-$l-$c',
-        ),
-      ],
-    DocVariant(id: 'std', label: tr('แบบมาตรฐาน'), birt: false, suffix: '-standard', fetch: (api) => api.getQuotationStandardPdf(id)),
-    // Hidden fallbacks (standard PDF in the same language / colour).
-    for (final l in ls)
-      for (final c in cs)
-        DocVariant(id: 'std-$l-$c', label: '', birt: false, suffix: '-$l${c == 'bw' ? '-bw' : ''}-standard', fetch: (api) => api.getQuotationStandardPdf(id, lang: l, color: c)),
-  ];
-}
+/// Quotation document exactly like the web preview: the BIRT report of the
+/// quotation's own template (`template_key`, Business / Package default set
+/// when it was created). The web offers only "ไทย · สี" — other language /
+/// colour reports do not exist on the report server, so they are not offered
+/// here either. The built-in PDF is only a knowingly chosen fallback.
+List<DocVariant> quotationVariants(String id, String? template) => [
+      DocVariant(id: 'birt', label: tr('ตามเทมเพลต'), fetch: (api) => api.getQuotationBirtPdf(id, template: template), fallback: 'std'),
+      DocVariant(id: 'std', label: tr('แบบสำรอง'), birt: false, hidden: true, suffix: '-standard', fetch: (api) => api.getQuotationStandardPdf(id)),
+    ];
+
+/// "เทมเพลต 1" / "เทมเพลต 2" from the record's document layout.
+String docLayoutLabel(Object? templateKey) => '${templateKey ?? ''}'.toLowerCase().startsWith('template2') ? tr('เทมเพลต 2') : tr('เทมเพลต 1');
 
 DocumentSource quotationDocumentSource(Map<String, dynamic> row) {
   final id = strId(row['id']);
@@ -145,27 +147,32 @@ DocumentSource quotationDocumentSource(Map<String, dynamic> row) {
   final tk = row['template_key']?.toString();
   final template = tk == null || tk.isEmpty ? null : tk;
   final templateId = row['template_id'];
+  final layout = docLayoutLabel(template);
   return DocumentSource(
     title: tr('ใบเสนอราคา'),
     subtitle: no,
     fileBase: no,
+    templateLabel: layout,
     variants: quotationVariants(id, template),
     publicLink: (api) => api.quotationPublicLink(id),
+    // Name of the document template (logo / letterhead) for the subtitle.
     refine: templateId == null || '$templateId'.isEmpty
         ? null
         : (api) async {
             final list = await api.getQuotationTemplates();
             final t = list.where((x) => '${x['id']}' == '$templateId').firstOrNull;
-            if (t == null) return null;
-            final lj = t['layout_json'] is Map ? Map<String, dynamic>.from(t['layout_json'] as Map) : const <String, dynamic>{};
-            List<String>? strs(Object? v) => v is List ? [for (final e in v) '$e'.toLowerCase()] : null;
-            return (variants: quotationVariants(id, template, langs: strs(lj['variants']), colors: strs(lj['colors'])), templateLabel: t['name']?.toString());
+            final name = t?['name']?.toString();
+            if (name == null || name.isEmpty) return null;
+            return (variants: quotationVariants(id, template), templateLabel: '$layout · $name');
           },
   );
 }
 
-Future<void> openDocumentPreview(BuildContext context, DocumentSource source) =>
-    nxPush<void>(context, DocumentPreviewScreen(source: source));
+Future<void> openDocumentPreview(BuildContext context, DocumentSource source, {Map<String, List<int>>? prefetched, VoidCallback? onEmail}) =>
+    nxPush<void>(context, DocumentPreviewScreen(source: source, prefetched: prefetched, onEmail: onEmail));
+
+/// Error text for a document that could not be built (server message first).
+String docErrorText(Object e) => e is StateError ? e.message : tr(formatApiError(e));
 
 /// Opens the document of a record (job / quotation / inspection).
 Future<void> openRecordDocument(BuildContext context, String module, Map<String, dynamic> row) {
@@ -180,8 +187,14 @@ Future<void> openRecordDocument(BuildContext context, String module, Map<String,
 // ---------------------------------------------------------------- screen
 
 class DocumentPreviewScreen extends StatefulWidget {
-  const DocumentPreviewScreen({super.key, required this.source});
+  const DocumentPreviewScreen({super.key, required this.source, this.prefetched, this.onEmail});
   final DocumentSource source;
+
+  /// Bytes already downloaded (variant id → PDF), e.g. from the เอกสาร tab.
+  final Map<String, List<int>>? prefetched;
+
+  /// "ส่งอีเมล" in the action bar (quotation / job).
+  final VoidCallback? onEmail;
 
   @override
   State<DocumentPreviewScreen> createState() => _DocumentPreviewScreenState();
@@ -219,13 +232,14 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
 
   DocVariant _variant(String id) => widget.source.variants.firstWhere((v) => v.id == id, orElse: () => widget.source.variants.first);
 
-  List<DocVariant> get _choices => [for (final v in widget.source.variants) if (v.label.isNotEmpty) v];
+  List<DocVariant> get _choices => [for (final v in widget.source.variants) if (v.label.isNotEmpty && !v.hidden) v];
 
   String get _fileName => '${widget.source.fileBase}${_variant(_shownId ?? _variantId).suffix}.pdf'.replaceAll(RegExp(r'[\\/:*?"<>|\s]+'), '_');
 
   @override
   void initState() {
     super.initState();
+    _cache.addAll(widget.prefetched ?? const {});
     _tc.addListener(_onTransform);
     _anim.addListener(() {
       final t = _tween;
@@ -268,50 +282,52 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
     final hit = _cache[v.id];
     if (hit != null) return hit;
     final b = await v.fetch(_api);
-    if (!_looksLikePdf(b)) throw StateError(tr('เซิร์ฟเวอร์ไม่ได้ส่งไฟล์ PDF กลับมา'));
+    if (!looksLikePdf(b)) throw StateError(tr('เซิร์ฟเวอร์ไม่ได้ส่งไฟล์ PDF กลับมา'));
     _cache[v.id] = b;
     return b;
   }
 
-  Future<void> _load() async {
+  Future<void> _load({String? id, String? notice}) async {
     final token = ++_token;
-    final want = _variant(_variantId);
+    final want = _variant(id ?? _variantId);
     setState(() {
       _loading = true;
       _error = null;
       _notice = null;
     });
     List<int>? bytes;
-    String shown = want.id;
-    String? notice;
     try {
       bytes = await _fetch(want);
     } catch (e) {
-      final fb = want.fallback;
-      if (fb != null) {
-        try {
-          bytes = await _fetch(_variant(fb));
-          shown = fb;
-          notice = '${tr('เทมเพลตเอกสาร (BIRT) ยังสร้างไม่ได้ตอนนี้ — แสดงแบบมาตรฐานแทน')}${want.label.isEmpty ? '' : ' ($want.label)'}';
-        } catch (_) {
-          if (token == _token && mounted) setState(() => _error = e);
+      if (token == _token && mounted) {
+        setState(() {
+          _error = e;
+          _loading = false;
+          _bytes = null;
+          _shownId = null;
+        });
+        for (final p in _pages) {
+          p.dispose();
         }
-      } else if (token == _token && mounted) {
-        setState(() => _error = e);
+        _pages.clear();
       }
-    }
-    if (token != _token || !mounted) return;
-    if (bytes == null) {
-      setState(() => _loading = false);
       return;
     }
+    if (token != _token || !mounted) return;
     setState(() {
       _bytes = bytes;
-      _shownId = shown;
+      _shownId = want.id;
       _notice = notice;
       _loading = false;
     });
     _render(bytes, token);
+  }
+
+  /// The user chose to see the built-in PDF because the template failed.
+  void _openFallback() {
+    final fb = _variant(_variantId).fallback;
+    if (fb == null) return;
+    _load(id: fb, notice: tr('แสดงแบบสำรอง (ไม่ใช่เทมเพลตเอกสาร) เพราะเซิร์ฟเวอร์รายงาน (BIRT) สร้างเอกสารไม่ได้'));
   }
 
   void _render(List<int> bytes, int token) {
@@ -330,7 +346,7 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
     // Sharp at 2× zoom, capped so big documents stay light on memory.
     final targetPx = (mq.size.width * mq.devicePixelRatio * 1.6).clamp(900.0, 1600.0);
     final dpi = targetPx / 8.27; // A4 width in inches
-    _renderSub = _renderPages(Uint8List.fromList(bytes), dpi).listen(
+    _renderSub = renderDocumentPages(Uint8List.fromList(bytes), dpi).listen(
       (img) {
         if (token != _token || !mounted) {
           img.dispose();
@@ -433,11 +449,7 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
 
   Future<void> _share() => _run((b) => (DocPreviewHooks.share ?? sharePdfBytes)(b, _fileName));
 
-  Future<void> _print() => _run((b) async {
-    final hook = DocPreviewHooks.print;
-    if (hook != null) return hook(b, _fileName);
-    await Printing.layoutPdf(name: _fileName, onLayout: (_) async => Uint8List.fromList(b));
-  });
+  Future<void> _print() => _run((b) => printDocumentBytes(b, _fileName));
 
   Future<void> _openExternal() => _run((b) => openPdfBytes(b, _fileName));
 
@@ -573,14 +585,15 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
             const SizedBox(height: 12),
             Text(tr('เปิดเอกสารไม่สำเร็จ'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
-            Text(_error is StateError ? (_error as StateError).message : tr(formatApiError(_error!)), textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+            Text(docErrorText(_error!), key: const ValueKey('doc-error-text'), textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
             const SizedBox(height: 16),
             Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
               FilledButton.icon(key: const ValueKey('doc-retry'), onPressed: () {
                 _cache.remove(_variantId);
                 _load();
               }, icon: const Icon(NxI.arrowClockwise, size: 18), label: Text(tr('ลองใหม่'))),
-              if (_bytes != null) OutlinedButton.icon(onPressed: _openExternal, icon: const Icon(NxI.arrowSquareOut, size: 18), label: Text(tr('เปิดด้วยแอปอื่น'))),
+              if (_variant(_variantId).fallback != null)
+                OutlinedButton.icon(key: const ValueKey('doc-show-fallback'), onPressed: _openFallback, icon: const Icon(NxI.file, size: 18), label: Text(tr('ดูแบบสำรอง'))),
             ]),
           ]),
         ),
@@ -690,6 +703,7 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
               action('doc-share', NxI.shareNetwork, 'แชร์', ready ? _share : null),
               action('doc-print', NxI.printer, 'พิมพ์', ready ? _print : null),
               action('doc-open', NxI.arrowSquareOut, 'แอปอื่น', ready ? _openExternal : null),
+              if (widget.onEmail != null) action('doc-email', NxI.envelope, 'ส่งอีเมล', widget.onEmail),
               if (widget.source.publicLink != null) action('doc-link', NxI.link, 'ลิงก์ลูกค้า', _customerLink),
             ]),
           ]),
@@ -717,19 +731,11 @@ class _DocumentCardState extends State<DocumentCard> {
     final api = context.read<AppConfig>().apiClient;
     setState(() => _busy = what);
     try {
+      // The template document only (like the web) — no silent fallback.
       final v = src.variants.first;
-      List<int> b;
-      var used = v;
-      try {
-        b = await v.fetch(api);
-        if (!_looksLikePdf(b)) throw StateError('not pdf');
-      } catch (_) {
-        final fb = v.fallback == null ? null : src.variants.where((x) => x.id == v.fallback).firstOrNull;
-        if (fb == null) rethrow;
-        b = await fb.fetch(api);
-        used = fb;
-      }
-      final name = '${src.fileBase}${used.suffix}.pdf'.replaceAll(RegExp(r'[\\/:*?"<>|\s]+'), '_');
+      final b = await v.fetch(api);
+      if (!looksLikePdf(b)) throw StateError(tr('เซิร์ฟเวอร์ไม่ได้ส่งไฟล์ PDF กลับมา'));
+      final name = '${src.fileBase}${v.suffix}.pdf'.replaceAll(RegExp(r'[\\/:*?"<>|\s]+'), '_');
       if (what == 'share') {
         await (DocPreviewHooks.share ?? sharePdfBytes)(b, name);
       } else {
@@ -737,7 +743,7 @@ class _DocumentCardState extends State<DocumentCard> {
         if (path != null && mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('บันทึกแล้ว')} · $name')));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(docErrorText(e))));
     } finally {
       if (mounted) setState(() => _busy = null);
     }

@@ -61,8 +61,11 @@ Settings → Secrets and variables → Actions ทุกตัวไม่บั
    - SHA-1 → Google Cloud: สร้าง Android OAuth client เพิ่ม (ดู `GOOGLE_SIGNIN.md`)
    - SHA-256 → env `ANDROID_APP_SHA256` ของเซิร์ฟเวอร์ (App Links)
 4. App content:
-   - **Data safety**: เก็บ ชื่อ อีเมล เบอร์โทร ตำแหน่งที่แม่นยำ รูปภาพ ข้อมูลระบุตัวตน ข้อมูลแอป crash log
+   - **Data safety**: เก็บ ชื่อ อีเมล เบอร์โทร ตำแหน่งที่แม่นยำ รูปภาพ **เสียง (Audio → Voice or sound recordings)**
+     **ข้อความในแอป (บทถอดเสียงสาย / สรุป)** ข้อมูลระบุตัวตน ข้อมูลแอป crash log
      เพื่อการทำงานของแอปเท่านั้น ไม่ขาย ไม่แชร์เพื่อโฆษณา เข้ารหัสระหว่างส่ง ผู้ใช้ขอลบได้
+     - เสียงและบทถอดเสียงในสาย (ISAAC AI การสื่อสาร): เก็บเมื่อผู้ใช้ยินยอมในสายเท่านั้น, ส่งให้ผู้ให้บริการ AI
+       (OpenAI) เพื่อถอดเสียง/สรุป, เก็บตามระยะที่ผู้ดูแลธุรกิจตั้ง แล้วลบอัตโนมัติ, ผู้ใช้ลบของตัวเองได้
    - **Account deletion**: ใส่ลิงก์ `https://<เซิร์ฟเวอร์>/account-deletion` และบอกว่าลบในแอปได้ที่ โปรไฟล์ → บัญชีและความปลอดภัย → ลบบัญชี
    - **Location permission**: ใช้ขณะใช้งานแอปเท่านั้น (เช็คอิน ลงเวลา)
    - Privacy policy URL
@@ -79,6 +82,8 @@ Settings → Secrets and variables → Actions ทุกตัวไม่บั
 4. Google Cloud → สร้าง OAuth client ชนิด **iOS** (bundle id `com.moai.nextt.mobile`) ในโปรเจกต์เดียวกับ Web client ของเซิร์ฟเวอร์ → secret `IOS_GOOGLE_CLIENT_ID`
 5. App Store Connect:
    - **App Privacy**: ตรงกับ `ios/Runner/PrivacyInfo.xcprivacy` (ไม่มีการติดตามผู้ใช้)
+     — มี **Audio Data** (เสียงในสายเมื่อยินยอม, ข้อความเสียง, AI Minute Auto) และ **Other User Content** (บทถอดเสียง / สรุป)
+     ใช้เพื่อ App Functionality, ผูกกับผู้ใช้, ไม่ใช้ติดตาม; ข้อความขอสิทธิ์ไมโครโฟนพูดถึงการโทร การถอดเสียง และการบันทึกเมื่อยินยอม
    - บัญชีทดสอบสำหรับผู้ตรวจ (เป็นผู้ใช้ทดสอบ ไม่ใช่บัญชีลูกค้าจริง)
    - หมายเหตุถึงผู้ตรวจ: ลบบัญชีได้ที่ โปรไฟล์ → บัญชีและความปลอดภัย → ลบบัญชี
 6. ภาพหน้าจอ: iPhone 6.9" หรือ 6.7", iPhone 6.5", iPad 13"

@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
 import '../../core/journey_rules.dart';
+import '../../core/status_labels.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
@@ -14,9 +16,11 @@ import '../crm/entity_detail_parts.dart' show commentAttachments;
 import 'job_journey.dart' show showPublicLinkSheet;
 import 'journey_controller.dart';
 import 'journey_photos.dart';
+import '../docs/doc_email_sheet.dart';
 import '../docs/document_preview.dart';
 import 'journey_widgets.dart';
 import 'quotation_versions.dart';
+import '../doc_form/doc_form_launcher.dart';
 import 'status_followups.dart';
 
 String _fmtDate(Object? v) {
@@ -231,7 +235,7 @@ class QuotationSummaryTab extends StatelessWidget {
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(NxI.wrench),
                     title: Text((j['title'] ?? '').toString()),
-                    subtitle: Text((j['status'] ?? '').toString()),
+                    subtitle: Text(statusValueLabel(j['status'], module: 'job')),
                     trailing: const Icon(NxI.caretRight, size: 16),
                     onTap: () => onOpen('job', '${j['id']}'),
                   ),
@@ -268,7 +272,7 @@ class QuotationSummaryTab extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(NxI.calendarCheck),
                       title: Text((a['title'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text([a['subtitle'], a['status']].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
+                      subtitle: Text([a['subtitle'], statusValueLabel(a['status'], module: 'activity')].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
                       trailing: const Icon(NxI.caretRight, size: 16),
                       onTap: () => onOpen('activity', '${a['id']}'),
                     ),
@@ -508,32 +512,6 @@ Future<List<Map<String, dynamic>>?> showSubmitApprovalSheet(BuildContext context
   );
 }
 
-/// Copy as a new quotation (web: `/quotation/new?from=` → POST /quotation/save):
-/// fresh status, no approval / outcome / customer link.
-Future<String?> duplicateQuotation(ApiClient api, Map<String, dynamic> row) async {
-  const drop = {
-    'id', 'quotation_no', 'quotation_status', 'offer_status', 'approval_state', 'approval_level', 'approval_chain',
-    'outcome_result', 'outcome_reason', 'outcome_note', 'outcome_at', 'po_reference', 'public_token', 'revision_no',
-    'revision_of_id', 'createdtime', 'modifiedtime', 'created_by', 'modified_by', 'deleted', 'business_id',
-    'customer_viewed_at', 'customer_accepted_at', 'customer_signed_at', 'signer_name', 'signature_path',
-    'approver_1_user_id', 'approver_2_user_id', '_shared_permission',
-  };
-  final fields = <String, dynamic>{
-    for (final e in row.entries)
-      if (!drop.contains(e.key) && !e.key.startsWith('_') && e.value is! Map && e.value is! List) e.key: e.value,
-  };
-  final lines = [
-    for (final l in await api.getQuotationLines('${row['id']}'))
-      {
-        for (final e in l.entries)
-          if (e.key != 'id' && e.key != 'quotation_id' && e.key != 'createdtime' && e.key != 'modifiedtime') e.key: e.value,
-      },
-  ];
-  final r = await api.saveQuotation(fields: fields, lines: lines);
-  final id = r['id'] ?? (r['quotation'] is Map ? r['quotation']['id'] : null);
-  return id?.toString();
-}
-
 /// Run a quotation next-step / bar action. Returns true when the record changed.
 Future<bool> runQuotationAction(
   BuildContext context, {
@@ -551,8 +529,11 @@ Future<bool> runQuotationAction(
   final api = context.read<AppConfig>().apiClient;
   final messenger = ScaffoldMessenger.of(context);
   void snack(String t) => messenger.showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, content: Text(tr(t))));
+  final record = entityTitle(row, module: 'quotation');
+  final offerNow = canonicalOfferStatus(row['offer_status']);
+  final offerFrom = offerNow.isEmpty ? null : offerNow;
   try {
-    if (action.startsWith('offer:')) return await QuotationFlows.setOffer(context, id, action.substring(6));
+    if (action.startsWith('offer:')) return await QuotationFlows.setOffer(context, id, action.substring(6), from: offerFrom, record: record);
     switch (action) {
       case 'close_sale':
         final r = await showQuotationOutcomeSheet(context, quotationId: id, winReasons: winReasons, lostReasons: lostReasons);
@@ -565,13 +546,13 @@ Future<bool> runQuotationAction(
         if (context.mounted) await maybeSuggestCloseDeal(context, r['suggest_close_deal']);
         return true;
       case 'offer_comparing':
-        return await QuotationFlows.setOffer(context, id, Offer.comparing);
+        return await QuotationFlows.setOffer(context, id, Offer.comparing, from: offerFrom, record: record);
       case 'offer_waiting_po':
-        return await QuotationFlows.setOffer(context, id, Offer.waitingPo);
+        return await QuotationFlows.setOffer(context, id, Offer.waitingPo, from: offerFrom, record: record);
       case 'approve':
-        return await QuotationFlows.approve(context, id);
+        return await QuotationFlows.approve(context, id, record: record);
       case 'reject':
-        return await QuotationFlows.reject(context, id);
+        return await QuotationFlows.reject(context, id, record: record);
       case 'view_approval':
         goTab('approval');
         return false;
@@ -587,7 +568,9 @@ Future<bool> runQuotationAction(
         snack('ส่งอีเมลขออนุมัติซ้ำแล้ว');
         return false;
       case 'send_email':
-        return await QuotationFlows.sendEmail(context, id, to: (row['contact_email'] ?? row['email'] ?? '').toString());
+        // The web's compose window: template subject / body, To / CC, the
+        // BIRT document attached by the server, extra files.
+        return await showDocEmailSheet(context, kind: 'quotation', id: id, docNo: row['quotation_no']?.toString());
       case 'public_link':
         final r = await api.quotationPublicLink(id);
         if (context.mounted) {
@@ -595,9 +578,18 @@ Future<bool> runQuotationAction(
         }
         return true;
       case 'create_job':
-        final r = await api.quotationCreateJob(id);
-        snack(r['created'] == true ? 'สร้างใบสั่งงานแล้ว' : 'มีใบสั่งงานอยู่แล้ว');
-        if (r['job_id'] != null) open('job', '${r['job_id']}');
+        // One job per quotation (server rule): open the existing one.
+        final existing = ctrl.linked('jobs');
+        if (existing.isNotEmpty) {
+          snack('มีใบสั่งงานอยู่แล้ว');
+          open('job', '${existing.first['id']}');
+          return false;
+        }
+        // The job step form, pre-filled from this quotation (customer, lines summary, reference).
+        final job = await openDocForm(context, module: 'job', parent: (module: 'quotation', row: row));
+        if (job == null) return false;
+        snack('สร้างใบสั่งงานแล้ว');
+        if (job['id'] != null) open('job', '${job['id']}');
         return true;
       case 'open_job':
         final jobs = ctrl.linked('jobs');
@@ -618,14 +610,17 @@ Future<bool> runQuotationAction(
         if (context.mounted) await openQuotationCompare(context, currentId: id, revisions: ctrl.revisions);
         return false;
       case 'duplicate':
-        final newId = await duplicateQuotation(api, row);
+        // ทำซ้ำ in the step form: customer + lines + terms copied, number / status / approval cleared, dated today.
+        final copy = await openDocForm(context, module: 'quotation', mode: DocFormMode.duplicate, id: id);
+        final newId = copy?['id'];
+        if (newId == null) return false;
         snack('ทำสำเนาเป็นใบใหม่แล้ว');
-        if (newId != null) open('quotation', newId);
+        open('quotation', '$newId');
         return false;
       case 'cancel':
-        return await QuotationFlows.cancel(context, id);
+        return await QuotationFlows.cancel(context, id, from: canonicalQuotationStatus(row['quotation_status']), record: record);
       case 'reopen_quotation':
-        return await QuotationFlows.reopen(context, id);
+        return await QuotationFlows.reopen(context, id, record: record);
       case 'edit':
         goTab('lines');
         return false;

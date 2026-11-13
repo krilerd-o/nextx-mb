@@ -10,6 +10,7 @@ import '../../core/workspace_models.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_chrome.dart';
 import '../../widgets/nx_icons.dart';
+import 'ws_detail_parts.dart' show confirmWsStatus;
 
 /// Result of a drop: item moved to [statusId], column order after the drop.
 typedef WsMove = Future<bool> Function(Map<String, dynamic> item, String statusId, List<String> orderedIds);
@@ -313,6 +314,9 @@ class WsKanbanState extends State<WsKanban> with SingleTickerProviderStateMixin 
       return;
     }
     if (target == null) return;
+    // Another column = a status change: ask first; cancel leaves the card where it was.
+    if ('${item['status_id']}' != target && !await confirmWsStatus(context, item: item, statuses: widget.statuses, to: target)) return;
+    if (!mounted) return;
     await _applyMove(item, target, index: index, scrollTo: viaDock);
   }
 

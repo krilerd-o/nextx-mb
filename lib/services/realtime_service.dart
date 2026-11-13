@@ -51,7 +51,17 @@ class RealtimeService extends ChangeNotifier {
     'stt:segment',
     'stt:state',
     'stt:request',
+    'stt:moved',
     'ai:call_summary_ready',
+    // Same account on several devices (rooms user:<id>): remembered choice, summary status, edits, follow-up ticks.
+    'ai:consent_choice',
+    'ai:call_summary_status',
+    'ai:call_segment_edited',
+    'ai:summary_actions',
+    // PDPA deletes (refresh / close the open summary) and background exports to every device of mine.
+    'ai:call_data_deleted',
+    'ai:summary_deleted',
+    'ai:export_job',
   ];
 
   /// Synthetic event sent on every (re)connect.

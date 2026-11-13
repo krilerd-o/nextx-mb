@@ -63,3 +63,16 @@ Future<String?> savePdfToDevice(List<int> bytes, String filename) async {
     allowedExtensions: const ['pdf'],
   );
 }
+
+/// Saves any file where the user chooses (system save dialog). Null when cancelled.
+Future<String?> saveFileToDevice(List<int> bytes, String filename) async {
+  if (kIsWeb) return null;
+  final dot = filename.lastIndexOf('.');
+  final ext = dot > 0 && dot < filename.length - 1 ? filename.substring(dot + 1).toLowerCase() : '';
+  return FilePicker.platform.saveFile(
+    fileName: filename,
+    bytes: Uint8List.fromList(bytes),
+    type: ext.isEmpty ? FileType.any : FileType.custom,
+    allowedExtensions: ext.isEmpty ? null : [ext],
+  );
+}

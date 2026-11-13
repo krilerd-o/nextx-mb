@@ -151,11 +151,17 @@ class ChartSlice {
 }
 
 class WonData {
-  const WonData({required this.amount, required this.prevAmount, required this.count, required this.trend});
+  const WonData({required this.amount, required this.prevAmount, required this.count, required this.trend, this.target});
   final double amount;
   final double prevAmount;
   final double count;
   final List<double> trend;
+
+  /// Sales target of the period when the server sends one (else null).
+  final double? target;
+
+  /// 0..1 towards [target]; null without a target.
+  double? get progress => target == null || target! <= 0 ? null : (amount / target!).clamp(0, 1).toDouble();
 
   /// % change vs the previous period; null when there is nothing to compare.
   double? get deltaPct => prevAmount <= 0 ? null : (amount - prevAmount) / prevAmount * 100;
@@ -225,11 +231,15 @@ WonData parseWon(Map<String, dynamic> cur, Map<String, dynamic>? prev, {Map<Stri
   final d = _map(cur['deal']);
   final p = _map(prev?['deal']);
   final t = extractMapList((trend ?? cur)['trend']);
+  // Target only when the payload has one (deal.targetAmount / deal.target / target).
+  final rawTarget = d['targetAmount'] ?? d['target_amount'] ?? d['target'] ?? cur['targetAmount'] ?? cur['target'];
+  final target = rawTarget == null ? 0.0 : chartNum(rawTarget);
   return WonData(
     amount: chartNum(d['wonAmount']),
     prevAmount: chartNum(p['wonAmount']),
     count: chartNum(d['wonCount']),
     trend: [for (final r in t) chartNum(r['won_amount'])],
+    target: target > 0 ? target : null,
   );
 }
 

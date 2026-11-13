@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
+import '../../core/menu_access.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../core/nx_page_route.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_exceptions.dart';
+import '../../services/realtime_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_list_toolbar.dart';
@@ -18,13 +22,19 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_split_view.dart';
 import '../../widgets/nx_surface_card.dart';
 import 'call_summary_screen.dart';
+import 'comm_ai_access.dart';
+import 'comm_ai_delete_sheet.dart';
 import 'comm_ai_isaac.dart';
 import 'comm_ai_widgets.dart';
 
 /// Communication → ประวัติ AI การสนทนา: every call ISAAC took notes on and every chat summary.
 /// Search inside transcripts and summaries, filter by type and Thai date range. Tablets: list + detail.
 class CommAiHistoryScreen extends StatefulWidget {
-  const CommAiHistoryScreen({super.key});
+  const CommAiHistoryScreen({super.key, this.initialUserId, this.initialQuery});
+
+  /// `?user=<id>` (from the insights "most active people") and `?q=` (a frequent topic).
+  final String? initialUserId;
+  final String? initialQuery;
 
   @override
   State<CommAiHistoryScreen> createState() => _CommAiHistoryScreenState();
@@ -36,8 +46,21 @@ const _typeGroup = NxFilterGroup(key: 'type', label: 'ประเภท', multi
   NxFilterOption('chat', 'สรุปแชท'),
 ]);
 
+const _scopeGroup = NxFilterGroup(key: 'scope', label: 'เดี่ยวและกลุ่ม', multi: false, options: [
+  NxFilterOption('single', 'คุยกัน 2 คน'),
+  NxFilterOption('group', 'กลุ่ม'),
+]);
+
+const _audioGroup = NxFilterGroup(key: 'audio', label: 'เสียง', multi: false, options: [NxFilterOption('1', 'มีเสียง')]);
+
 class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
-  NxListQuery _query = const NxListQuery();
+  late NxListQuery _query = NxListQuery(
+    q: widget.initialQuery ?? '',
+    filters: {if ((widget.initialUserId ?? '').isNotEmpty) 'person': {widget.initialUserId!}},
+  );
+  List<NxFilterOption> _people = const [];
+  List<NxFilterOption> _rooms = const [];
+  CommAiAccess _access = const CommAiAccess(insights: false);
   DateTimeRange? _range;
   final _items = <Map<String, dynamic>>[];
   String? _next;
@@ -49,11 +72,53 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
 
   String get _type => _query.single('type') ?? 'all';
 
+  StreamSubscription<RealtimeEvent>? _deletedSub;
+
   @override
   void initState() {
     super.initState();
     _load();
+    // Deleted on any device (PDPA): the row goes away.
+    _deletedSub = RealtimeService.instance.events.listen((e) {
+      if (e.type == 'ai:summary_deleted' && e.data['source'] == 'chat') {
+        _removeItem((x) => x['type'] == 'chat' && '${x['id']}' == '${e.data['summary_id']}');
+      } else if (e.type == 'ai:call_data_deleted' && e.data['what'] is List && (e.data['what'] as List).contains('call')) {
+        _removeItem((x) => x['type'] != 'chat' && '${x['id']}' == '${e.data['call_id']}');
+      }
+    });
+    final api = context.read<AppConfig>().apiClient;
+    CommAiAccess.of(api).then((a) {
+      if (mounted) setState(() => _access = a);
+    });
+    api.getCommAiHistoryFilters().then((r) {
+      if (!mounted) return;
+      setState(() {
+        _people = [for (final p in (r['people'] as List? ?? const [])) if (p is Map && p['user_id'] != null) NxFilterOption('${p['user_id']}', '${p['name'] ?? p['user_id']}')];
+        _rooms = [for (final x in (r['rooms'] as List? ?? const [])) if (x is Map && x['id'] != null) NxFilterOption('${x['id']}', '${x['name'] ?? '#${x['id']}'}')];
+      });
+    }).catchError((_) {});
   }
+
+  @override
+  void dispose() {
+    _deletedSub?.cancel();
+    super.dispose();
+  }
+
+  /// Person / room pickers; a person from a link shows even before the list arrives.
+  List<NxFilterGroup> get _groups {
+    final person = _query.single('person');
+    final people = [..._people, if (person != null && !_people.any((p) => p.value == person)) NxFilterOption(person, '#$person')];
+    return [
+      _typeGroup,
+      _scopeGroup,
+      if (people.isNotEmpty) NxFilterGroup(key: 'person', label: 'คนในสาย', multi: false, options: people),
+      if (_rooms.isNotEmpty) NxFilterGroup(key: 'room', label: 'ห้องแชท', multi: false, options: _rooms),
+      _audioGroup,
+    ];
+  }
+
+  String _filterSig(NxListQuery q) => [q.q, for (final k in const ['type', 'scope', 'person', 'room', 'audio']) q.single(k) ?? ''].join('|');
 
   String _ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
@@ -69,6 +134,10 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
             q: _query.q,
             from: _range == null ? null : _ymd(_range!.start),
             to: _range == null ? null : _ymd(_range!.end),
+            scope: _query.single('scope'),
+            userId: _query.single('person'),
+            roomId: _query.single('room'),
+            hasAudio: _query.single('audio') == '1',
             before: before,
           );
       if (my != _req || !mounted) return;
@@ -107,7 +176,22 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
     nxPush<void>(context, _detailFor(it));
   }
 
-  Widget _detailFor(Map<String, dynamic> it) => it['type'] == 'chat' ? ChatSummaryDetailScreen(id: '${it['id']}') : CallSummaryScreen(callId: '${it['id']}');
+  /// Drop a deleted conversation from the list (and its open pane).
+  void _removeItem(bool Function(Map<String, dynamic> it) match) {
+    if (!mounted || !_items.any(match)) return;
+    setState(() {
+      _items.removeWhere(match);
+      if (_selected != null && match(_selected!)) _selected = null;
+    });
+  }
+
+  /// In the split view a deleted conversation clears the pane; pushed, the screen closes itself.
+  Widget _detailFor(Map<String, dynamic> it, {bool pane = false}) {
+    final VoidCallback? onDeleted = pane ? () => _removeItem((x) => x['type'] == it['type'] && '${x['id']}' == '${it['id']}') : null;
+    return it['type'] == 'chat'
+        ? ChatSummaryDetailScreen(id: '${it['id']}', onDeleted: onDeleted)
+        : CallSummaryScreen(callId: '${it['id']}', onDeleted: onDeleted);
+  }
 
   Widget _tile(Map<String, dynamic> it, Color hint) {
     final type = '${it['type']}';
@@ -146,7 +230,7 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
-                '${it['headline'] ?? (type == 'chat' ? tr('สรุปแชท') : pending ? tr('ISAAC กำลังสรุป…') : tr('บทสนทนา (ยังไม่มีสรุป)'))}',
+                '${it['headline'] ?? (type == 'chat' ? tr('สรุปแชท') : pending ? tr('ไอแซคกำลังสรุป…') : tr('บทสนทนา (ยังไม่มีสรุป)'))}',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w600, height: 1.3),
@@ -179,9 +263,13 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
       const CommAiHero(
         mood: 'organize_data',
         title: 'ประวัติ AI การสนทนา',
-        subtitle: 'ทุกสายที่ ISAAC จดไว้ และทุกสรุปแชท — ค้นหาได้ทั้งในบทสนทนาและในสรุป',
+        subtitle: 'ทุกสายที่ไอแซคจดไว้ และทุกสรุปแชท — ค้นหาได้ทั้งในบทสนทนาและในสรุป',
       ),
       const SizedBox(height: 8),
+      if (!_access.available) ...[
+        const IsaacTip('ธุรกิจนี้ยังไม่ได้เปิดแพ็กเกจไอแซคเอไอ การสื่อสาร — ดูประวัติเดิมได้ แต่สรุปหรือแชร์ใหม่ไม่ได้', mood: 'shrug', key: ValueKey('comm-ai-unavailable')),
+        const SizedBox(height: 8),
+      ],
     ];
     String? lastDay;
     for (final it in _items) {
@@ -207,11 +295,11 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
     } else if (_loading) {
       rows.add(const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())));
     } else if (_loaded && _items.isEmpty) {
-      final filtered = _query.q.isNotEmpty || _range != null || _type != 'all';
+      final filtered = _query.q.isNotEmpty || _range != null || _query.activeFilterCount > 0;
       rows.add(CommAiIsaacState(
         mood: filtered ? 'searching' : 'sleepy',
-        title: filtered ? 'ISAAC ไม่พบรายการที่ตรงกัน' : 'ยังไม่มีประวัติ',
-        message: filtered ? 'ลองเปลี่ยนคำค้นหรือช่วงวันที่' : 'เปิด "จดบทสนทนา" ตอนโทร หรือกด ✨ ในห้องแชทเพื่อให้ ISAAC สรุป',
+        title: filtered ? 'ไอแซคไม่พบรายการที่ตรงกัน' : 'ยังไม่มีประวัติ',
+        message: filtered ? 'ลองเปลี่ยนคำค้นหรือช่วงวันที่' : 'เปิด "จดบทสนทนา" ตอนโทร หรือกด ✨ ในห้องแชทเพื่อให้ไอแซคสรุป',
         action: filtered
             ? OutlinedButton(
                 onPressed: () {
@@ -230,7 +318,7 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
       NxListToolbar(
         query: _query,
         searchHint: 'ค้นหาในบทสนทนาและสรุป เช่น ชื่อลูกค้า สินค้า',
-        groups: const [_typeGroup],
+        groups: _groups,
         quickGroup: 'type',
         allowSavedViews: false,
         leading: [
@@ -253,7 +341,7 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
           ),
         ],
         onChanged: (q) {
-          final reload = q.q != _query.q || q.single('type') != _query.single('type');
+          final reload = _filterSig(q) != _filterSig(_query);
           setState(() => _query = q);
           if (reload) _load();
         },
@@ -282,11 +370,18 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
     return NxScrollScaffold(
       header: NxAppHeader(
         title: 'ประวัติ AI การสนทนา',
-        subtitle: 'ISAAC AI',
+        subtitle: 'ไอแซคเอไอ',
         actions: [
+          if (_access.available && _access.insights && MenuAccess.allow(context.read<AppConfig>().session, MenuAccess.commAiInsights))
+            IconButton(
+              key: const ValueKey('comm-ai-open-insights'),
+              tooltip: tr('แดชบอร์ดไอแซค'),
+              icon: const Icon(NxI.chartBar),
+              onPressed: () => context.push(AppRoutes.commAiInsights),
+            ),
           IconButton(
             key: const ValueKey('comm-ai-open-settings'),
-            tooltip: tr('ตั้งค่า ISAAC AI การสื่อสาร'),
+            tooltip: tr('ตั้งค่าไอแซคเอไอ การสื่อสาร'),
             icon: const Icon(NxI.gear),
             onPressed: () => context.push(AppRoutes.commAiSettings),
           ),
@@ -294,13 +389,13 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
       ),
       body: NxSplitView(
         onClose: () => setState(() => _selected = null),
-        empty: const Center(child: CommAiIsaacState(mood: 'reading', title: 'เลือกรายการทางซ้าย', message: 'ISAAC จะแสดงสรุปและบทสนทนาตรงนี้')),
+        empty: const Center(child: CommAiIsaacState(mood: 'reading', title: 'เลือกรายการทางซ้าย', message: 'ไอแซคจะแสดงสรุปและบทสนทนาตรงนี้')),
         detail: _selected == null
             ? null
             : NxPaneHost(
                 key: ValueKey('comm-ai-pane-${_selected!['type']}-${_selected!['id']}'),
                 onPopRoot: () => setState(() => _selected = null),
-                child: _detailFor(_selected!),
+                child: _detailFor(_selected!, pane: true),
               ),
         list: _list(context),
       ),
@@ -308,39 +403,102 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
   }
 }
 
-/// One saved chat summary (from history or a shared link inside the app).
-class ChatSummaryDetailScreen extends StatelessWidget {
-  const ChatSummaryDetailScreen({super.key, required this.id});
+/// One saved chat summary (from history or a shared link inside the app). Its creator or an admin
+/// (`can_delete`) can delete it; deleted elsewhere (`ai:summary_deleted`) → closes.
+class ChatSummaryDetailScreen extends StatefulWidget {
+  const ChatSummaryDetailScreen({super.key, required this.id, this.onDeleted});
   final String id;
+
+  /// Deleted here or on another device. Default: close this screen.
+  final VoidCallback? onDeleted;
+
+  @override
+  State<ChatSummaryDetailScreen> createState() => _ChatSummaryDetailScreenState();
+}
+
+class _ChatSummaryDetailScreenState extends State<ChatSummaryDetailScreen> {
+  Map<String, dynamic>? _data;
+  Object? _error;
+  bool _gone = false;
+  StreamSubscription<RealtimeEvent>? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _sub = RealtimeService.instance.on('ai:summary_deleted').listen((e) {
+      if ('${e.data['summary_id']}' == widget.id) _close(tr('สรุปนี้ถูกลบแล้ว'));
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final d = await context.read<AppConfig>().apiClient.getCommAiSummary(widget.id);
+      if (mounted) setState(() => _data = d);
+    } catch (e) {
+      if (mounted) setState(() => _error = e);
+    }
+  }
+
+  void _close(String message) {
+    if (_gone || !mounted) return;
+    _gone = true;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
+    final cb = widget.onDeleted;
+    if (cb != null) {
+      cb();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  Future<void> _delete() async {
+    final out = await showCommAiDeleteSheet(context, kind: 'chat', id: widget.id);
+    if (out != null && mounted) _close(tr('ลบสรุปแชทแล้ว'));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: context.read<AppConfig>().apiClient.getCommAiSummary(id),
-      builder: (context, snap) {
-        final r = snap.data?['result'] is Map ? Map<String, dynamic>.from(snap.data!['result'] as Map) : null;
-        final range = snap.data == null ? '' : '${commAiWhen(snap.data!['range_from'])} – ${commAiWhen(snap.data!['range_to'])}';
-        return NxScrollScaffold(
-          header: NxAppHeader(
-            title: 'ISAAC สรุปแชท',
-            subtitle: range,
-            actions: [
-              if (r != null)
-                IconButton(
-                  key: const ValueKey('chat-summary-share'),
-                  tooltip: tr('แชร์'),
-                  icon: const Icon(NxI.shareNetwork),
-                  onPressed: () => showCommAiShareSheet(context, kind: 'chat', id: id, title: '${r['headline'] ?? ''}'),
-                ),
-            ],
-          ),
-          body: snap.hasError
-              ? Center(child: CommAiIsaacState(mood: 'error', title: 'เปิดสรุปไม่ได้', message: formatApiError(snap.error!)))
-              : r == null
-                  ? const Center(child: CommAiIsaacState(mood: 'reading', title: 'ISAAC กำลังเปิดสรุป…', busy: true))
-                  : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [CommAiSummaryView(result: r)]),
-        );
-      },
+    final data = _data;
+    final r = data?['result'] is Map ? Map<String, dynamic>.from(data!['result'] as Map) : null;
+    final range = data == null ? '' : '${commAiWhen(data['range_from'])} – ${commAiWhen(data['range_to'])}';
+    return NxScrollScaffold(
+      header: NxAppHeader(
+        title: 'ไอแซคสรุปแชท',
+        subtitle: range,
+        actions: [
+          if (data?['can_delete'] == true)
+            IconButton(
+              key: const ValueKey('chat-summary-delete'),
+              tooltip: tr('ลบสรุปแชทนี้'),
+              icon: const Icon(NxI.trash),
+              onPressed: _delete,
+            ),
+          if (r != null)
+            FutureBuilder<CommAiAccess>(
+              future: CommAiAccess.of(context.read<AppConfig>().apiClient),
+              builder: (context, a) => a.data?.available == false
+                  ? const SizedBox.shrink()
+                  : IconButton(
+                      key: const ValueKey('chat-summary-share'),
+                      tooltip: tr('แชร์'),
+                      icon: const Icon(NxI.shareNetwork),
+                      onPressed: () => showCommAiShareSheet(context, kind: 'chat', id: widget.id, title: '${r['headline'] ?? ''}'),
+                    ),
+            ),
+        ],
+      ),
+      body: _error != null
+          ? Center(child: CommAiIsaacState(mood: 'error', title: 'เปิดสรุปไม่ได้', message: formatApiError(_error!)))
+          : r == null
+              ? const Center(child: CommAiIsaacState(mood: 'reading', title: 'ไอแซคกำลังเปิดสรุป…', busy: true))
+              : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [CommAiSummaryView(result: r, summaryId: widget.id)]),
     );
   }
 }

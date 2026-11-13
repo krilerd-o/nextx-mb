@@ -76,7 +76,7 @@ void main() {
 
     test('server message wins; codes map to Thai', () {
       expect(isaacLaunchErrorText('ISAAC_403_PLUGIN_DISABLED', message: 'ข้อความจากเซิร์ฟเวอร์'), 'ข้อความจากเซิร์ฟเวอร์');
-      expect(isaacLaunchErrorText('ISAAC_503_NOT_READY'), contains('ISAAC'));
+      expect(isaacLaunchErrorText('ISAAC_503_NOT_READY'), contains('ไอแซค'));
       expect(isaacLaunchErrorText('ISAAC_429_RATE_LIMIT'), contains('รอสักครู่'));
     });
   });

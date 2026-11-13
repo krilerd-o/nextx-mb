@@ -86,7 +86,10 @@ extension JourneyApi on ApiClient {
 
   Future<List<Map<String, dynamic>>> getJobActivityTemplates() async {
     final env = await _send('GET', '/api/settings/job/activity-templates', query: {'active': 1});
-    return extractMapList(env['data']);
+    final d = env['data'];
+    // The server answers `{templates: […], owner_rules: […]}`.
+    if (d is Map && d['templates'] is List) return extractMapList(d['templates']);
+    return extractMapList(d);
   }
 
   /// `{template_id}` or `{items:[…]}` (+ `overrides`).
@@ -221,6 +224,17 @@ extension JourneyApi on ApiClient {
     }));
   }
 
+  /// The web form's context: users, document templates, allowed layouts
+  /// (Template-1/2 per Business / Package), new-quotation defaults, branding.
+  Future<Map<String, dynamic>> getQuotationContext() async => _dataMap(await _send('GET', '/api/quotation/context'));
+
+  /// My default text blocks for a new quotation (`{intro|terms|footer|…: {html, templateIds, locale}}`).
+  Future<Map<String, dynamic>> resolveQuotationTextDefaults({String locale = 'th'}) async =>
+      _dataMap(await _send('GET', '/api/quotation/text-templates/defaults/resolve', query: {'locale': locale}));
+
+  /// Job form context: document templates, allowed layouts, job settings' document defaults.
+  Future<Map<String, dynamic>> getJobFormContext() async => _dataMap(await _send('GET', '/api/field-service/job-form-context'));
+
   Future<Map<String, dynamic>> getQuotationEmailStatus(String id) async =>
       _dataMap(await _send('GET', '/api/approvals/quotation/$id/email-status'));
 
@@ -328,4 +342,56 @@ extension JourneyApi on ApiClient {
 
   Future<Map<String, dynamic>> rejectActivity(String id, {String? note}) async =>
       _dataMap(await _send('POST', '/api/activity-approval/$id/reject', data: {if (note != null && note.isNotEmpty) 'note': note}));
+
+  // ------------------------------------------------- Document e-mail (compose)
+  // The web's "ส่งอีเมล" window: quotation → /api/quotation/:id/…,
+  // job → /api/field-service/jobs/:id/… (same fields and answers).
+
+  String _composeBase(String kind, String id) =>
+      kind == 'job' ? '/api/field-service/jobs/${Uri.encodeComponent(id)}' : '/api/quotation/${Uri.encodeComponent(id)}';
+
+  /// Recipients, subject, body (HTML), templates, suggestions, limits, mail_ready.
+  Future<Map<String, dynamic>> getDocComposeDefaults(String kind, String id) async =>
+      _dataMap(await _send('GET', '${_composeBase(kind, id)}/compose-defaults'));
+
+  /// Sends like the web (multipart): the server builds the PDF from the
+  /// document template (BIRT) when [includePdf]; [files] ride along (≤10 × 15 MB).
+  Future<({Map<String, dynamic> data, String message})> sendDocCompose(
+    String kind,
+    String id, {
+    required List<String> to,
+    List<String> cc = const [],
+    List<String> bcc = const [],
+    required String subject,
+    required String bodyHtml,
+    bool includePdf = true,
+    bool includeLink = false,
+    String? templateId,
+    List<MultipartFile> files = const [],
+    ProgressCallback? onSendProgress,
+  }) async {
+    final form = FormData.fromMap({
+      'to': to.join(','),
+      'cc': cc.join(','),
+      'bcc': bcc.join(','),
+      'subject': subject,
+      'body_html': bodyHtml,
+      'include_pdf': includePdf ? 'true' : 'false',
+      'include_link': includeLink ? 'true' : 'false',
+      'template_id': templateId ?? '',
+      'file_ids': '',
+    });
+    for (final f in files) {
+      form.files.add(MapEntry('files', f));
+    }
+    final env = await _send('POST', '${_composeBase(kind, id)}/compose-send', data: form, onSendProgress: onSendProgress, options: Options(sendTimeout: const Duration(minutes: 3), receiveTimeout: const Duration(minutes: 3)));
+    return (data: _dataMap(env), message: env['message']?.toString() ?? env['messagestatus']?.toString() ?? '');
+  }
+
+  /// E-mails sent from the window (newest first).
+  Future<List<Map<String, dynamic>>> getDocEmailLog(String kind, String id) async {
+    final env = await _send('GET', '${_composeBase(kind, id)}/email-log');
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
 }

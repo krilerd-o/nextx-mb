@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../core/effects.dart';
@@ -39,7 +40,12 @@ class NxScrollScaffold extends StatefulWidget {
     this.resizeToAvoidBottomInset,
     this.headerBottom,
     this.headerBottomHeight = 0,
+    this.headerBlur,
   });
+
+  /// When given, the blur behind the header only shows while this is true
+  /// (Home: hidden while the full-bleed hero photo sits under the status bar).
+  final ValueListenable<bool>? headerBlur;
 
   /// Extra floating row(s) under the header (search, filter chips) that sit on
   /// the same glass; content scrolls beneath both.
@@ -156,7 +162,7 @@ class _NxScrollScaffoldState extends State<NxScrollScaffold> {
       child: Scaffold(
         extendBodyBehindAppBar: true,
         resizeToAvoidBottomInset: w.resizeToAvoidBottomInset,
-        appBar: _FloatingHeader(header: w.header, extend: !insetBody, bottom: w.headerBottom, bottomHeight: w.headerBottomHeight),
+        appBar: _FloatingHeader(header: w.header, extend: !insetBody, bottom: w.headerBottom, bottomHeight: w.headerBottomHeight, blurVisible: w.headerBlur),
         floatingActionButton: fab,
         bottomNavigationBar: w.bottomNavigationBar,
         body: content,
@@ -169,8 +175,9 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
   /// Fade below the header (content dissolves into it).
   static const double _tail = 14;
 
-  const _FloatingHeader({required this.header, required this.extend, this.bottom, this.bottomHeight = 0});
+  const _FloatingHeader({required this.header, required this.extend, this.bottom, this.bottomHeight = 0, this.blurVisible});
   final PreferredSizeWidget header;
+  final ValueListenable<bool>? blurVisible;
   final Widget? bottom;
   final double bottomHeight;
 
@@ -179,6 +186,20 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => Size.fromHeight(header.preferredSize.height + (bottom == null ? 0 : bottomHeight));
+
+  Widget _blurGate(Widget blur) {
+    final v = blurVisible;
+    if (v == null) return blur;
+    return ValueListenableBuilder<bool>(
+      valueListenable: v,
+      child: blur,
+      builder: (context, on, child) => AnimatedOpacity(
+        opacity: on ? 1 : 0,
+        duration: MediaQuery.maybeDisableAnimationsOf(context) == true ? Duration.zero : const Duration(milliseconds: 180),
+        child: child,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -201,11 +222,13 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
             // A short tail below the header so the blur ends softly but takes little room.
             height: top + h + (extend ? _tail : 0),
             child: IgnorePointer(
-              child: NxEdgeBlur(
-                fromTop: true,
-                // Full blur over the status bar + most of the header, fade below.
-                solidFraction: extend ? (top + h * 0.25) / (top + h + _tail) : 0.6,
-                washSolid: extend ? (top + h - 4) / (top + h + _tail) : 0.9,
+              child: _blurGate(
+                NxEdgeBlur(
+                  fromTop: true,
+                  // Full blur over the status bar + most of the header, fade below.
+                  solidFraction: extend ? (top + h * 0.25) / (top + h + _tail) : 0.6,
+                  washSolid: extend ? (top + h - 4) / (top + h + _tail) : 0.9,
+                ),
               ),
             ),
           ),

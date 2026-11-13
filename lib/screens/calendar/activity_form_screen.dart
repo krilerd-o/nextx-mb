@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_map/flutter_map.dart' as fm;
 import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
-import 'package:latlong2/latlong.dart' as ll;
 import 'package:provider/provider.dart';
 
 import '../../core/activity_guests.dart';
@@ -12,11 +10,11 @@ import '../../core/html_display.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
-import '../../services/location_service.dart';
 import '../../widgets/fields/nx_lift_sheet.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_map_pin_picker.dart';
 import '../../widgets/nx_map_view.dart';
 import 'cal/cal_model.dart';
 import '../../widgets/nx_unsaved_guard.dart';
@@ -89,7 +87,7 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
     _descInitial = stripHtmlPreview('${r['description'] ?? ''}', maxLen: 100000);
     _desc = TextEditingController(text: _descInitial);
     final t = '${r['activitytype'] ?? ''}';
-    // New activities start as a customer visit (เยี่ยมลูกค้า).
+    // New activities start as a customer visit (เข้าพบลูกค้า).
     _type = t.isEmpty ? 'Visit' : t;
     _allDay = r['all_day'] == true || r['all_day'] == 1 || '${r['all_day']}' == 'true';
     final s = parseWall(r['date_start']) ?? widget.start ?? _nextSlot(thaiNow());
@@ -240,10 +238,7 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
   // ── location ─────────────────────────────────────────────────────────────
 
   Future<void> _pickOnMap() async {
-    final res = await showNxLiftSheet<({double lat, double lng})>(
-      context: context,
-      builder: (ctx, scroll) => _MapPinPicker(lat: _lat, lng: _lng),
-    );
+    final res = await showNxMapPinPicker(context, lat: _lat, lng: _lng);
     if (res != null && mounted) {
       setState(() {
         _lat = res.lat;
@@ -806,105 +801,6 @@ class _GuestPickerState extends State<_GuestPicker> {
                 child: Text(tr('ไม่พบรายชื่อ'), textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
               ),
           ],
-        ),
-      ),
-    ]);
-  }
-}
-
-/// Tap the map to drop the pin, or use the current position.
-class _MapPinPicker extends StatefulWidget {
-  const _MapPinPicker({this.lat, this.lng});
-  final double? lat;
-  final double? lng;
-
-  @override
-  State<_MapPinPicker> createState() => _MapPinPickerState();
-}
-
-class _MapPinPickerState extends State<_MapPinPicker> {
-  final _map = fm.MapController();
-  ll.LatLng? _pin;
-  bool _locating = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.lat != null && widget.lng != null) {
-      _pin = ll.LatLng(widget.lat!, widget.lng!);
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _here(move: true));
-    }
-  }
-
-  Future<void> _here({bool move = true}) async {
-    setState(() => _locating = true);
-    try {
-      final fix = await LocationService().currentFix();
-      if (!mounted) return;
-      final p = ll.LatLng(fix.latitude, fix.longitude);
-      setState(() => _pin = p);
-      if (move && nxMapKind() != NxMapKind.card) _map.move(p, 16);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('หาตำแหน่งปัจจุบันไม่ได้'))));
-    } finally {
-      if (mounted) setState(() => _locating = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final center = _pin ?? const ll.LatLng(13.7563, 100.5018); // Bangkok
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
-        child: Row(children: [
-          Expanded(child: Text(tr('แตะแผนที่เพื่อปักหมุด'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
-          TextButton(
-            key: const ValueKey('pin-done'),
-            onPressed: _pin == null ? null : () => Navigator.of(context).pop((lat: _pin!.latitude, lng: _pin!.longitude)),
-            child: Text(tr('ใช้ตำแหน่งนี้')),
-          ),
-        ]),
-      ),
-      Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: nxMapKind() == NxMapKind.card
-                ? ColoredBox(
-                    color: cs.surfaceContainerHighest,
-                    child: Center(child: Text(_pin == null ? tr('ยังไม่ได้ปักหมุด') : '${_pin!.latitude.toStringAsFixed(5)}, ${_pin!.longitude.toStringAsFixed(5)}')),
-                  )
-                : fm.FlutterMap(
-                    mapController: _map,
-                    options: fm.MapOptions(
-                      initialCenter: center,
-                      initialZoom: _pin == null ? 11 : 16,
-                      onTap: (_, p) => setState(() => _pin = p),
-                    ),
-                    children: [
-                      fm.TileLayer(urlTemplate: kOsmTiles, userAgentPackageName: 'com.moai.nextt.mobile'),
-                      if (_pin != null)
-                        fm.MarkerLayer(markers: [
-                          fm.Marker(point: _pin!, width: 44, height: 44, alignment: Alignment.topCenter, child: Icon(NxI.mapPin, size: 40, color: cs.error)),
-                        ]),
-                    ],
-                  ),
-          ),
-        ),
-      ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-        child: OutlinedButton.icon(
-          key: const ValueKey('pin-here'),
-          onPressed: _locating ? null : () => _here(),
-          icon: _locating ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.crosshair, size: 18),
-          label: Text(tr('ใช้ตำแหน่งปัจจุบัน')),
-          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
         ),
       ),
     ]);

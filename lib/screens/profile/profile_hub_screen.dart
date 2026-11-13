@@ -1,4 +1,3 @@
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -60,7 +59,7 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
   }
 
   Future<void> _photo(AppConfig config) async {
-    final has = (config.profileAvatarBase64 ?? '').isNotEmpty;
+    final has = config.profileAvatarUrl == null && (config.profileAvatarBase64 ?? '').isNotEmpty;
     final pick = await showAppBottomSheet<String>(
       context: context,
       title: 'รูปโปรไฟล์',
@@ -366,13 +365,7 @@ class _Hero extends StatelessWidget {
     final ring = config.activeSpace?.color ?? cs.primary;
     final name = s.displayName ?? s.email ?? 'ผู้ใช้';
     final role = (s.businessRole ?? (s.isBusinessAdmin ? 'admin' : 'member')).toUpperCase();
-    ImageProvider? image;
-    final b64 = config.profileAvatarBase64;
-    if (b64 != null && b64.isNotEmpty) {
-      try {
-        image = MemoryImage(base64Decode(b64.contains(',') ? b64.split(',').last : b64));
-      } catch (_) {}
-    }
+    final image = config.profileAvatarImage;
     Widget chip(String label, Color color) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
           decoration: BoxDecoration(color: color.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(20)),
@@ -406,6 +399,7 @@ class _Hero extends StatelessWidget {
                 radius: 46,
                 backgroundColor: cs.surface,
                 backgroundImage: image,
+                onBackgroundImageError: image == null ? null : (_, _) {},
                 child: image == null
                     ? Text(name.characters.take(2).toString().toUpperCase(),
                         style: theme.textTheme.headlineSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800))

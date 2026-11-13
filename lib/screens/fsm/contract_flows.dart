@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
@@ -7,6 +6,7 @@ import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
+import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 
 /// Service contract statuses (server values) and Thai labels — same as the web.
@@ -55,6 +55,26 @@ String contractActionLabel(String a) => tr(switch (a) {
   _ => a,
 });
 
+/// Status an action leads to (null: depends on the server / not a status move).
+String? contractActionTarget(String a) => switch (a) {
+      'submit_approval' => 'Pending_Approval',
+      'start_implement' => 'Implement',
+      'activate' => 'Active',
+      'cancel' => 'Cancelled',
+      'reject' || 'reactivate' => 'Draft',
+      _ => null,
+    };
+
+/// Colour of a contract status.
+Color contractStatusTone(ColorScheme cs, Object? s) => switch ('${s ?? ''}') {
+      'Draft' => cs.onSurfaceVariant,
+      'Implement' => const Color(0xFF2563EB),
+      'Pending_Approval' || 'Pending_Sign' || 'Wait_Start' => const Color(0xFFF59E0B),
+      'Active' || 'Renewed' => const Color(0xFF16A34A),
+      'Cancelled' || 'Expired' => kNxDangerRed,
+      final v => nxStatusTone(cs, v),
+    };
+
 IconData contractActionIcon(String a) => switch (a) {
   'submit_approval' => NxI.paperPlaneTilt,
   'approve' || 'activate' => NxI.check,
@@ -94,16 +114,37 @@ class ContractFlows {
     final api = context.read<AppConfig>().apiClient;
     final messenger = ScaffoldMessenger.maybeOf(context);
     final id = strId(row['id']);
+    final cs = Theme.of(context).colorScheme;
+    final target = contractActionTarget(action);
+    // Shared status confirm: current → new (or the step), in contract colours.
+    Future<NxStatusConfirm?> confirm({String? impact, bool reason = false, String? label, List<String> reasons = const []}) => showStatusChangeConfirm(
+          context,
+          title: '${contractActionLabel(action)}?',
+          recordTitle: entityTitle(row, module: 'service_contract'),
+          from: '${row['contract_status'] ?? ''}'.isEmpty ? null : contractStatusLabel(row['contract_status']),
+          fromColor: contractStatusTone(cs, row['contract_status']),
+          to: target == null ? contractActionLabel(action) : contractStatusLabel(target),
+          toColor: target == null ? cs.primary : contractStatusTone(cs, target),
+          impact: impact,
+          requireReason: reason,
+          reasons: reasons,
+          noteLabel: label,
+          destructive: action == 'cancel' || action == 'reject',
+          confirmLabel: reason ? 'ยืนยัน' : contractActionLabel(action),
+          noteKey: const ValueKey('contract-reason'),
+          confirmKey: ValueKey(reason ? 'contract-reason-ok' : 'contract-confirm'),
+        );
     Map<String, dynamic>? body;
     switch (action) {
       case 'reject' || 'cancel' || 'reactivate':
-        final reason = await _askText(
-          context,
-          title: contractActionLabel(action),
+        final r = await confirm(
+          reason: true,
           label: action == 'reject' ? tr('เหตุผลที่ไม่อนุมัติ') : action == 'cancel' ? tr('เหตุผลที่ยกเลิก') : tr('เหตุผลที่เปิดใหม่'),
-          danger: action != 'reactivate',
+          reasons: action == 'cancel' ? kNxCancelReasons : (action == 'reject' ? kNxRejectReasons : const []),
+          impact: action == 'cancel' ? 'สัญญาจะหยุดมีผล และใช้ชั่วโมง Manday ต่อไม่ได้' : null,
         );
-        if (reason == null) return null;
+        if (r == null) return null;
+        final reason = r.note;
         body = {
           'reason': reason,
           if (action == 'reject') 'reject_reason': reason,
@@ -119,8 +160,10 @@ class ContractFlows {
           lastDate: DateTime.now().add(const Duration(days: 365)),
           helpText: tr('วันที่ลูกค้าเซ็น'),
         );
-        if (d == null) return null;
-        body = {'signed_date': '${d.year}-${'${d.month}'.padLeft(2, '0')}-${'${d.day}'.padLeft(2, '0')}'};
+        if (d == null || !context.mounted) return null;
+        final signed = '${d.year}-${'${d.month}'.padLeft(2, '0')}-${'${d.day}'.padLeft(2, '0')}';
+        if (await confirm(impact: '${tr('วันที่ลูกค้าเซ็น')}: ${d.day}/${d.month}/${uiYear(d.year)}') == null) return null;
+        body = {'signed_date': signed};
       case 'submit_approval':
         if (!context.mounted) return null;
         body = await showModalBottomSheet<Map<String, dynamic>>(
@@ -137,54 +180,19 @@ class ContractFlows {
         body = {'smownerid': owner};
       default:
         if (!context.mounted) return null;
-        final ok = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text(contractActionLabel(action)),
-            content: Text('${tr('สถานะปัจจุบัน')}: ${contractStatusLabel(row['contract_status'])}'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
-              FilledButton(key: const ValueKey('contract-confirm'), onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ยืนยัน'))),
-            ],
-          ),
-        );
-        if (ok != true) return null;
+        final ok = await confirm(impact: action == 'activate' ? 'สัญญาจะเริ่มมีผล และนับสิทธิ์บริการตามสัญญา' : null);
+        if (ok == null) return null;
         body = const {};
     }
     try {
       final r = await api.serviceContractWorkflowAction(id, {'action': action, ...body});
-      HapticFeedback.mediumImpact();
       final rec = r['record'] is Map ? Map<String, dynamic>.from(r['record'] as Map) : <String, dynamic>{};
-      messenger?.showSnackBar(SnackBar(content: Text('${contractActionLabel(action)} · ${contractStatusLabel(rec['contract_status'])}')));
+      showNxStatusChangedSnack(messenger, label: '${contractActionLabel(action)} · ${contractStatusLabel(rec['contract_status'])}');
       return rec;
     } catch (e) {
       messenger?.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
       return null;
     }
-  }
-
-  static Future<String?> _askText(BuildContext context, {required String title, required String label, bool danger = false}) async {
-    final ctrl = TextEditingController();
-    final r = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(key: const ValueKey('contract-reason'), controller: ctrl, autofocus: true, maxLines: 3, decoration: InputDecoration(labelText: '$label *')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
-          FilledButton(
-            key: const ValueKey('contract-reason-ok'),
-            style: danger ? FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error) : null,
-            onPressed: () {
-              if (ctrl.text.trim().isEmpty) return;
-              Navigator.pop(ctx, ctrl.text.trim());
-            },
-            child: Text(tr('ยืนยัน')),
-          ),
-        ],
-      ),
-    );
-    return r;
   }
 }
 

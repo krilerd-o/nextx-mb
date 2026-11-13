@@ -18,6 +18,9 @@ List<String>? requiredMenusFor(String path) {
     case 'fsm':
       if (segs.length >= 2) return [EntityModules.menuKeyOf(segs[1])];
       return MenuAccess.fsmKeys;
+    case 'form':
+      if (segs.length >= 2) return [EntityModules.menuKeyOf(segs[1])];
+      return null;
     case 'modules':
       // Generic module links (/modules/:module[/...]) follow the same menu rule.
       if (segs.length >= 2) return [EntityModules.menuKeyOf(segs[1])];
@@ -43,6 +46,7 @@ List<String>? requiredMenusFor(String path) {
     case 'call-log':
       return const [MenuAccess.callLog];
     case 'comm-ai':
+      if (segs.length >= 2 && segs[1] == 'insights') return const [MenuAccess.commAiInsights];
       return const [MenuAccess.commAi];
     case 'hr':
       if (segs.length >= 2 && segs[1] == 'attendance-report') {

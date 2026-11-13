@@ -11,7 +11,7 @@ class _Api extends ApiClient {
   int failCode = 0;
   @override
   Future<Map<String, dynamic>> uploadCallRecordingPart(String callId, String filePath,
-      {required int part, int parts = 0, bool isFinal = false, int durationMs = 0, String mime = 'audio/wav'}) async {
+      {required int part, int parts = 0, bool isFinal = false, int durationMs = 0, String mime = 'audio/wav', String deviceId = ''}) async {
     if (failNext > 0) {
       failNext--;
       throw ApiException(failCode, 'x');

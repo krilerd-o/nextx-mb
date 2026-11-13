@@ -5,7 +5,7 @@
 "NSCameraUsageDescription" = "The camera takes photos as proof for check-ins, clock-ins and inspections.";
 "NSPhotoLibraryUsageDescription" = "Pick photos as check-in proof and for your profile picture.";
 "NSPhotoLibraryAddUsageDescription" = "Save files you download in the app.";
-"NSMicrophoneUsageDescription" = "Uses the microphone to record meetings in AI Minute Auto and voice messages to the AI assistant";
+"NSMicrophoneUsageDescription" = "Uses the microphone for voice and video calls, to transcribe and record calls (only when you agree) so ISAAC can summarise them, to record meetings in AI Minute Auto, and for voice messages";
 "NSSpeechRecognitionUsageDescription" = "Turns your speech into text when you ask the AI assistant";
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "Your location is used to check in on site and to clock in or out (only while you use the app).";
 "NSLocationAlwaysUsageDescription" = "Your location is used to check in on site and to clock in or out (only while you use the app).";

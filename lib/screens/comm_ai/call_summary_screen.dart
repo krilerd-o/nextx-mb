@@ -10,22 +10,41 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../services/api_exceptions.dart';
+import '../../services/realtime_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_search_field.dart';
 import '../../widgets/nx_sliding_segmented.dart';
 import '../../widgets/nx_surface_card.dart';
+import 'comm_ai_access.dart';
+import 'comm_ai_delete_sheet.dart';
+import 'comm_ai_errors.dart';
 import 'comm_ai_isaac.dart';
 import 'comm_ai_widgets.dart';
+
+/// Languages ISAAC can translate a transcript into (same list as the web).
+const kCommAiTranslateLangs = <(String, String)>[
+  ('en', 'English'),
+  ('th', 'ไทย'),
+  ('zh', '中文'),
+  ('ja', '日本語'),
+  ('my', 'မြန်မာ'),
+  ('lo', 'ລາວ'),
+  ('km', 'ខ្មែរ'),
+  ('vi', 'Tiếng Việt'),
+];
 
 const _speakerColors = [Color(0xFF0EA5E9), Color(0xFF10B981), Color(0xFFF59E0B), Color(0xFFEC4899), Color(0xFF8B5CF6), Color(0xFF14B8A6)];
 
 /// After a call: ISAAC summary (4 cards + Task / Visit suggestions) and the transcript with audio playback.
 /// Phones: two tabs. Tablets: summary and transcript side by side.
 class CallSummaryScreen extends StatefulWidget {
-  const CallSummaryScreen({super.key, required this.callId});
+  const CallSummaryScreen({super.key, required this.callId, this.onDeleted});
   final String callId;
+
+  /// The whole conversation was deleted (here or elsewhere). Default: close this screen.
+  final VoidCallback? onDeleted;
 
   @override
   State<CallSummaryScreen> createState() => _CallSummaryScreenState();
@@ -50,6 +69,22 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
   String? _tapePath;
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<Duration>? _durSub;
+  bool _available = true;
+  bool _summarizing = false;
+  int? _editingSeq;
+  final _editCtl = TextEditingController();
+  bool _savingLine = false;
+  bool _edited = false;
+  String _lang = '';
+  final _translated = <String, String>{}; // '$lang:$seq' → text
+  bool _translating = false;
+  StreamSubscription<RealtimeEvent>? _liveSub;
+  bool _gone = false;
+
+  /// What this viewer may delete: `{user_id, participant, admin}` from GET /calls/:id.
+  Map<String, dynamic> get _viewer => _data?['viewer'] is Map ? Map<String, dynamic>.from(_data!['viewer'] as Map) : const {};
+  bool get _canDeleteMine => _viewer['participant'] == true;
+  bool get _canDeleteAll => _viewer['admin'] == true;
 
   /// Combined "meeting tape" (every shared voice on one timeline); played by the same player as id 'tape'.
   Map<String, dynamic>? get _tape => _data?['tape'] is Map ? {...Map<String, dynamic>.from(_data!['tape'] as Map), 'user_id': 'tape', 'mime': 'audio/mp4'} : null;
@@ -72,10 +107,16 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
       if (v != _q) setState(() => _q = v);
     });
     _load();
+    _liveSub = RealtimeService.instance.events.listen(_onLive);
+    CommAiAccess.of(context.read<AppConfig>().apiClient).then((a) {
+      if (mounted && !a.available) setState(() => _available = false);
+    });
   }
 
   @override
   void dispose() {
+    _liveSub?.cancel();
+    _editCtl.dispose();
     _poll?.cancel();
     _stateSub?.cancel();
     _posSub?.cancel();
@@ -95,12 +136,176 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
         _error = null;
       });
       final s = d['summary'];
-      final pending = s == null || (s is Map && s['status'] == 'pending');
+      // Summary still being written → check again shortly (a missing one may still be on its way).
+      final waiting = s == null || (s is Map && (s['status'] == 'pending' || s['status'] == 'running'));
       final hasTranscript = (d['transcript'] is List) && (d['transcript'] as List).isNotEmpty;
-      if (pending && hasTranscript && _tries++ < 40) _poll = Timer(const Duration(seconds: 3), _load);
+      if (waiting && hasTranscript && _tries < 40 && (s != null || _tries < 20)) {
+        _tries++;
+        _poll = Timer(const Duration(seconds: 3), _load);
+      } else if (_summarizing) {
+        setState(() => _summarizing = false);
+      }
+      _translateMissing();
     } catch (e) {
       if (mounted) setState(() => _error = formatApiError(e));
     }
+  }
+
+  /// Changes made on another device / by another person in this call: summary status, fixed lines.
+  void _onLive(RealtimeEvent e) {
+    if (!mounted) return;
+    if (e.type == 'ai:summary_deleted') {
+      final sid = (_data?['summary'] as Map?)?['id'];
+      if (sid != null && '${e.data['summary_id']}' == '$sid') _load();
+      return;
+    }
+    if ('${e.data['call_id']}' != widget.callId) return;
+    switch (e.type) {
+      case 'ai:call_data_deleted':
+        final what = e.data['what'] is List ? [for (final w in e.data['what'] as List) '$w'] : const <String>[];
+        if (what.contains('call')) {
+          _closeDeleted(tr('การสนทนานี้ถูกลบแล้ว'));
+        } else {
+          _translated.clear();
+          _loadedUser = null;
+          _tapePath = null;
+          _stopPlayer();
+          _load();
+        }
+      case 'ai:call_summary_status':
+      case 'ai:call_summary_ready':
+        _tries = 1;
+        _load();
+      case 'ai:call_segment_edited':
+        final seq = '${e.data['seq']}';
+        final text = '${e.data['text'] ?? ''}';
+        if (_data == null || text.isEmpty) return;
+        setState(() {
+          _data = {
+            ...?_data,
+            'transcript': [
+              for (final l in _list('transcript')) '${l['seq']}' == seq ? {...l, 'text': text, 'edited': true} : l,
+            ],
+          };
+          _translated.removeWhere((k, _) => k.endsWith(':$seq'));
+          _edited = true;
+        });
+        _translateMissing();
+    }
+  }
+
+  /// "ให้ ISAAC สรุปตอนนี้" / "สรุปใหม่" / "ลองสรุปอีกครั้ง" — then follow the new summary until it is done.
+  Future<void> _summarize() async {
+    setState(() {
+      _summarizing = true;
+      _edited = false;
+      _tab = 'summary';
+    });
+    try {
+      final r = await context.read<AppConfig>().apiClient.summarizeCall(widget.callId);
+      if (!mounted) return;
+      setState(() => _data = {...?_data, 'summary': {...?(_data?['summary'] as Map?), 'id': r['summary_id'], 'status': r['status'] ?? 'pending'}});
+      _tries = 1;
+      _poll?.cancel();
+      _poll = Timer(const Duration(seconds: 3), _load);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _summarizing = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(commAiErrorText(e))));
+    }
+  }
+
+  /// Fix a line ISAAC misheard (own lines; admins any).
+  Future<void> _saveLine(Map<String, dynamic> x) async {
+    final text = _editCtl.text.trim();
+    final seq = (x['seq'] as num?)?.toInt();
+    if (text.isEmpty || seq == null) return;
+    setState(() => _savingLine = true);
+    try {
+      await context.read<AppConfig>().apiClient.editCallSegment(widget.callId, seq, text);
+      if (!mounted) return;
+      setState(() {
+        _data = {
+          ...?_data,
+          'transcript': [
+            for (final l in _list('transcript')) '${l['seq']}' == '$seq' ? {...l, 'text': text, 'edited': true} : l,
+          ],
+        };
+        _translated.removeWhere((k, _) => k.endsWith(':$seq'));
+        _editingSeq = null;
+        _edited = true;
+      });
+      _translateMissing();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(formatApiError(e))));
+    } finally {
+      if (mounted) setState(() => _savingLine = false);
+    }
+  }
+
+  /// Translate the lines not translated yet into [_lang] (30 lines per request, cached on the server).
+  Future<void> _translateMissing() async {
+    final lang = _lang;
+    if (lang.isEmpty || _translating) return;
+    final todo = [for (final x in _list('transcript')) if (_translated['$lang:${x['seq']}'] == null && '${x['text'] ?? ''}'.isNotEmpty) x];
+    if (todo.isEmpty) return;
+    setState(() => _translating = true);
+    final api = context.read<AppConfig>().apiClient;
+    try {
+      for (var i = 0; i < todo.length; i += 30) {
+        final batch = todo.sublist(i, (i + 30).clamp(0, todo.length));
+        final out = await api.translateCommAi([for (final x in batch) '${x['text']}'], lang);
+        if (!mounted || _lang != lang) return;
+        setState(() {
+          for (var k = 0; k < batch.length; k++) {
+            _translated['$lang:${batch[k]['seq']}'] = k < out.length ? out[k] : '';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(commAiErrorText(e))));
+      if (mounted && isCommAiQuotaError(e)) setState(() => _lang = '');
+    } finally {
+      if (mounted) setState(() => _translating = false);
+      if (mounted && _lang != lang) _translateMissing();
+    }
+  }
+
+  /// The audio file may be gone: stop it (not awaited — the player answers on its own time).
+  void _stopPlayer() => unawaited(_player.stop().catchError((Object _) {}));
+
+  /// The conversation is gone: say so and close (or let the split view clear its pane).
+  void _closeDeleted(String message) {
+    if (_gone || !mounted) return;
+    _gone = true;
+    _poll?.cancel();
+    _stopPlayer();
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
+    final cb = widget.onDeleted;
+    if (cb != null) {
+      cb();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  /// "ลบข้อมูลของฉัน" (participants) / "ลบการสนทนาทั้งหมด" (admins).
+  Future<void> _delete() async {
+    final mineRec = _list('recordings').any((r) => '${r['user_id']}' == '${_viewer['user_id']}');
+    final out = await showCommAiDeleteSheet(context, kind: 'call', id: widget.callId, canMine: _canDeleteMine, canAll: _canDeleteAll, hasRecording: mineRec);
+    if (out == null || !mounted) return;
+    if (out.scope == 'all') {
+      _closeDeleted(tr('ลบการสนทนาทั้งหมดแล้ว'));
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ลบข้อมูลของคุณแล้ว — สรุปเดิมจะขึ้นว่าแหล่งข้อมูลถูกแก้'))));
+    _translated.clear();
+    if (out.recording) {
+      _stopPlayer();
+      _loadedUser = null;
+      _tapePath = null;
+    }
+    _load();
   }
 
   Future<void> _play(Map<String, dynamic> rec, {int? atMs}) async {
@@ -264,19 +469,73 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
 
   Widget _summaryPane(Map<String, dynamic>? summary, Map<String, dynamic>? result, List<Map<String, dynamic>> transcript, String when) {
     final Widget body;
-    if (result != null) {
-      body = CommAiSummaryView(key: const ValueKey('call-summary-view'), result: result, sourceNote: '${tr('จากสรุปการโทร')} $when', showSource: false);
-    } else if (summary?['status'] == 'failed') {
+    final status = summary?['status'];
+    final busy = _summarizing || status == 'pending' || status == 'running';
+    if (result != null && !_summarizing) {
+      body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (_available && transcript.isNotEmpty)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              key: const ValueKey('call-summary-resummarize'),
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              onPressed: _summarize,
+              icon: const Icon(NxI.arrowsClockwise, size: 16),
+              label: Text(tr('ให้ไอแซคสรุปใหม่')),
+            ),
+          ),
+        if (result['source_edited'] != null && result['source_edited'] != false)
+          Container(
+            key: const ValueKey('call-summary-source-edited'),
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
+            decoration: BoxDecoration(color: const Color(0xFFF59E0B).withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.18 : 0.1), borderRadius: BorderRadius.circular(14)),
+            child: Row(children: [
+              const Icon(NxI.warning, size: 18, color: Color(0xFFD97706)),
+              const SizedBox(width: 8),
+              Expanded(child: Text(tr('แหล่งข้อมูลถูกแก้ — สรุปใหม่ได้'), style: const TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w600))),
+              if (_available && transcript.isNotEmpty)
+                FilledButton(
+                  key: const ValueKey('call-summary-source-edited-resummarize'),
+                  style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                  onPressed: _summarize,
+                  child: Text(tr('สรุปใหม่')),
+                ),
+            ]),
+          ),
+        // New summary → fresh follow-up ticks.
+        KeyedSubtree(
+          key: ValueKey('call-summary-${summary?['id']}'),
+          child: CommAiSummaryView(
+            key: const ValueKey('call-summary-view'),
+            result: result,
+            summaryId: summary?['id']?.toString(),
+            sourceNote: '${tr('จากสรุปการโทร')} $when',
+            showSource: false,
+          ),
+        ),
+      ]);
+    } else if (status == 'failed' && !_summarizing) {
       body = CommAiIsaacState(
         mood: 'error',
-        title: 'ISAAC สรุปไม่สำเร็จ',
-        message: 'ยังดูบทสนทนาและฟังเสียงได้ตามปกติ',
-        action: OutlinedButton.icon(onPressed: _load, icon: const Icon(NxI.arrowsClockwise, size: 16), label: Text(tr('ลองโหลดใหม่'))),
+        title: 'ไอแซคสรุปไม่สำเร็จ',
+        message: summary?['error'] == 'quota_exceeded' ? 'ใช้โควตาการสรุปของแพ็กเกจครบแล้วในเดือนนี้ — ยังดูบทสนทนาและฟังเสียงได้ตามปกติ' : 'ยังดูบทสนทนาและฟังเสียงได้ตามปกติ',
+        action: _available && transcript.isNotEmpty
+            ? FilledButton.icon(key: const ValueKey('call-summary-summarize'), onPressed: _summarize, icon: const Icon(NxI.arrowsClockwise, size: 16), label: Text(tr('ลองสรุปอีกครั้ง')))
+            : OutlinedButton.icon(onPressed: _load, icon: const Icon(NxI.arrowsClockwise, size: 16), label: Text(tr('ลองโหลดใหม่'))),
       );
+    } else if (transcript.isNotEmpty && busy) {
+      body = const CommAiIsaacState(key: ValueKey('call-summary-busy'), mood: 'typing', title: 'ไอแซคกำลังสรุปการสนทนา…', message: 'ใช้เวลาไม่นาน หน้านี้จะอัปเดตเอง', busy: true);
     } else if (transcript.isNotEmpty) {
-      body = const CommAiIsaacState(mood: 'typing', title: 'ISAAC กำลังสรุปการสนทนา…', message: 'ใช้เวลาไม่นาน หน้านี้จะอัปเดตเอง', busy: true);
+      body = CommAiIsaacState(
+        mood: 'idea',
+        title: 'ยังไม่มีสรุปของสายนี้',
+        action: _available
+            ? FilledButton.icon(key: const ValueKey('call-summary-summarize'), onPressed: _summarize, icon: const Icon(NxI.sparkle, size: 16), label: Text(tr('ให้ไอแซคสรุปตอนนี้')))
+            : null,
+      );
     } else {
-      body = const CommAiIsaacState(mood: 'shrug', title: 'สายนี้ไม่ได้เปิดให้ ISAAC จดบทสนทนา', message: 'ครั้งหน้ากด "เริ่มจดบทสนทนา" ตอนรับสายหรือระหว่างคุย');
+      body = const CommAiIsaacState(mood: 'shrug', title: 'สายนี้ไม่ได้เปิดให้ไอแซคจดบทสนทนา', message: 'ครั้งหน้ากด "เริ่มจดบทสนทนา" ตอนรับสายหรือระหว่างคุย');
     }
     return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [body]);
   }
@@ -332,40 +591,140 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
             children: [perPerson],
           ),
         ),
-      NxSearchField(key: const ValueKey('comm-ai-transcript-search'), controller: _search, hint: 'ค้นหาในบทสนทนา'),
+      if (_edited && _available)
+        Container(
+          key: const ValueKey('call-transcript-edited-banner'),
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+          decoration: BoxDecoration(color: kIsaacIndigo.withValues(alpha: theme.brightness == Brightness.dark ? 0.18 : 0.07), borderRadius: BorderRadius.circular(14)),
+          child: Row(children: [
+            Expanded(child: Text(tr('แก้บทสนทนาแล้ว — ให้ไอแซคสรุปใหม่จากข้อความที่แก้ไหม?'), style: const TextStyle(fontSize: 13, height: 1.35))),
+            const SizedBox(width: 6),
+            FilledButton(
+              key: const ValueKey('call-transcript-resummarize'),
+              style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+              onPressed: _summarize,
+              child: Text(tr('สรุปใหม่')),
+            ),
+          ]),
+        ),
+      Row(children: [
+        Expanded(child: NxSearchField(key: const ValueKey('comm-ai-transcript-search'), controller: _search, hint: 'ค้นหาในบทสนทนา')),
+        if (_available && transcript.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          PopupMenuButton<String>(
+            key: const ValueKey('comm-ai-transcript-lang'),
+            tooltip: tr('แปลบทสนทนา'),
+            initialValue: _lang,
+            onSelected: (v) {
+              setState(() => _lang = v);
+              _translateMissing();
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(value: '', child: Text(tr('ไม่แปล'))),
+              for (final (code, label) in kCommAiTranslateLangs) PopupMenuItem(key: ValueKey('comm-ai-lang-$code'), value: code, child: Text(label)),
+            ],
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: _lang.isEmpty ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5) : kIsaacIndigo.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (_translating)
+                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                else
+                  Icon(NxI.languages, size: 18, color: _lang.isEmpty ? hint : kIsaacIndigo),
+                const SizedBox(width: 6),
+                Text(_lang.isEmpty ? tr('แปล') : _lang.toUpperCase(), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: _lang.isEmpty ? null : kIsaacIndigo)),
+              ]),
+            ),
+          ),
+        ],
+      ]),
+      if (_translating) Padding(padding: const EdgeInsets.only(top: 6), child: Text(tr('ไอแซคกำลังแปล…'), style: TextStyle(fontSize: 12, color: hint))),
       const SizedBox(height: 8),
       if (transcript.isEmpty)
         const CommAiIsaacState(mood: 'shrug', title: 'ยังไม่มีบทสนทนา', size: 72)
       else if (shown.isEmpty)
         const CommAiIsaacState(mood: 'searching', title: 'ไม่พบคำที่ค้นหา', size: 72),
-      for (final x in shown)
-        InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => _playLine(x, recordings),
-          child: Container(
-            decoration: BoxDecoration(
-              color: _onTape && _posMs >= ((x['start_ms'] as num?) ?? 0) && _posMs <= ((x['end_ms'] as num?) ?? 0) + 400 ? const Color(0x33F59E0B) : null,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              SizedBox(width: 42, child: Text(_mmss(x['start_ms'] as num? ?? 0), style: TextStyle(fontSize: 12, color: hint, fontFeatures: const [FontFeature.tabularFigures()]))),
-              Container(
-                margin: const EdgeInsets.only(top: 5, right: 8),
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: _speakerColors[ids.indexOf('${x['user_id']}') % _speakerColors.length], shape: BoxShape.circle),
-              ),
-              Expanded(
-                child: Text.rich(TextSpan(children: [
-                  TextSpan(text: '${x['name']}  ', style: TextStyle(fontWeight: FontWeight.w700, color: _speakerColors[ids.indexOf('${x['user_id']}') % _speakerColors.length])),
-                  TextSpan(text: '${x['text']}', style: const TextStyle(height: 1.4)),
-                ])),
-              ),
-            ]),
-          ),
-        ),
+      for (final x in shown) _line(x, ids, recordings, hint),
     ]);
+  }
+
+  Widget _line(Map<String, dynamic> x, List<String> ids, List<Map<String, dynamic>> recordings, Color hint) {
+    final seq = '${x['seq']}';
+    final color = _speakerColors[ids.indexOf('${x['user_id']}').clamp(0, 99) % _speakerColors.length];
+    final editing = _editingSeq != null && '$_editingSeq' == seq;
+    final translated = _lang.isEmpty ? null : _translated['$_lang:$seq'];
+    final canEdit = x['can_edit'] == true && _available && x['seq'] != null;
+    final active = _onTape && _posMs >= ((x['start_ms'] as num?) ?? 0) && _posMs <= ((x['end_ms'] as num?) ?? 0) + 400;
+    return InkWell(
+      key: ValueKey('call-transcript-line-$seq'),
+      borderRadius: BorderRadius.circular(12),
+      onTap: editing ? null : () => _playLine(x, recordings),
+      child: Container(
+        decoration: BoxDecoration(color: active ? const Color(0x33F59E0B) : null, borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(width: 42, child: Text(_mmss(x['start_ms'] as num? ?? 0), style: TextStyle(fontSize: 12, color: hint, fontFeatures: const [FontFeature.tabularFigures()]))),
+          Container(margin: const EdgeInsets.only(top: 5, right: 8), width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          Expanded(
+            child: editing
+                ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Text('${x['name']}', style: TextStyle(fontWeight: FontWeight.w700, color: color)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      key: const ValueKey('call-transcript-edit'),
+                      controller: _editCtl,
+                      autofocus: true,
+                      minLines: 1,
+                      maxLines: 5,
+                      maxLength: 4000,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _saveLine(x),
+                      decoration: const InputDecoration(isDense: true, counterText: ''),
+                    ),
+                    Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                      TextButton(onPressed: _savingLine ? null : () => setState(() => _editingSeq = null), child: Text(tr('ยกเลิก'))),
+                      FilledButton(
+                        key: const ValueKey('call-transcript-save'),
+                        style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                        onPressed: _savingLine ? null : () => _saveLine(x),
+                        child: _savingLine ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(tr('บันทึก')),
+                      ),
+                    ]),
+                  ])
+                : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text.rich(TextSpan(children: [
+                      TextSpan(text: '${x['name']}  ', style: TextStyle(fontWeight: FontWeight.w700, color: color)),
+                      TextSpan(text: '${x['text']}', style: const TextStyle(height: 1.4)),
+                      if (x['edited'] == true) TextSpan(text: '  ${tr('(แก้ไขแล้ว)')}', style: TextStyle(fontSize: 11, color: hint)),
+                    ])),
+                    if (translated != null && translated.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(translated, key: ValueKey('call-transcript-tr-$seq'), style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: kIsaacIndigo, height: 1.35)),
+                      ),
+                  ]),
+          ),
+          if (canEdit && !editing)
+            IconButton(
+              key: ValueKey('call-transcript-edit-btn-$seq'),
+              tooltip: tr('แก้ข้อความ'),
+              visualDensity: VisualDensity.compact,
+              iconSize: 16,
+              color: hint,
+              icon: const Icon(NxI.pencilSimple),
+              onPressed: () => setState(() {
+                _editingSeq = (x['seq'] as num).toInt();
+                _editCtl.text = '${x['text']}';
+              }),
+            ),
+        ]),
+      ),
+    );
   }
 
   @override
@@ -389,7 +748,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
         ),
       );
     } else if (d == null) {
-      body = const Center(child: CommAiIsaacState(mood: 'reading', title: 'ISAAC กำลังเปิดบทสนทนา…', busy: true));
+      body = const Center(child: CommAiIsaacState(mood: 'reading', title: 'ไอแซคกำลังเปิดบทสนทนา…', busy: true));
     } else {
       body = LayoutBuilder(builder: (context, c) {
         if (c.maxWidth >= 900) {
@@ -415,15 +774,28 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
     }
     return NxScrollScaffold(
       header: NxAppHeader(
-        title: 'ISAAC สรุปการสนทนา',
+        title: 'ไอแซคสรุปการสนทนา',
         subtitle: [isVideo ? tr('วิดีโอคอล') : tr('โทร'), if (when.isNotEmpty) when, if (people.isNotEmpty) people].join(' · '),
         actions: [
-          if (d != null)
+          if (d != null && (_canDeleteMine || _canDeleteAll))
+            IconButton(
+              key: const ValueKey('call-summary-delete'),
+              tooltip: tr(_canDeleteMine ? 'ลบข้อมูลของฉัน' : 'ลบการสนทนาทั้งหมด'),
+              icon: const Icon(NxI.trash),
+              onPressed: _delete,
+            ),
+          if (d != null && _available)
             IconButton(
               key: const ValueKey('call-summary-share'),
               tooltip: tr('แชร์'),
               icon: const Icon(NxI.shareNetwork),
-              onPressed: () => showCommAiShareSheet(context, kind: 'call', id: widget.callId, title: '${result?['headline'] ?? tr('สรุปการสนทนา')}'),
+              onPressed: () => showCommAiShareSheet(
+                context,
+                kind: 'call',
+                id: widget.callId,
+                title: '${result?['headline'] ?? tr('สรุปการสนทนา')}',
+                hasAudio: recordings.isNotEmpty || _tape != null,
+              ),
             ),
         ],
       ),

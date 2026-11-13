@@ -15,6 +15,8 @@ import 'package:nextx_mobile/core/service_journey.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/crm/entity_detail_screen.dart';
 import 'package:nextx_mobile/screens/journey/quotation_versions.dart';
+import 'package:nextx_mobile/core/doc_form/doc_form_rules.dart' show DocFormMode;
+import 'package:nextx_mobile/screens/doc_form/quotation_step_form.dart';
 import 'package:nextx_mobile/widgets/nx_upload_pill.dart';
 import 'package:nextx_mobile/services/photo_upload_center.dart';
 import 'package:provider/provider.dart';
@@ -123,7 +125,7 @@ void main() {
       await frames(12);
       await shot('qt_compare');
 
-      await tester.pumpWidget(app(const QuotationReviseScreen(row: {'id': 9, 'quotation_no': 'Q26111100002-R1', 'title_th': '[QA] ติดตั้งระบบกล้อง', 'valid_until': '2026-12-15'})));
+      await tester.pumpWidget(app(const QuotationStepForm(mode: DocFormMode.revise, recordId: '9')));
       await frames(12);
       await shot('qt_revise');
 

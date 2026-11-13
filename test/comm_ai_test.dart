@@ -9,6 +9,7 @@ import 'package:nextx_mobile/screens/comm_ai/chat_summary_sheet.dart';
 import 'package:nextx_mobile/services/calls/call_service.dart';
 import 'package:nextx_mobile/services/calls/live_transcription.dart';
 import 'package:nextx_mobile/services/realtime_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FakeSignaling implements CallSignaling {
   final ctrl = StreamController<RealtimeEvent>.broadcast();
@@ -88,6 +89,7 @@ void main() {
   late LiveTranscription lt;
 
   void init() {
+    SharedPreferences.setMockInitialValues({CommAiDevice.key: 'app-test-1'});
     sig = FakeSignaling();
     service = CallService(signaling: sig, myUserId: '1');
     stt = FakeStt(sig.events);
