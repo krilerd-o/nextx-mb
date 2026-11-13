@@ -348,6 +348,21 @@ String _clip(String s, [int max = 120]) => s.length > max ? '${s.substring(0, ma
 final _tags = RegExp(r'<[^>]*>');
 final _isoDate = RegExp(r'^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}.*)?$');
 
+/// A stored upload path (`signatures/sig_2_1794570515772.png`), not prose.
+final _filePath = RegExp(r'^[\w./-]+/[^/\n]+\.(png|jpe?g|gif|webp|heic|pdf|svg)$', caseSensitive: false);
+
+/// The server sometimes logs values JSON-encoded (`"2026-11-13T11:48:36.000Z"`).
+String _unquote(String s) {
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+    try {
+      final d = jsonDecode(s);
+      if (d is String) return d.trim();
+    } catch (_) {}
+    return s.substring(1, s.length - 1).trim();
+  }
+  return s;
+}
+
 String _plain(String s) => s.replaceAll(_tags, ' ').replaceAll('&nbsp;', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
 
 /// "จาก A เป็น B" / "เป็น B" / "จาก A".
@@ -385,8 +400,13 @@ String _fieldLabel(Map<String, dynamic> e, String Function(String field)? fieldL
 /// A field value for display: tags stripped, picklist / status labels, dates
 /// in Thai time, long text clipped.
 String _value(Object? v, {required String field, String? module, String Function(String field, String value)? valueLabel, bool status = false}) {
-  final s = _plain(_s(v));
+  final s = _plain(_unquote(_s(v)));
   if (s.isEmpty) return '';
+  // Uploaded files (signatures, photos) are stored as paths: say what they are instead.
+  if (_filePath.hasMatch(s)) {
+    if (field.toLowerCase().contains('signature')) return historyText('ลงลายเซ็นแล้ว');
+    return historyText('ไฟล์ {}', [s.split('/').last]);
+  }
   var out = valueLabel == null || field.isEmpty ? s : valueLabel(field, s);
   if (out == s && (status || _isStatusField(field, ''))) out = statusValueLabel(s, module: module, field: field);
   if (out == s && _isoDate.hasMatch(s)) out = formatThaiField(s, field, module: module, year: uiYear);
@@ -472,6 +492,14 @@ HistoryLine _fieldChange(
   if (_kOwnerFields.contains(field.toLowerCase())) {
     if (to.isEmpty) return HistoryLine(kind: HistoryKind.assign, title: historyText('ยกเลิกผู้รับผิดชอบ'), detail: from.isEmpty ? null : historyText('จาก {}', [from]));
     return HistoryLine(kind: HistoryKind.assign, title: historyText('มอบหมายให้ {}', [to]), detail: from.isEmpty ? null : historyText('จาก {}', [from]));
+  }
+  // Signature pads store an image path: "ลงลายเซ็นช่าง" reads better than "— → ลงลายเซ็นแล้ว".
+  if (field.toLowerCase().contains('signature') && !_isoDate.hasMatch(to) && !_isoDate.hasMatch(from)) {
+    final added = from.isEmpty;
+    return HistoryLine(
+      kind: to.isEmpty ? HistoryKind.delete : HistoryKind.sign,
+      title: historyText(to.isEmpty ? 'ลบ{}' : (added ? 'ลง{}' : 'เปลี่ยน{}'), [label]),
+    );
   }
   return HistoryLine(
     kind: HistoryKind.edit,
