@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -47,6 +48,7 @@ class DocumentSource {
     this.templateLabel,
     this.refine,
     this.publicLink,
+    this.draftWatermark,
   });
 
   final String title;
@@ -60,6 +62,85 @@ class DocumentSource {
 
   /// Creates the customer link (job / quotation).
   final Future<Map<String, dynamic>> Function(ApiClient api)? publicLink;
+
+  /// Whether the template document is a draft that the web shows with the
+  /// big diagonal "DRAFT" watermark (the server's BIRT `watermark=1`). The
+  /// app draws the same mark over the template pages ([DocDraftWatermark]):
+  /// the phone's PDF renderer does not show the report's page-background
+  /// image, so only the small footer was visible. The PDF itself (download /
+  /// share / e-mail) is the server's file, unchanged.
+  final Future<bool> Function(ApiClient api)? draftWatermark;
+}
+
+/// The server's `shouldWatermarkQuotation`: DRAFT until approved, unless the
+/// quotation settings turn it off (`document.watermark_until_approved`).
+/// [settings] is `GET /api/settings/quotation` (`{config: {...}}`) or its
+/// config. A row with no status at all is not marked (unknown, not a draft).
+bool quotationDraftWatermark(Map<String, dynamic> row, [Map<String, dynamic>? settings]) {
+  final cfg = settings?['config'] is Map ? settings!['config'] as Map : settings;
+  final doc = cfg?['document'];
+  if (doc is Map && doc['watermark_until_approved'] == false) return false;
+  if (!row.containsKey('approval_state') && !row.containsKey('quotation_status')) return false;
+  final appr = '${row['approval_state'] ?? ''}'.trim().toLowerCase();
+  if (appr == 'approved' || appr == 'done') return false;
+  final st = '${row['quotation_status'] ?? ''}'.trim();
+  return !const ['อนุมัติใบเสนอราคา', 'ปิดการขาย', 'Approved', 'Won', 'Lost', 'Closed'].contains(st);
+}
+
+/// The server's job report rule: Template-2 (`job_template2`) gets the DRAFT
+/// watermark while the job status is Draft; Template-1 has none.
+bool jobDraftWatermark(Map<String, dynamic> row) =>
+    '${row['template_key'] ?? ''}'.trim().toLowerCase() == 'template2' && '${row['job_status'] ?? ''}'.trim().toLowerCase() == 'draft';
+
+/// The web's draft mark (BIRT `draft-watermark.png`): "DRAFT" in bold
+/// slate grey at ~18% opacity, rising diagonally (55°) across the page
+/// centre. Put it over a page; it ignores touches.
+class DocDraftWatermark extends StatelessWidget {
+  const DocDraftWatermark({super.key});
+
+  /// rgba(99, 116, 138, 46/255) — the colour of the web's watermark image.
+  static const color = Color(0x2E63748A);
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ClipRect(
+        child: LayoutBuilder(builder: (context, c) {
+          final w = c.maxWidth;
+          return OverflowBox(
+            maxWidth: w * 1.3,
+            maxHeight: c.maxHeight * 1.3,
+            child: Transform.rotate(
+              angle: -55 * math.pi / 180,
+              child: SizedBox(
+                // The word spans ~1.1 page widths along the diagonal, like the web.
+                width: w * 1.1,
+                child: const FittedBox(
+                  fit: BoxFit.fitWidth,
+                  child: Text(
+                    'DRAFT',
+                    key: ValueKey('doc-draft-watermark'),
+                    maxLines: 1,
+                    textScaler: TextScaler.noScaling,
+                    style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 100, height: 1, letterSpacing: 2),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+/// One rendered page on white, with the DRAFT mark when [draft].
+Widget docPageImage(ui.Image page, {bool draft = false}) {
+  final img = RawImage(image: page, fit: BoxFit.fill, filterQuality: FilterQuality.medium);
+  return AspectRatio(
+    aspectRatio: page.width / page.height,
+    child: draft ? Stack(fit: StackFit.expand, children: [img, const DocDraftWatermark()]) : img,
+  );
 }
 
 /// Hooks for tests (no PDF engine / file dialogs in widget tests).
@@ -103,6 +184,7 @@ DocumentSource jobDocumentSource(Map<String, dynamic> row) {
       DocVariant(id: 'birt', label: tr('ตามเทมเพลต'), fetch: (api) => api.getJobBirtPdf(id), fallback: 'std'),
       DocVariant(id: 'std', label: tr('แบบสำรอง'), birt: false, hidden: true, suffix: '-standard', fetch: (api) => api.getJobStandardPdf(id)),
     ],
+    draftWatermark: (_) async => jobDraftWatermark(row),
     // Reuse the job's signing link: a POST makes a new token and the link
     // the customer already has would stop working.
     publicLink: (api) async {
@@ -161,6 +243,16 @@ DocumentSource quotationDocumentSource(Map<String, dynamic> row) {
     templateLabel: layout,
     variants: quotationVariants(id, template),
     publicLink: (api) => api.quotationPublicLink(id),
+    draftWatermark: (api) async {
+      if (!quotationDraftWatermark(row)) return false;
+      Map<String, dynamic>? settings;
+      try {
+        settings = await api.getQuotationSettings();
+      } catch (_) {
+        // Like the server: settings unreadable → the default (watermark on).
+      }
+      return quotationDraftWatermark(row, settings);
+    },
     // Name of the document template (logo / letterhead) for the subtitle.
     refine: templateId == null || '$templateId'.isEmpty
         ? null
@@ -221,6 +313,12 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
   int _token = 0;
   StreamSubscription<ui.Image>? _renderSub;
 
+  /// The source says the template document is a draft (see [DocumentSource.draftWatermark]).
+  bool _draft = false;
+
+  /// DRAFT over the pages: draft document, template (BIRT) variant shown.
+  bool get _showDraft => _draft && _shownId != null && _variant(_shownId!).birt;
+
   final _tc = TransformationController();
   late final AnimationController _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 260));
   Animation<Matrix4>? _tween;
@@ -254,7 +352,17 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _load();
       _refine();
+      _checkDraft();
     });
+  }
+
+  Future<void> _checkDraft() async {
+    final fn = widget.source.draftWatermark;
+    if (fn == null) return;
+    try {
+      final d = await fn(_api);
+      if (mounted && d != _draft) setState(() => _draft = d);
+    } catch (_) {}
   }
 
   @override
@@ -499,7 +607,7 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
                       border: Border.all(color: i == _page ? Theme.of(ctx).colorScheme.primary : Theme.of(ctx).colorScheme.outlineVariant, width: i == _page ? 2 : 1),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: RawImage(image: _pages[i], fit: BoxFit.contain),
+                    child: Center(child: docPageImage(_pages[i], draft: _showDraft)),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -652,7 +760,7 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
                   Container(
                     key: ValueKey('doc-page-$i'),
                     decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(blurRadius: 14, offset: Offset(0, 3), color: Color(0x26000000))]),
-                    child: AspectRatio(aspectRatio: _pages[i].width / _pages[i].height, child: RawImage(image: _pages[i], fit: BoxFit.fill, filterQuality: FilterQuality.medium)),
+                    child: docPageImage(_pages[i], draft: _showDraft),
                   ),
                 ],
                 if (_rendering) const Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator(strokeWidth: 2.4)),

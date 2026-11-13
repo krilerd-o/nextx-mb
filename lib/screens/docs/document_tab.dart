@@ -51,6 +51,9 @@ class _RecordDocumentTabState extends State<RecordDocumentTab> {
   StreamSubscription<ui.Image>? _sub;
   String? _busy;
 
+  /// Draft document → DRAFT over the template pages, like the web.
+  bool _draft = false;
+
   List<Map<String, dynamic>>? _log;
   bool _logFailed = false;
 
@@ -69,7 +72,17 @@ class _RecordDocumentTabState extends State<RecordDocumentTab> {
       _load();
       _loadLog();
       _refine();
+      _checkDraft();
     });
+  }
+
+  Future<void> _checkDraft() async {
+    final fn = _src.draftWatermark;
+    if (fn == null) return;
+    try {
+      final d = await fn(_api);
+      if (mounted && d != _draft) setState(() => _draft = d);
+    } catch (_) {}
   }
 
   @override
@@ -381,7 +394,7 @@ class _RecordDocumentTabState extends State<RecordDocumentTab> {
           onTap: _fullScreen,
           child: Container(
             decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(blurRadius: 14, offset: Offset(0, 3), color: Color(0x26000000))]),
-            child: AspectRatio(aspectRatio: _pages[i].width / _pages[i].height, child: RawImage(image: _pages[i], fit: BoxFit.fill, filterQuality: FilterQuality.medium)),
+            child: docPageImage(_pages[i], draft: _draft && _shown?.birt == true),
           ),
         ),
       ],
