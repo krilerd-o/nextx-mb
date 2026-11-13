@@ -49,11 +49,15 @@ void main() {
     expect(find.text('แก้ไขโปรไฟล์'), findsNothing, reason: 'removed from the hub; it lives in จัดการโปรไฟล์');
     expect(find.textContaining('Space'), findsNothing, reason: 'Thai UI says พื้นที่ทำงาน');
     expect(find.textContaining('Package'), findsNothing, reason: 'Thai UI says แพ็กเกจ');
-    // พื้นที่ทำงานของฉัน: company, current package, switch package, add — in that order.
-    final ys = [for (final k in ['company', 'package', 'switch-package', 'add']) tester.getTopLeft(find.byKey(ValueKey('profile-ws-$k'))).dy];
-    for (var i = 1; i < ys.length; i++) {
-      expect(ys[i], greaterThan(ys[i - 1]));
-    }
+    // พื้นที่ทำงานของฉัน: company (package capsule inside), then สลับแพ็กเกจ | เพิ่มพื้นที่ทำงาน side by side;
+    // the card sits after the area menu and just above logout.
+    double y(String k) => tester.getTopLeft(find.byKey(ValueKey('profile-ws-$k'))).dy;
+    expect(y('package'), greaterThan(y('company')));
+    expect(y('switch-package'), greaterThan(y('package')));
+    expect(y('add'), y('switch-package'));
+    expect(tester.getTopLeft(find.byKey(const ValueKey('profile-ws-add'))).dx, greaterThan(tester.getTopLeft(find.byKey(const ValueKey('profile-ws-switch-package'))).dx));
+    expect(y('company'), greaterThan(tester.getTopLeft(find.byKey(const ValueKey('profile-menu-settings'))).dy));
+    expect(y('add'), lessThan(tester.getTopLeft(find.byKey(const ValueKey('nx-logout-button'))).dy));
     expect(find.byKey(const ValueKey('profile-menu-settings')), findsOneWidget);
     expect(find.byTooltip('การตั้งค่า'), findsOneWidget);
     // Theme / colour controls live on จัดการธีม, not here.

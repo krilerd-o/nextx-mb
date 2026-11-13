@@ -146,40 +146,43 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
       children: [
         SettingsAppear(index: i++, child: _Hero(onPhoto: () => _photo(config))),
 
-        // ── พื้นที่ทำงานของฉัน: company, current package, switch package, add a workspace.
-        SettingsAppear(
-          index: i++,
-          child: SettingsGroup(title: 'พื้นที่ทำงานของฉัน', children: [
-            // Company with the current package as a capsule under its name.
-            _CompanyPackageRow(onTap: () => showWorkspaceSwitcherSheet(context)),
-            KeyedSubtree(
-              key: const ValueKey('profile-ws-switch-package'),
-              child: SettingsTile(
-                icon: NxI.arrowsLeftRight,
-                tint: cs.primary,
-                title: 'สลับแพ็กเกจ',
-                subtitle: 'เมนูที่เห็นจะเปลี่ยนตามแพ็กเกจและสิทธิ์ของคุณ',
-                onTap: () => showWorkspaceSwitcherSheet(context),
-              ),
-            ),
-            KeyedSubtree(
-              key: const ValueKey('profile-ws-add'),
-              child: SettingsTile(
-                icon: NxI.plus,
-                tint: cs.primary,
-                title: 'เพิ่มพื้นที่ทำงาน',
-                subtitle: 'บัญชีอื่นหรือโดเมนอื่น',
-                onTap: () => showAddSpaceSheet(context),
-              ),
-            ),
-          ]),
-        ),
-
         // ── One row per area, each its own page.
         SettingsAppear(
           index: i++,
           child: SettingsGroup(title: 'บัญชีและการตั้งค่า', children: [
             for (final id in kProfileMenuOrder) KeyedSubtree(key: ValueKey('profile-menu-$id'), child: menu[id]!),
+          ]),
+        ),
+
+        // ── พื้นที่ทำงานของฉัน (just above logout): one compact card — company with
+        // its package capsule, then "สลับแพ็กเกจ" and "เพิ่มพื้นที่ทำงาน" side by side.
+        const SizedBox(height: 4),
+        SettingsAppear(
+          index: i++,
+          child: SettingsGroup(title: 'พื้นที่ทำงานของฉัน', children: [
+            _CompanyPackageRow(onTap: () => showWorkspaceSwitcherSheet(context)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+              child: Row(children: [
+                Expanded(
+                  child: _MiniAction(
+                    key: const ValueKey('profile-ws-switch-package'),
+                    icon: NxI.arrowsLeftRight,
+                    label: 'สลับแพ็กเกจ',
+                    onTap: () => showWorkspaceSwitcherSheet(context),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MiniAction(
+                    key: const ValueKey('profile-ws-add'),
+                    icon: NxI.plus,
+                    label: 'เพิ่มพื้นที่ทำงาน',
+                    onTap: () => showAddSpaceSheet(context),
+                  ),
+                ),
+              ]),
+            ),
           ]),
         ),
 
@@ -210,6 +213,45 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Small tonal button used under the company row.
+class _MiniAction extends StatelessWidget {
+  const _MiniAction({super.key, required this.icon, required this.label, required this.onTap});
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      color: cs.primary.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(icon, size: 16, color: cs.primary),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  tr(label),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 }
