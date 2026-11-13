@@ -11,6 +11,7 @@ import '../../core/nx_page_route.dart';
 import '../../core/ui_font.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
+import '../../widgets/nx_app_header.dart' show NxLanguagePill;
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_logout.dart';
 import '../../widgets/settings_tiles.dart';
@@ -136,6 +137,7 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
     return ProfileSubPage(
       title: 'โปรไฟล์',
       actions: [
+        NxLanguagePill(code: config.uiLocaleCode, onChanged: config.setUiLocaleCode),
         IconButton(
           key: const ValueKey('profile-open-settings'),
           tooltip: tr('การตั้งค่า'),
@@ -183,6 +185,17 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                 ),
               ]),
             ),
+            // Several workspaces (other accounts / domains): switch between them here.
+            if (config.spaces.length > 1)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: _MiniAction(
+                  key: const ValueKey('profile-ws-switch-space'),
+                  icon: NxI.arrowsClockwise,
+                  label: 'สลับพื้นที่ทำงาน',
+                  onTap: () => showSpaceSwitcher(context),
+                ),
+              ),
           ]),
         ),
 
@@ -213,6 +226,66 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Compact theme switch on the profile card: three icon segments with a
+/// sliding thumb (ระบบ / สว่าง / มืด), same height as "จัดการโปรไฟล์".
+class _ThemeToggle extends StatelessWidget {
+  const _ThemeToggle({required this.mode, required this.onChanged});
+  final ThemeMode mode;
+  final ValueChanged<ThemeMode> onChanged;
+
+  static const _modes = [(ThemeMode.system, NxI.deviceMobile, 'ระบบ'), (ThemeMode.light, NxI.sun, 'สว่าง'), (ThemeMode.dark, NxI.moon, 'มืด')];
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final i = _modes.indexWhere((m) => m.$1 == mode).clamp(0, 2);
+    return Container(
+      key: const ValueKey('profile-theme-toggle'),
+      height: 44,
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(99), border: Border.all(color: cs.outlineVariant)),
+      padding: const EdgeInsets.all(3),
+      child: LayoutBuilder(builder: (context, c) {
+        final w = c.maxWidth / 3;
+        return Stack(children: [
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            left: w * i,
+            top: 0,
+            bottom: 0,
+            width: w,
+            child: DecoratedBox(decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(99))),
+          ),
+          Row(children: [
+            for (final (m, icon, label) in _modes)
+              Expanded(
+                child: Tooltip(
+                  message: tr(label),
+                  child: Semantics(
+                    button: true,
+                    selected: m == mode,
+                    label: tr(label),
+                    child: InkWell(
+                      key: ValueKey('profile-theme-${m.name}'),
+                      borderRadius: BorderRadius.circular(99),
+                      onTap: m == mode
+                          ? null
+                          : () {
+                              HapticFeedback.selectionClick();
+                              onChanged(m);
+                            },
+                      child: Center(child: Icon(icon, size: 18, color: m == mode ? cs.primary : cs.onSurfaceVariant)),
+                    ),
+                  ),
+                ),
+              ),
+          ]),
+        ]);
+      }),
     );
   }
 }
@@ -426,15 +499,8 @@ class _Hero extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Expanded(
-            child: OutlinedButton.icon(
-              key: const ValueKey('profile-switch'),
-              style: OutlinedButton.styleFrom(fixedSize: const Size.fromHeight(44), padding: const EdgeInsets.symmetric(horizontal: 12)),
-              onPressed: () => showSpaceSwitcher(context),
-              icon: const Icon(NxI.arrowsClockwise, size: 18),
-              label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('สลับพื้นที่ทำงาน'), maxLines: 1)),
-            ),
-          ),
+          // Theme right here: ระบบ / สว่าง / มืด.
+          Expanded(child: _ThemeToggle(mode: context.select((AppConfig c) => c.themeMode), onChanged: context.read<AppConfig>().setThemeMode)),
         ]),
       ]),
     );

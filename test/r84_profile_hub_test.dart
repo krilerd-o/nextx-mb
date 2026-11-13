@@ -39,7 +39,7 @@ void main() {
       find.text('MEMBER'),
       find.text('QA Co'),
       find.byKey(const ValueKey('profile-manage')),
-      find.byKey(const ValueKey('profile-switch')),
+      find.byKey(const ValueKey('profile-theme-toggle')),
     ]) {
       expect(find.descendant(of: hero, matching: f), findsOneWidget);
     }

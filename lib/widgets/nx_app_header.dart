@@ -113,6 +113,64 @@ class NxAppHeader extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
+/// A header control wider than the round buttons (e.g. the TH | EN switch):
+/// placed as-is in the header's action row, at the round buttons' height.
+abstract class NxHeaderPill extends StatelessWidget {
+  const NxHeaderPill({super.key});
+}
+
+/// TH | EN language switch for headers: a raised capsule like the round
+/// buttons; the active language is filled.
+class NxLanguagePill extends NxHeaderPill {
+  const NxLanguagePill({super.key, required this.code, required this.onChanged});
+  final String code;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final fill = isDark ? const Color(0xFF2A2B36) : Colors.white;
+    Widget seg(String c, String label) {
+      final on = code == c;
+      return Expanded(
+        child: Semantics(
+          button: true,
+          selected: on,
+          label: c == 'th' ? 'ภาษาไทย' : 'English',
+          child: GestureDetector(
+            key: ValueKey('lang-pill-$c'),
+            behavior: HitTestBehavior.opaque,
+            onTap: on ? null : () => onChanged(c),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              margin: const EdgeInsets.all(3),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: on ? cs.primary : Colors.transparent, borderRadius: BorderRadius.circular(99)),
+              child: Text(label, style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w800, color: on ? cs.onPrimary : cs.onSurfaceVariant)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      key: const ValueKey('lang-pill'),
+      width: 84,
+      height: NxAppHeader.controlSize,
+      child: Material(
+        color: fill,
+        shape: const StadiumBorder(),
+        elevation: isDark ? 4 : 3,
+        shadowColor: Colors.black.withValues(alpha: isDark ? 0.5 : 0.22),
+        child: Row(children: [seg('th', 'TH'), seg('en', 'EN')]),
+      ),
+    );
+  }
+}
+
 class _CircleBtn extends StatelessWidget {
   const _CircleBtn({
     super.key,
@@ -201,7 +259,9 @@ List<Widget> _circleActions(List<Widget>? actions) {
         // Keep the page's key on the converted button so tests and callers can still find it.
         key: w.key,
         padding: const EdgeInsets.only(left: 10),
-        child: w is IconButton
+        child: w is NxHeaderPill
+            ? w
+            : w is IconButton
             ? _CircleBtn(
                 icon: w.icon is Icon ? (w.icon as Icon).icon ?? NxI.dotsThreeCircle : NxI.dotsThreeCircle,
                 onTap: w.onPressed ?? () {},
