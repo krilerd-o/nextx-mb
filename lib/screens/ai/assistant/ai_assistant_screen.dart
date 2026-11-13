@@ -432,7 +432,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                         ),
-                        Text('ISAAC AI', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(tr('ไอแซคเอไอ'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -1031,7 +1031,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               const IsaacSticker(state: 'idle', size: 36, animate: false),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('ISAAC AI', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                child: Text(tr('ไอแซคเอไอ'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               ),
               FilledButton.tonalIcon(
                 onPressed: () {
@@ -1090,7 +1090,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             close();
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const WebSessionScreen(path: '/ai/agent', title: 'AI Agent', subtitle: 'ISAAC AI'),
+                builder: (_) => const WebSessionScreen(path: '/ai/agent', title: 'AI Agent', subtitle: 'ไอแซคเอไอ'),
               ),
             );
           },
@@ -1104,7 +1104,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             close();
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const WebSessionScreen(path: '/ai/notebook', title: 'AI Notebook', subtitle: 'ISAAC AI'),
+                builder: (_) => const WebSessionScreen(path: '/ai/notebook', title: 'AI Notebook', subtitle: 'ไอแซคเอไอ'),
               ),
             );
           },

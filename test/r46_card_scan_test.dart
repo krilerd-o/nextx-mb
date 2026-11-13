@@ -261,12 +261,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('form-scan-banner')));
     await _frames(tester, 6);
     expect(find.byKey(const ValueKey('card-reading')), findsOneWidget);
-    expect(find.text('Isaac กำลังอ่านนามบัตร…'), findsOneWidget);
+    expect(find.text('ไอแซคกำลังอ่านนามบัตร…'), findsOneWidget);
     await _frames(tester, 40);
     expect(ocrRuns, 0);
     expect(adapter.calls.where((c) => c.path == '/api/crm/business-card/scan'), hasLength(1));
     expect(find.byKey(const ValueKey('card-isaac')), findsOneWidget);
-    expect(find.text('Isaac อ่านได้ 7 ช่องใน 1.8 วินาที'), findsOneWidget);
+    expect(find.text('ไอแซคอ่านได้ 7 ช่องใน 1.8 วินาที'), findsOneWidget);
     expect(find.text('gemini-3.8-flash'), findsOneWidget);
     expect(find.textContaining('โดเมนเดียวกัน'), findsOneWidget);
   });

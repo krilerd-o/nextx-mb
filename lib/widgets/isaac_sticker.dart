@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_config.dart';
 import '../core/effects.dart';
+import '../core/i18n.dart';
 import '../core/isaac_states.dart';
 import '../core/nx_network.dart';
 
@@ -64,7 +65,7 @@ class IsaacSticker extends StatelessWidget {
       );
     }
     return Semantics(
-      label: 'Isaac: ${kIsaacLabels[s] ?? s}',
+      label: '${tr('ไอแซค')}: ${tr(kIsaacLabels[s] ?? s)}',
       child: SizedBox(
         width: size,
         height: size,

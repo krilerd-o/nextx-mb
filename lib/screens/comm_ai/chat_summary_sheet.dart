@@ -261,7 +261,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              Text(tr('ISAAC สรุปแชท'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(tr('ไอแซคสรุปแชท'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const IsaacBadge(),
             ]),
             Text('${widget.roomName} · ${tr('เวลาประเทศไทย')}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: hint, fontSize: 12)),
@@ -293,7 +293,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
       ]),
       const SizedBox(height: 12),
       if (!_available)
-        const IsaacTip('ธุรกิจนี้ยังไม่ได้เปิดแพ็กเกจ ISAAC AI การสื่อสาร — ดูประวัติเดิมได้ แต่สรุปหรือแชร์ใหม่ไม่ได้', mood: 'shrug', key: ValueKey('comm-ai-unavailable'))
+        const IsaacTip('ธุรกิจนี้ยังไม่ได้เปิดแพ็กเกจไอแซคเอไอ การสื่อสาร — ดูประวัติเดิมได้ แต่สรุปหรือแชร์ใหม่ไม่ได้', mood: 'shrug', key: ValueKey('comm-ai-unavailable'))
       else
         Row(children: [
           Expanded(
@@ -304,7 +304,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
                 style: FilledButton.styleFrom(backgroundColor: busy ? null : Colors.transparent, shadowColor: Colors.transparent, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
                 onPressed: busy ? null : () => _run(),
                 icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.sparkle),
-                label: Text(busy ? tr('ISAAC กำลังสรุป…') : tr('ให้ ISAAC สรุปช่วงเวลานี้')),
+                label: Text(busy ? tr('ไอแซคกำลังสรุป…') : tr('ให้ไอแซคสรุปช่วงเวลานี้')),
               ),
             ),
           ),
@@ -319,7 +319,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
           mood: 'reading',
           busy: true,
           size: 80,
-          title: _stage == 'map' ? 'ข้อความเยอะ ISAAC กำลังแบ่งอ่านทีละส่วน…' : _stage == 'reduce' ? 'ISAAC กำลังรวมสรุป…' : 'ISAAC กำลังอ่านข้อความ…',
+          title: _stage == 'map' ? 'ข้อความเยอะ ไอแซคกำลังแบ่งอ่านทีละส่วน…' : _stage == 'reduce' ? 'ไอแซคกำลังรวมสรุป…' : 'ไอแซคกำลังอ่านข้อความ…',
         ),
       if (_phase == 'streaming')
         ValueListenableBuilder<String>(
@@ -338,7 +338,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
         CommAiIsaacState(
           mood: 'searching',
           size: 80,
-          title: 'ISAAC ไม่พบข้อความในช่วงเวลานี้',
+          title: 'ไอแซคไม่พบข้อความในช่วงเวลานี้',
           action: _preset == '7d'
               ? null
               : OutlinedButton.icon(
@@ -351,7 +351,7 @@ class _ChatSummaryPanelState extends State<ChatSummaryPanel> {
                   label: Text(tr('ลองดู 7 วันล่าสุด')),
                 ),
         ),
-      if (_phase == 'error') CommAiIsaacState(mood: 'error', size: 80, title: 'ISAAC สรุปไม่สำเร็จ', message: _error),
+      if (_phase == 'error') CommAiIsaacState(mood: 'error', size: 80, title: 'ไอแซคสรุปไม่สำเร็จ', message: _error),
       if (_phase == 'done' && result != null) ...[
         Row(children: [
           Expanded(

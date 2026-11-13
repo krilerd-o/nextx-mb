@@ -244,7 +244,7 @@ class _CommAiInsightsScreenState extends State<CommAiInsightsScreen> {
     final scope = d == null ? '' : ' · ${_fmtYmd(d['from'])} – ${_fmtYmd(d['to'])} · ${d['scope'] == 'business' ? tr('ทั้งธุรกิจ') : tr('เฉพาะของฉัน')}';
     rows.add(CommAiHero(
       mood: 'analyzing',
-      title: 'แดชบอร์ด ISAAC การสื่อสาร',
+      title: 'แดชบอร์ดไอแซค การสื่อสาร',
       subtitle: '${tr('งานค้างจากการคุย ความรู้สึกลูกค้า และหัวข้อที่ถูกพูดถึงบ่อย')}$scope',
       footer: Align(
         alignment: Alignment.centerLeft,
@@ -328,8 +328,8 @@ class _CommAiInsightsScreenState extends State<CommAiInsightsScreen> {
     }
     return NxScrollScaffold(
       header: NxAppHeader(
-        title: 'แดชบอร์ด ISAAC',
-        subtitle: 'ISAAC AI',
+        title: 'แดชบอร์ดไอแซค',
+        subtitle: 'ไอแซคเอไอ',
       ),
       body: NxRefresh(
         onRefresh: _load,

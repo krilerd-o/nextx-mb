@@ -230,7 +230,7 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(
-                '${it['headline'] ?? (type == 'chat' ? tr('สรุปแชท') : pending ? tr('ISAAC กำลังสรุป…') : tr('บทสนทนา (ยังไม่มีสรุป)'))}',
+                '${it['headline'] ?? (type == 'chat' ? tr('สรุปแชท') : pending ? tr('ไอแซคกำลังสรุป…') : tr('บทสนทนา (ยังไม่มีสรุป)'))}',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w600, height: 1.3),
@@ -263,11 +263,11 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
       const CommAiHero(
         mood: 'organize_data',
         title: 'ประวัติ AI การสนทนา',
-        subtitle: 'ทุกสายที่ ISAAC จดไว้ และทุกสรุปแชท — ค้นหาได้ทั้งในบทสนทนาและในสรุป',
+        subtitle: 'ทุกสายที่ไอแซคจดไว้ และทุกสรุปแชท — ค้นหาได้ทั้งในบทสนทนาและในสรุป',
       ),
       const SizedBox(height: 8),
       if (!_access.available) ...[
-        const IsaacTip('ธุรกิจนี้ยังไม่ได้เปิดแพ็กเกจ ISAAC AI การสื่อสาร — ดูประวัติเดิมได้ แต่สรุปหรือแชร์ใหม่ไม่ได้', mood: 'shrug', key: ValueKey('comm-ai-unavailable')),
+        const IsaacTip('ธุรกิจนี้ยังไม่ได้เปิดแพ็กเกจไอแซคเอไอ การสื่อสาร — ดูประวัติเดิมได้ แต่สรุปหรือแชร์ใหม่ไม่ได้', mood: 'shrug', key: ValueKey('comm-ai-unavailable')),
         const SizedBox(height: 8),
       ],
     ];
@@ -298,8 +298,8 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
       final filtered = _query.q.isNotEmpty || _range != null || _query.activeFilterCount > 0;
       rows.add(CommAiIsaacState(
         mood: filtered ? 'searching' : 'sleepy',
-        title: filtered ? 'ISAAC ไม่พบรายการที่ตรงกัน' : 'ยังไม่มีประวัติ',
-        message: filtered ? 'ลองเปลี่ยนคำค้นหรือช่วงวันที่' : 'เปิด "จดบทสนทนา" ตอนโทร หรือกด ✨ ในห้องแชทเพื่อให้ ISAAC สรุป',
+        title: filtered ? 'ไอแซคไม่พบรายการที่ตรงกัน' : 'ยังไม่มีประวัติ',
+        message: filtered ? 'ลองเปลี่ยนคำค้นหรือช่วงวันที่' : 'เปิด "จดบทสนทนา" ตอนโทร หรือกด ✨ ในห้องแชทเพื่อให้ไอแซคสรุป',
         action: filtered
             ? OutlinedButton(
                 onPressed: () {
@@ -370,18 +370,18 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
     return NxScrollScaffold(
       header: NxAppHeader(
         title: 'ประวัติ AI การสนทนา',
-        subtitle: 'ISAAC AI',
+        subtitle: 'ไอแซคเอไอ',
         actions: [
           if (_access.available && _access.insights && MenuAccess.allow(context.read<AppConfig>().session, MenuAccess.commAiInsights))
             IconButton(
               key: const ValueKey('comm-ai-open-insights'),
-              tooltip: tr('แดชบอร์ด ISAAC'),
+              tooltip: tr('แดชบอร์ดไอแซค'),
               icon: const Icon(NxI.chartBar),
               onPressed: () => context.push(AppRoutes.commAiInsights),
             ),
           IconButton(
             key: const ValueKey('comm-ai-open-settings'),
-            tooltip: tr('ตั้งค่า ISAAC AI การสื่อสาร'),
+            tooltip: tr('ตั้งค่าไอแซคเอไอ การสื่อสาร'),
             icon: const Icon(NxI.gear),
             onPressed: () => context.push(AppRoutes.commAiSettings),
           ),
@@ -389,7 +389,7 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
       ),
       body: NxSplitView(
         onClose: () => setState(() => _selected = null),
-        empty: const Center(child: CommAiIsaacState(mood: 'reading', title: 'เลือกรายการทางซ้าย', message: 'ISAAC จะแสดงสรุปและบทสนทนาตรงนี้')),
+        empty: const Center(child: CommAiIsaacState(mood: 'reading', title: 'เลือกรายการทางซ้าย', message: 'ไอแซคจะแสดงสรุปและบทสนทนาตรงนี้')),
         detail: _selected == null
             ? null
             : NxPaneHost(
@@ -470,7 +470,7 @@ class _ChatSummaryDetailScreenState extends State<ChatSummaryDetailScreen> {
     final range = data == null ? '' : '${commAiWhen(data['range_from'])} – ${commAiWhen(data['range_to'])}';
     return NxScrollScaffold(
       header: NxAppHeader(
-        title: 'ISAAC สรุปแชท',
+        title: 'ไอแซคสรุปแชท',
         subtitle: range,
         actions: [
           if (data?['can_delete'] == true)
@@ -497,7 +497,7 @@ class _ChatSummaryDetailScreenState extends State<ChatSummaryDetailScreen> {
       body: _error != null
           ? Center(child: CommAiIsaacState(mood: 'error', title: 'เปิดสรุปไม่ได้', message: formatApiError(_error!)))
           : r == null
-              ? const Center(child: CommAiIsaacState(mood: 'reading', title: 'ISAAC กำลังเปิดสรุป…', busy: true))
+              ? const Center(child: CommAiIsaacState(mood: 'reading', title: 'ไอแซคกำลังเปิดสรุป…', busy: true))
               : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [CommAiSummaryView(result: r, summaryId: widget.id)]),
     );
   }

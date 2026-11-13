@@ -928,7 +928,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 NxHeaderMenuItem(label: 'แชร์ลิงก์', icon: NxI.shareNetwork, onTap: _shareLink),
                 NxHeaderMenuItem(label: 'แชร์ให้ผู้ใช้ / Role', icon: NxI.users, onTap: () => showEntityShareSheet(context, module: widget.module, id: _id, title: entityTitle(_row, module: widget.module))),
                 NxHeaderMenuItem(
-                  label: 'ถาม Isaac',
+                  label: 'ถามไอแซค',
                   icon: NxI.sparkle,
                   onTap: () => context.push(
                     AppRoutes.aiAsk(

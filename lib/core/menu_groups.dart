@@ -159,11 +159,11 @@ const kMenuGroups = <MenuGroupDef>[
       MenuSectionDef(title: 'คุยในทีม', items: [
         MenuItemDef(id: 'chat', title: 'แชททีม', subtitle: 'แชททีมแบบเรียลไทม์', icon: NxI.chatCircle, route: AppRoutes.chatHome, menuKeys: [MenuAccess.chat]),
         MenuItemDef(id: 'comm-ai', title: 'ประวัติ AI การสนทนา', subtitle: 'บทสนทนา เสียง และสรุปจากการโทรและแชท', icon: NxI.sparkle, route: AppRoutes.commAi, menuKeys: [MenuAccess.commAi]),
-        MenuItemDef(id: 'comm-ai-insights', title: 'แดชบอร์ด ISAAC การสื่อสาร', subtitle: 'งานค้างจากการคุย ความรู้สึกลูกค้า และหัวข้อที่ถูกพูดถึงบ่อย', icon: NxI.chartBar, route: AppRoutes.commAiInsights, menuKeys: [MenuAccess.commAiInsights]),
+        MenuItemDef(id: 'comm-ai-insights', title: 'แดชบอร์ดไอแซค การสื่อสาร', subtitle: 'งานค้างจากการคุย ความรู้สึกลูกค้า และหัวข้อที่ถูกพูดถึงบ่อย', icon: NxI.chartBar, route: AppRoutes.commAiInsights, menuKeys: [MenuAccess.commAiInsights]),
       ]),
     ],
   ),
-  MenuGroupDef(id: 'ai', title: 'ISAAC AI', icon: NxI.sparkle, color: Color(0xFFEC4899), isaac: true),
+  MenuGroupDef(id: 'ai', title: 'ไอแซคเอไอ', icon: NxI.sparkle, color: Color(0xFFEC4899), isaac: true),
   MenuGroupDef(
     id: 'apps',
     title: 'แอปอื่น',

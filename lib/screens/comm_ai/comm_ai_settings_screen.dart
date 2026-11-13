@@ -37,10 +37,10 @@ const kCommAiPromptTips = <String, List<(String, String)>>{
 };
 
 const _isaacTips = [
-  'บอกว่าใครจะอ่านสรุป เช่น "ผู้จัดการฝ่ายขาย" ISAAC จะเลือกระดับรายละเอียดให้เหมาะ',
+  'บอกว่าใครจะอ่านสรุป เช่น "ผู้จัดการฝ่ายขาย" ไอแซคจะเลือกระดับรายละเอียดให้เหมาะ',
   'ระบุคำศัพท์ของธุรกิจ เช่น ชื่อสินค้า รหัสสาขา เพื่อให้สรุปใช้คำเดียวกับทีม',
   'อยากให้แนะนำงานแบบไหน เขียนไว้ได้ เช่น "ถ้าลูกค้าขอราคา ให้แนะนำเปิด Task ใบเสนอราคา"',
-  'กด "ให้ ISAAC ลองสรุป" ทุกครั้งก่อนบันทึก เพื่อดูผลจริงโดยไม่กระทบผู้ใช้',
+  'กด "ให้ไอแซคลองสรุป" ทุกครั้งก่อนบันทึก เพื่อดูผลจริงโดยไม่กระทบผู้ใช้',
 ];
 
 /// ตั้งค่า → ISAAC AI การสื่อสาร: live captions, consent, sharing / retention and the summary prompts.
@@ -221,7 +221,7 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
     final s = _settings!;
     return [
       _panel(icon: NxI.microphone, title: 'ถอดบทสนทนาสด', desc: 'คำบรรยายสดระหว่างโทรและวิดีโอคอล ทั้งเดี่ยวและกลุ่ม', children: [
-        _switch('stt_enabled', 'เปิดให้ ISAAC จดบทสนทนา', desc: 'ปิด = ไม่ถามและไม่ถอดเสียงในทุกสาย'),
+        _switch('stt_enabled', 'เปิดให้ไอแซคจดบทสนทนา', desc: 'ปิด = ไม่ถามและไม่ถอดเสียงในทุกสาย'),
         const SizedBox(height: 6),
         Text(tr('ใครเป็นคนตัดสินใจ'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
         const SizedBox(height: 8),
@@ -246,7 +246,7 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
         _switch('ask_every_call', 'ถามก่อนทุกครั้ง', desc: 'ปิด = ใช้ตัวเลือกที่ผู้ใช้กด "จำการเลือกนี้" ไว้'),
         _switch('share_captions_default', 'ให้คู่สายเห็นข้อความเป็นค่าเริ่มต้น'),
         _switch('record_audio', 'บันทึกเสียงไว้ฟังย้อนหลัง', desc: 'เฉพาะคนที่ยินยอม · เก็บแบบส่วนตัว เปิดได้ผ่านสิทธิ์เท่านั้น'),
-        _switch('auto_summary', 'ให้ ISAAC สรุปอัตโนมัติหลังวางสาย'),
+        _switch('auto_summary', 'ให้ไอแซคสรุปอัตโนมัติหลังวางสาย'),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           isExpanded: true,
@@ -283,15 +283,15 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
     if (_error != null) {
       body = Center(child: CommAiIsaacState(mood: 'error', title: 'โหลดการตั้งค่าไม่ได้', message: _error, action: OutlinedButton(onPressed: _load, child: Text(tr('ลองใหม่')))));
     } else if (s == null) {
-      body = const Center(child: CommAiIsaacState(mood: 'loading', title: 'ISAAC กำลังเปิดการตั้งค่า…', busy: true));
+      body = const Center(child: CommAiIsaacState(mood: 'loading', title: 'ไอแซคกำลังเปิดการตั้งค่า…', busy: true));
     } else {
       final on = s['stt_enabled'] == true;
       final hero = CommAiHero(
         mood: on ? 'listening' : 'sleepy',
-        title: 'ISAAC AI การสื่อสาร',
-        subtitle: 'ให้ ISAAC ฟังสายโทรและวิดีโอคอล เขียนคำบรรยายสด สรุปหลังวางสาย และสรุปแชทตามช่วงเวลา',
+        title: 'ไอแซคเอไอ การสื่อสาร',
+        subtitle: 'ให้ไอแซคฟังสายโทรและวิดีโอคอล เขียนคำบรรยายสด สรุปหลังวางสาย และสรุปแชทตามช่วงเวลา',
         footer: Wrap(spacing: 6, runSpacing: 6, children: [
-          _chip(on ? 'ISAAC พร้อมจดบทสนทนา' : 'ปิดการถอดเสียงอยู่', on ? const Color(0xFF059669) : const Color(0xFF64748B)),
+          _chip(on ? 'ไอแซคพร้อมจดบทสนทนา' : 'ปิดการถอดเสียงอยู่', on ? const Color(0xFF059669) : const Color(0xFF64748B)),
           _chip(s['consent_mode'] == 'caller' ? 'ผู้โทรตัดสินใจ' : 'แต่ละคนเลือกเอง', kIsaacIndigo),
           if (s['record_audio'] == true) _chip('บันทึกเสียง', kIsaacViolet),
           if (!_canEdit) _chip('ดูอย่างเดียว — เฉพาะผู้ดูแลแก้ไขได้', const Color(0xFFD97706)),
@@ -317,7 +317,7 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
       });
     }
     return NxScrollScaffold(
-      header: const NxAppHeader(title: 'ISAAC AI การสื่อสาร', subtitle: 'ตั้งค่าการถอดเสียงและการสรุป'),
+      header: const NxAppHeader(title: 'ไอแซคเอไอ การสื่อสาร', subtitle: 'ตั้งค่าการถอดเสียงและการสรุป'),
       body: Stack(children: [
         Positioned.fill(child: body),
         if (_dirty && _canEdit)
@@ -367,7 +367,7 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
     final sttValue = '${s['stt_model'] ?? ''}'.isEmpty ? 'gpt-4o-transcribe' : '${s['stt_model']}';
     final provider = '${s['summary_provider'] ?? ''}';
     final models = [for (final m in (providers.where((x) => x['id'] == provider).firstOrNull?['models'] as List? ?? const [])) '$m'];
-    return _panel(icon: NxI.sparkle, title: 'AI ที่ ISAAC ใช้', desc: 'เลือกโมเดลถอดเสียงและผู้ให้บริการสำหรับเขียนสรุป', children: [
+    return _panel(icon: NxI.sparkle, title: 'AI ที่ไอแซคใช้', desc: 'เลือกโมเดลถอดเสียงและผู้ให้บริการสำหรับเขียนสรุป', children: [
       if (p == null) const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator())),
       if (p != null) ...[
         const SizedBox(height: 4),
@@ -439,7 +439,7 @@ class _CommAiSettingsScreenState extends State<CommAiSettingsScreen> {
         child: Text(tr(text), style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w700)),
       );
 
-  Widget _tipsPanel() => _panel(icon: NxI.lightning, title: 'เคล็ดลับจาก ISAAC', children: [
+  Widget _tipsPanel() => _panel(icon: NxI.lightning, title: 'เคล็ดลับจากไอแซค', children: [
         for (final t in _isaacTips)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -550,8 +550,8 @@ class _PromptEditorCardState extends State<PromptEditorCard> {
           const SizedBox(width: 10),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(tr('Prompt การสรุปของ ISAAC'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-              Text(tr('ISAAC ตอบเป็น 4 หัวข้อเสมอ — เขียนเพิ่มเฉพาะสิ่งที่อยากให้เน้น'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text(tr('Prompt การสรุปของไอแซค'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text(tr('ไอแซคตอบเป็น 4 หัวข้อเสมอ — เขียนเพิ่มเฉพาะสิ่งที่อยากให้เน้น'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ]),
           ),
         ]),
@@ -566,7 +566,7 @@ class _PromptEditorCardState extends State<PromptEditorCard> {
           const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
         else ...[
           Row(children: [
-            Expanded(child: Text(tr('คำสั่งให้ ISAAC สรุป'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+            Expanded(child: Text(tr('คำสั่งให้ไอแซคสรุป'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
             Text(_cur['is_default'] == true ? tr('ค่าเริ่มต้น') : '${tr('ปรับแล้ว')} v${_cur['version'] ?? ''}', style: TextStyle(fontSize: 12, color: theme.hintColor)),
           ]),
           const SizedBox(height: 6),
@@ -592,7 +592,7 @@ class _PromptEditorCardState extends State<PromptEditorCard> {
                 Row(children: [
                   const Icon(NxI.sparkle, size: 14, color: kIsaacViolet),
                   const SizedBox(width: 6),
-                  Expanded(child: Text(tr('ISAAC แนะนำ — แตะเพื่อเพิ่มลงใน Prompt'), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: kIsaacViolet))),
+                  Expanded(child: Text(tr('ไอแซคแนะนำ — แตะเพื่อเพิ่มลงใน Prompt'), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: kIsaacViolet))),
                 ]),
                 const SizedBox(height: 8),
                 Wrap(spacing: 6, runSpacing: 6, children: [
@@ -644,7 +644,7 @@ class _PromptEditorCardState extends State<PromptEditorCard> {
                           if (mounted) setState(() => _test = r);
                         }),
                 icon: _busy == 'test' ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.sparkle, size: 18),
-                label: Text(tr('ให้ ISAAC ลองสรุป')),
+                label: Text(tr('ให้ไอแซคลองสรุป')),
               ),
               TextButton.icon(
                 key: const ValueKey('comm-ai-prompt-reset'),
@@ -662,7 +662,7 @@ class _PromptEditorCardState extends State<PromptEditorCard> {
           ],
           if (_msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w600))),
           if (_busy == 'test')
-            const CommAiIsaacState(mood: 'reading', title: 'ISAAC กำลังลองสรุปด้วย Prompt นี้…', busy: true, size: 72),
+            const CommAiIsaacState(mood: 'reading', title: 'ไอแซคกำลังลองสรุปด้วย Prompt นี้…', busy: true, size: 72),
           if (_test != null && _busy != 'test' && _test!['result'] is Map) ...[
             const SizedBox(height: 12),
             Text('${tr('ผลทดสอบ (ไม่บันทึก)')} · ${((_test!['ms'] as num? ?? 0) / 1000).toStringAsFixed(1)} ${tr('วินาที')}', style: TextStyle(fontSize: 12, color: theme.hintColor)),

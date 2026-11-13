@@ -57,7 +57,7 @@ class IsaacBadge extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: small ? 6 : 8, vertical: small ? 1 : 2),
       decoration: BoxDecoration(gradient: kIsaacGradient, borderRadius: BorderRadius.circular(999)),
-      child: Text('ISAAC AI', style: TextStyle(color: Colors.white, fontSize: small ? 9 : 10, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
+      child: Text(tr('ไอแซคเอไอ'), style: TextStyle(color: Colors.white, fontSize: small ? 9 : 10, fontWeight: FontWeight.w800, letterSpacing: 0.6)),
     );
   }
 }

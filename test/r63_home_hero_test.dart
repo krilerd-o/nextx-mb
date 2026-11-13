@@ -296,7 +296,7 @@ void main() {
     await _pumpHome(tester, _s(['attendance', 'ai-assistant']));
     expect(_key('home-isaac'), findsOneWidget);
     expect(_key('home-isaac-open'), findsOneWidget);
-    expect(find.text('ISAAC แนะนำ'), findsOneWidget);
+    expect(find.text('ไอแซคแนะนำ'), findsOneWidget);
     expect(tester.widget<Text>(_key('home-isaac-text')).data, isNotEmpty);
     await _dispose(tester);
 

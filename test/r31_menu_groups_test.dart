@@ -77,6 +77,10 @@ void main() {
 
   testWidgets('search finds a menu across groups and opens it', (tester) async {
     await pumpHub(tester, ['case', 'deal']);
+    // The search box opens from the header icon.
+    expect(find.byKey(const ValueKey('menu-search')), findsNothing);
+    await tester.tap(find.byTooltip('ค้นหาเมนู'));
+    await tester.pump();
     await tester.enterText(find.byKey(const ValueKey('menu-search')), 'ดีล');
     await tester.pump();
     expect(find.byKey(const ValueKey('menu-group-sales')), findsNothing); // results, not cards

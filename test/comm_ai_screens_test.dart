@@ -101,7 +101,7 @@ void main() {
 
   testWidgets('settings: admin edits a switch and saves; prompt tip + ISAAC test', (tester) async {
     final api = await _pump(tester, const CommAiSettingsScreen(), settingsReplies);
-    expect(find.text('ISAAC AI การสื่อสาร'), findsWidgets);
+    expect(find.text('ไอแซคเอไอ การสื่อสาร'), findsWidgets);
     expect(find.byKey(const ValueKey('comm-ai-settings-save')), findsNothing);
 
     await _show(tester, find.byKey(const ValueKey('comm-ai-setting-record_audio')));
@@ -180,7 +180,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('chat-summary-run')));
     await _settle(tester);
     expect(find.textContaining('แอร์ชั้น 3 น้ำหยด'), findsWidgets);
-    expect(find.text('ISAAC แนะนำให้เปิดงาน'), findsOneWidget);
+    expect(find.text('ไอแซคแนะนำให้เปิดงาน'), findsOneWidget);
     final run = api.calls.firstWhere((c) => c.path == '/api/comm-ai/chat/rooms/9/summary');
     expect((run.data as Map)['from'], isNotEmpty);
 
@@ -200,7 +200,7 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('chat-summary-run')));
     await _settle(tester);
-    expect(find.text('ISAAC ไม่พบข้อความในช่วงเวลานี้'), findsOneWidget);
+    expect(find.text('ไอแซคไม่พบข้อความในช่วงเวลานี้'), findsOneWidget);
     expect(find.byKey(const ValueKey('chat-summary-try-7d')), findsOneWidget);
   });
 
@@ -262,7 +262,7 @@ void main() {
       },
     });
     expect(find.byKey(const ValueKey('call-summary-view')), findsOneWidget);
-    expect(find.text('ISAAC สรุปการสนทนา'), findsOneWidget);
+    expect(find.text('ไอแซคสรุปการสนทนา'), findsOneWidget);
     await tester.tap(find.textContaining('บทสนทนา (2)'));
     await _settle(tester);
     await tester.enterText(find.byType(TextField), 'แอร์');

@@ -27,7 +27,7 @@ class IsaacComingSoonScreen extends StatelessWidget {
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(64),
-        child: SafeArea(bottom: false, child: NxAppHeader(title: title, subtitle: 'ISAAC AI')),
+        child: SafeArea(bottom: false, child: NxAppHeader(title: title, subtitle: 'ไอแซคเอไอ')),
       ),
       body: Stack(children: [
         Positioned.fill(
@@ -83,7 +83,7 @@ class IsaacComingSoonScreen extends StatelessWidget {
                   key: const ValueKey('isaac-soon-cta'),
                   onPressed: () => context.push(AppRoutes.aiChat),
                   icon: const Icon(NxI.sparkle, size: 16),
-                  label: Text(tr('ไปที่ ISAAC AI Assistant')),
+                  label: Text(tr('ไปที่ไอแซคเอไอ Assistant')),
                 ),
               ]),
             ),
