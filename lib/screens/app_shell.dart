@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../core/app_config.dart';
 import '../core/nx_breakpoint.dart';
 import '../core/nav_dock.dart';
+import '../core/effects.dart';
 import '../core/nx_motion.dart';
 import '../services/offline_queue.dart';
 import '../services/unread_service.dart';
@@ -89,6 +90,9 @@ const _hubTabs = {kMenuTabId};
 class _AppShellState extends State<AppShell> {
   String _current = '';
 
+  /// +1 = moved to a tab on the right, -1 = left (the new tab slides in from that side).
+  int _tabDirection = 0;
+
   /// Tabs opened at least once — others stay unbuilt so launch only loads
   /// the visible tab instead of every tab's API at once.
   final Set<String> _built = {};
@@ -165,6 +169,7 @@ class _AppShellState extends State<AppShell> {
           onSelect: (i) {
             // A new tab starts with its tools and the bar showing.
             NxChromeBus.reset();
+            _tabDirection = i == selected ? 0 : (i > selected ? 1 : -1);
             setState(() => _current = ids[i]);
             config.setLastTab(ids[i]);
           },
@@ -185,7 +190,11 @@ class _AppShellState extends State<AppShell> {
               for (final id in ids)
                 KeyedSubtree(
                   key: ValueKey('tab-$id'),
-                  child: NxShellTabScope(tabId: id, child: _built.contains(id) ? shellTabScreen(id) : const SizedBox.shrink()),
+                  child: NxTabEntrance(
+                    active: id == _current,
+                    direction: _tabDirection,
+                    child: NxShellTabScope(tabId: id, child: _built.contains(id) ? shellTabScreen(id) : const SizedBox.shrink()),
+                  ),
                 ),
             ],
           ),
@@ -365,6 +374,68 @@ class _PendingSyncBanner extends StatelessWidget {
               title: Text(tr('มี $n รายการรอส่ง (บันทึกตอนออฟไลน์)'), style: TextStyle(color: cs.onTertiaryContainer)),
               trailing: TextButton(onPressed: () => context.read<AppConfig>().flushOfflineQueue(), child: Text(tr('ส่งตอนนี้'))),
             ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+
+/// Tab switch: the tab you open fades in while sliding a few pixels from the
+/// side you moved toward and settling from 98.5% scale ("fade through").
+/// The tabs stay in an IndexedStack, so their state and scroll are kept; the
+/// old tab simply hides. Off with reduced motion or effects off.
+@visibleForTesting
+class NxTabEntrance extends StatefulWidget {
+  const NxTabEntrance({super.key, required this.active, required this.direction, required this.child});
+  final bool active;
+  final int direction;
+  final Widget child;
+
+  @override
+  State<NxTabEntrance> createState() => NxTabEntranceState();
+}
+
+class NxTabEntranceState extends State<NxTabEntrance> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 280), value: 1);
+  int _dir = 0;
+
+  @override
+  void didUpdateWidget(NxTabEntrance old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) {
+      final off = NxMotion.reduced(context) || Effects.of(context) == EffectsLevel.off;
+      if (off) {
+        _c.value = 1;
+      } else {
+        _dir = widget.direction;
+        _c.forward(from: 0);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      child: widget.child,
+      builder: (context, child) {
+        final v = _c.value;
+        if (v >= 1) return child!;
+        final t = Curves.easeOutCubic.transform(v);
+        final fade = Curves.easeOut.transform((v / 0.7).clamp(0.0, 1.0));
+        return Opacity(
+          opacity: fade,
+          child: Transform.translate(
+            offset: Offset((1 - t) * 18 * _dir, (1 - t) * (_dir == 0 ? 8 : 0)),
+            child: Transform.scale(scale: 0.985 + 0.015 * t, child: child),
           ),
         );
       },

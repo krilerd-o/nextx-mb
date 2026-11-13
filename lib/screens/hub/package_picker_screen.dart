@@ -11,7 +11,7 @@ import '../../widgets/nx_step_header.dart';
 import '../../core/i18n.dart';
 
 /// Friendly names for the standard NEXTX packages (API names win when present).
-const _packageHints = <String, (String, IconData)>{
+const kPackageHints = <String, (String, IconData)>{
   'next_x': ('ทุกเมนูของ NEXTX', NxI.squaresFour),
   'next_t': ('ทีมและงาน: Workspace แชท ปฏิทิน เคส', NxI.kanban),
   'next_s': ('งานขาย: ผู้มุ่งหวัง ดีล ใบเสนอราคา ลูกค้า', NxI.handshake),
@@ -132,10 +132,10 @@ class _PackagePickerScreenState extends State<PackagePickerScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(22, 20, 22, 24),
                 children: [
-                  Text(tr('เลือก Package'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(tr('เลือกแพ็กเกจ'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
                   Text(
-                    tr('${config.session.businessName ?? ''}\nเมนูที่เห็นจะเป็นไปตาม Package และสิทธิ์ของคุณ'),
+                    tr('${config.session.businessName ?? ''}\nเมนูที่เห็นจะเป็นไปตามแพ็กเกจและสิทธิ์ของคุณ'),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.5),
                   ),
@@ -150,12 +150,12 @@ class _PackagePickerScreenState extends State<PackagePickerScreen> {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: NxChoiceCard(
-                          icon: _packageHints[p['code']]?.$2 ?? NxI.package,
+                          icon: kPackageHints[p['code']]?.$2 ?? NxI.package,
                           color: _hexColor(p['color']?.toString()),
-                          title: p['name']?.toString() ?? p['code']?.toString() ?? 'Package',
+                          title: p['name']?.toString() ?? p['code']?.toString() ?? 'แพ็กเกจ',
                           subtitle: (p['description']?.toString().trim().isNotEmpty == true)
                               ? p['description'].toString()
-                              : (_packageHints[p['code']]?.$1 ?? p['name_en']?.toString() ?? ''),
+                              : (kPackageHints[p['code']]?.$1 ?? p['name_en']?.toString() ?? ''),
                           selected: _selected == p['code']?.toString(),
                           onTap: _busy ? null : () => setState(() => _selected = p['code']?.toString()),
                         ),
@@ -165,7 +165,7 @@ class _PackagePickerScreenState extends State<PackagePickerScreen> {
                       controlAffinity: ListTileControlAffinity.leading,
                       value: _setDefault,
                       onChanged: (v) => setState(() => _setDefault = v ?? false),
-                      title: Text(tr('ใช้ Package นี้เป็นค่าเริ่มต้น')),
+                      title: Text(tr('ใช้แพ็กเกจนี้เป็นค่าเริ่มต้น')),
                     ),
                   ],
                 ],

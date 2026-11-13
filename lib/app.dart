@@ -187,7 +187,7 @@ class _AddSpaceCancelPill extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               child: Text(
-                tr('ยกเลิกการเพิ่ม Space'),
+                tr('ยกเลิกการเพิ่มพื้นที่ทำงาน'),
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onInverseSurface,
                   fontWeight: FontWeight.w600,

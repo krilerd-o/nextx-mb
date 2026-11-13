@@ -41,7 +41,7 @@ Future<AppConfig> _signedIn(WidgetTester tester, Widget home, {Size size = const
 }
 
 void main() {
-  testWidgets('add Space window: switch to "สแกน QR" → scan button opens the scanner', (tester) async {
+  testWidgets('add พื้นที่ทำงาน window: switch to "สแกน QR" → scan button opens the scanner', (tester) async {
     await _signedIn(
       tester,
       Scaffold(body: Builder(builder: (c) => Center(child: TextButton(onPressed: () => showAddSpaceSheet(c), child: const Text('open'))))),
@@ -58,7 +58,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     final scan = tester.widget<QrLoginScanScreen>(find.byType(QrLoginScanScreen));
     expect(scan.addSpace, isTrue);
-    expect(find.text('สแกน QR เพิ่ม Space'), findsOneWidget);
+    expect(find.text('สแกน QR เพิ่มพื้นที่ทำงาน'), findsOneWidget);
   });
 
   testWidgets('scan while signed in: redeemed on the QR server, a new Space opens, the old one stays', (tester) async {

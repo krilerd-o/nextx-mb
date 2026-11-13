@@ -282,7 +282,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
             key: ValueKey('np-unsupported'),
             icon: NxI.cloud,
             title: 'ยังเลือกการแจ้งเตือนแต่ละเรื่องไม่ได้',
-            text: 'ระบบ MOAI NEXT ของ Space นี้ต้องอัปเดตก่อน — ตอนนี้แอปยังแจ้งเตือนตามค่าเริ่มต้นของระบบ',
+            text: 'ระบบ MOAI NEXT ของพื้นที่ทำงานนี้ต้องอัปเดตก่อน — ตอนนี้แอปยังแจ้งเตือนตามค่าเริ่มต้นของระบบ',
           ),
         ),
       );

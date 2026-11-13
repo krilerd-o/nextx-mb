@@ -14,9 +14,10 @@ import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_logout.dart';
 import '../../widgets/settings_tiles.dart';
-import '../profile_edit_screen.dart';
+import '../hub/package_picker_screen.dart' show kPackageHints;
 import '../spaces/add_space_sheet.dart';
 import '../spaces/space_switcher.dart';
+import '../../widgets/nx_workspace_switcher.dart' show showWorkspaceSwitcherSheet;
 import 'my_signatures_screen.dart';
 import 'notification_prefs_screen.dart';
 import 'profile_manage_screen.dart';
@@ -30,7 +31,7 @@ const kProfileMenuOrder = ['theme', 'devices', 'signatures', 'security', 'notifi
 /// "โปรไฟล์" (avatar tap): who I am (with "จัดการโปรไฟล์" and "สลับ Space"),
 /// my Spaces, then one menu row per area — theme, devices, signatures,
 /// security, notifications, what's new, settings — each its own page.
-/// "แก้ไขโปรไฟล์" sits at the very bottom.
+/// Editing the profile is reached from "จัดการโปรไฟล์" (no button at the bottom).
 class ProfileHubScreen extends StatefulWidget {
   const ProfileHubScreen({super.key});
 
@@ -78,8 +79,6 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final config = context.watch<AppConfig>();
-    final active = config.activeSpace;
-    final spaces = [...config.spaces]..sort((a, b) => a.id == active?.id ? -1 : (b.id == active?.id ? 1 : 0));
     var i = 0;
 
     final menu = <String, Widget>{
@@ -147,52 +146,48 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
       children: [
         SettingsAppear(index: i++, child: _Hero(onPhoto: () => _photo(config))),
 
-        // ── Spaces
+        // ── พื้นที่ทำงานของฉัน: company, current package, switch package, add a workspace.
         SettingsAppear(
           index: i++,
-          child: SettingsGroup(title: 'Space ของฉัน', children: [
-            for (final sp in spaces)
-              Builder(
-                builder: (c) => InkWell(
-                  key: ValueKey('profile-space-${sp.id}'),
-                  onTap: sp.id == active?.id
-                      ? null
-                      : () {
-                          final box = c.findRenderObject() as RenderBox?;
-                          runSpaceTransition(context, sp, box == null ? null : box.localToGlobal(Offset.zero) & box.size, () => config.switchSpace(sp.id));
-                        },
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                    child: Row(children: [
-                      SpaceAvatar(space: sp, size: 36),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(tr(sp.title), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-                          Text(
-                            [sp.host, ?sp.email].join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                          ),
-                        ]),
-                      ),
-                      if (sp.id == active?.id)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
-                          child: Text(tr('ใช้อยู่'), style: theme.textTheme.labelSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800)),
-                        ),
-                    ]),
-                  ),
-                ),
+          child: SettingsGroup(title: 'พื้นที่ทำงานของฉัน', children: [
+            KeyedSubtree(
+              key: const ValueKey('profile-ws-company'),
+              child: SettingsTile(
+                icon: NxI.buildings,
+                tint: const Color(0xFF0EA5E9),
+                title: 'บริษัท',
+                subtitle: config.session.businessName ?? 'ยังไม่ได้เลือกบริษัท',
+                onTap: () => showWorkspaceSwitcherSheet(context),
               ),
-            SettingsTile(
-              icon: NxI.plus,
-              tint: cs.primary,
-              title: 'เพิ่ม Space',
-              subtitle: 'บัญชีอื่นหรือโดเมนอื่น',
-              onTap: () => showAddSpaceSheet(context),
+            ),
+            KeyedSubtree(
+              key: const ValueKey('profile-ws-package'),
+              child: SettingsTile(
+                icon: kPackageHints[config.session.packageCode]?.$2 ?? NxI.package,
+                tint: const Color(0xFF8B5CF6),
+                title: 'แพ็กเกจที่ใช้ปัจจุบัน',
+                subtitle: _packageLabel(config.session.packageCode),
+              ),
+            ),
+            KeyedSubtree(
+              key: const ValueKey('profile-ws-switch-package'),
+              child: SettingsTile(
+                icon: NxI.arrowsLeftRight,
+                tint: cs.primary,
+                title: 'สลับแพ็กเกจ',
+                subtitle: 'เมนูที่เห็นจะเปลี่ยนตามแพ็กเกจและสิทธิ์ของคุณ',
+                onTap: () => showWorkspaceSwitcherSheet(context),
+              ),
+            ),
+            KeyedSubtree(
+              key: const ValueKey('profile-ws-add'),
+              child: SettingsTile(
+                icon: NxI.plus,
+                tint: cs.primary,
+                title: 'เพิ่มพื้นที่ทำงาน',
+                subtitle: 'บัญชีอื่นหรือโดเมนอื่น',
+                onTap: () => showAddSpaceSheet(context),
+              ),
             ),
           ]),
         ),
@@ -217,24 +212,12 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              tr('Space อื่นยังใช้งานได้ตามเดิม'),
+              tr('พื้นที่ทำงานอื่นยังใช้งานได้ตามเดิม'),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           ),
 
-        // ── Very bottom: edit my profile.
-        const SizedBox(height: 14),
-        SettingsAppear(
-          index: i++,
-          child: FilledButton.tonalIcon(
-            key: const ValueKey('profile-edit'),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-            onPressed: () => nxPush<bool>(context, const ProfileEditScreen()),
-            icon: const Icon(NxI.userPen, size: 20),
-            label: Text(tr('แก้ไขโปรไฟล์'), style: const TextStyle(fontWeight: FontWeight.w700)),
-          ),
-        ),
         Padding(
           padding: const EdgeInsets.only(top: 14, bottom: 8),
           child: Text(
@@ -246,6 +229,15 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
       ],
     );
   }
+}
+
+/// "NEXT X · ทุกเมนูของ NEXTX" from the session's package code.
+String _packageLabel(String? code) {
+  final c = (code ?? '').trim();
+  if (c.isEmpty) return 'ยังไม่ได้เลือกแพ็กเกจ';
+  final name = c.toUpperCase().replaceAll('_', ' ');
+  final hint = kPackageHints[c]?.$1;
+  return hint == null ? name : '$name · $hint';
 }
 
 /// Centered profile card: photo ringed in the Space colour (tap to change),
@@ -349,7 +341,7 @@ class _Hero extends StatelessWidget {
               style: OutlinedButton.styleFrom(fixedSize: const Size.fromHeight(44), padding: const EdgeInsets.symmetric(horizontal: 12)),
               onPressed: () => showSpaceSwitcher(context),
               icon: const Icon(NxI.arrowsClockwise, size: 18),
-              label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('สลับ Space'), maxLines: 1)),
+              label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('สลับพื้นที่ทำงาน'), maxLines: 1)),
             ),
           ),
         ]),

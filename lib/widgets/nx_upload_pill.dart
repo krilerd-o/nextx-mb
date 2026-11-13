@@ -170,7 +170,7 @@ class _QueueSheet extends StatelessWidget {
                   child: items.isEmpty
                       ? Padding(
                           padding: const EdgeInsets.all(24),
-                          child: Text(tr(other > 0 ? 'มีรูปของ Space อื่น $other รูป — จะส่งเมื่อสลับไป Space นั้น' : 'ไม่มีรูปค้างส่ง'),
+                          child: Text(tr(other > 0 ? 'มีรูปของพื้นที่ทำงานอื่น $other รูป — จะส่งเมื่อสลับไปพื้นที่ทำงานนั้น' : 'ไม่มีรูปค้างส่ง'),
                               textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                         )
                       : ListView.builder(

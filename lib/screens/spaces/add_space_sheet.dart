@@ -117,7 +117,7 @@ class _AddSpaceSheetState extends State<_AddSpaceSheet> {
             normalizeServerUrl(s.baseUrl) == check.url &&
             (s.email ?? '').toLowerCase() == email.toLowerCase(),
       )) {
-        throw const _Msg('มี Space ของบัญชีนี้อยู่แล้ว');
+        throw const _Msg('มีพื้นที่ทำงานของบัญชีนี้อยู่แล้ว');
       }
       // Sign in on a separate client: the current Space is untouched until this works.
       final api = ApiClient()..attachSession(baseUrl: check.url);
@@ -225,13 +225,13 @@ class _AddSpaceSheetState extends State<_AddSpaceSheet> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            tr('เพิ่ม Space'),
+                            tr('เพิ่มพื้นที่ทำงาน'),
                             style: theme.textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w800,
                             ),
                           ),
                           Text(
-                            tr('บัญชีอื่นหรือโดเมนอื่น · Space เดิมยังใช้ได้'),
+                            tr('บัญชีอื่นหรือโดเมนอื่น · พื้นที่ทำงานเดิมยังใช้ได้'),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: cs.onSurfaceVariant,
                             ),
@@ -490,7 +490,7 @@ class _AddSpaceSheetState extends State<_AddSpaceSheet> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Text(tr('เพิ่มและเปิด Space')),
+                        : Text(tr('เพิ่มและเปิดพื้นที่ทำงาน')),
                   ),
                 ],
               ],

@@ -43,8 +43,16 @@ void main() {
     expect(find.text('โปรไฟล์'), findsWidgets);
     expect(find.text('QA User'), findsOneWidget);
     expect(find.text('ข้อมูลของฉัน'), findsNothing, reason: 'email / mobile rows moved to จัดการโปรไฟล์');
-    for (final t in ['SPACE ของฉัน', 'เพิ่ม Space', 'จัดการความปลอดภัย', 'จัดการโปรไฟล์', 'สลับ Space', 'แก้ไขโปรไฟล์']) {
+    for (final t in ['พื้นที่ทำงานของฉัน', 'บริษัท', 'แพ็กเกจที่ใช้ปัจจุบัน', 'สลับแพ็กเกจ', 'เพิ่มพื้นที่ทำงาน', 'จัดการความปลอดภัย', 'จัดการโปรไฟล์', 'สลับพื้นที่ทำงาน']) {
       expect(find.text(t), findsWidgets, reason: t);
+    }
+    expect(find.text('แก้ไขโปรไฟล์'), findsNothing, reason: 'removed from the hub; it lives in จัดการโปรไฟล์');
+    expect(find.textContaining('Space'), findsNothing, reason: 'Thai UI says พื้นที่ทำงาน');
+    expect(find.textContaining('Package'), findsNothing, reason: 'Thai UI says แพ็กเกจ');
+    // พื้นที่ทำงานของฉัน: company, current package, switch package, add — in that order.
+    final ys = [for (final k in ['company', 'package', 'switch-package', 'add']) tester.getTopLeft(find.byKey(ValueKey('profile-ws-$k'))).dy];
+    for (var i = 1; i < ys.length; i++) {
+      expect(ys[i], greaterThan(ys[i - 1]));
     }
     expect(find.byKey(const ValueKey('profile-menu-settings')), findsOneWidget);
     expect(find.byTooltip('การตั้งค่า'), findsOneWidget);

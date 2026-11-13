@@ -53,7 +53,7 @@ Future<bool> confirmNxLogout(BuildContext context, AppConfig config) async {
             ),
           point(NxI.shieldCheck, 'ข้อมูลและงานของคุณยังอยู่ครบ ไม่มีอะไรถูกลบ'),
           point(NxI.signIn, 'กลับมาเข้าสู่ระบบได้อีกครั้งทุกเมื่อ ด้วยบัญชีเดิม'),
-          if (others) point(NxI.squaresFour, 'Space อื่นในแอปยังใช้งานได้ตามปกติ'),
+          if (others) point(NxI.squaresFour, 'พื้นที่ทำงานอื่นในแอปยังใช้งานได้ตามปกติ'),
         ]),
         actionsAlignment: MainAxisAlignment.center,
         actions: [

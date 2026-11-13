@@ -29,7 +29,7 @@ final _routes = <String, Widget Function()>{
 };
 
 void main() {
-  testWidgets('first card: avatar + camera, name, email, chips, จัดการโปรไฟล์ and สลับ Space', (tester) async {
+  testWidgets('first card: avatar + camera, name, email, chips, จัดการโปรไฟล์ and สลับพื้นที่ทำงาน', (tester) async {
     await pumpProfilePage(tester, const ProfileHubScreen(), _replies);
     final hero = find.byKey(const ValueKey('profile-hero'));
     for (final f in [
@@ -43,12 +43,12 @@ void main() {
     ]) {
       expect(find.descendant(of: hero, matching: f), findsOneWidget);
     }
-    expect(find.descendant(of: hero, matching: find.byKey(const ValueKey('profile-edit'))), findsNothing, reason: 'แก้ไขโปรไฟล์ moved to the bottom');
+    expect(find.descendant(of: hero, matching: find.byKey(const ValueKey('profile-edit'))), findsNothing, reason: 'no แก้ไขโปรไฟล์ on the hub');
     expect(find.text('ข้อมูลของฉัน'), findsNothing);
-    expect(find.text('SPACE ของฉัน'), findsOneWidget);
+    expect(find.text('พื้นที่ทำงานของฉัน'), findsOneWidget);
   });
 
-  testWidgets('menu order: theme, devices, signatures, security, notifications, what\'s new, settings; edit profile last', (tester) async {
+  testWidgets('menu order: theme, devices, signatures, security, notifications, what\'s new, settings; no edit button (it lives in จัดการโปรไฟล์)', (tester) async {
     await pumpProfilePage(tester, const ProfileHubScreen(), _replies, size: const Size(430, 2600));
     final ys = [for (final id in kProfileMenuOrder) tester.getTopLeft(find.byKey(ValueKey('profile-menu-$id'))).dy];
     expect(kProfileMenuOrder, ['theme', 'devices', 'signatures', 'security', 'notifications', 'whats-new', 'settings']);
@@ -59,9 +59,8 @@ void main() {
     for (var i = 0; i < labels.length; i++) {
       expect(find.descendant(of: find.byKey(ValueKey('profile-menu-${kProfileMenuOrder[i]}')), matching: find.text(labels[i])), findsOneWidget);
     }
-    final edit = tester.getTopLeft(find.byKey(const ValueKey('profile-edit'))).dy;
-    expect(edit, greaterThan(ys.last));
-    expect(edit, greaterThan(tester.getTopLeft(find.byKey(const ValueKey('nx-logout-button'))).dy), reason: 'very bottom');
+    expect(find.byKey(const ValueKey('profile-edit')), findsNothing, reason: 'removed at the owner\'s request');
+    expect(tester.getTopLeft(find.byKey(const ValueKey('nx-logout-button'))).dy, greaterThan(ys.last), reason: 'logout is last');
     // No theme / language controls on the profile any more.
     expect(find.byKey(const ValueKey('profile-theme')), findsNothing);
     expect(find.byKey(const ValueKey('theme-mode')), findsNothing);
@@ -85,14 +84,12 @@ void main() {
     });
   }
 
-  testWidgets('จัดการโปรไฟล์ and แก้ไขโปรไฟล์ open their pages', (tester) async {
+  testWidgets('จัดการโปรไฟล์ opens, and แก้ไขโปรไฟล์ is reached from there', (tester) async {
     await pumpProfilePage(tester, const ProfileHubScreen(), _replies, size: const Size(430, 2600));
     await tester.tap(find.byKey(const ValueKey('profile-manage')));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
     expect(find.byType(ProfileManageScreen), findsOneWidget);
-    tester.state<NavigatorState>(find.byType(Navigator).first).pop();
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    await tester.tap(find.byKey(const ValueKey('profile-edit')));
+    await tester.tap(find.byKey(const ValueKey('pm-edit')));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
     expect(find.byType(ProfileEditScreen), findsOneWidget);
   });

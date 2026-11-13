@@ -10,6 +10,16 @@ import '../screens/spaces/space_switcher.dart' show runColorHandOff;
 import '../core/i18n.dart';
 
 /// "ธุรกิจ · Package" chip; tap to switch package (or business) in place.
+/// The business + package switcher sheet (also opened from the profile's
+/// "พื้นที่ทำงานของฉัน" → บริษัท / สลับแพ็กเกจ).
+Future<void> showWorkspaceSwitcherSheet(BuildContext context) => showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.85),
+      builder: (_) => _SwitcherSheet(host: context),
+    );
+
 class NxWorkspaceSwitcher extends StatelessWidget {
   const NxWorkspaceSwitcher({super.key});
 
@@ -25,13 +35,7 @@ class NxWorkspaceSwitcher extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         onTap: () {
           HapticFeedback.selectionClick();
-          showModalBottomSheet<void>(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.85),
-            builder: (_) => _SwitcherSheet(host: context),
-          );
+          showWorkspaceSwitcherSheet(context);
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
@@ -491,11 +495,11 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
               ..._businessList(theme, cs, s.businessId)
             else ...[
               const SizedBox(height: 18),
-              Text(tr('เลือก Package'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Text(tr('เลือกแพ็กเกจ'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
               Padding(
                 padding: const EdgeInsets.only(top: 2, bottom: 10),
                 child: Text(
-                  tr('เมนูจะเปลี่ยนตาม Package และสิทธิ์ของคุณ'),
+                  tr('เมนูจะเปลี่ยนตามแพ็กเกจและสิทธิ์ของคุณ'),
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ),

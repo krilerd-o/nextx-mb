@@ -203,7 +203,7 @@ class _QrLoginScanScreenState extends State<QrLoginScanScreen>
         foregroundColor: Colors.white,
         elevation: 0,
         title: Text(
-          tr(widget.addSpace ? 'สแกน QR เพิ่ม Space' : 'สแกน QR เข้าสู่ระบบ'),
+          tr(widget.addSpace ? 'สแกน QR เพิ่มพื้นที่ทำงาน' : 'สแกน QR เข้าสู่ระบบ'),
         ),
       ),
       extendBodyBehindAppBar: true,
@@ -272,7 +272,7 @@ class _QrLoginScanScreenState extends State<QrLoginScanScreen>
                           Text(
                             tr(
                               widget.addSpace
-                                  ? 'กำลังเพิ่ม Space…'
+                                  ? 'กำลังเพิ่มพื้นที่ทำงาน…'
                                   : 'กำลังเข้าสู่ระบบ…',
                             ),
                             style: theme.textTheme.titleMedium,

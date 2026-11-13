@@ -267,7 +267,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
               key: ValueKey('dev-unavailable'),
               icon: NxI.cloud,
               title: 'ยังดูอุปกรณ์อื่นไม่ได้',
-              text: 'ระบบ MOAI NEXT ของ Space นี้ยังไม่รองรับการดูอุปกรณ์อื่น (ต้องอัปเดตเซิร์ฟเวอร์) — ออกจากระบบเครื่องนี้ได้ตามปกติ',
+              text: 'ระบบ MOAI NEXT ของพื้นที่ทำงานนี้ยังไม่รองรับการดูอุปกรณ์อื่น (ต้องอัปเดตเซิร์ฟเวอร์) — ออกจากระบบเครื่องนี้ได้ตามปกติ',
             ),
           ),
         if (_error != null)

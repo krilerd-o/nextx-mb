@@ -163,7 +163,7 @@ class _SpaceSheetState extends State<_SpaceSheet> {
             ListTile(
               leading: Icon(NxI.signOut, color: Theme.of(context).colorScheme.error),
               title: Text(tr('ออกจากระบบ'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
-              subtitle: Text(tr('ลบ Space นี้ออกจากเครื่อง (Space อื่นยังใช้งานได้)')),
+              subtitle: Text(tr('ลบพื้นที่ทำงานนี้ออกจากเครื่อง (พื้นที่ทำงานอื่นยังใช้งานได้)')),
               onTap: () => Navigator.pop(context, 'out'),
             ),
           ],
@@ -272,7 +272,7 @@ class _SpaceSheetState extends State<_SpaceSheet> {
           child: Row(
             children: [
               Expanded(
-                child: Text(tr('Space ของฉัน'), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                child: Text(tr('พื้นที่ทำงานของฉัน'), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
               ),
               TextButton(onPressed: spaces.length < 2 ? null : () => setState(() => _editing = !_editing), child: Text(tr(_editing ? 'เสร็จ' : 'แก้ไข'))),
             ],
@@ -311,7 +311,7 @@ class _SpaceSheetState extends State<_SpaceSheet> {
           top: false,
           child: Column(
             children: [
-              ListTile(leading: const Icon(NxI.plus), title: Text(tr('เพิ่ม Space')), subtitle: Text(tr('โดเมนอื่น หรือบัญชีอื่น')), onTap: () => _add()),
+              ListTile(leading: const Icon(NxI.plus), title: Text(tr('เพิ่มพื้นที่ทำงาน')), subtitle: Text(tr('โดเมนอื่น หรือบัญชีอื่น')), onTap: () => _add()),
               ListTile(
                 leading: const Icon(NxI.deviceMobile),
                 title: Text(tr('อุปกรณ์ที่เข้าใช้งาน')),
@@ -344,7 +344,7 @@ Future<void> showSpaceEditor(BuildContext context, Space sp) async {
   var color = sp.color.toARGB32();
   await showAppBottomSheet<void>(
     context: context,
-    title: 'แก้ไข Space',
+    title: 'แก้ไขพื้นที่ทำงาน',
     child: StatefulBuilder(
       builder: (ctx, set) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
