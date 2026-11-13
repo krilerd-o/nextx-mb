@@ -32,6 +32,7 @@ class DocStepShell extends StatelessWidget {
     required this.canOpen,
     required this.onStep,
     required this.body,
+    this.complete,
     required this.bottom,
     this.subtitle,
     this.banners = const [],
@@ -47,6 +48,9 @@ class DocStepShell extends StatelessWidget {
   final List<DocStepInfo> steps;
   final int current;
   final List<int> missing;
+
+  /// Steps done (a check instead of the number); null = never shown.
+  final List<bool>? complete;
   final bool Function(int step) canOpen;
   final ValueChanged<int> onStep;
   final List<Widget> banners;
@@ -77,7 +81,7 @@ class DocStepShell extends StatelessWidget {
           ? const NxSkeletonForm()
           : Column(
               children: [
-                _StepChips(steps: steps, current: current, missing: missing, canOpen: canOpen, onStep: onStep),
+                _StepChips(steps: steps, current: current, missing: missing, complete: complete, canOpen: canOpen, onStep: onStep),
                 ...banners,
                 Expanded(
                   child: wide
@@ -105,88 +109,132 @@ class DocStepShell extends StatelessWidget {
   }
 }
 
-class _StepChips extends StatefulWidget {
-  const _StepChips({required this.steps, required this.current, required this.missing, required this.canOpen, required this.onStep});
+/// Steps as a compact stepper that always fits the width: a circle per step
+/// (its icon · green check when done · filled when current) joined by a
+/// line, the title under it, and a small amber dot with the count of
+/// required fields still missing (tooltip "ยังขาด N ช่อง").
+class _StepChips extends StatelessWidget {
+  const _StepChips({required this.steps, required this.current, required this.missing, required this.canOpen, required this.onStep, this.complete});
   final List<DocStepInfo> steps;
   final int current;
   final List<int> missing;
+  final List<bool>? complete;
   final bool Function(int) canOpen;
   final ValueChanged<int> onStep;
 
-  @override
-  State<_StepChips> createState() => _StepChipsState();
-}
-
-class _StepChipsState extends State<_StepChips> {
-  final _chipKeys = <int, GlobalKey>{};
-
-  @override
-  void didUpdateWidget(covariant _StepChips old) {
-    super.didUpdateWidget(old);
-    if (old.current != widget.current) {
-      // Keep the current step in view on a narrow phone.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final ctx = _chipKeys[widget.current]?.currentContext;
-        if (ctx != null && ctx.mounted) Scrollable.ensureVisible(ctx, alignment: 0.5, duration: const Duration(milliseconds: 250));
-      });
-    }
-  }
+  static const _warn = Color(0xFFF59E0B);
+  static const _done = Color(0xFF16A34A);
 
   @override
   Widget build(BuildContext context) {
-    final steps = widget.steps, current = widget.current, missing = widget.missing, canOpen = widget.canOpen, onStep = widget.onStep;
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return SingleChildScrollView(
+    Widget line(bool on, bool show) => Expanded(
+          child: show
+              ? Container(
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: on ? cs.primary.withValues(alpha: 0.7) : cs.outlineVariant.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        );
+    return Padding(
       key: const ValueKey('docform-steps'),
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      child: Row(children: [
-        for (var i = 0; i < steps.length; i++) ...[
-          if (i > 0) Container(width: 14, height: 1.5, color: cs.outlineVariant),
-          () {
-            final on = i == current;
-            final miss = i < missing.length ? missing[i] : 0;
-            final open = canOpen(i);
-            final fg = on ? cs.onPrimary : (open ? cs.onSurface : cs.onSurfaceVariant.withValues(alpha: 0.6));
-            return Semantics(
-              key: _chipKeys.putIfAbsent(i, GlobalKey.new),
-              container: true,
-              selected: on,
-              hint: miss > 0 ? tr('ยังขาด $miss ช่อง') : null,
-              child: Material(
-                color: on ? cs.primary : cs.surfaceContainerHighest.withValues(alpha: open ? 0.7 : 0.35),
-                shape: StadiumBorder(side: BorderSide(color: miss > 0 && !on ? cs.error.withValues(alpha: 0.6) : Colors.transparent)),
+      padding: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (var i = 0; i < steps.length; i++)
+          Expanded(
+            child: () {
+              final on = i == current;
+              final miss = i < missing.length ? missing[i] : 0;
+              final done = !on && miss == 0 && complete != null && i < complete!.length && complete![i];
+              final open = canOpen(i);
+              final Color fill = on ? cs.primary : (done ? _done : cs.surfaceContainerHighest);
+              final Color fg = on ? cs.onPrimary : (done ? Colors.white : (open ? cs.onSurface : cs.onSurfaceVariant.withValues(alpha: 0.55)));
+              final circle = Container(
+                key: done ? ValueKey('docform-step-done-$i') : null,
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: fill,
+                  shape: BoxShape.circle,
+                  border: on ? Border.all(color: cs.primary.withValues(alpha: 0.35), width: 4, strokeAlign: BorderSide.strokeAlignOutside) : null,
+                ),
+                child: done ? const Icon(NxI.check, size: 16, color: Colors.white) : Icon(steps[i].icon, size: 15, color: fg),
+              );
+              return Semantics(
+                container: true,
+                selected: on,
+                button: open && !on,
+                label: '${i + 1}. ${tr(steps[i].title)}',
+                hint: miss > 0 ? tr('ยังขาด $miss ช่อง') : (done ? tr('ครบแล้ว') : null),
                 child: InkWell(
                   key: ValueKey('docform-step-$i'),
-                  customBorder: const StadiumBorder(),
+                  borderRadius: BorderRadius.circular(14),
                   onTap: open && !on ? () => onStep(i) : null,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 6, 12, 6),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(
-                        width: 24,
-                        height: 24,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: miss > 0 ? cs.error : (on ? cs.onPrimary.withValues(alpha: 0.2) : cs.surface),
-                          shape: BoxShape.circle,
-                        ),
-                        child: miss > 0
-                            ? Text('$miss', key: ValueKey('docform-step-missing-$i'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onError, fontWeight: FontWeight.w800))
-                            : Text('${i + 1}', style: theme.textTheme.labelSmall?.copyWith(color: fg, fontWeight: FontWeight.w800)),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      SizedBox(
+                        height: 34,
+                        child: Row(children: [
+                          line(i <= current, i > 0),
+                          Stack(clipBehavior: Clip.none, children: [
+                            circle,
+                            if (miss > 0)
+                              Positioned(
+                                top: -4,
+                                right: -7,
+                                child: Tooltip(
+                                  message: tr('ยังขาด $miss ช่อง'),
+                                  child: Container(
+                                    key: ValueKey('docform-step-warn-$i'),
+                                    constraints: const BoxConstraints(minWidth: 17),
+                                    height: 17,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: _warn,
+                                      borderRadius: BorderRadius.circular(9),
+                                      border: Border.all(color: theme.scaffoldBackgroundColor, width: 1.5),
+                                    ),
+                                    child: Text(
+                                      '$miss',
+                                      key: ValueKey('docform-step-missing-$i'),
+                                      textScaler: TextScaler.noScaling,
+                                      style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w800, height: 1.1),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ]),
+                          line(i < current, i < steps.length - 1),
+                        ]),
                       ),
-                      const SizedBox(width: 6),
-                      Icon(steps[i].icon, size: 15, color: fg),
-                      const SizedBox(width: 4),
-                      Text(tr(steps[i].title), style: theme.textTheme.labelLarge?.copyWith(color: fg, fontWeight: on ? FontWeight.w800 : FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Text(
+                          tr(steps[i].title),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            height: 1.2,
+                            fontWeight: on ? FontWeight.w800 : FontWeight.w600,
+                            color: on ? cs.primary : (open ? cs.onSurface : cs.onSurfaceVariant.withValues(alpha: 0.6)),
+                          ),
+                        ),
+                      ),
                     ]),
                   ),
                 ),
-              ),
-            );
-          }(),
-        ],
+              );
+            }(),
+          ),
       ]),
     );
   }
@@ -295,9 +343,12 @@ class DocFieldAnchors {
 
 /// Sticky bottom bar: summary on the left, actions on the right.
 class DocBottomBar extends StatelessWidget {
-  const DocBottomBar({super.key, required this.summary, required this.actions});
+  const DocBottomBar({super.key, required this.summary, required this.actions, this.secondary});
   final Widget summary;
   final List<Widget> actions;
+
+  /// Optional row of secondary actions above [actions] (each sized by the caller).
+  final List<Widget>? secondary;
 
   @override
   Widget build(BuildContext context) {
@@ -318,6 +369,12 @@ class DocBottomBar extends StatelessWidget {
             children: [
               KeyedSubtree(key: const ValueKey('docform-summary'), child: summary),
               const SizedBox(height: 10),
+              if (secondary != null && secondary!.isNotEmpty) ...[
+                Row(children: [
+                  for (var i = 0; i < secondary!.length; i++) ...[if (i > 0) const SizedBox(width: 8), secondary![i]],
+                ]),
+                const SizedBox(height: 8),
+              ],
               Row(children: [
                 for (var i = 0; i < actions.length; i++) ...[
                   if (i > 0) const SizedBox(width: 8),
@@ -430,18 +487,26 @@ class DocKeyValue extends StatelessWidget {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(child: Text(tr(label), style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant))),
+      child: LayoutBuilder(builder: (context, c) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // The label keeps its own width (at most ~45 %); the value takes the rest.
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: c.maxWidth * 0.45),
+          child: Text(tr(label), style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ),
         const SizedBox(width: 12),
-        Flexible(
-          child: Text(
-            value.isEmpty ? '—' : value,
-            key: valueKey,
-            textAlign: TextAlign.right,
-            style: (strong ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)?.copyWith(fontWeight: strong ? FontWeight.w900 : FontWeight.w600),
+        // The value hugs the right edge (amounts line up under each other).
+        Expanded(
+          child: Align(
+            alignment: Alignment.topRight,
+            child: Text(
+              value.isEmpty ? '—' : value,
+              key: valueKey,
+              textAlign: TextAlign.right,
+              style: (strong ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)?.copyWith(fontWeight: strong ? FontWeight.w900 : FontWeight.w600),
+            ),
           ),
         ),
-      ]),
+      ])),
     );
   }
 }

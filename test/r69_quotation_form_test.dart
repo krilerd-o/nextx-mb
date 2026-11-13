@@ -112,13 +112,12 @@ void main() {
     await h.tap(const ValueKey('open'));
     await h.settle();
 
-    // 4 steps; red counts straight away where something required is missing.
+    // 4 steps; a new form does not greet the user with warnings (R86): only
+    // steps that were checked or left behind show the amber count.
     for (var i = 0; i < 4; i++) {
       expect(find.byKey(ValueKey('docform-step-$i')), findsOneWidget);
+      expect(find.byKey(ValueKey('docform-step-missing-$i')), findsNothing);
     }
-    expect(h.textOf(const ValueKey('docform-step-missing-0')), '1', reason: 'no customer yet');
-    expect(h.textOf(const ValueKey('docform-step-missing-1')), '1', reason: 'no line yet');
-    expect(h.textOf(const ValueKey('docform-step-missing-2')), '1', reason: 'business-required custom field');
     // Not asked on create: status, totals; hidden field never drawn.
     expect(find.byKey(const ValueKey('nx-field-quotation_status')), findsNothing);
     expect(find.byKey(const ValueKey('nx-field-grand_total')), findsNothing);
@@ -130,9 +129,11 @@ void main() {
     // ถัดไป with no customer: stays, shows what is missing.
     await h.tap(const ValueKey('docform-next'));
     expect(find.byKey(const ValueKey('docform-customer-error')), findsOneWidget);
-    expect(find.byKey(const ValueKey('customer-search')), findsOneWidget);
+    expect(h.textOf(const ValueKey('docform-step-missing-0')), '1', reason: 'no customer yet');
+    expect(find.byKey(const ValueKey('customer-search')), findsNothing, reason: 'search lives in its own page');
 
-    // One search: accounts + contacts + leads together.
+    // One search page: accounts + contacts + leads together.
+    await h.tap(const ValueKey('qt-customer-pick'));
     await tester.enterText(find.byKey(const ValueKey('customer-search')), 'บริษัท');
     await tester.pump(const Duration(milliseconds: 400));
     await h.settle();
@@ -143,17 +144,20 @@ void main() {
     expect(find.byKey(const ValueKey('qt-customer-card')), findsOneWidget);
     expect(find.text('99 ถนนพระราม 9 ห้วยขวาง กรุงเทพมหานคร'), findsWidgets);
     expect(find.byKey(const ValueKey('docform-step-missing-0')), findsNothing);
-    // Contacts of that customer as chips → contact name / mobile / e-mail.
-    await h.tap(const ValueKey('qt-contact-7'));
-    expect(find.text('ผู้ติดต่อ: สมศรี ใจงาม'), findsOneWidget);
+    // Contact of that customer: one row → its own picker → name / mobile / e-mail.
+    await h.tap(const ValueKey('qt-contact-pick'));
+    await h.tap(const ValueKey('contact-hit-7'));
+    expect(h.textOf(const ValueKey('qt-contact-value')), 'สมศรี ใจงาม');
 
     await h.tap(const ValueKey('docform-next'));
-    expect(find.byKey(const ValueKey('catalog-search')), findsOneWidget);
+    expect(find.byKey(const ValueKey('qt-add-catalog')), findsOneWidget);
     // Catalog item: list price + its 10 % discount → 900.
+    await h.tap(const ValueKey('qt-add-catalog'));
     await tester.enterText(find.byKey(const ValueKey('catalog-search')), 'กล้อง');
     await tester.pump(const Duration(milliseconds: 400));
     await h.settle();
     await h.tap(const ValueKey('catalog-hit-product-11'));
+    await h.tap(const ValueKey('catalog-confirm'));
     expect(h.textOf(const ValueKey('qline-0-amount')), '฿900.00');
     // Typed line: 2 × 500 − ฿50/unit = 900.
     await h.tap(const ValueKey('qt-add-text-line'));
@@ -170,7 +174,7 @@ void main() {
 
     await h.tap(const ValueKey('docform-next'));
     // VAT included: the same 1620 already holds the VAT.
-    await tester.tap(find.text('รวม VAT แล้ว'));
+    await tester.tap(find.text('ราคารวม VAT แล้ว'));
     await tester.pump();
     expect(h.textOf(const ValueKey('docform-bar-total')), '฿1,620.00');
     await h.tap(const ValueKey('qt-valid-15'));
@@ -247,6 +251,7 @@ void main() {
     expect(find.byKey(const ValueKey('nx-field-customer_taxid')), findsNothing);
     final title = tester.widget<NxFormField>(find.byWidgetPredicate((w) => w is NxFormField && w.name == 'title_th'));
     expect(title.readOnly, isTrue);
+    await h.tap(const ValueKey('qt-customer-pick'));
     await tester.enterText(find.byKey(const ValueKey('customer-search')), 'เอ');
     await tester.pump(const Duration(milliseconds: 400));
     await h.settle();
@@ -254,13 +259,13 @@ void main() {
     expect(h.adapter.calls.where((c) => (c.path == '/api/entity/contact' || c.path == '/api/entity/lead') && c.queryParameters['q'] == 'เอ'), isEmpty);
     await h.tap(const ValueKey('customer-hit-account-5'));
     await h.tap(const ValueKey('docform-next'));
-    await h.tap(const ValueKey('catalog-scan'));
+    await h.tap(const ValueKey('qt-scan'));
     expect(h.adapter.calls.any((c) => c.path == '/api/entity/product' && c.queryParameters['q'] == 'CAM-01'), isTrue);
     expect(h.textOf(const ValueKey('qline-0-amount')), '฿900.00');
     // Create: later steps open only after the earlier ones.
     await tester.tap(find.byKey(const ValueKey('docform-step-3')));
     await h.settle(2);
-    expect(find.byKey(const ValueKey('catalog-search')), findsOneWidget);
+    expect(find.byKey(const ValueKey('qt-add-catalog')), findsOneWidget);
   });
 
   final src = {
@@ -351,7 +356,7 @@ void main() {
     await h.settle();
     expect(find.byKey(const ValueKey('docform-locked')), findsOneWidget);
     await h.tap(const ValueKey('docform-step-3'));
-    expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('docform-save'))).onPressed, isNull);
+    expect(tester.widget<ButtonStyleButton>(find.byKey(const ValueKey('docform-save'))).onPressed, isNull);
   });
 
   testWidgets('every entry point lands on the step forms (generic form kept for other modules)', (tester) async {
