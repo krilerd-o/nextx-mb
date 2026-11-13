@@ -144,7 +144,12 @@ void main() {
         f('cf_visit_window', type: 'DateTime'), f('cf_gate_code', section: 'สถานที่หน้างาน'), f('cf_misc'),
       ]);
       final steps = {for (final e in s.extra) e.field['name']: e.step};
-      expect(steps, {'job_code': 0, 'contract_po_no': 1, 'salesperson_user_id': 2, 'problem_found': 3, 'cf_visit_window': 2, 'cf_gate_code': 1, 'cf_misc': 3});
+      // job_code / contract_po_no / salesperson are drawn by the form itself now.
+      expect(steps, {'problem_found': 3, 'cf_visit_window': 2, 'cf_gate_code': 1, 'cf_misc': 3});
+      expect(s.extra.firstWhere((e) => e.field['name'] == 'problem_found').group, kJobReportGroup);
+      for (final n in ['job_code', 'contract_po_no', 'salesperson_user_id']) {
+        expect(kCoreFieldStep['job']!.containsKey(n), isTrue, reason: n);
+      }
     });
 
     test('core fields keep business required / readonly / hidden', () {
@@ -243,14 +248,15 @@ void main() {
       expect([q['job_name'], q['related_quotation_id'], q['description']], ['Q-9 — บริษัท เอ', 9, 'อ้างอิงใบเสนอราคา Q-9 · PO: PO1\n\n• กล้อง × 2 ตัว']);
       expect(quotationLinesSummary([{'line_type': 'product', 'description': '<b>กล้อง</b>', 'quantity': 2, 'unit': 'ตัว'}, {'line_type': 'text', 'description': 'หมายเหตุ'}]), '• กล้อง × 2 ตัว\nหมายเหตุ');
     });
-    test('ทำซ้ำ job: customer / place / details copied; dates, technicians, status cleared', () {
+    test('ทำซ้ำ job: customer / place / people / details copied; owner = me (web); dates, status, signatures cleared', () {
       final v = jobDuplicateValues({
         'id': 1, 'job_no': 'JOB-1', 'job_status': 'Completed', 'job_name': 'ล้างแอร์', 'related_account_id': 5, 'site_address_snapshot': 'กทม',
         'description': 'ล้าง 3 เครื่อง', 'plan_start': '2026-11-01 09:00:00', 'plan_end': '2026-11-01 11:00:00', 'actual_start': 'x', 'smownerid': 3,
-        'engineer_user_id': 4, 'customer_signature': 'sig',
-      });
-      expect([v['job_name'], v['related_account_id'], v['site_address_snapshot'], v['description']], ['ล้างแอร์ (Copy)', 5, 'กทม', 'ล้าง 3 เครื่อง']);
-      for (final k in ['id', 'job_no', 'job_status', 'plan_start', 'plan_end', 'actual_start', 'smownerid', 'engineer_user_id', 'customer_signature']) {
+        'engineer_user_id': 4, 'customer_signature': 'sig', 'related_activity_id': 9, 'acknowledgement_note': 'รับทราบ',
+      }, userId: '7');
+      expect([v['job_name'], v['related_account_id'], v['site_address_snapshot'], v['description'], v['smownerid'], v['engineer_user_id']],
+          ['ล้างแอร์ (Copy)', 5, 'กทม', 'ล้าง 3 เครื่อง', 7, 4]);
+      for (final k in ['id', 'job_no', 'job_status', 'plan_start', 'plan_end', 'actual_start', 'customer_signature', 'related_activity_id', 'acknowledgement_note']) {
         expect(v.containsKey(k), isFalse, reason: k);
       }
     });

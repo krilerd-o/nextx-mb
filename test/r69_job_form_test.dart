@@ -78,7 +78,7 @@ void main() {
     'account_name': 'บริษัท เอ จำกัด', 'due_datetime': '2026-11-20 17:00:00', 'smownerid': 1,
   };
 
-  testWidgets('from a case: pre-filled, relation pickers hidden; place, quick time chips, appointment, checklist, files; created like the web', (tester) async {
+  testWidgets('from a case: pre-filled, the case shown as a locked card; contact / site / time by pickers and chips; created like the web', (tester) async {
     final h = DocFormHarness(tester);
     DocFormHooks.pickFiles = (_) async => [MultipartFile.fromBytes(utf8.encode('jpg'), filename: 'หน้างาน.jpg')];
     DocFormHooks.pickPin = (_) async => (lat: 13.75, lng: 100.5);
@@ -88,24 +88,28 @@ void main() {
     await h.settle();
 
     expect(find.byKey(const ValueKey('job-parent')), findsOneWidget);
-    expect(find.text('สร้างจากเคส'), findsOneWidget);
-    expect(find.byKey(const ValueKey('nx-field-related_case_id')), findsNothing, reason: 'case picker hidden');
-    expect(find.byKey(const ValueKey('nx-field-related_contract_id')), findsNothing);
+    expect(find.text('สร้างจากเคส'), findsWidgets);
+    expect(find.byKey(const ValueKey('job-case-card')), findsOneWidget, reason: 'the parent case as a card');
+    expect(find.byKey(const ValueKey('job-case-change')), findsNothing, reason: 'the parent link is not changed here');
+    expect(find.byKey(const ValueKey('nx-field-related_case_id')), findsNothing, reason: 'no raw relation field');
     expect(find.text('Request — แอร์ไม่เย็น'), findsWidgets);
     // Not in the form: status, actual times (check-in), JSON tick lists.
     for (final n in ['job_status', 'actual_start', 'actual_end', 'work_types']) {
       expect(find.byKey(ValueKey('nx-field-$n')), findsNothing, reason: n);
     }
-    // The required business field of a "place" section is counted on step 2.
-    expect(h.textOf(const ValueKey('docform-step-missing-1')), '1');
+    // Later steps are not nagged before the user gets there.
+    expect(find.byKey(const ValueKey('docform-step-missing-1')), findsNothing);
 
     await h.tap(const ValueKey('docform-next'));
-    // Customer from the case's account; its contacts as chips.
-    expect(find.text('บริษัท เอ จำกัด'), findsWidgets);
-    expect(find.text('99 พระราม 9 ห้วยขวาง กรุงเทพมหานคร'), findsOneWidget, reason: 'site address from the account');
-    await h.tap(const ValueKey('job-contact-7'));
-    await h.tap(const ValueKey('job-place-pin'));
-    expect(find.text('ถนนพระราม 9 ห้วยขวาง (13.750000,100.500000)'), findsOneWidget);
+    // Customer from the case's account as a card; the contact is a picker row (no chip wall).
+    expect(find.byKey(const ValueKey('job-customer-card')), findsOneWidget);
+    expect(find.byKey(const ValueKey('job-contact-7')), findsNothing);
+    expect(h.textOf(const ValueKey('job-site-address')), '99 พระราม 9 ห้วยขวาง กรุงเทพมหานคร', reason: 'site address from the account');
+    await h.tap(const ValueKey('job-contact-pick'));
+    await h.tap(const ValueKey('contact-hit-7'));
+    expect(h.textOf(const ValueKey('job-contact-value')), 'สมศรี ใจงาม');
+    await h.tap(const ValueKey('job-site-pin'));
+    expect(find.byKey(const ValueKey('job-site-pinned')), findsOneWidget);
     await h.tap(const ValueKey('docform-next'));
     expect(find.byKey(const ValueKey('docform-missing-banner')), findsOneWidget, reason: 'gate code still missing');
     await h.type('cf_gate_code', '#1234');
@@ -114,7 +118,7 @@ void main() {
     await h.tap(const ValueKey('job-slot-tomorrow_am'));
     final now = thaiNow();
     final tomorrow = DateTime(now.year, now.month, now.day + 1);
-    await h.tap(const ValueKey('job-end-plus-4'));
+    await h.tap(const ValueKey('job-dur-4'));
     await h.tap(const ValueKey('job-appointment'));
     await h.tap(const ValueKey('docform-next'));
 
@@ -122,6 +126,7 @@ void main() {
     await h.tap(const ValueKey('job-attach'));
     expect(find.text('หน้างาน.jpg'), findsOneWidget);
     expect(h.textOf(const ValueKey('job-sum-customer')), 'บริษัท เอ จำกัด');
+    expect(find.text('สร้างใบสั่งงาน'), findsWidgets);
     await h.tap(const ValueKey('docform-save'), settleFrames: 12);
 
     final b = h.body('POST', '/api/entity/job');
@@ -130,7 +135,7 @@ void main() {
     expect([b['customer_name'], b['customer_contact_name'], b['customer_mobile'], b['cf_gate_code']], ['บริษัท เอ จำกัด', 'สมศรี ใจงาม', '0899999999', '#1234']);
     expect(b['plan_start'], wallDateTime(DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 9)));
     expect(b['plan_end'], wallDateTime(DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 13)));
-    expect(b['site_address_snapshot'], 'ถนนพระราม 9 ห้วยขวาง (13.750000,100.500000)');
+    expect(b['site_address_snapshot'], '99 พระราม 9 ห้วยขวาง กรุงเทพมหานคร (13.750000,100.500000)', reason: 'the pin keeps the address and adds the coordinates');
     expect([b['due_datetime'], b['deliverable_template'], b['smownerid']], ['2026-11-20 17:00:00', 'request_report', 1]);
     for (final k in ['job_status', 'job_no', 'actual_start', 'actual_end']) {
       expect(b.containsKey(k), isFalse, reason: k);
@@ -142,27 +147,29 @@ void main() {
     expect(results.single?['id'], '77');
   });
 
-  testWidgets('required per step: job name on งานอะไร; optional case / contract links folded; priority chips', (tester) async {
+  testWidgets('required per step: job name on งานอะไร; case / contract as picker rows; priority segments', (tester) async {
     final h = DocFormHarness(tester);
     await h.pump(opener(), jobReplies());
     await h.tap(const ValueKey('open'));
     await h.settle();
-    expect(h.textOf(const ValueKey('docform-step-missing-0')), '1', reason: 'job name');
+    expect(find.byKey(const ValueKey('docform-step-missing-0')), findsNothing, reason: 'quiet until ถัดไป');
     await h.tap(const ValueKey('docform-next'));
+    expect(h.textOf(const ValueKey('docform-step-missing-0')), '1', reason: 'job name');
     expect(find.text('ตั้งชื่องาน'), findsOneWidget);
-    expect(find.byKey(const ValueKey('nx-field-related_account_id')), findsNothing, reason: 'still on step 1');
-    expect(find.byKey(const ValueKey('nx-field-related_case_id')), findsNothing, reason: 'links folded until asked');
-    await h.tap(const ValueKey('job-links-toggle'));
-    expect(find.byKey(const ValueKey('nx-field-related_case_id')), findsOneWidget);
+    expect(find.byKey(const ValueKey('job-customer-pick')), findsNothing, reason: 'still on step 1');
+    expect(find.byKey(const ValueKey('job-case-pick')), findsOneWidget);
+    expect(find.byKey(const ValueKey('job-contract-pick')), findsOneWidget);
     await h.type('job_name', 'ล้างแอร์ประจำปี');
     await h.tap(const ValueKey('job-priority-Urgent'));
     expect(find.byKey(const ValueKey('docform-step-missing-0')), findsNothing);
     await h.tap(const ValueKey('docform-next'));
-    expect(find.byKey(const ValueKey('nx-field-related_account_id')), findsOneWidget);
-    expect(find.byKey(const ValueKey('nx-field-customer_name')), findsOneWidget, reason: 'typed customer only without an account');
+    expect(find.byKey(const ValueKey('job-customer-pick')), findsOneWidget);
+    expect(find.byKey(const ValueKey('nx-field-customer_name')), findsNothing, reason: 'typed customer only when asked');
+    await h.tap(const ValueKey('job-customer-manual'));
+    expect(find.byKey(const ValueKey('nx-field-customer_name')), findsOneWidget);
   });
 
-  testWidgets('ทำซ้ำ: customer / place / details copied; dates, technicians, status cleared', (tester) async {
+  testWidgets('ทำซ้ำ: customer / place / details copied; owner = me (web); dates, status cleared', (tester) async {
     final h = DocFormHarness(tester);
     await h.pump(opener(mode: DocFormMode.duplicate, id: '1'), {
       ...jobReplies(),
@@ -170,20 +177,23 @@ void main() {
         'id': 1, 'job_no': 'JOB-1', 'job_status': 'Completed', 'job_name': 'ล้างแอร์', 'job_type': 'service', 'related_account_id': 5,
         'customer_name': 'บริษัท เอ จำกัด', 'site_address_snapshot': 'อาคาร B ชั้น 3', 'description': 'ล้าง 3 เครื่อง', 'cf_gate_code': '#9',
         'plan_start': '2026-11-01 09:00:00', 'plan_end': '2026-11-01 11:00:00', 'actual_start': '2026-11-01 09:10:00', 'smownerid': 2,
-        'customer_signature': 'sig.png',
+        'customer_signature': 'sig.png', 'related_activity_id': 400,
       },
     });
     await h.tap(const ValueKey('open'));
     await h.settle();
     expect(find.text('ทำซ้ำใบสั่งงาน'), findsOneWidget);
+    expect(find.byKey(const ValueKey('job-duplicate-banner')), findsOneWidget);
     expect(find.text('ล้างแอร์ (Copy)'), findsWidgets);
     await h.tap(const ValueKey('docform-step-3'));
     expect(h.textOf(const ValueKey('job-sum-start')), '—');
-    expect(h.textOf(const ValueKey('job-sum-tech')), '—');
+    expect(h.textOf(const ValueKey('job-sum-tech')), 'สมชาย ใจดี');
+    expect(find.text('สร้างจากสำเนา'), findsOneWidget);
     await h.tap(const ValueKey('docform-save'), settleFrames: 10);
     final b = h.body('POST', '/api/entity/job');
-    expect([b['job_name'], b['related_account_id'], b['site_address_snapshot'], b['description'], b['cf_gate_code']], ['ล้างแอร์ (Copy)', 5, 'อาคาร B ชั้น 3', 'ล้าง 3 เครื่อง', '#9']);
-    for (final k in ['job_status', 'job_no', 'plan_start', 'plan_end', 'actual_start', 'smownerid', 'customer_signature', 'id']) {
+    expect([b['job_name'], b['related_account_id'], b['site_address_snapshot'], b['description'], b['cf_gate_code'], b['smownerid']],
+        ['ล้างแอร์ (Copy)', 5, 'อาคาร B ชั้น 3', 'ล้าง 3 เครื่อง', '#9', 1]);
+    for (final k in ['job_status', 'job_no', 'plan_start', 'plan_end', 'actual_start', 'customer_signature', 'id', 'related_activity_id']) {
       expect(b.containsKey(k), isFalse, reason: k);
     }
   });
@@ -200,12 +210,14 @@ void main() {
     });
     await h.tap(const ValueKey('open'));
     await h.settle();
+    expect(find.byKey(const ValueKey('job-edit-banner')), findsOneWidget);
     expect(h.textOf(const ValueKey('docform-step-missing-2')), '1');
     await h.tap(const ValueKey('docform-step-2'));
-    expect(find.text('งานนี้มีนัดหมายในปฏิทินแล้ว'), findsOneWidget);
-    await h.tap(const ValueKey('job-end-plus-2'));
+    expect(find.byKey(const ValueKey('job-appointment-done')), findsOneWidget);
+    await h.tap(const ValueKey('job-dur-2'));
     expect(find.byKey(const ValueKey('docform-step-missing-2')), findsNothing);
     await h.tap(const ValueKey('docform-step-3'));
+    expect(find.text('บันทึกการแก้ไข'), findsOneWidget);
     await h.tap(const ValueKey('docform-save'), settleFrames: 10);
     final b = h.body('PUT', '/api/entity/job/1');
     expect([b['job_name'], b['plan_end'], b['smownerid']], ['ล้างแอร์', '2026-11-20T11:00:00', 2]);
@@ -213,4 +225,3 @@ void main() {
     expect(h.called('POST', '/api/field-service/jobs/1/schedule'), isFalse);
   });
 }
-
