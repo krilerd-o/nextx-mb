@@ -172,8 +172,9 @@ class _NxScrollScaffoldState extends State<NxScrollScaffold> {
 }
 
 class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
-  /// Fade below the header (content dissolves into it).
-  static const double _tail = 14;
+  /// Fade below the header (content dissolves into it). Long enough that the
+  /// blur eases out instead of stopping at a visible line.
+  static const double _tail = 26;
 
   const _FloatingHeader({required this.header, required this.extend, this.bottom, this.bottomHeight = 0, this.blurVisible});
   final PreferredSizeWidget header;
@@ -230,8 +231,9 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
               child: _blurGate(
                 NxEdgeBlur(
                   fromTop: true,
-                  // Full blur over the status bar + most of the header, fade below.
-                  solidFraction: extend ? (top + h * 0.25) / (top + h + _tail) : 0.6,
+                  // Full blur over the status bar + most of the header (so nothing ghosts
+                  // through its text), then a long soft fade below.
+                  solidFraction: extend ? (top + h * 0.75) / (top + h + _tail) : 0.6,
                   washSolid: extend ? (top + h - 4) / (top + h + _tail) : 0.9,
                 ),
               ),
@@ -292,6 +294,9 @@ class NxEdgeBlur extends StatelessWidget {
 
   static const liteSigma = 6.0;
 
+  /// Lite: bands from light (tallest) up to [liteSigma] (the header itself).
+  static const liteBands = 4;
+
   @override
   Widget build(BuildContext context) {
     final bg = Theme.of(context).scaffoldBackgroundColor;
@@ -330,23 +335,27 @@ class NxEdgeBlur extends StatelessWidget {
     );
     if (!full && !lite) return IgnorePointer(child: tint);
     if (lite) {
+      // A few graded bands instead of one: each lower band is lighter, so the
+      // blur steps down softly instead of ending at a hard line.
+      final reach = solidFraction + (1 - solidFraction) * 0.6;
       return IgnorePointer(
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Align(
-              alignment: edge,
-              child: FractionallySizedBox(
-                widthFactor: 1,
-                heightFactor: solidFraction + (1 - solidFraction) * 0.35,
-                child: ClipRect(
-                  child: BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: liteSigma, sigmaY: liteSigma),
-                    child: const SizedBox.expand(),
+            for (var i = 0; i < liteBands; i++)
+              Align(
+                alignment: edge,
+                child: FractionallySizedBox(
+                  widthFactor: 1,
+                  heightFactor: reach - (reach - solidFraction) * i / (liteBands - 1),
+                  child: ClipRect(
+                    child: BackdropFilter.grouped(
+                      filter: ui.ImageFilter.blur(sigmaX: liteSigma * (i + 1) / liteBands, sigmaY: liteSigma * (i + 1) / liteBands),
+                      child: const SizedBox.expand(),
+                    ),
                   ),
                 ),
               ),
-            ),
             tint,
           ],
         ),

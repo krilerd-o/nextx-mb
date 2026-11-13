@@ -116,15 +116,23 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
   bool _refreshing = false;
   Object? _error;
 
-  /// Header blur shows once the hero photo has scrolled away.
+  /// Header blur shows once the first widget starts sliding under the pinned header.
   final ValueNotifier<bool> _pastHero = ValueNotifier(false);
+
+  /// Pinned header colours: 0 = on the scene (white), 1 = on the page.
+  final ValueNotifier<double> _headerSolid = ValueNotifier(0);
   final GlobalKey _heroKey = GlobalKey(debugLabel: 'home-hero');
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
-    final h = _heroKey.currentContext?.size?.height ?? 300;
-    final limit = h - HomeHero.overlapDepth - MediaQuery.paddingOf(context).top - 8;
-    _pastHero.value = _scroll.offset > limit;
+    final heroBox = _heroKey.currentContext?.size?.height ?? 300;
+    final barH = HomeGreetingBar.heightFor(MediaQuery.textScalerOf(context));
+    // Where the first widget (it starts one gap below the hero) meets the header's bottom edge.
+    final meet = heroBox + kHomeWidgetGap - MediaQuery.paddingOf(context).top - barH;
+    final o = _scroll.offset;
+    // Quick swap (a long blend passes through grey that reads on neither).
+    _headerSolid.value = ((o - (meet - 34)) / 22).clamp(0.0, 1.0);
+    _pastHero.value = o > meet - 16;
   }
 
   @override
@@ -329,6 +337,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
     HomeLayout.instance.removeListener(_onLayout);
     _scroll.removeListener(_onScroll);
     _pastHero.dispose();
+    _headerSolid.dispose();
     _wiggle.dispose();
     _scroll.dispose();
     _autoScroll?.cancel();
@@ -737,22 +746,24 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
 
     final hero = HomeHero(
       key: _heroKey,
-      greeting: greetingFor(now),
-      name: session.displayName,
-      date: thaiShortDate(now),
       now: now,
       gutter: pad.left,
       maxContentWidth: maxContent,
     );
 
-    // The hero is the page's header: the floating header is empty and its
-    // blur only shows once the photo has scrolled away.
+    // The greeting row is pinned like every list page's header: on the scene
+    // at first, its blur shows once the widgets start sliding under it.
     return NxScrollScaffold(
       insetBody: false,
       headerBlur: _pastHero,
-      header: const PreferredSize(
-        preferredSize: Size.zero,
-        child: SizedBox.shrink(),
+      header: HomeGreetingBar(
+        greeting: greetingFor(now),
+        name: session.displayName,
+        date: thaiShortDate(now),
+        solid: _headerSolid,
+        height: HomeGreetingBar.heightFor(MediaQuery.textScalerOf(context)),
+        gutter: pad.left,
+        maxContentWidth: maxContent,
       ),
       body: Builder(
         builder: (context) {

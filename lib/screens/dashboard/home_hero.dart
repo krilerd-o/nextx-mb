@@ -1,5 +1,7 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -57,15 +59,12 @@ Duration _motion(BuildContext context, int ms) => MediaQuery.maybeDisableAnimati
 
 // ─────────────────────────── hero ───────────────────────────
 
-/// Full-bleed drawn landscape at the top of Home (follows the time of day): avatar, greeting + name, date, frosted
-/// search and bell, then the role's headline. Home passes no [overlap] any more
+/// Full-bleed drawn landscape at the top of Home (follows the time of day), under the pinned
+/// [HomeGreetingBar], then the role's headline. Home passes no [overlap] any more
 /// ("ไอแซคแนะนำ" is an ordinary Home widget); the scene's bottom fades into the page.
 class HomeHero extends StatelessWidget {
   const HomeHero({
     super.key,
-    required this.greeting,
-    required this.date,
-    this.name,
     this.headline,
     this.overlap,
     this.now,
@@ -73,9 +72,6 @@ class HomeHero extends StatelessWidget {
     this.gutter = 16,
   });
 
-  final String greeting;
-  final String? name;
-  final String date;
   final Widget? headline;
   final Widget? overlap;
 
@@ -96,8 +92,8 @@ class HomeHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
+    // Status bar + the pinned greeting header (the page's top inset).
     final top = MediaQuery.paddingOf(context).top;
-    final hasName = name != null && name!.trim().isNotEmpty;
     final under = overlap == null && headline == null ? sceneUnderlap : 0.0;
 
     Widget limit(Widget child) => Center(
@@ -167,50 +163,12 @@ class HomeHero extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(height: top + 10),
-              limit(
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const NxHubAvatar(size: 46, ring: true),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            date.isEmpty ? tr(greeting) : '${tr(greeting)} · ${tr(date)}',
-                            key: const ValueKey('home-greeting'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: _onPhoto(theme.textTheme.bodyMedium, alpha: 0.92, weight: FontWeight.w500),
-                          ),
-                          if (hasName)
-                            Text(
-                              name!,
-                              key: const ValueKey('home-name'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: _onPhoto(theme.textTheme.titleLarge, weight: FontWeight.w800),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    HeroGlassButton(
-                      key: const ValueKey('home-search'),
-                      icon: NxI.magnifyingGlass,
-                      tooltip: tr('ค้นหาทุกอย่าง'),
-                      onTap: (_) => context.push(AppRoutes.globalSearch),
-                    ),
-                    const SizedBox(width: 10),
-                    const _HeroBell(),
-                  ],
-                ),
-              ),
+              // The greeting row is Home's pinned header ([HomeGreetingBar]); the page's top
+              // inset already holds it, so the scene simply runs on under it.
+              SizedBox(height: top),
               if (headline != null) ...[const SizedBox(height: 18), limit(headline!)],
               // Open sky under the greeting; without a card this is where the scene fades out.
-              SizedBox(height: headline != null ? 28 : (overlap == null ? 150 - under : 170)),
+              SizedBox(height: headline != null ? 28 : (overlap == null ? 144 - under : 164)),
               if (overlap != null) limit(overlap!),
               SizedBox(height: overlap == null ? 0 : 18),
             ],
@@ -221,10 +179,126 @@ class HomeHero extends StatelessWidget {
   }
 }
 
+/// Home's header: avatar, greeting + date, name, search and bell. Pinned while
+/// the page scrolls, like every list page's header. [solid] 0 = over the scene
+/// (white text, frosted buttons, light status bar), 1 = over the page (the
+/// normal header colours); in between it blends as the scene scrolls away.
+class HomeGreetingBar extends StatelessWidget implements PreferredSizeWidget {
+  const HomeGreetingBar({
+    super.key,
+    required this.greeting,
+    required this.date,
+    required this.solid,
+    required this.height,
+    this.name,
+    this.maxContentWidth = 1100,
+    this.gutter = 16,
+  });
+
+  final String greeting;
+  final String? name;
+  final String date;
+  final ValueListenable<double> solid;
+
+  /// Without the status bar; see [heightFor].
+  final double height;
+  final double maxContentWidth;
+  final double gutter;
+
+  static const double _padTop = 10;
+  static const double _padBottom = 6;
+
+  /// Room for the row (avatar / two text lines at the user's text size).
+  static double heightFor(TextScaler s) => _padTop + math.max(50.0, s.scale(20) + s.scale(28) + 2) + _padBottom;
+
+  @override
+  Size get preferredSize => Size.fromHeight(height);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final top = MediaQuery.paddingOf(context).top;
+    final hasName = name != null && name!.trim().isNotEmpty;
+    return ValueListenableBuilder<double>(
+      valueListenable: solid,
+      builder: (context, p, _) {
+        final ink = Color.lerp(Colors.white, theme.colorScheme.onSurface, p)!;
+        final soft = Color.lerp(Colors.white.withValues(alpha: 0.92), theme.colorScheme.onSurfaceVariant, p)!;
+        final shadows = p >= 1
+            ? const <Shadow>[]
+            : [for (final s in _textShadow) Shadow(color: s.color.withValues(alpha: s.color.a * (1 - p)), blurRadius: s.blurRadius, offset: s.offset)];
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          // Light icons on the scene; the theme's own once the page is under them.
+          value: (p < 0.5 || dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(statusBarColor: Colors.transparent),
+          child: Padding(
+            padding: EdgeInsets.only(top: top + _padTop, bottom: _padBottom),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxContentWidth),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: gutter),
+                  child: SizedBox(
+                    key: const ValueKey('home-greeting-bar'),
+                    height: height - _padTop - _padBottom,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const NxHubAvatar(size: 46, ring: true),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                date.isEmpty ? tr(greeting) : '${tr(greeting)} · ${tr(date)}',
+                                key: const ValueKey('home-greeting'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium?.copyWith(color: soft, shadows: shadows, fontWeight: FontWeight.w500),
+                              ),
+                              if (hasName)
+                                Text(
+                                  name!,
+                                  key: const ValueKey('home-name'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleLarge?.copyWith(color: ink, shadows: shadows, fontWeight: FontWeight.w800),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        HeroGlassButton(
+                          key: const ValueKey('home-search'),
+                          icon: NxI.magnifyingGlass,
+                          tooltip: tr('ค้นหาทุกอย่าง'),
+                          solid: p,
+                          onTap: (_) => context.push(AppRoutes.globalSearch),
+                        ),
+                        const SizedBox(width: 10),
+                        _HeroBell(solid: p),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Frosted round button on the photo (blur where effects allow).
 class HeroGlassButton extends StatelessWidget {
-  const HeroGlassButton({super.key, required this.icon, required this.onTap, this.tooltip, this.badge = 0});
+  const HeroGlassButton({super.key, required this.icon, required this.onTap, this.tooltip, this.badge = 0, this.solid = 0});
   final IconData icon;
+
+  /// 0 = frosted on the scene, 1 = the header's solid round button (page under it).
+  final double solid;
 
   /// Gets the button's own context (bell: the panel grows out of it).
   final void Function(BuildContext context) onTap;
@@ -237,20 +311,39 @@ class HeroGlassButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final level = Effects.of(context);
     final blur = level != EffectsLevel.off;
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final p = solid.clamp(0.0, 1.0);
+    // Same fill as the list pages' header buttons once the page is under it.
+    final fill = dark ? const Color(0xFF2A2B36) : Colors.white;
     Widget face = Material(
-      color: Colors.white.withValues(alpha: blur ? 0.22 : 0.30),
-      shape: CircleBorder(side: BorderSide(color: Colors.white.withValues(alpha: 0.45))),
+      color: Color.lerp(Colors.white.withValues(alpha: blur ? 0.22 : 0.30), fill, p),
+      shape: CircleBorder(side: BorderSide(color: Colors.white.withValues(alpha: 0.45 * (1 - p)))),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: () => onTap(context),
         child: Center(
-          child: Icon(icon, size: 21, color: Colors.white, shadows: _textShadow),
+          child: Icon(
+            icon,
+            size: 21,
+            color: Color.lerp(Colors.white, theme.colorScheme.onSurface, p),
+            shadows: p >= 1 ? null : [for (final s in _textShadow) Shadow(color: s.color.withValues(alpha: s.color.a * (1 - p)), blurRadius: s.blurRadius, offset: s.offset)],
+          ),
         ),
       ),
     );
-    if (blur) {
+    if (blur && p < 1) {
       face = ClipOval(
         child: BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14), child: face),
+      );
+    }
+    if (p > 0) {
+      face = DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: (dark ? 0.5 : 0.18) * p), blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: face,
       );
     }
     final button = Semantics(
@@ -294,7 +387,8 @@ class HeroGlassButton extends StatelessWidget {
 }
 
 class _HeroBell extends StatelessWidget {
-  const _HeroBell();
+  const _HeroBell({this.solid = 0});
+  final double solid;
 
   @override
   Widget build(BuildContext context) {
@@ -305,6 +399,7 @@ class _HeroBell extends StatelessWidget {
         icon: NxI.bell,
         tooltip: tr('การแจ้งเตือน'),
         badge: UnreadNotifications.instance.count,
+        solid: solid,
         onTap: (btn) async {
           final box = btn.findRenderObject() as RenderBox?;
           if (box == null || !box.hasSize) {
