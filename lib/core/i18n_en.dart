@@ -3023,6 +3023,22 @@ const Map<String, String> enStrings = {
   'แบบสำรอง': 'Fallback',
   'แสดงแบบสำรอง (ไม่ใช่เทมเพลตเอกสาร) เพราะเซิร์ฟเวอร์รายงาน (BIRT) สร้างเอกสารไม่ได้': 'Showing the fallback (not the document template) because the report server (BIRT) could not build the document',
   'ไฟล์ใหญ่เกิน': 'File larger than',
+  // R72: comments tab
+  'กล่าวถึง (@)': 'Mention (@)',
+  'กำลังโหลดรายชื่อ…': 'Loading people…',
+  'ซ่อนการตอบกลับ': 'Hide replies',
+  'ดาวน์โหลดไฟล์ไม่สำเร็จ': 'Could not download the file',
+  'บันทึกลงเครื่อง': 'Save to device',
+  'บันทึกไฟล์แล้ว': 'File saved',
+  'รออัปโหลดให้เสร็จ': 'Wait for uploads to finish',
+  'อัปโหลดไม่สำเร็จ': 'Upload failed',
+  'เขียนจากช่องด้านล่างของจอ — พิมพ์ @ เพื่อกล่าวถึง แนบรูป ไฟล์ หรือลิงก์ได้': 'Write in the box at the bottom — type @ to mention, attach photos, files or links',
+  'เขียนจากช่องด้านบน — พิมพ์ @ เพื่อกล่าวถึง แนบรูป ไฟล์ หรือลิงก์ได้': 'Write in the box above — type @ to mention, attach photos, files or links',
+  'เริ่มสนทนาได้จากช่องด้านล่าง — พิมพ์ @ เพื่อกล่าวถึง แนบรูป ไฟล์ หรือลิงก์ได้': 'Start the conversation below — type @ to mention, attach photos, files or links',
+  'เปิดกล้อง / คลังรูปไม่ได้': 'Couldn\'t open the camera / photo library',
+  'แนบรูป / ไฟล์': 'Attach photos / files',
+  'ไฟล์ใหญ่เกิน 500 MB': 'File is larger than 500 MB',
+  'ไม่แสดงตัวอย่างลิงก์': 'Don\'t show link preview',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -3315,4 +3331,8 @@ const Map<String, String> enPatterns = {
   '{} เสียง': '{} voices',
   'ส่งให้ {} คนในแชทแล้ว': 'Sent to {} people in chat',
   '{} งานที่ต้องทำต่อ': '{} follow-ups',
+  // R72: comments tab
+  'การตอบกลับ {} รายการใต้คอมเม้นท์นี้จะถูกลบไปด้วย': 'The {} replies under this comment will be deleted too',
+  'ดูการตอบกลับ {} รายการ': 'View {} replies',
+  'แนบได้สูงสุด {} ไฟล์ต่อคอมเม้นท์': 'Up to {} files per comment',
 };

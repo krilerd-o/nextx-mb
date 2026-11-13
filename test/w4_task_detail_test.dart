@@ -145,6 +145,7 @@ void main() {
   testWidgets('comment send and like', (tester) async {
     final adapter = await pump(tester);
     await tester.enterText(find.byKey(const ValueKey('ws-comment-input')), '[QA] ความเห็นใหม่');
+    await tester.pump(); // send turns on once there is text (R72)
     await tester.tap(find.byKey(const ValueKey('ws-comment-send')));
     await tester.pump(const Duration(milliseconds: 300));
     expect('${_body(adapter, 'POST /api/boards/1/tasks/1/comments')['body']}', contains('[QA] ความเห็นใหม่'));

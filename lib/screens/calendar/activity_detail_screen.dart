@@ -34,8 +34,14 @@ import '../../widgets/nx_refresh.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
-  const ActivityDetailScreen({super.key, required this.row});
+  const ActivityDetailScreen({super.key, required this.row, this.initialTab, this.focusCommentId});
   final Map<String, dynamic> row;
+
+  /// `comments` / `files` / `history` (deep link from a notification).
+  final String? initialTab;
+
+  /// Comment to highlight (mention notification).
+  final String? focusCommentId;
 
   @override
   State<ActivityDetailScreen> createState() => _ActivityDetailScreenState();
@@ -47,8 +53,20 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   bool _busy = false;
   Object? _error;
   late Map<String, dynamic> _row = Map<String, dynamic>.from(widget.row);
-  int _tab = 0;
+  late int _tab = switch (widget.initialTab) { 'comments' => 1, 'files' => 2, 'history' => 3, _ => 0 };
   List<Map<String, dynamic>> _comments = [];
+
+  /// Comments tab composer (sticky at the bottom while the tab is open).
+  late final NxCommentsController _commentsCtl;
+
+  Future<void> _reloadComments() async {
+    try {
+      final list = await context.read<AppConfig>().apiClient.getEntityComments('activity', _id);
+      if (mounted) setState(() => _comments = list);
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
+  }
   List<Map<String, dynamic>> _timeline = [];
   bool _timelineLoading = false;
   bool _timelineLoaded = false;
@@ -58,8 +76,17 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _commentsCtl = entityCommentsController(context, module: 'activity', id: _id, onChanged: _reloadComments);
     _loadVisit();
     _loadRecord();
+    if (_tab == 3) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _loadTimeline(); });
+  }
+
+  @override
+  void dispose() {
+    _commentsCtl.dispose();
+    _scroll.dispose();
+    super.dispose();
   }
 
   /// Callers often pass only `{id}` (FSM job, related lists) — load the full row.
@@ -439,6 +466,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
     final photos = extractMapList(_visit?['photos']);
     return NxScrollScaffold(
       insetBody: false,
+      bottomNavigationBar: _tab == 1 && context.select((AppConfig c) => c.isLoggedIn) ? NxCommentComposer(controller: _commentsCtl, sticky: true) : null,
       header: NxAppHeader(
         title: entityTitle(row, module: 'activity'),
         actions: [
@@ -545,7 +573,9 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                 module: 'activity',
                 id: _id,
                 comments: _comments,
-                onChanged: _loadRecord,
+                onChanged: _reloadComments,
+                controller: context.select((AppConfig c) => c.isLoggedIn) ? _commentsCtl : null,
+                focusCommentId: widget.focusCommentId,
               ),
             ],
             if (_tab == 2) ...[

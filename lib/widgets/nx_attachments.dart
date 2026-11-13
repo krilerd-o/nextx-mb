@@ -81,8 +81,14 @@ Future<void> openNxFile(String url) async {
 }
 
 class NxAttachmentStrip extends StatelessWidget {
-  const NxAttachmentStrip({super.key, required this.items, this.onRemove, this.thumb = 84});
+  const NxAttachmentStrip({super.key, required this.items, this.onRemove, this.thumb = 84, this.onOpenFile, this.onFileActions});
   final List<Map<String, dynamic>> items;
+
+  /// Tap on a file card (default: video player / preview browser).
+  final ValueChanged<Map<String, dynamic>>? onOpenFile;
+
+  /// Long press on any item (open / share / save sheet).
+  final ValueChanged<Map<String, dynamic>>? onFileActions;
 
   /// Shows a remove button on each item.
   final ValueChanged<Map<String, dynamic>>? onRemove;
@@ -113,6 +119,7 @@ class NxAttachmentStrip extends StatelessWidget {
                     GestureDetector(
                       key: ValueKey('nx-att-img-$i'),
                       onTap: () => openNxImageViewer(context, urls, i, names: names),
+                      onLongPress: onFileActions == null ? null : () => onFileActions!(images[i]),
                       child: Hero(
                         tag: 'nx-att-${urls[i]}-$i',
                         child: ClipRRect(
@@ -147,7 +154,9 @@ class NxAttachmentStrip extends StatelessWidget {
               child: InkWell(
                 key: ValueKey('nx-att-file-${nxAttachmentName(f)}'),
                 borderRadius: BorderRadius.circular(12),
+                onLongPress: onFileActions == null ? null : () => onFileActions!(f),
                 onTap: () {
+                  if (onOpenFile != null) return onOpenFile!(f);
                   final url = api.absoluteUrl(nxAttachmentUrl(f));
                   // Videos play in the app; other files open in the preview browser.
                   nxIsVideoUrl(url) || nxIsVideoUrl(nxAttachmentName(f)) || '${f['mime'] ?? f['mime_type'] ?? ''}'.startsWith('video/')

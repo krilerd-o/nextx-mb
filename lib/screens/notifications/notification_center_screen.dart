@@ -38,6 +38,7 @@ const notificationCategories = <String, String>{
 
 IconData notificationIcon(Map<String, dynamic> n) {
   final type = '${n['type'] ?? ''} ${n['link_path'] ?? ''}'.toLowerCase();
+  if (type.startsWith('mention ')) return NxI.at;
   if (type.contains('chat') || type.contains('camp')) return NxI.chatCircle;
   if (type.contains('calendar') || type.contains('activity')) return NxI.calendarBlank;
   if (type.contains('workspace') || type.contains('task')) return NxI.kanban;

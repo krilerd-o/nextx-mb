@@ -52,7 +52,18 @@ String? notificationTab(String? extra) {
   if (e.isEmpty) return null;
   if (e.startsWith('quotation_approv') || e == 'quotation_rejected') return 'approval';
   if (e.startsWith('quotation_customer') || e.startsWith('job_') || e == 'job_from_quotation') return 'summary';
+  if (e == 'comment_mention') return 'comments';
   return null;
+}
+
+/// `?tab=comments&comment=<id>` for links to a record comment (web `section=comments&comment=`).
+String _commentQuery(Uri? uri) {
+  if (uri == null) return '';
+  final section = uri.queryParameters['section'] ?? uri.queryParameters['tab'];
+  final comment = uri.queryParameters['comment'];
+  final hasComment = comment != null && comment.isNotEmpty;
+  if (section != 'comments' && !hasComment) return '';
+  return '?tab=comments${hasComment ? '&comment=${Uri.encodeQueryComponent(comment)}' : ''}';
 }
 
 String notificationDeepLink(String path, {String? linkId, String? extra}) {
@@ -96,17 +107,19 @@ String _notificationDeepLink(String path, {String? linkId, String? extra}) {
       id = segs[2];
     }
     id ??= (open != null && open.isNotEmpty) ? open : linkId;
+    final q = _commentQuery(uri);
+    if (module == 'activity' && q.isNotEmpty && id != null && id.isNotEmpty) return '${AppRoutes.activity(id)}$q';
     if (EntityModules.isFsm(module)) {
-      if (id != null && id.isNotEmpty) return AppRoutes.fsmRecord(module, id);
+      if (id != null && id.isNotEmpty) return '${AppRoutes.fsmRecord(module, id)}$q';
       return AppRoutes.fsmModule(module);
     }
-    if (id != null && id.isNotEmpty) return AppRoutes.crmRecord(module, id);
+    if (id != null && id.isNotEmpty) return '${AppRoutes.crmRecord(module, id)}$q';
     return AppRoutes.crmModule(module);
   }
 
   if (segs.isNotEmpty && segs.first == 'calendar') {
     final id = segs.length >= 2 ? segs[1] : (open ?? linkId);
-    if (id != null && id.isNotEmpty) return AppRoutes.activity(id);
+    if (id != null && id.isNotEmpty) return '${AppRoutes.activity(id)}${_commentQuery(uri)}';
     return AppRoutes.calendar;
   }
 

@@ -138,6 +138,7 @@ void main() {
     expect(adapter.callKeys, contains('GET /api/entity/lead/5/comments'));
     expect(find.textContaining('[QA] คอมเมนต์เดิม'), findsOneWidget);
     await tester.enterText(find.byType(TextField).last, '[QA] อัปเดตจากรายการ');
+    await tester.pump(); // send turns on once there is text (R72)
     await tester.tap(find.byTooltip('ส่ง'));
     await settle(tester);
     final post = adapter.calls.where((c) => c.method == 'POST' && c.path == '/api/entity/lead/5/comments').toList();

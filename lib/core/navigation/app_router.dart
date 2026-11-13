@@ -359,6 +359,7 @@ GoRouter createAppRouter(AppConfig config) {
           module: state.pathParameters['module'] ?? 'lead',
           id: state.pathParameters['id'] ?? '',
           tab: state.uri.queryParameters['tab'],
+          comment: state.uri.queryParameters['comment'],
         ),
       ),
       GoRoute(
@@ -371,6 +372,7 @@ GoRouter createAppRouter(AppConfig config) {
           module: state.pathParameters['module'] ?? 'job',
           id: state.pathParameters['id'] ?? '',
           tab: state.uri.queryParameters['tab'],
+          comment: state.uri.queryParameters['comment'],
         ),
       ),
       GoRoute(
@@ -379,7 +381,11 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: '/calendar/:id',
-        builder: (_, state) => ActivityByIdLoader(id: state.pathParameters['id'] ?? ''),
+        builder: (_, state) => ActivityByIdLoader(
+          id: state.pathParameters['id'] ?? '',
+          tab: state.uri.queryParameters['tab'],
+          comment: state.uri.queryParameters['comment'],
+        ),
       ),
       GoRoute(
         path: '/jobs/:id',

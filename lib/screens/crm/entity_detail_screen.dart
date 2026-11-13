@@ -54,10 +54,13 @@ import 'package:share_plus/share_plus.dart';
 import '../../widgets/nx_refresh.dart';
 
 class EntityDetailScreen extends StatefulWidget {
-  const EntityDetailScreen({super.key, required this.module, required this.row, this.embedded = false, this.onDeleted, this.initialTab});
+  const EntityDetailScreen({super.key, required this.module, required this.row, this.embedded = false, this.onDeleted, this.initialTab, this.focusCommentId});
 
   /// Open on this tab (e.g. 'approval' from an approval notification).
   final String? initialTab;
+
+  /// Comment to highlight on the comments tab (mention notification).
+  final String? focusCommentId;
 
   final String module;
   final Map<String, dynamic> row;
@@ -93,10 +96,24 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   /// Current tab id (tabs differ per module / journey).
   late String _tabId = widget.initialTab ?? (widget.module == 'inspection' ? 'insp-summary' : 'info');
 
+  /// Comments tab: composer state (sticky at the bottom while the tab is open).
+  late final NxCommentsController _commentsCtl;
+
+  /// After posting / editing / deleting a comment: only the comments are fetched again.
+  Future<void> _reloadComments() async {
+    try {
+      final list = await context.read<AppConfig>().apiClient.getEntityComments(widget.module, _id);
+      if (mounted) setState(() => _comments = list);
+    } catch (e, s) {
+      ErrorReporting.report(e, s);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _row = Map<String, dynamic>.from(widget.row);
+    _commentsCtl = entityCommentsController(context, module: widget.module, id: _id, onChanged: _reloadComments);
     _reload();
     // Opened straight on the history tab (deep link / "ดูประวัติ"): load it now,
     // since only switching tabs loads it otherwise.
@@ -128,6 +145,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     _paneScroll.dispose();
     _leftScroll.dispose();
     _jc?.dispose();
+    _commentsCtl.dispose();
     super.dispose();
   }
 
@@ -811,7 +829,14 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   onChangeStatus: canEdit ? _pickStatus : null,
                   statusLabel: _pickOptions('inspection_status').where((o) => o.value == '${_row['inspection_status'] ?? ''}').firstOrNull?.label,
                 ),
-                'comments' => EntityCommentsPanel(module: widget.module, id: _id, comments: _comments, onChanged: _reload),
+                'comments' => EntityCommentsPanel(
+                  module: widget.module,
+                  id: _id,
+                  comments: _comments,
+                  onChanged: _reloadComments,
+                  controller: loggedIn ? _commentsCtl : null,
+                  focusCommentId: widget.focusCommentId,
+                ),
                 'files' => EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
                 'history' => EntityHistoryPanel(events: _timeline, loading: _timelineLoading, valueLabel: _valueLabel),
                 'activities' => Column(
@@ -907,6 +932,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
 
     return NxScrollScaffold(
       insetBody: false,
+      // Comments tab: the composer stays at the bottom and rises with the keyboard.
+      bottomNavigationBar: loggedIn && !_loading && _tabsResolved() == 'comments' ? NxCommentComposer(controller: _commentsCtl, sticky: true) : null,
       header: NxAppHeader(
         title: title,
         automaticallyImplyLeading: !widget.embedded,

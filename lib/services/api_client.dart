@@ -269,6 +269,7 @@ class ApiClient {
     Object? data,
     Options? options,
     CancelToken? cancel,
+    ProgressCallback? onSendProgress,
   }) async {
     try {
       final isForm = data is FormData;
@@ -277,6 +278,7 @@ class ApiClient {
         queryParameters: query,
         data: data,
         cancelToken: cancel,
+        onSendProgress: onSendProgress,
         options: (options ?? Options()).copyWith(
           method: method,
           contentType: isForm ? null : options?.contentType,
@@ -905,6 +907,22 @@ class ApiClient {
         if (attachments != null) 'attachments': attachments,
       }));
 
+  /// People who can be @mentioned on a record: business users who can open it
+  /// (`GET /api/entity/:module/:id/mention-users`); servers without the route → all business users.
+  Future<List<Map<String, dynamic>>> getEntityMentionUsers(String module, String id) async {
+    try {
+      final env = await _send('GET', '/api/entity/$module/$id/mention-users');
+      return extractMapList(env['data']);
+    } catch (_) {
+      return getUsersCached();
+    }
+  }
+
+  /// Delete a record comment and its replies (author; business owner/admin may delete any).
+  Future<void> deleteEntityComment(String module, String id, Object commentId) async {
+    await _send('DELETE', '/api/entity/$module/$id/comments/$commentId');
+  }
+
   /// Unified history (`audit` / `field_change` / status / engagement events,
   /// newest first) — `GET /api/entity/:module/:id/timeline`.
   Future<List<Map<String, dynamic>>> getEntityTimeline(String module, String id, {int limit = 100}) async {
@@ -926,8 +944,8 @@ class ApiClient {
 
   /// Uploads to File Manager and returns comment-attachment maps
   /// (`{url, name, mime, size, file_id}`), the same shape the web sends.
-  Future<List<Map<String, dynamic>>> uploadCommentAttachments(List<MultipartFile> files) async {
-    final res = await uploadFiles(files);
+  Future<List<Map<String, dynamic>>> uploadCommentAttachments(List<MultipartFile> files, {ProgressCallback? onSendProgress}) async {
+    final res = await uploadFiles(files, onSendProgress: onSendProgress);
     final rows = extractMapList(res['list'] ?? res['files'] ?? res);
     return [
       for (final r in rows)
@@ -1232,12 +1250,12 @@ class ApiClient {
   }
 
   /// Uploads files to a board; returns `[{url, name, size, mime}]` to store on a task.
-  Future<List<Map<String, dynamic>>> uploadBoardAttachments(String boardId, List<MultipartFile> files) async {
+  Future<List<Map<String, dynamic>>> uploadBoardAttachments(String boardId, List<MultipartFile> files, {ProgressCallback? onSendProgress}) async {
     final form = FormData();
     for (final f in files) {
       form.files.add(MapEntry('files', f));
     }
-    final env = await _send('POST', '/api/boards/$boardId/attachments', data: form);
+    final env = await _send('POST', '/api/boards/$boardId/attachments', data: form, onSendProgress: onSendProgress);
     return extractMapList(env['data']);
   }
 
@@ -2350,13 +2368,33 @@ class ApiClient {
 
   Future<List<int>> downloadFile(String id) => _downloadBytes('/api/files/$id/download');
 
-  Future<Map<String, dynamic>> uploadFiles(List<MultipartFile> files, {String? folderId}) async {
+  Future<Map<String, dynamic>> uploadFiles(List<MultipartFile> files, {String? folderId, ProgressCallback? onSendProgress}) async {
     final form = FormData();
     if (folderId != null && folderId.isNotEmpty) form.fields.add(MapEntry('folder_id', folderId));
     for (final f in files) {
       form.files.add(MapEntry('files', f));
     }
-    return _dataMap(await _send('POST', '/api/files/upload', data: form));
+    return _dataMap(await _send('POST', '/api/files/upload', data: form, onSendProgress: onSendProgress));
+  }
+
+  /// Bytes of an uploaded file (`/uploads/...` or an absolute URL) — preview / share / save.
+  Future<List<int>> downloadFileBytes(String url) => _downloadBytes(url);
+
+  final Map<String, Future<Map<String, dynamic>>> _linkPreviews = {};
+
+  /// Open Graph card of a link (`GET /api/chat/unfurl?url=`, the web's unfurl; server-side
+  /// SSRF-safe + cached). `{url, title, description, image, siteName}`; cached per URL for the
+  /// session, failures are not cached.
+  Future<Map<String, dynamic>> getLinkPreview(String url) {
+    final hit = _linkPreviews[url];
+    if (hit != null) return hit;
+    final f = _send('GET', '/api/chat/unfurl', query: {'url': url}).then(_dataMap);
+    _linkPreviews[url] = f;
+    f.catchError((Object _) {
+      _linkPreviews.remove(url);
+      return const <String, dynamic>{};
+    });
+    return f;
   }
 
   Future<List<Map<String, dynamic>>> getMail({String box = 'inbox', int limit = 40}) async {
