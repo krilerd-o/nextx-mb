@@ -9,17 +9,22 @@ import '../../services/notebook/notebook_controller.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../comm_ai/comm_ai_isaac.dart';
+import '../../core/notebook/notebook_studio_meta.dart';
+import 'notebook_audio_overview.dart';
 import 'notebook_note_viewer.dart';
 import 'notebook_widgets.dart';
 
 /// "สตูดิโอ" tab: make study material from the enabled sources, and the
 /// notebook's notes (saved answers, studio outputs, own notes).
 class NotebookStudioPane extends StatelessWidget {
-  const NotebookStudioPane({super.key, required this.c, this.onAsk});
+  const NotebookStudioPane({super.key, required this.c, this.onAsk, this.onDraft});
   final NotebookController c;
 
   /// Ask in the chat (mind map node "ถามต่อ").
   final ValueChanged<String>? onAsk;
+
+  /// Put a question in the chat composer ("ถามในแชท" on the interactive mind map).
+  final ValueChanged<String>? onDraft;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(listenable: c, builder: (context, _) => _build(context));
@@ -31,15 +36,22 @@ class NotebookStudioPane extends StatelessWidget {
       return;
     }
     String? template;
+    Map<String, dynamic>? options;
     if (kind.id == 'infographic') {
       template = await _pickTemplate(context);
       if (template == null) return;
     }
+    if (kind.id == 'audio' && context.mounted) {
+      // Audio Overview v2: format + length first (no options = the classic single voice).
+      final pick = await showAudioOptionsSheet(context);
+      if (pick == null) return;
+      options = audioStudioOptions(format: pick.format, length: pick.length);
+    }
     HapticFeedback.selectionClick();
     try {
-      final note = await c.runStudio(kind, templateId: template, locale: L10n.isEn ? 'en' : 'th');
+      final note = await c.runStudio(kind, templateId: template, locale: L10n.isEn ? 'en' : 'th', options: options);
       HapticFeedback.mediumImpact();
-      if (note != null && context.mounted) await openNotebookNote(context, c, note, onAsk: onAsk);
+      if (note != null && context.mounted) await openNotebookNote(context, c, note, onAsk: onAsk, onDraft: onDraft);
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(tr(notebookError(e).text))));
     }
@@ -104,7 +116,7 @@ class NotebookStudioPane extends StatelessWidget {
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           sliver: SliverGrid(
-            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 220, mainAxisSpacing: 10, crossAxisSpacing: 10, mainAxisExtent: 74 * ts),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 220, mainAxisSpacing: 10, crossAxisSpacing: 10, mainAxisExtent: 80 * ts),
             delegate: SliverChildListDelegate([for (final k in StudioKind.all) _tile(context, k, busy: run != null)]),
           ),
         ),
@@ -197,7 +209,8 @@ class NotebookStudioPane extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(tr(k.label), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800, height: 1.25)),
+              // Long names (สรุปสำหรับผู้บริหาร) wrap rather than lose their ending.
+              Text(tr(k.label), maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w800, height: 1.25)),
               Text(tr(k.hint), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.3)),
             ]),
           ),
@@ -214,7 +227,7 @@ class NotebookStudioPane extends StatelessWidget {
     return NotebookCard(
       key: ValueKey('notebook-note-${n.id}'),
       padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
-      onTap: () => openNotebookNote(context, c, n, onAsk: onAsk),
+      onTap: () => openNotebookNote(context, c, n, onAsk: onAsk, onDraft: onDraft),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         StudioKindBadge(kind: k, size: 40),
         const SizedBox(width: 12),

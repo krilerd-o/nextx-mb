@@ -53,6 +53,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
   void initState() {
     super.initState();
     _tab = widget.initialTab;
+    if (widget.initialTab == NotebookTab.studio) _side = NotebookTab.studio;
     _c.addListener(_onChange);
     _c.guideLocale = L10n.isEn ? 'en' : 'th';
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -80,7 +81,7 @@ class _NotebookScreenState extends State<NotebookScreen> {
       await _c.load(quiet: true);
       note = _c.noteById(nid);
     }
-    if (note != null && mounted) await openNotebookNote(context, _c, note, onAsk: _ask);
+    if (note != null && mounted) await openNotebookNote(context, _c, note, onAsk: _ask, onDraft: _draft);
   }
 
   Future<void> _record() async {
@@ -113,6 +114,12 @@ class _NotebookScreenState extends State<NotebookScreen> {
   void _ask(String q) {
     _setTab(NotebookTab.chat);
     WidgetsBinding.instance.addPostFrameCallback((_) => _chatKey.currentState?.ask(q));
+  }
+
+  /// Switches to the chat with [q] in the composer (not sent yet).
+  void _draft(String q) {
+    _setTab(NotebookTab.chat);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _chatKey.currentState?.draft(q));
   }
 
   Future<void> _edit() async {
@@ -181,9 +188,9 @@ class _NotebookScreenState extends State<NotebookScreen> {
       key: _chatKey,
       c: _c,
       onGoSources: () => _setTab(NotebookTab.sources),
-      onNoteSaved: (n) => openNotebookNote(context, _c, n, onAsk: _ask),
+      onNoteSaved: (n) => openNotebookNote(context, _c, n, onAsk: _ask, onDraft: _draft),
     );
-    final studio = NotebookStudioPane(c: _c, onAsk: _ask);
+    final studio = NotebookStudioPane(c: _c, onAsk: _ask, onDraft: _draft);
     final bp = NxBreakpoint.of(context);
     if (bp.width >= 1100 && bp.height >= 560) {
       return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

@@ -423,6 +423,24 @@ class NotebookController extends ChangeNotifier {
     _notify();
   }
 
+  // ── chat settings
+
+  ChatSettings get chatSettings => notebook?.chatSettings ?? ChatSettings.defaults;
+
+  /// Saves how ISAAC answers here; null resets to the defaults. Throws (e.g. 400 validation) to the caller.
+  Future<void> saveChatSettings(ChatSettings? s) async {
+    final nb = notebook;
+    if (nb == null) return;
+    final m = await api.updateNotebookChatSettings(id, s?.toJson());
+    if (m['id'] != null) {
+      notebook = nb.merge(Notebook.fromJson({'user_id': nb.userId, ...m}));
+      _sortSources();
+    }
+    // Older servers echo the row without `chat_settings`: keep what was saved.
+    notebook!.chatSettings = m['chat_settings'] is Map ? ChatSettings.fromJson(Map<String, dynamic>.from(m['chat_settings'] as Map)) : (s ?? ChatSettings.defaults);
+    _notify();
+  }
+
   // ── sources
 
   Future<void> toggleSource(NotebookSource s, bool enabled) async {
@@ -888,14 +906,15 @@ class NotebookController extends ChangeNotifier {
   }
 
   /// Makes a studio output from the enabled sources; returns the new note.
-  Future<NotebookNote?> runStudio(StudioKind kind, {String? templateId, String locale = 'th'}) async {
+  /// [options]: e.g. `{audio: {format, length, hosts: 2}}` for the v2 Audio Overview.
+  Future<NotebookNote?> runStudio(StudioKind kind, {String? templateId, String locale = 'th', Map<String, dynamic>? options}) async {
     if (studioRun != null || notebook == null) return null;
     final run = studioRun = StudioRun(kind);
     _notify();
     try {
       final before = {for (final n in notes) n.id};
       final async = await _useJobs();
-      final res = await api.runNotebookStudio(id, kind: kind.id, sourceIds: [for (final s in enabledSources) s.id], locale: locale, templateId: templateId, async: async);
+      final res = await api.runNotebookStudio(id, kind: kind.id, sourceIds: [for (final s in enabledSources) s.id], locale: locale, templateId: templateId, async: async, options: options);
       NotebookNote? note;
       if (res['queued'] == true && res['jobId'] != null) {
         run.phase = 'queued';

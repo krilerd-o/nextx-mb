@@ -634,21 +634,27 @@ class _CrmFormState extends State<_CrmForm> {
 // -------------------------------------------------------------- source viewer
 
 /// Source guide sheet: what the source says, plus refresh / rename / delete /
-/// on-off. [highlight] marks a cited passage and scrolls to it.
-Future<void> showSourceViewer(BuildContext context, NotebookController c, NotebookSource s, {String? highlight}) {
+/// on-off. [highlight] marks a cited passage and scrolls to it: at [start]..[end]
+/// (offsets into the source content) when they fit, else wherever the text is found.
+Future<void> showSourceViewer(BuildContext context, NotebookController c, NotebookSource s, {String? highlight, int? start, int? end}) {
+  final mark = highlight != null || (start != null && end != null);
   return showNxSnapSheet<void>(
     context: context,
     snaps: const [0.62, 0.95],
-    initial: highlight != null ? 0.95 : null,
-    builder: (ctx, scroll) => NotebookSourceViewer(c: c, source: s, highlight: highlight, scroll: scroll),
+    initial: mark ? 0.95 : null,
+    builder: (ctx, scroll) => NotebookSourceViewer(c: c, source: s, highlight: highlight, start: start, end: end, scroll: scroll),
   );
 }
 
 class NotebookSourceViewer extends StatefulWidget {
-  const NotebookSourceViewer({super.key, required this.c, required this.source, this.highlight, this.scroll});
+  const NotebookSourceViewer({super.key, required this.c, required this.source, this.highlight, this.start, this.end, this.scroll});
   final NotebookController c;
   final NotebookSource source;
   final String? highlight;
+
+  /// Offsets of the passage in the source `content` (citation passages, verified quotes).
+  final int? start;
+  final int? end;
   final ScrollController? scroll;
 
   @override
@@ -666,7 +672,7 @@ class _NotebookSourceViewerState extends State<NotebookSourceViewer> {
   @override
   void initState() {
     super.initState();
-    if (widget.highlight != null) {
+    if (widget.highlight != null || widget.start != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final ctx = _hit.currentContext;
         if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 350), alignment: 0.2);
@@ -719,7 +725,10 @@ class _NotebookSourceViewerState extends State<NotebookSourceViewer> {
     final cs = theme.colorScheme;
     final st = sourceKindStyle(_s);
     final body = _s.body;
-    final hit = findQuote(body, widget.highlight);
+    // Offsets point into `content`; with only an excerpt, look for the text instead.
+    final hit = _s.content.trim().isNotEmpty
+        ? passageRange(body, start: widget.start, end: widget.end, quote: widget.highlight)
+        : findQuote(body, widget.highlight);
     final url = _s.url;
     final canWrite = widget.c.canWrite;
     final long = body.length > _previewChars && !_full && hit == null;

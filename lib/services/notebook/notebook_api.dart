@@ -32,6 +32,11 @@ extension NotebookApi on ApiClient {
   Future<Map<String, dynamic>> updateNotebook(String id, Map<String, dynamic> body) async =>
       _item(await _send('PATCH', '/api/ai/notebooks/$id', data: body));
 
+  /// `{chat_settings: {goal, custom_prompt, persona, length}}` (merged by the server);
+  /// [settings] null resets to the defaults. 400 `SYS_400_VALIDATION` when a custom goal has no prompt.
+  Future<Map<String, dynamic>> updateNotebookChatSettings(String id, Map<String, dynamic>? settings) async =>
+      _item(await _send('PATCH', '/api/ai/notebooks/$id', data: {'chat_settings': settings}));
+
   Future<void> deleteNotebook(String id) async => _send('DELETE', '/api/ai/notebooks/$id');
 
   /// "ลบข้อมูลของฉัน": every Notebook recording this user made in the business (audio, transcript,
@@ -86,6 +91,7 @@ extension NotebookApi on ApiClient {
     String locale = 'th',
     String? templateId,
     bool async = false,
+    Map<String, dynamic>? options,
   }) async {
     final d = _dataMap(await _send(
       'POST',
@@ -98,6 +104,7 @@ extension NotebookApi on ApiClient {
         'provider': 'auto',
         'template_id': ?templateId,
         if (async) 'async': true,
+        if (options != null && options.isNotEmpty) 'options': options,
       },
       options: Options(receiveTimeout: const Duration(minutes: 4)),
     ));
