@@ -28,6 +28,17 @@ const kActivityOutcomeSections = [
   ActivityOutcomeSection('remark', 'หมายเหตุ', 'เรื่องที่ควรรู้เพิ่มเติม เช่น ข้อควรระวัง', NxI.note, Color(0xFFD97706)),
 ];
 
+/// Job report write-ups (stored on `aicrm_job`): the four blocks the job
+/// report prints (BIRT job_template2 / job_work_order, `jobTemplate2Pdf.js`):
+/// Problem `problem_found`, Actions taken `work_performed`, Suggestions
+/// `customer_suggestion`, Remarks `additional_remark`.
+const kJobReportSections = [
+  ActivityOutcomeSection('problem_found', 'Problem', 'ปัญหาที่พบ — สภาพปัญหาก่อนปรับปรุงแก้ไข', NxI.warningCircle, Color(0xFFDC2626)),
+  ActivityOutcomeSection('work_performed', 'Action Taken', 'วิธีการแก้ไข — สิ่งที่ได้ปรับปรุงและแก้ไข', NxI.wrench, Color(0xFF2563EB)),
+  ActivityOutcomeSection('customer_suggestion', 'Suggestions', 'ข้อเสนอแนะให้แก่ลูกค้า (ถ้ามี)', NxI.lightning, Color(0xFF16A34A)),
+  ActivityOutcomeSection('additional_remark', 'Remark', 'หมายเหตุเพิ่มเติม', NxI.note, Color(0xFFD97706)),
+];
+
 /// Seed of the "สร้างนัดหมายต่อ" form: same customer / place / guests,
 /// subject = first line of the next step.
 Map<String, dynamic> activityFollowUpSeed(Map<String, dynamic> row, String nextStep) {
@@ -63,10 +74,27 @@ enum _SaveState { idle, pending, saving, saved, error }
 /// Overview of an activity, under the description: สรุปผล / ขั้นตอนถัดไป /
 /// หมายเหตุ. Empty sections sit as small "＋" chips; a chip opens an input card
 /// that saves itself once typing stops; a filled section is a card (tap to edit).
+/// Also used by the job summary with [module] `job` and [kJobReportSections].
 class ActivityOutcomeNotes extends StatefulWidget {
-  const ActivityOutcomeNotes({super.key, required this.activityId, required this.row, this.onSaved, this.onFollowUp, this.debounce = const Duration(milliseconds: 800)});
+  const ActivityOutcomeNotes({
+    super.key,
+    required this.activityId,
+    required this.row,
+    this.onSaved,
+    this.onFollowUp,
+    this.debounce = const Duration(milliseconds: 800),
+    this.module = 'activity',
+    this.sections = kActivityOutcomeSections,
+    this.readOnly = false,
+  });
 
+  /// Record id (activity id, or job id with [module] `job`).
   final String activityId;
+  final String module;
+  final List<ActivityOutcomeSection> sections;
+
+  /// Filled sections show; nothing can be added or edited.
+  final bool readOnly;
   final Map<String, dynamic> row;
 
   /// After a section was saved (field, new value or null).
@@ -108,7 +136,7 @@ class _ActivityOutcomeNotesState extends State<ActivityOutcomeNotes> {
   void initState() {
     super.initState();
     _api = context.read<AppConfig>().apiClient;
-    for (final s in kActivityOutcomeSections) {
+    for (final s in widget.sections) {
       _values[s.field] = _clean(widget.row[s.field]);
     }
   }
@@ -117,7 +145,7 @@ class _ActivityOutcomeNotesState extends State<ActivityOutcomeNotes> {
   void didUpdateWidget(ActivityOutcomeNotes old) {
     super.didUpdateWidget(old);
     // A reload brings the server values; sections being typed in keep theirs.
-    for (final s in kActivityOutcomeSections) {
+    for (final s in widget.sections) {
       if (_open.contains(s.field) || _timers[s.field]?.isActive == true) continue;
       if (widget.row.containsKey(s.field)) _values[s.field] = _clean(widget.row[s.field]);
     }
@@ -180,7 +208,7 @@ class _ActivityOutcomeNotesState extends State<ActivityOutcomeNotes> {
     if (!fromDispose && mounted) setState(() => _state[field] = _SaveState.saving);
     final messenger = _messenger;
     try {
-      await _api.putEntity('activity', widget.activityId, {field: text.isEmpty ? null : text});
+      await _api.putEntity(widget.module, widget.activityId, {field: text.isEmpty ? null : text});
       _values[field] = text;
       widget.onSaved?.call(field, text.isEmpty ? null : text);
       if (!fromDispose && mounted) setState(() => _state[field] = _SaveState.saved);
@@ -194,20 +222,20 @@ class _ActivityOutcomeNotesState extends State<ActivityOutcomeNotes> {
   @override
   Widget build(BuildContext context) {
     final filled = [
-      for (final s in kActivityOutcomeSections)
+      for (final s in widget.sections)
         if (_open.contains(s.field) || (_values[s.field] ?? '').isNotEmpty) s,
     ];
     final empty = [
-      for (final s in kActivityOutcomeSections)
+      for (final s in widget.sections)
         if (!filled.contains(s)) s,
     ];
     return Column(
-      key: const ValueKey('activity-outcome-notes'),
+      key: ValueKey(widget.module == 'activity' ? 'activity-outcome-notes' : '${widget.module}-report-notes'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final s in filled) ...[_open.contains(s.field) ? _editor(context, s) : _card(context, s), const SizedBox(height: 10)],
-        if (empty.isNotEmpty) Wrap(spacing: 8, runSpacing: 8, children: [for (final s in empty) _chip(context, s)]),
+        if (empty.isNotEmpty && !widget.readOnly) Wrap(spacing: 8, runSpacing: 8, children: [for (final s in empty) _chip(context, s)]),
       ],
     );
   }
@@ -241,7 +269,7 @@ class _ActivityOutcomeNotesState extends State<ActivityOutcomeNotes> {
     return NxSurfaceCard(
       key: ValueKey('outcome-card-${s.field}'),
       padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-      onTap: () => _openSection(s.field),
+      onTap: widget.readOnly ? null : () => _openSection(s.field),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -255,7 +283,7 @@ class _ActivityOutcomeNotesState extends State<ActivityOutcomeNotes> {
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: s.color),
                 ),
               ),
-              Icon(NxI.pencilSimple, size: 16, color: cs.onSurfaceVariant),
+              if (!widget.readOnly) Icon(NxI.pencilSimple, size: 16, color: cs.onSurfaceVariant),
             ],
           ),
           const SizedBox(height: 8),

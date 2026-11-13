@@ -133,7 +133,8 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _accepting.add(id));
     try {
-      await context.read<AppConfig>().apiClient.jobWorkflowAction(id, 'accept');
+      // No customer e-mail unless asked (same default as the รับงาน sheet).
+      await context.read<AppConfig>().apiClient.jobWorkflowAction(id, 'accept', skipEmail: true);
       showNxStatusChangedSnack(messenger, label: 'รับงานแล้ว — กำลังดำเนินการ');
       await _load();
     } catch (e) {

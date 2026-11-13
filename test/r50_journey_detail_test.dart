@@ -91,12 +91,15 @@ void main() {
     final left = find.byKey(const ValueKey('detail-pane-left'));
     final right = find.byKey(const ValueKey('detail-pane-right'));
     expect(find.descendant(of: left, matching: find.byKey(const ValueKey('next-accept'))), findsOneWidget);
-    expect(find.descendant(of: right, matching: find.text('ปฏิบัติงาน')), findsWidgets);
+    // R73: ปฏิบัติงาน / กิจกรรม / ลายเซ็น are sections of the summary (left).
+    expect(find.descendant(of: right, matching: find.text('ข้อมูล')), findsWidgets);
+    expect(find.descendant(of: right, matching: find.text('ปฏิบัติงาน')), findsNothing);
     expect(find.descendant(of: right, matching: find.text('สรุป')), findsNothing);
-    // A KPI tile on the left switches the right pane.
+    expect(find.descendant(of: left, matching: find.byKey(const ValueKey('job-signatures-section'))), findsOneWidget);
+    // A KPI tile scrolls the left pane to its section.
     await tester.tap(find.byKey(const ValueKey('kpi-signatures')));
     await _frames(tester);
-    expect(find.descendant(of: right, matching: find.text('ลายเซ็น')), findsWidgets);
+    expect(find.descendant(of: left, matching: find.byKey(const ValueKey('job-sig-box-technician'))).hitTestable(), findsOneWidget);
   });
 
   testWidgets('job: Summary first; next step "accept" → sheet → workflow-action with expected status', (tester) async {
@@ -121,7 +124,8 @@ void main() {
 
   testWidgets('job: stage "ปิดงาน" opens the close dialog and lists missing signatures', (tester) async {
     final a = await _pump(tester, 'job', {
-      'GET /api/entity/job/9': {...job, 'job_status': 'In Progress'},
+      // Both report signatures are there (R73: required before closing).
+      'GET /api/entity/job/9': {...job, 'job_status': 'In Progress', 'technician_signature': 'signatures/t.png', 'customer_signature': 'signatures/c.png'},
       'GET /api/field-service/jobs/9/overview': {...overview, 'job_status': 'In Progress', 'can_close': true, 'activities': {'total': 2, 'open': 1, 'done': 1}},
       'GET /api/field-service/jobs/9/signatures': {
         'slots': [

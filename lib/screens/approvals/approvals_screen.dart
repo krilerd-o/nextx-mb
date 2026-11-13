@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/activity_guests.dart' show activityTypeLabel;
 import '../../core/approval_queue.dart';
+import '../../core/journey_rules.dart' show jobPriorityLabel;
 import '../../core/entity_display.dart';
 import '../../core/menu_access.dart';
 import '../../core/service_journey.dart';
@@ -140,7 +142,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         await _run(() async => approve ? await api.approveActivity(id) : await api.rejectActivity(id, note: reason), label);
       case 'job':
         // "อนุมัติ" = รับงาน ("ไม่อนุมัติ" opened the job above).
-        await _run(() async => api.jobWorkflowAction(id, 'accept'), 'รับงานแล้ว');
+        // No customer e-mail unless asked (same default as the รับงาน sheet).
+        await _run(() async => api.jobWorkflowAction(id, 'accept', skipEmail: true), 'รับงานแล้ว');
     }
   }
 
@@ -264,12 +267,17 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
       case 'activity':
         return (
           (r['subject'] ?? r['title'] ?? 'กิจกรรม').toString(),
-          [r['owner_name'], r['activitytype'], r['date_start']].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
+          [
+            r['owner_name'],
+            if ('${r['activitytype'] ?? ''}'.isNotEmpty) tr(activityTypeLabel('${r['activitytype']}')),
+            if (r['date_start'] != null) formatThaiField(r['date_start'], 'date_start', module: 'activity', year: uiYear),
+          ].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
         );
       case 'job':
         return (
           '${r['job_no'] ?? ''} ${r['job_name'] ?? ''}'.trim(),
-          [r['customer_name'], r['job_priority'], if (r['plan_start'] != null) thaiDate(r['plan_start'], year: uiYear)].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
+          // Priority in Thai like the web (Normal → ปกติ).
+          [r['customer_name'], jobPriorityLabel(r['job_priority']), if (r['plan_start'] != null) thaiDate(r['plan_start'], year: uiYear)].where((e) => e != null && '$e'.isNotEmpty).join(' · '),
         );
       case 'leave':
         return (

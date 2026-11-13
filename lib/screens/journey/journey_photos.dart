@@ -11,6 +11,7 @@ import '../../services/photo_pipeline.dart';
 import '../../widgets/nx_icons.dart';
 import '../calendar/fast_take_screen.dart';
 import '../calendar/visit_photo_flow.dart' show askPhotoTagMode, PhotoSource, PhotoTagMode;
+import '../calendar/visit_photo_grid.dart' show confirmDeleteVisitPhoto, showVisitPhotoActions;
 import '../../widgets/nx_attachments.dart';
 import 'journey_widgets.dart';
 
@@ -32,7 +33,12 @@ class JourneyPhotosSection extends StatefulWidget {
     required this.onChanged,
     this.canEdit = true,
     this.title = 'รูปงาน',
+    this.compact = false,
   });
+
+  /// Gallery look (job summary): slim add buttons in the header row, the
+  /// grid underneath; photos can be deleted (long-press or the viewer's trash).
+  final bool compact;
 
   final String module;
   final String id;
@@ -131,6 +137,25 @@ class _JourneyPhotosSectionState extends State<JourneyPhotosSection> {
     b.close();
   }
 
+  /// Remove one job photo (`PUT /jobs/:id/photos {remove}` — atomic, does not
+  /// touch uploads still in flight).
+  Future<bool> _delete(Map<String, dynamic> photo) async {
+    final id = '${photo['id'] ?? ''}';
+    if (id.isEmpty) return false;
+    final api = context.read<AppConfig>().apiClient;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      await api.editJobPhotos(widget.id, remove: [id]);
+      HapticFeedback.mediumImpact();
+      widget.onChanged();
+      messenger?.showSnackBar(SnackBar(content: Text(tr('ลบรูปแล้ว'))));
+      return true;
+    } catch (e) {
+      messenger?.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -155,7 +180,15 @@ class _JourneyPhotosSectionState extends State<JourneyPhotosSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.canEdit)
+          if (widget.canEdit && widget.compact)
+            Row(children: [
+              Expanded(child: _SlimAction(key: const ValueKey('journey-photo-camera'), icon: NxI.camera, label: 'ถ่ายรูป', color: cs.primary, primary: true, onTap: () => _take(PhotoSource.camera))),
+              const SizedBox(width: 6),
+              Expanded(child: _SlimAction(key: const ValueKey('journey-photo-fast'), icon: NxI.lightning, label: 'ต่อเนื่อง', color: const Color(0xFFF59E0B), onTap: () => _take(PhotoSource.fastTake))),
+              const SizedBox(width: 6),
+              Expanded(child: _SlimAction(key: const ValueKey('journey-photo-gallery'), icon: NxI.image, label: 'คลังภาพ', color: const Color(0xFF0D9488), onTap: () => _take(PhotoSource.gallery))),
+            ])
+          else if (widget.canEdit)
             Row(children: [
               Expanded(
                 child: _PhotoAction(
@@ -239,12 +272,68 @@ class _JourneyPhotosSectionState extends State<JourneyPhotosSection> {
           if (images.isEmpty && pending == 0 && failed == 0)
             _EmptyPhotos(canEdit: widget.canEdit)
           else
-            JourneyPhotoGrid(items: images, pending: pending, failed: failed, onRetry: () => _batch?.retryFailed()),
+            JourneyPhotoGrid(
+              items: images,
+              pending: pending,
+              failed: failed,
+              onRetry: () => _batch?.retryFailed(),
+              onDelete: widget.compact && widget.canEdit && widget.module == 'job' ? _delete : null,
+            ),
           if (files.isNotEmpty) ...[
             const SizedBox(height: 10),
             NxAttachmentStrip(items: files),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Slim add button: tinted pill, icon + label on one line.
+class _SlimAction extends StatelessWidget {
+  const _SlimAction({super.key, required this.icon, required this.label, required this.color, required this.onTap, this.primary = false});
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    final fg = primary ? cs.onPrimary : color;
+    return Material(
+      color: primary ? color : color.withValues(alpha: dark ? 0.16 : 0.09),
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 42),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 18, color: fg),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    tr(label),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: primary ? cs.onPrimary : cs.onSurface),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -365,8 +454,12 @@ class _EmptyPhotos extends StatelessWidget {
 /// (Hero). More than two rows fold into "+N" and "ดูทั้งหมด"; uploads in
 /// progress show as placeholder squares.
 class JourneyPhotoGrid extends StatefulWidget {
-  const JourneyPhotoGrid({super.key, required this.items, this.pending = 0, this.failed = 0, this.onRetry, this.columns = 5, this.foldRows = 2});
+  const JourneyPhotoGrid({super.key, required this.items, this.pending = 0, this.failed = 0, this.onRetry, this.columns = 5, this.foldRows = 2, this.onDelete});
   final List<Map<String, dynamic>> items;
+
+  /// Delete one photo (true = deleted). Long-press a thumbnail or the
+  /// viewer's trash; both ask "ลบรูปนี้?" first.
+  final Future<bool> Function(Map<String, dynamic> photo)? onDelete;
   final int pending;
   final int failed;
   final VoidCallback? onRetry;
@@ -394,6 +487,14 @@ class _JourneyPhotoGridState extends State<JourneyPhotoGrid> {
     final shownPhotos = folded ? (fold - 1 - extra).clamp(0, urls.length) : urls.length;
     final hidden = urls.length - shownPhotos;
     const gap = 6.0;
+    final del = widget.onDelete;
+    Future<bool> confirmAndDelete(int i) async {
+      if (del == null || i < 0 || i >= widget.items.length) return false;
+      final ok = await confirmDeleteVisitPhoto(context, url: urls[i], message: 'รูปจะถูกลบออกจากใบสั่งงานนี้ และกู้คืนไม่ได้');
+      if (!ok) return false;
+      return del(widget.items[i]);
+    }
+
     return LayoutBuilder(builder: (context, box) {
       final side = (box.maxWidth - gap * (widget.columns - 1)) / widget.columns;
       final dpr = MediaQuery.devicePixelRatioOf(context);
@@ -424,7 +525,14 @@ class _JourneyPhotoGridState extends State<JourneyPhotoGrid> {
             heroTag: 'nx-att-${urls[i]}-$i',
             cacheWidth: (side * dpr).round(),
             index: i,
-            onTap: () => openNxImageViewer(context, urls, i, names: names),
+            onTap: () => openNxImageViewer(context, urls, i, names: names, onDelete: del == null ? null : confirmAndDelete),
+            onLongPress: del == null
+                ? null
+                : () async {
+                    HapticFeedback.mediumImpact();
+                    final action = await showVisitPhotoActions(context, urls[i]);
+                    if (action == 'delete' && context.mounted) await confirmAndDelete(i);
+                  },
           )),
         if (folded && hidden > 0)
           square(Material(
@@ -475,7 +583,8 @@ class _JourneyPhotoGridState extends State<JourneyPhotoGrid> {
 }
 
 class _PhotoThumb extends StatefulWidget {
-  const _PhotoThumb({super.key, required this.url, required this.heroTag, required this.cacheWidth, required this.index, required this.onTap});
+  const _PhotoThumb({super.key, required this.url, required this.heroTag, required this.cacheWidth, required this.index, required this.onTap, this.onLongPress});
+  final VoidCallback? onLongPress;
   final String url;
   final String heroTag;
   final int cacheWidth;
@@ -501,6 +610,12 @@ class _PhotoThumbState extends State<_PhotoThumb> {
       child: GestureDetector(
         onTapDown: (_) => setState(() => _down = true),
         onTapCancel: () => setState(() => _down = false),
+        onLongPress: widget.onLongPress == null
+            ? null
+            : () {
+                setState(() => _down = false);
+                widget.onLongPress!();
+              },
         onTap: () {
           setState(() => _down = false);
           HapticFeedback.selectionClick();

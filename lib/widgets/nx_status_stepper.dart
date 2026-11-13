@@ -41,7 +41,15 @@ class NxStatusStepper extends StatefulWidget {
     this.stepKeyPrefix = 'nx-step-',
     this.doneKeyPrefix = 'nx-step-done-',
     this.padding = const EdgeInsets.symmetric(horizontal: 16),
+    this.trailing = const [],
+    this.revealTrailing = false,
   });
+
+  /// Extra pills after the last step (e.g. a terminal "ยกเลิกงาน" stage).
+  final List<Widget> trailing;
+
+  /// Scroll the trailing pills into view instead of the current step.
+  final bool revealTrailing;
 
   final List<NxStep> steps;
 
@@ -66,6 +74,7 @@ class NxStatusStepper extends StatefulWidget {
 class _NxStatusStepperState extends State<NxStatusStepper> {
   final _scroll = ScrollController();
   final _keys = <int, GlobalKey>{};
+  final _trailingKey = GlobalKey();
 
   @override
   void initState() {
@@ -78,7 +87,7 @@ class _NxStatusStepperState extends State<NxStatusStepper> {
   @override
   void didUpdateWidget(NxStatusStepper old) {
     super.didUpdateWidget(old);
-    if (old.current != widget.current) {
+    if (old.current != widget.current || old.revealTrailing != widget.revealTrailing) {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _reveal(animate: true),
       );
@@ -86,8 +95,10 @@ class _NxStatusStepperState extends State<NxStatusStepper> {
   }
 
   void _reveal({required bool animate}) {
-    if (!mounted || widget.current < 0) return;
-    final ctx = _keys[widget.current]?.currentContext;
+    if (!mounted) return;
+    final ctx = widget.revealTrailing && widget.trailing.isNotEmpty
+        ? _trailingKey.currentContext
+        : (widget.current < 0 ? null : _keys[widget.current]?.currentContext);
     if (ctx == null) return;
     Scrollable.ensureVisible(
       ctx,
@@ -138,6 +149,10 @@ class _NxStatusStepperState extends State<NxStatusStepper> {
                       : cs.outlineVariant,
                 ),
               _step(context, i, at, passedFg),
+            ],
+            if (widget.trailing.isNotEmpty) ...[
+              const SizedBox(width: 4),
+              Row(key: _trailingKey, mainAxisSize: MainAxisSize.min, children: widget.trailing),
             ],
           ],
         ),

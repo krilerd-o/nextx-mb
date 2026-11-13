@@ -284,6 +284,8 @@ class JobFlows {
             message: 'งานจะเป็น "กำลังดำเนินการ" และบันทึกเวลารับงาน',
             noteLabel: 'หมายเหตุ',
             checkLabel: 'ส่งอีเมลแจ้งลูกค้า',
+            // Off by default: the customer is e-mailed only when asked for.
+            checkDefault: false,
             confirm: 'รับงาน',
           );
           if (f == null || !context.mounted) return false;
