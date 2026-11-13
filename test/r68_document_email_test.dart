@@ -319,7 +319,7 @@ void main() {
     await openSheet(tester);
     expect(find.text('ส่งอีเมล'), findsOneWidget);
     expect(find.descendant(of: find.byKey(const ValueKey('compose-doc-chip')), matching: find.text('QT-7')), findsOneWidget);
-    expect(find.text('บริษัท ลูกค้า'), findsOneWidget);
+    expect(find.text('บริษัท ลูกค้า'), findsNothing, reason: 'header shows only the document number');
     expect(tester.widget<TextField>(find.byKey(const ValueKey('compose-subject'))).controller!.text, 'ใบเสนอราคา_QT-7_บริษัท ลูกค้า_261113');
     expect(find.byKey(const ValueKey('chip-buyer@cust.test')), findsOneWidget);
     expect(find.byKey(const ValueKey('chip-owner@biz.test')), findsOneWidget);

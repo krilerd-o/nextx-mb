@@ -549,7 +549,6 @@ class _DocEmailSheetState extends State<DocEmailSheet> {
 
   Widget _topBar(ThemeData theme, ColorScheme cs) {
     final no = _docNo;
-    final customer = '${_docInfo['customer'] ?? ''}';
     final canSend = _canSend;
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 6, 6, 6),
@@ -568,48 +567,31 @@ class _DocEmailSheetState extends State<DocEmailSheet> {
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, height: 1.2),
                 ),
-                if (no.isNotEmpty || customer.isNotEmpty)
+                // Only the document number: the customer name made the header too long.
+                if (no.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: LayoutBuilder(
-                      builder: (context, box) => Row(
-                        children: [
-                          if (no.isNotEmpty)
-                            ConstrainedBox(
-                              constraints: BoxConstraints(maxWidth: (box.maxWidth - (customer.isEmpty ? 0 : 40)).clamp(0, 150)),
-                              child: Container(
-                                key: const ValueKey('compose-doc-chip'),
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(_isJob ? NxI.wrench : NxI.fileText, size: 12, color: cs.primary),
-                                    const SizedBox(width: 3),
-                                    Flexible(
-                                      child: Text(
-                                        no,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.labelSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w700),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          if (customer.isNotEmpty) ...[
-                            const SizedBox(width: 6),
+                    child: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Container(
+                        key: const ValueKey('compose-doc-chip'),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(_isJob ? NxI.wrench : NxI.fileText, size: 12, color: cs.primary),
+                            const SizedBox(width: 3),
                             Flexible(
                               child: Text(
-                                customer,
+                                no,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                                style: theme.textTheme.labelSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w700),
                               ),
                             ),
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
