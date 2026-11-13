@@ -34,6 +34,11 @@ extension NotebookApi on ApiClient {
 
   Future<void> deleteNotebook(String id) async => _send('DELETE', '/api/ai/notebooks/$id');
 
+  /// "ลบข้อมูลของฉัน": every Notebook recording this user made in the business (audio, transcript,
+  /// its recording source and summary note). Returns counts {recordings, segments, files, sources, notes, notebook_ids}.
+  Future<Map<String, dynamic>> deleteMyNotebookRecordings() async =>
+      _dataMap(await _send('DELETE', '/api/comm-ai/me/notebook-recordings'));
+
   // ── sources
 
   /// `{source_kind, title, content, url, source_config}`; with `knowledge_ids`

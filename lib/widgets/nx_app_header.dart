@@ -198,6 +198,8 @@ List<Widget> _circleActions(List<Widget>? actions) {
   return [
     for (final w in actions)
       Padding(
+        // Keep the page's key on the converted button so tests and callers can still find it.
+        key: w.key,
         padding: const EdgeInsets.only(left: 10),
         child: w is IconButton
             ? _CircleBtn(

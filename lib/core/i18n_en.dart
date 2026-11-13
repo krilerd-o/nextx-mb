@@ -2941,6 +2941,15 @@ const Map<String, String> enStrings = {
   'ใช้โควตาการสรุปของแพ็กเกจครบแล้วในเดือนนี้ — ยังดูบทสนทนาและฟังเสียงได้ตามปกติ': 'This month’s summary quota is used up — the transcript and audio are still here',
   'ลบสรุปแชทนี้': 'Delete this chat summary',
   'ลบข้อมูลของฉัน': 'Delete my data',
+  'ลบบันทึกเสียงทั้งหมดของฉัน': 'Delete all my recordings',
+  'เสียง บทถอดข้อความ และสรุปการประชุมที่ฉันบันทึกในทุกเล่ม': 'Audio, transcripts and meeting summaries I recorded in any notebook',
+  'บันทึกเสียงทั้งหมดของฉัน': 'all my recordings',
+  'ไฟล์เสียงที่ฉันบันทึกในสมุดโน้ตทุกเล่ม': 'Audio I recorded in every notebook',
+  'บทถอดข้อความและแหล่งข้อมูลบันทึกเสียง': 'Transcripts and recording sources',
+  'โน้ตสรุปการประชุมจากบันทึกเหล่านั้น': 'Meeting-summary notes from those recordings',
+  'ลบแล้วกู้คืนไม่ได้ — บันทึกของคนอื่นในเล่มเดียวกันไม่ถูกลบ': "Can't be undone — other people's recordings in the same notebook stay",
+  'ไม่มีบันทึกเสียงของคุณให้ลบ': 'You have no recordings to delete',
+  'ลบไม่สำเร็จ ลองใหม่อีกครั้ง': 'Delete failed, please try again',
   'ลบการสนทนาทั้งหมด': 'Delete the whole conversation',
   'สรุปนี้และลิงก์แชร์ของสรุปจะถูกลบถาวร ข้อความในห้องแชทยังอยู่ตามเดิม': 'The summary and its share links are deleted for good; the chat messages stay',
   'ลบแล้วกู้คืนไม่ได้ สรุปเดิมยังอยู่แต่จะขึ้นว่า "แหล่งข้อมูลถูกแก้" — ให้ไอแซคสรุปใหม่ได้': 'This cannot be undone. Existing summaries stay but are marked "source edited" — ISAAC can summarise again',
@@ -3486,6 +3495,7 @@ const Map<String, String> enStrings = {
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
 const Map<String, String> enPatterns = {
+  'ลบบันทึกเสียงแล้ว {} รายการ': 'Deleted {} recordings',
   'สรุปเมื่อ {}': 'Summarised at {}',
   'ไอแซคสรุปไม่สำเร็จ ({}) — ลองใหม่อีกครั้ง': 'ISAAC could not summarise ({}) — try again',
   'พบ {} พื้นที่ของรหัส {} — แตะเพื่อเติมตำบล อำเภอ จังหวัด': 'Found {} areas for postcode {} — tap to fill sub-district, district and province',

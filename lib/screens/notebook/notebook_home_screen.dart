@@ -8,6 +8,7 @@ import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/notebook/notebook_models.dart';
 import '../../core/nx_breakpoint.dart';
+import '../../services/api_client.dart';
 import '../../services/notebook/notebook_controller.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_app_header.dart';
@@ -76,6 +77,40 @@ class _NotebookHomeScreenState extends State<NotebookHomeScreen> {
   void _snack(String text) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(text))));
+  }
+
+  /// Header ⋮: privacy — delete every recording I made in Notebooks (the privacy policy promises this).
+  Future<void> _moreMenu() async {
+    final pick = await showAppBottomSheet<String>(
+      context: context,
+      title: tr('สมุดโน้ต'),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(
+          key: const ValueKey('notebook-delete-my-recordings'),
+          leading: Icon(NxI.trash, color: Theme.of(context).colorScheme.error),
+          title: Text(tr('ลบบันทึกเสียงทั้งหมดของฉัน')),
+          subtitle: Text(tr('เสียง บทถอดข้อความ และสรุปการประชุมที่ฉันบันทึกในทุกเล่ม')),
+          onTap: () => Navigator.pop(context, 'delete-recordings'),
+        ),
+      ]),
+    );
+    if (pick != 'delete-recordings' || !mounted) return;
+    final ok = await showDeleteConfirm(
+      context,
+      name: tr('บันทึกเสียงทั้งหมดของฉัน'),
+      loses: const ['ไฟล์เสียงที่ฉันบันทึกในสมุดโน้ตทุกเล่ม', 'บทถอดข้อความและแหล่งข้อมูลบันทึกเสียง', 'โน้ตสรุปการประชุมจากบันทึกเหล่านั้น'],
+      note: 'ลบแล้วกู้คืนไม่ได้ — บันทึกของคนอื่นในเล่มเดียวกันไม่ถูกลบ',
+    );
+    if (!ok || !mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      final r = await context.read<AppConfig>().apiClient.deleteMyNotebookRecordings();
+      final n = (r['recordings'] as num?)?.toInt() ?? 0;
+      messenger?.showSnackBar(SnackBar(content: Text(n == 0 ? tr('ไม่มีบันทึกเสียงของคุณให้ลบ') : tr('ลบบันทึกเสียงแล้ว $n รายการ'))));
+      await _c.load();
+    } catch (e) {
+      messenger?.showSnackBar(SnackBar(content: Text(tr('ลบไม่สำเร็จ ลองใหม่อีกครั้ง'))));
+    }
   }
 
   Future<void> _menu(Notebook n) async {
@@ -155,6 +190,12 @@ class _NotebookHomeScreenState extends State<NotebookHomeScreen> {
               HapticFeedback.selectionClick();
               _c.toggleGrid();
             },
+          ),
+          IconButton(
+            key: const ValueKey('notebook-home-more'),
+            tooltip: tr('เพิ่มเติม'),
+            icon: const Icon(NxI.dotsThreeVertical),
+            onPressed: _moreMenu,
           ),
         ],
       ),
