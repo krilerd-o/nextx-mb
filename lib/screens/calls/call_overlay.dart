@@ -63,6 +63,14 @@ class CallOverlay extends StatelessWidget {
   }
 }
 
+/// Calling / ringing / in-call screens cover the app: a keyboard left open by a text field
+/// underneath (chat, search) would sit on top of the call buttons with no way to close it.
+@visibleForTesting
+void hideKeyboardForCall() {
+  FocusManager.instance.primaryFocus?.unfocus();
+  SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+}
+
 String _fmt(Duration d) {
   final h = d.inHours, m = d.inMinutes % 60, s = (d.inSeconds % 60).toString().padLeft(2, '0');
   return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$s' : '$m:$s';
@@ -113,6 +121,12 @@ class _IncomingViewState extends State<_IncomingView> {
   bool? _askVideo;
 
   CallService get service => widget.service;
+
+  @override
+  void initState() {
+    super.initState();
+    hideKeyboardForCall(); // callee: ringing screen
+  }
 
   /// Answering first asks "ให้ AI ช่วยจดบทสนทนาไหม?" (one tap answers and decides).
   Future<void> _answer({bool? video}) async {
@@ -351,6 +365,7 @@ class _CallViewState extends State<_CallView> {
   @override
   void initState() {
     super.initState();
+    hideKeyboardForCall(); // caller (calling…) and both sides in the call, also when the bubble is expanded
     _t = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
