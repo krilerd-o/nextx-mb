@@ -58,8 +58,8 @@ Duration _motion(BuildContext context, int ms) => MediaQuery.maybeDisableAnimati
 // ─────────────────────────── hero ───────────────────────────
 
 /// Full-bleed drawn landscape at the top of Home (follows the time of day): avatar, greeting + name, date, frosted
-/// search and bell, then the role's headline. [overlap] (the ISAAC card) sits
-/// over the bottom edge of the scene.
+/// search and bell, then the role's headline. Home passes no [overlap] any more
+/// ("ไอแซคแนะนำ" is an ordinary Home widget); the scene's bottom fades into the page.
 class HomeHero extends StatelessWidget {
   const HomeHero({
     super.key,
@@ -105,7 +105,7 @@ class HomeHero extends StatelessWidget {
       ),
     );
 
-    // No rounded edge: the scene runs on behind the ISAAC card and melts into the page.
+    // No rounded edge: the scene melts into the page (behind [overlap] when there is one).
     // The bottom fades out with an alpha mask (the scene itself turns transparent), so it melts
     // into whatever the page colour is, with no seam.
     final scene = ShaderMask(
@@ -202,7 +202,7 @@ class HomeHero extends StatelessWidget {
                 ),
               ),
               if (headline != null) ...[const SizedBox(height: 18), limit(headline!)],
-              // Open sky between the greeting and the card, as in the reference look.
+              // Open sky under the greeting; without a card this is where the scene fades out.
               SizedBox(height: headline != null ? 28 : (overlap == null ? 150 : 170)),
               if (overlap != null) limit(overlap!),
               SizedBox(height: overlap == null ? 0 : 18),
@@ -591,100 +591,13 @@ class HeroAttendanceHeadline extends StatelessWidget {
 
 // ─────────────────────────── ISAAC card ───────────────────────────
 
-/// First sentence of the day summary, for the one-line suggestion.
+/// First sentence of the day summary: the closed "ไอแซคแนะนำ" widget's one-liner
+/// (the widget itself is `IsaacBriefCard` in home_isaac.dart).
 String isaacSuggestion(String brief) {
   final t = brief.trim();
   if (t.isEmpty) return t;
   final first = t.split(' · ').first.trim();
   return first;
-}
-
-/// White card over the bottom edge of the hero: ISAAC's one-line suggestion
-/// with an arrow to the AI assistant.
-class IsaacSuggestionCard extends StatelessWidget {
-  const IsaacSuggestionCard({super.key, required this.text, required this.onOpen});
-  final String text;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
-    return Semantics(
-      container: true,
-      button: true,
-      label: '${tr('ไอแซคแนะนำ')}: ${tr(text)}',
-      excludeSemantics: true,
-      child: HomeCardShadow(
-        frost: true,
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            key: const ValueKey('home-isaac'),
-            borderRadius: BorderRadius.circular(24),
-            onTap: onOpen,
-            child: Ink(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-              decoration: homeCardFill(context).copyWith(
-                // Frosted over the photo, with a soft green/blue glow on the right.
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: dark
-                      ? [const Color(0xE61C2030), const Color(0xD91C2030), const Color(0xCC1F3A35)]
-                      : [Colors.white.withValues(alpha: 0.86), Colors.white.withValues(alpha: 0.80), const Color(0xCCE3F6E8)],
-                  stops: const [0, 0.6, 1],
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF1E1B4B), Color(0xFF0F172A)]),
-                    ),
-                    child: ShaderMask(
-                      shaderCallback: (r) => const LinearGradient(colors: [Color(0xFFF9A8D4), Color(0xFFA5B4FC)]).createShader(r),
-                      child: const Icon(NxI.sparkleFill, color: Colors.white, size: 22),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(tr('ไอแซคแนะนำ'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 2),
-                        Text(
-                          tr(text),
-                          key: const ValueKey('home-isaac-text'),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.35),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Container(
-                    key: const ValueKey('home-isaac-open'),
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(color: dark ? Colors.white : const Color(0xFF0F172A), shape: BoxShape.circle),
-                    child: Icon(NxI.arrowRight, size: 18, color: dark ? const Color(0xFF0F172A) : Colors.white),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ─────────────────────────── stat cards ───────────────────────────

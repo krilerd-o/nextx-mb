@@ -663,7 +663,7 @@ const Map<String, String> enStrings = {
   'เสาร์': 'Saturday',
   'อาทิตย์': 'Sunday',
   'ยังไม่ได้ลงเวลาเข้างาน': 'Not clocked in yet',
-  'วันนี้ยังไม่มีงานค้างหรือนัดหมาย ลองถาม AI ให้ช่วยวางแผนหรือสรุปลูกค้าที่ควรติดตาม': 'Nothing pending or scheduled today. Ask AI to help plan or list customers to follow up',
+  'วันนี้ยังไม่มีงานค้างหรือนัดหมาย — แตะให้ไอแซคช่วยวางแผนวันนี้': 'Nothing pending or scheduled today — tap and ISAAC helps you plan',
   'ลงเวลา': 'Clock in',
   'ขอลา': 'Request leave',
   'งานบริการ': 'Service',
@@ -1334,6 +1334,18 @@ const Map<String, String> enStrings = {
   'ทางลัด': 'Shortcuts',
   'ลงเวลา ขอลา แชท ปฏิทิน …': 'Clock in, leave, chat, calendar…',
   'สรุปโดย AI': 'AI summary',
+  // Home "ไอแซคแนะนำ" widget (home_isaac.dart)
+  'แตะแล้วไอแซคสรุปวันนี้ให้เป็นข้อๆ ตรงนี้เลย': 'Tap and ISAAC sums up your day right here',
+  'สรุปวันนี้ของคุณ': 'Your day at a glance',
+  'ถามต่อในไอแซค': 'Ask ISAAC more',
+  'ไอแซคยังไม่มีสรุปให้ตอนนี้ — ลองใหม่อีกครั้ง': 'ISAAC has no summary right now — try again',
+  'ไอแซคสรุปไม่สำเร็จ — ลองใหม่อีกครั้ง': 'ISAAC could not summarise — try again',
+  'ยังไม่ได้ตั้งค่า AI สำหรับธุรกิจนี้ — ให้ผู้ดูแลเปิดใช้และตั้งค่าผู้ให้บริการ AI': 'AI is not set up for this business — ask an admin to turn it on and set up an AI provider',
+  'โควตา AI วันนี้หมดแล้ว — ลองใหม่พรุ่งนี้ หรือให้ผู้ดูแลเพิ่มโควตา': 'Today\'s AI quota is used up — try again tomorrow or ask an admin for more',
+  'ส่งคำขอถี่เกินไป — รอสักครู่แล้วลองใหม่': 'Too many requests — wait a moment and try again',
+  'ผู้ให้บริการ AI ปฏิเสธการใช้งาน (การชำระเงิน) — ติดต่อผู้ดูแล': 'The AI provider refused the request (billing) — contact an admin',
+  'คุณไม่มีสิทธิ์ใช้ AI Assistant': 'You do not have access to the AI Assistant',
+  'เชื่อมต่อไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่': 'Could not connect — check the internet and try again',
   'สรุปวันนี้แบบสั้นๆ': 'A short summary of today',
   'งาน Workspace ที่มอบให้ฉัน': 'Workspace tasks assigned to me',
   'นัดหมายที่กำลังมา': 'Upcoming appointments',
@@ -3192,6 +3204,8 @@ const Map<String, String> enStrings = {
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
 const Map<String, String> enPatterns = {
+  'สรุปเมื่อ {}': 'Summarised at {}',
+  'ไอแซคสรุปไม่สำเร็จ ({}) — ลองใหม่อีกครั้ง': 'ISAAC could not summarise ({}) — try again',
   'พบ {} พื้นที่ของรหัส {} — แตะเพื่อเติมตำบล อำเภอ จังหวัด': 'Found {} areas for postcode {} — tap to fill sub-district, district and province',
   // Confirm sheets (nx_confirm_sheet.dart)
   'โทรหา {}?': 'Call {}?',

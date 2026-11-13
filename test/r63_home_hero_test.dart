@@ -292,12 +292,14 @@ void main() {
     }
   });
 
-  testWidgets('ISAAC card only with the AI menu; arrow opens the assistant', (tester) async {
+  testWidgets('ISAAC card only with the AI menu; a Home widget below the hero, not on it', (tester) async {
     await _pumpHome(tester, _s(['attendance', 'ai-assistant']));
     expect(_key('home-isaac'), findsOneWidget);
-    expect(_key('home-isaac-open'), findsOneWidget);
+    expect(_key('home-isaac-toggle'), findsOneWidget);
     expect(find.text('ไอแซคแนะนำ'), findsOneWidget);
     expect(tester.widget<Text>(_key('home-isaac-text')).data, isNotEmpty);
+    expect(find.descendant(of: _key('home-hero'), matching: _key('home-isaac')), findsNothing, reason: 'no longer locked over the hero');
+    expect(tester.getTopLeft(_key('home-isaac')).dy, greaterThanOrEqualTo(tester.getBottomLeft(_key('home-hero')).dy));
     await _dispose(tester);
 
     await _pumpHome(tester, _s(['attendance']));

@@ -19,8 +19,6 @@ import '../../services/unread_service.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
-import '../../widgets/nx_markdown.dart';
-import '../../widgets/nx_streaming_text.dart';
 import '../../core/thai_time.dart';
 import '../../core/workspace_models.dart';
 import '../../core/i18n.dart';
@@ -34,6 +32,7 @@ import 'home_boxes.dart';
 import 'home_charts.dart';
 import 'home_edit_mode.dart';
 import 'home_hero.dart';
+import 'home_isaac.dart';
 import 'home_widgets.dart';
 import 'widget_gallery_sheet.dart';
 import '../hr/attendance_punch_sheet.dart';
@@ -614,8 +613,49 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
       );
     }
     if (parts.isEmpty)
-      return 'วันนี้ยังไม่มีงานค้างหรือนัดหมาย ลองถาม AI ให้ช่วยวางแผนหรือสรุปลูกค้าที่ควรติดตาม';
+      return 'วันนี้ยังไม่มีงานค้างหรือนัดหมาย — แตะให้ไอแซคช่วยวางแผนวันนี้';
     return parts.join(' · ');
+  }
+
+  /// What ISAAC is told about today (from the data Home already loaded):
+  /// clock-in, work counts, overdue work and the next appointments — each
+  /// record with its route so a bullet about it opens it.
+  List<IsaacFact> _isaacFacts(Map<String, dynamic>? counts, dynamic clockIn, dynamic clockOut) {
+    final session = context.read<AppConfig>().session;
+    final out = <IsaacFact>[];
+    if (MenuAccess.allow(session, MenuAccess.attendance)) {
+      out.add(IsaacFact(
+        clockIn == null
+            ? 'ยังไม่ได้ลงเวลาเข้างาน'
+            : clockOut == null
+                ? 'ลงเวลาเข้างานแล้ว ${_hhmm(clockIn)} (ยังไม่ลงเวลาออก)'
+                : 'ลงเวลาเข้า ${_hhmm(clockIn)} ออก ${_hhmm(clockOut)} แล้ว',
+        route: clockIn == null || clockOut == null ? AppRoutes.attendance : null,
+      ));
+    }
+    if (counts != null) {
+      out.add(IsaacFact('งาน Workspace: ครบกำหนดวันนี้ ${_count(counts, 'today')} · เลยกำหนด ${_count(counts, 'overdue')} · กำลังมา ${_count(counts, 'upcoming')}'));
+    }
+    final pending = _pendingItems();
+    if (pending.isNotEmpty) out.add(IsaacFact('งานค้าง/เลยกำหนดทั้งหมด ${_pendingTotal()} รายการ'));
+    for (final p in pending.take(6)) {
+      final d = p.due;
+      final due = d == null ? '' : ' (กำหนด ${d.day}/${d.month} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')})';
+      out.add(IsaacFact(
+        '${p.kind == 'task' ? 'งานเลยกำหนด' : 'กิจกรรมเลยกำหนด'}: ${p.title}${p.detail.isEmpty ? '' : ' — ${p.detail}'}$due',
+        route: p.route,
+      ));
+    }
+    for (final a in _upcoming()) {
+      final where = '${a['location'] ?? ''}';
+      final who = '${a['account_name'] ?? ''}';
+      out.add(IsaacFact(
+        'นัดหมาย ${_hhmm(a['date_start'])}: ${a['subject'] ?? entityTitle(a, module: 'activity')}'
+        '${where.isEmpty ? '' : ' @ $where'}${who.isEmpty ? '' : ' · $who'}',
+        route: a['id'] == null ? null : AppRoutes.activity('${a['id']}'),
+      ));
+    }
+    return out;
   }
 
   Future<void> _punch(dynamic clockIn) async {
@@ -703,12 +743,6 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
       now: now,
       gutter: pad.left,
       maxContentWidth: maxContent,
-      overlap: aiAllowed
-          ? IsaacSuggestionCard(
-              text: isaacSuggestion(_brief(counts, clockIn)),
-              onOpen: () => context.push(AppRoutes.aiChat),
-            )
-          : null,
     );
 
     // The hero is the page's header: the floating header is empty and its
@@ -749,10 +783,16 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
               ],
             ],
             'birthdays': [HomeBirthdayBox(revision: _revision)],
+            // ไอแซคแนะนำ: a normal widget (follows the user's order); tap =
+            // ISAAC summarises the day in place. Replaces the old "สรุปวันนี้" box.
             'ai': [
               if (aiAllowed) ...[
                 const SizedBox(height: 12),
-                _AiBriefCard(text: _brief(counts, clockIn)),
+                IsaacBriefCard(
+                  key: ValueKey('home-isaac-card|${context.read<AppConfig>().businessScope}'),
+                  suggestion: isaacSuggestion(_brief(counts, clockIn)),
+                  facts: () => _isaacFacts(counts, clockIn, clockOut),
+                ),
               ],
             ],
             'quick': [
@@ -1261,80 +1301,6 @@ class _TodayCard extends StatelessWidget {
     ),
     child: Icon(icon, color: c, size: 20),
   );
-}
-
-/// Day summary that streams in word by word, with a shortcut to the AI chat.
-class _AiBriefCard extends StatelessWidget {
-  const _AiBriefCard({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return _HomeCard(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
-      onTap: () => context.push(AppRoutes.aiChat),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0xFF0F172A),
-                ),
-                child: ShaderMask(
-                  shaderCallback: (r) => const LinearGradient(
-                    colors: [Color(0xFFF9A8D4), Color(0xFFA5B4FC)],
-                  ).createShader(r),
-                  child: const Icon(
-                    NxI.sparkleFill,
-                    color: Colors.white,
-                    size: 17,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  tr('สรุปวันนี้'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                tr('ถาม AI'),
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: cs.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Icon(NxI.caretRight, size: 14, color: cs.primary),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Summaries from the AI are markdown: show headings / bold / lists
-          // like the chat; plain text keeps the word-by-word effect.
-          if (looksLikeMarkdown(text))
-            NxRevealMarkdown(data: text)
-          else
-            NxStreamingText(
-              tr(text),
-              style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-            ),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
 }
 
 class _QuickAction {

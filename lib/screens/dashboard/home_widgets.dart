@@ -43,8 +43,8 @@ class HomeWidgetInfo {
   bool get resizable => HomeLayout.resizable(id);
 
   static const _sectionStyle = <String, (IconData, String, Color)>{
+    'ai': (NxI.sparkleFill, 'general', Color(0xFF8B5CF6)),
     'today': (NxI.sun, 'general', Color(0xFFF59E0B)),
-    'ai': (NxI.sparkle, 'general', Color(0xFF8B5CF6)),
     'work': (NxI.kanban, 'work', Color(0xFF3B82F6)),
     'pending': (NxI.warningCircle, 'work', Color(0xFFEF4444)),
     'quick': (NxI.lightning, 'general', Color(0xFF0EA5E9)),
@@ -146,7 +146,7 @@ bool homeWidgetAllowed(SessionState s, String id) {
     // Classic sections — what each one actually reads.
     case 'today': // clock-in (attendance) · next appointment (calendar) · work counts (workspace)
       return MenuAccess.allow(s, MenuAccess.attendance) || MenuAccess.anyCalendar(s) || MenuAccess.allow(s, MenuAccess.workspace);
-    case 'ai':
+    case 'ai': // ไอแซคแนะนำ — asks the AI assistant
       return MenuAccess.allow(s, MenuAccess.ai);
     case 'work':
       return MenuAccess.allow(s, MenuAccess.workspace);
