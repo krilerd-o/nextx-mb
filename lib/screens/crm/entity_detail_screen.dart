@@ -157,12 +157,26 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final ok = await ServiceJourney.supported(config.apiClient);
     if (!ok || !mounted) return;
     final jc = JourneyController(api: config.apiClient, module: widget.module, id: _id)..addListener(_onJourney);
+    final first = widget.initialTab ?? 'summary';
     setState(() {
       _journey = true;
       _jc = jc;
-      _tabId = widget.initialTab ?? 'summary';
+      _tabId = _jobSections.containsKey(first) && widget.module == 'job' ? 'summary' : first;
     });
     jc.load();
+    // Opened on a section that now lives in the job summary (old links).
+    if (widget.module == 'job' && _jobSections.containsKey(first)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => Future<void>.delayed(const Duration(milliseconds: 400), () => _scrollToSection(first)));
+    }
+  }
+
+  /// Job summary sections that used to be tabs (ปฏิบัติงาน / กิจกรรม / ลายเซ็น).
+  final Map<String, GlobalKey> _jobSections = {'ops': GlobalKey(), 'activities': GlobalKey(), 'signatures': GlobalKey()};
+
+  void _scrollToSection(String id) {
+    final ctx = _jobSections[id]?.currentContext;
+    if (ctx == null || !mounted) return;
+    Scrollable.ensureVisible(ctx, alignment: 0.06, duration: const Duration(milliseconds: 380), curve: Curves.easeOutCubic);
   }
 
   void _onJourney() {
@@ -170,6 +184,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   }
 
   void _goTab(String id) {
+    if (_journey && widget.module == 'job' && _jobSections.containsKey(id)) {
+      // Merged into the summary: stay there and scroll to the section.
+      if (!_wide) setState(() => _tabId = 'summary');
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSection(id));
+      return;
+    }
     setState(() => _tabId = id);
     if (id == 'history') _loadTimeline();
   }
@@ -235,7 +255,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     // เอกสาร: the web's template document (quotation / job), for users who have the menu.
     final doc = _hasDocumentTab ? [('document', 'เอกสาร')] : const <(String, String)>[];
     if (_journey && widget.module == 'job') {
-      return [('summary', 'สรุป'), ...doc, ('ops', 'ปฏิบัติงาน'), ('activities', 'กิจกรรม'), ('signatures', 'ลายเซ็น'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
+      // ปฏิบัติงาน / กิจกรรม / ลายเซ็น are sections of the summary page.
+      return [('summary', 'สรุป'), ...doc, ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
     }
     if (_journey && widget.module == 'quotation') {
       return [('summary', 'สรุป'), ...doc, ('lines', 'รายการ'), ('approval', 'อนุมัติ'), ('activities', 'กิจกรรม'), ('info', 'ข้อมูล'), ('comments', comments), ('history', 'ประวัติ')];
@@ -825,8 +846,6 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   row: {..._row, 'id': _id},
                   canEmail: perms.canEdit && loggedIn,
                 ),
-                'ops' => _jobOps(canEdit, session),
-                'signatures' => JobSignaturesTab(jobId: _id, ctrl: _jc!, canEdit: canEdit, row: _row, onChanged: _reload),
                 'lines' => _quotationLines(canEdit),
                 'approval' => QuotationApprovalTab(row: _row, ctrl: _jc!, meId: int.tryParse(session.userId ?? ''), canEdit: canEdit, onAction: _journeyAction),
                 'checklist' => InspectionLinesEditor(inspectionId: _id, canEdit: canEdit),
@@ -1106,11 +1125,16 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       final cur = _row['job_status'];
       final allowed = jobWorkflowActions(cur);
       final cancelled = canonicalJobStatus(cur) == 'Cancelled';
+      // "ยกเลิกงาน" is the last, terminal stage of the row (not a chip below).
       return JourneyStageStrip(
         steps: jobSteps(),
         current: jobCurrentStep(_row),
-        side: cancelled ? 'cancelled' : null,
-        sideLabel: jobSideLabel(_row),
+        terminal: (
+          'Cancelled',
+          cancelled ? jobStatusLabel('Cancelled') : tr('ยกเลิกงาน'),
+          cancelled,
+          canEdit && !_jBusy && allowed.contains('cancel') ? () => _journeyAction('cancel') : null,
+        ),
         onPick: !canEdit || _jBusy
             ? null
             : (i) {
@@ -1121,7 +1145,6 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ขั้นนี้ทำต่อจากสถานะปัจจุบันไม่ได้'))));
                 }
               },
-        sideChips: [if (canEdit && allowed.contains('cancel')) ('cancel', tr('ยกเลิกงาน'), () => _journeyAction('cancel'))],
       );
     }
     final jc = _jc!;
@@ -1152,7 +1175,31 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final jc = _jc;
     if (jc == null) return const SizedBox.shrink();
     if (widget.module == 'job') {
-      return JobSummaryTab(row: _row, ctrl: jc, canEdit: canEdit, busy: _jBusy, onAction: _journeyAction, onGoTab: _goTab, onReload: _reload, onOpen: _openRecord);
+      return JobSummaryTab(
+        row: {..._row, 'id': _id},
+        ctrl: jc,
+        canEdit: canEdit,
+        busy: _jBusy,
+        onAction: _journeyAction,
+        onGoTab: _goTab,
+        onReload: _reload,
+        onOpen: _openRecord,
+        sectionKeys: _jobSections,
+        fieldOps: _jobOps(canEdit, session),
+        users: _users,
+        picklists: _picklists,
+        reloadToken: _row['modifiedtime'],
+        onCreateActivity: canEdit
+            ? () async {
+                final ok = await _createLinkedActivity();
+                if (ok == true) {
+                  await _reload();
+                  jc.load();
+                }
+              }
+            : null,
+        onSaveActivityTemplate: canEdit ? _saveActivitiesAsTemplate : null,
+      );
     }
     return QuotationSummaryTab(
       row: _row,
@@ -1169,17 +1216,25 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     );
   }
 
+  /// "งานสนาม" card of the job summary: PDF, schedule, matching technicians,
+  /// skills, parts, Workspace and the job's inspection.
   Widget _jobOps(bool canEdit, SessionState session) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        JobExtrasPanel(id: _id, row: _row, canEdit: canEdit, onOpen: (module, id, {row}) => _openRecord(module, id)),
-        if (canEdit) ...[const SizedBox(height: 12), JobWorkspaceButton(jobId: _id)],
+    return JobExtrasPanel(
+      id: _id,
+      row: {..._row, 'id': _id},
+      canEdit: canEdit,
+      sectioned: true,
+      onOpen: (module, id, {row}) => _openRecord(module, id),
+      extra: [
+        if (canEdit) ...[const SizedBox(height: 12), Align(alignment: Alignment.centerLeft, child: JobWorkspaceButton(jobId: _id))],
         if (MenuAccess.allow(session, MenuAccess.inspection)) ...[
-          const SizedBox(height: 16),
-          NxHeroCta(
-            label: 'ใบตรวจรับของงานนี้',
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            key: const ValueKey('job-inspection-cta'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
             onPressed: () => nxPush<void>(context, JobInspectionScreen(job: _row)),
+            icon: const Icon(NxI.clipboardText, size: 18),
+            label: Text(tr('ใบตรวจรับของงานนี้')),
           ),
         ],
       ],

@@ -35,7 +35,7 @@ class JobPartsSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(children: [
-          Text(tr('อะไหล่ / ชิ้นส่วน'), style: theme.textTheme.titleSmall),
+          Flexible(child: Text(tr('อะไหล่ / ชิ้นส่วน'), style: theme.textTheme.titleSmall)),
           const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

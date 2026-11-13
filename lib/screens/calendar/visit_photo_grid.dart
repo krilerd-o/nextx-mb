@@ -104,7 +104,9 @@ Widget _preview(BuildContext context, String url) {
   );
 }
 
-/// Long-press menu of a photo: "ดูรูป" / "ลบรูป".
+/// Long-press menu of a photo: "ลบรูป" (with a preview).
+Future<String?> showVisitPhotoActions(BuildContext context, String url) => _photoActions(context, url);
+
 Future<String?> _photoActions(BuildContext context, String url) {
   return showAppBottomSheet<String>(
     context: context,
@@ -136,7 +138,7 @@ Future<String?> _photoActions(BuildContext context, String url) {
 }
 
 /// "ลบรูปนี้?" confirm sheet. True = the user confirmed.
-Future<bool> confirmDeleteVisitPhoto(BuildContext context, {String? url}) async {
+Future<bool> confirmDeleteVisitPhoto(BuildContext context, {String? url, String message = 'รูปจะถูกลบออกจากการเข้าพบนี้ และกู้คืนไม่ได้'}) async {
   final ok = await showAppBottomSheet<bool>(
     context: context,
     title: 'ลบรูปนี้?',
@@ -152,7 +154,7 @@ Future<bool> confirmDeleteVisitPhoto(BuildContext context, {String? url}) async 
               children: [
                 if (url != null) ...[_preview(ctx, url), const SizedBox(width: 12)],
                 Expanded(
-                  child: Text(tr('รูปจะถูกลบออกจากการเข้าพบนี้ และกู้คืนไม่ได้'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                  child: Text(tr(message), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
                 ),
               ],
             ),

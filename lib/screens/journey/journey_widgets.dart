@@ -55,7 +55,12 @@ class JourneyStageStrip extends StatelessWidget {
     this.sideDanger = true,
     this.onPick,
     this.sideChips = const [],
+    this.terminal,
   });
+
+  /// A terminal / destructive stage drawn at the END of the stage row (job:
+  /// "ยกเลิกงาน"): `(id, label, active, onTap)`. Active = the record is in it.
+  final (String, String, bool, VoidCallback?)? terminal;
 
   final List<NxStep> steps;
   final int current;
@@ -93,8 +98,10 @@ class JourneyStageStrip extends StatelessWidget {
           stepKeyPrefix: 'jstep-',
           doneKeyPrefix: 'jstep-done-',
           padding: EdgeInsets.zero,
+          trailing: terminal == null ? const [] : [_TerminalStage(id: terminal!.$1, label: terminal!.$2, active: terminal!.$3, onTap: terminal!.$4)],
+          revealTrailing: terminal?.$3 == true,
         ),
-        if (sideLabel != null || sideChips.isNotEmpty)
+        if (terminal == null && (sideLabel != null || sideChips.isNotEmpty))
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Wrap(
@@ -124,10 +131,72 @@ class JourneyStageStrip extends StatelessWidget {
   }
 }
 
-/// "ขั้นถัดไป" card: title + hint + primary button + secondary chips.
-class NextActionCard extends StatelessWidget {
-  const NextActionCard({super.key, required this.module, required this.next, required this.onAction, this.busy = false, this.params = const {}});
+/// Last pill of the stage row: a stop / destructive stage ("ยกเลิกงาน"), set
+/// apart by a dotted gap; outlined red, filled red when the record is in it.
+class _TerminalStage extends StatelessWidget {
+  const _TerminalStage({required this.id, required this.label, required this.active, this.onTap});
+  final String id;
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
 
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const danger = Color(0xFFE11D48);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < 3; i++)
+          Container(width: 3, height: 3, margin: const EdgeInsets.symmetric(horizontal: 2), decoration: BoxDecoration(color: danger.withValues(alpha: 0.5), shape: BoxShape.circle)),
+        const SizedBox(width: 2),
+        Semantics(
+          button: onTap != null,
+          selected: active,
+          label: label,
+          child: Material(
+            color: active ? danger : danger.withValues(alpha: 0.07),
+            shape: StadiumBorder(side: BorderSide(color: danger.withValues(alpha: active ? 1 : 0.55), width: 1.2)),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: ValueKey('jstep-$id'),
+              onTap: active || onTap == null
+                  ? null
+                  : () {
+                      HapticFeedback.selectionClick();
+                      onTap!();
+                    },
+              child: Container(
+                height: NxStatusStepper.pillHeight,
+                padding: const EdgeInsets.symmetric(horizontal: 11),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(active ? NxI.prohibit : NxI.x, size: 13, color: active ? Colors.white : danger),
+                    const SizedBox(width: 4),
+                    Text(
+                      label,
+                      style: theme.textTheme.labelMedium?.copyWith(color: active ? Colors.white : danger, fontWeight: active ? FontWeight.w800 : FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "ขั้นถัดไป" card: title + hint + primary button + secondary chips.
+/// [compact]: one slim row — icon, title, one-line hint, primary button
+/// inline; secondary actions as small text buttons underneath.
+class NextActionCard extends StatelessWidget {
+  const NextActionCard({super.key, required this.module, required this.next, required this.onAction, this.busy = false, this.params = const {}, this.compact = false});
+
+  final bool compact;
   final String module;
   final NextAction next;
   final ValueChanged<String> onAction;
@@ -142,6 +211,7 @@ class NextActionCard extends StatelessWidget {
     final cs = theme.colorScheme;
     final tone = journeyTone(context, next.tone);
     final hint = nextHint(module, next, params: params);
+    if (compact) return _compactCard(context, tone, hint);
     return Container(
       key: ValueKey('next-${next.key}'),
       decoration: BoxDecoration(
@@ -228,6 +298,110 @@ class NextActionCard extends StatelessWidget {
   }
 }
 
+extension on NextActionCard {
+  Widget _compactCard(BuildContext context, Color tone, String hint) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    final action = next.action;
+    final primary = action == null
+        ? null
+        : FilledButton.icon(
+            key: ValueKey('next-action-$action'),
+            style: FilledButton.styleFrom(
+              backgroundColor: tone,
+              foregroundColor: Colors.white,
+              visualDensity: VisualDensity.compact,
+              minimumSize: const Size(0, 40),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: busy
+                ? null
+                : () {
+                    HapticFeedback.lightImpact();
+                    onAction(action);
+                  },
+            icon: busy
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Icon(journeyActionIcon(action), size: 18),
+            label: Text(actionLabel(module, action), style: const TextStyle(fontWeight: FontWeight.w700)),
+          );
+    final head = Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(color: tone.withValues(alpha: dark ? 0.24 : 0.14), borderRadius: BorderRadius.circular(11)),
+          child: Icon(NxI.lightning, size: 17, color: tone),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(tr('ขั้นถัดไป'), style: theme.textTheme.labelSmall?.copyWith(color: tone, fontWeight: FontWeight.w700, letterSpacing: 0.2)),
+              Text(
+                nextTitle(module, next, params: params),
+                key: const ValueKey('next-title'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              if (hint.isNotEmpty)
+                Text(hint, key: const ValueKey('next-hint'), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      ],
+    );
+    return Container(
+      key: ValueKey('next-${next.key}'),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: dark ? 0.12 : 0.06),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: tone.withValues(alpha: 0.28)),
+      ),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+      child: LayoutBuilder(builder: (context, c) {
+        // Narrow / large text: the button drops under the title.
+        final inline = primary != null && c.maxWidth >= 340 && MediaQuery.textScalerOf(context).scale(14) <= 17;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (inline) Row(children: [Expanded(child: head), const SizedBox(width: 8), primary]) else head,
+            if (primary != null && !inline) ...[const SizedBox(height: 8), primary],
+            if (next.secondary.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 36),
+                child: Wrap(
+                  spacing: 2,
+                  children: [
+                    for (final a in next.secondary)
+                      TextButton.icon(
+                        key: ValueKey('next-secondary-$a'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: cs.onSurfaceVariant,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: const Size(0, 34),
+                        ),
+                        onPressed: busy ? null : () => onAction(a),
+                        icon: Icon(journeyActionIcon(a), size: 16),
+                        label: Text(actionLabel(module, a), style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      }),
+    );
+  }
+}
+
 class KpiTile {
   const KpiTile({required this.icon, required this.label, required this.value, this.hint, this.tone = 'neutral', this.onTap, this.id});
   final IconData icon;
@@ -239,7 +413,7 @@ class KpiTile {
   final String? id;
 }
 
-/// 2×2 (phone) / 4 (wide) KPI tiles.
+/// 2×2 (phone) / 4 (wide) KPI tiles, all the same height.
 class KpiGrid extends StatelessWidget {
   const KpiGrid({super.key, required this.tiles});
   final List<KpiTile> tiles;
@@ -284,10 +458,15 @@ class KpiGrid extends StatelessWidget {
                         color: t.tone == 'neutral' || t.tone == 'primary' ? null : journeyTone(context, t.tone),
                       ),
                     ),
-                    if (t.hint != null && t.hint!.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(t.hint!, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                    ],
+                    // Always one hint line (blank when none): every tile has
+                    // the same height, at any text size.
+                    const SizedBox(height: 2),
+                    Text(
+                      (t.hint ?? '').isEmpty ? ' ' : t.hint!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
                   ],
                 ),
               ),
