@@ -15,11 +15,11 @@ String _s(Object? v) => v == null ? '' : '$v'.trim();
 
 /// Columns `GET /api/entity/:module?q=` must search (`search_cols`).
 ///
-/// The server's built-in floor for product / service is the legacy vtiger
+/// Older servers' built-in floor for product / service was the legacy vtiger
 /// set (`productname`, `name`, `product_no`) — none of the name columns exist
 /// in `aicrm_product`, so only the running number was searched and "kas"
-/// never found "Kaspersky …". The web picker has the same gap. Naming the
-/// real columns fixes it on every server (unknown names are ignored there).
+/// never found "Kaspersky …". The server floor now names the real columns;
+/// sending them anyway keeps older servers working (unknown names are ignored).
 const Map<String, List<String>> kPickerSearchCols = {
   'product': ['product_name_th', 'product_name_en', 'product_code', 'product_no'],
   'service': ['service_name_th', 'service_name_en', 'service_code', 'service_no'],
@@ -38,31 +38,56 @@ const Map<String, String> kPickerSort = {
 };
 
 /// Query params for one picker page: `search_cols` with the text, the sort,
-/// `with_total` for paging, and equality filters (`filter[col]`).
-Map<String, String> pickerQueryParams(String module, {String q = '', Map<String, String> filters = const {}}) => {
+/// `with_total` for paging, equality filters (`filter[col]`) and, for the
+/// quotation's product / service picker, `sellable=1` (ready-for-sale only —
+/// see [isSellableCatalogStatus]).
+Map<String, String> pickerQueryParams(String module, {String q = '', Map<String, String> filters = const {}, bool sellableOnly = false}) => {
       if (q.trim().isNotEmpty) 'search_cols': (kPickerSearchCols[module] ?? const []).join(','),
       if (kPickerSort[module] != null) 'sort': kPickerSort[module]!,
       'order': 'asc',
       'with_total': '1',
+      if (sellableOnly && kCatalogStatusField.containsKey(module)) 'sellable': '1',
       for (final e in filters.entries)
         if (e.value.trim().isNotEmpty) 'filter[${e.key}]': e.value.trim(),
     };
+
+// ─────────────────────────────────────────────────────────── sellable
+
+/// Status column of a catalog module.
+const Map<String, String> kCatalogStatusField = {'product': 'product_status', 'service': 'service_status'};
+
+/// Ready-for-sale statuses (trimmed, lower-case) — the server's
+/// `SELLABLE_CATALOG_STATUSES` (backend/src/constants/catalogSellable.js).
+/// The picklist is Active (ใช้งาน) · Inactive (ไม่ใช้งาน) · Draft (ฉบับร่าง) ·
+/// Discontinued (เลิกผลิต); only Active sells.
+const Set<String> kSellableCatalogStatuses = {'active', 'ใช้งาน', 'พร้อมขาย', 'published', 'available'};
+
+/// A product / service with this status can go on a quotation: Active, or no
+/// status at all (old / imported rows — the picklist default is Active).
+/// Draft / Inactive / Discontinued cannot. Stock does not matter.
+bool isSellableCatalogStatus(Object? status) {
+  final s = _s(status).toLowerCase();
+  return s.isEmpty || kSellableCatalogStatuses.contains(s);
+}
+
+bool isSellableCatalogRow(String module, Map<String, dynamic> row) {
+  final f = kCatalogStatusField[module];
+  return f == null || isSellableCatalogStatus(row[f]);
+}
 
 /// Category column of a catalog module.
 String catalogCategoryField(String module) => module == 'service' ? 'service_category' : 'product_category';
 
 // ─────────────────────────────────────────────────────────── catalog rows
 
-/// What a product / service row shows in the picker.
+/// What a product / service row shows in the quotation picker (no stock:
+/// a quotation can offer what is not on hand).
 class CatalogItemView {
-  const CatalogItemView({required this.name, required this.code, required this.unit, required this.price, this.stock, this.image, this.category = ''});
+  const CatalogItemView({required this.name, required this.code, required this.unit, required this.price, this.image, this.category = ''});
   final String name;
   final String code;
   final String unit;
   final double price;
-
-  /// Stock on hand (null = not tracked / unknown).
-  final double? stock;
   final String? image;
   final String category;
 
@@ -77,27 +102,15 @@ CatalogItemView catalogItemView(String module, Map<String, dynamic> r, {bool th 
   final code = _s(r['${p}_code']).isNotEmpty ? _s(r['${p}_code']) : _s(r['${p}_no']);
   final sell = r['${p}_selling_price'];
   final price = qNum(sell == null || '$sell'.trim().isEmpty ? r['${p}_initial_price'] : sell);
-  final stockRaw = r['stock_qty'] ?? r['stock_on_hand'] ?? r['${p}_stock'];
   final img = _s(r['picture']).isNotEmpty ? _s(r['picture']) : _s(r['image_url']);
   return CatalogItemView(
     name: name,
     code: code,
     unit: _s(r['${p}_unit']),
     price: price,
-    stock: stockRaw == null || '$stockRaw'.trim().isEmpty ? null : qNum(stockRaw),
     image: img.isEmpty ? null : img,
     category: _s(r[catalogCategoryField(p)]),
   );
-}
-
-/// Stock from the parts catalog (`/field-service/parts/catalog`) merged into
-/// product rows by id (the entity list has no stock column).
-List<Map<String, dynamic>> mergeCatalogStock(List<Map<String, dynamic>> rows, List<Map<String, dynamic>> parts) {
-  final byId = <String, Object?>{for (final p in parts) _s(p['product_id']): p['stock_qty']};
-  return [
-    for (final r in rows)
-      if (byId[_s(r['id'])] != null && r['stock_qty'] == null) {...r, 'stock_qty': byId[_s(r['id'])]} else r,
-  ];
 }
 
 // ─────────────────────────────────────────────────────────── customer rows

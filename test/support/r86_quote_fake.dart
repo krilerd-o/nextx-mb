@@ -5,17 +5,30 @@ import 'fake_api.dart';
 /// A small NEXTX for the R86 quotation form tests / screenshots: the entity
 /// list answers `q` the way `routes/entity.js` does — `search_cols` from the
 /// client plus the server's own floor (`MODULE_SEARCH_COLUMNS`), only columns
-/// the table really has, `ILIKE '%q%'` — so a client that relies on the
-/// floor alone reproduces the "kas finds nothing" bug.
+/// the table really has, `ILIKE '%q%'` — and `sellable=1` keeps only
+/// ready-for-sale products / services (`constants/catalogSellable.js`).
+/// `legacy: true` is an older server: the floor without the name columns
+/// (a client relying on it reproduces the "kas finds nothing" bug) and no
+/// `sellable` filter.
 
-/// The server's floor (`MODULE_SEARCH_COLUMNS` in routes/entity.js).
-const kServerSearchFloor = {
+/// The server's floor (`backend/src/constants/entitySearchColumns.js`).
+const Map<String, List<String>> kServerSearchFloor = {
   'lead': ['lead_no', 'lead_firstname', 'lead_lastname', 'lead_name', 'lead_status', 'company_name', 'mobile_1st', 'email_1st'],
   'contact': ['contact_no', 'contact_firstname', 'contact_lastname', 'contact_name', 'contact_status', 'mobile_1st', 'email_1st', 'email1'],
   'account': ['account_no', 'account_code', 'account_name', 'account_status', 'mobile_1st', 'email_1st', 'accountname', 'name', 'contact_name_1st'],
-  'product': ['productname', 'name', 'product_no'],
-  'service': ['servicename', 'name', 'service_no'],
+  'product': ['product_name_th', 'product_name_en', 'product_code', 'product_no'],
+  'service': ['service_name_th', 'service_name_en', 'service_code', 'service_no'],
 };
+
+/// The floor before the fix: vtiger names that `aicrm_product` does not have.
+final Map<String, List<String>> kLegacyServerSearchFloor = {
+  ...kServerSearchFloor,
+  'product': const ['productname', 'name', 'product_no'],
+  'service': const ['servicename', 'name', 'service_no'],
+};
+
+/// Server `SELLABLE_CATALOG_STATUSES` (empty status = sellable).
+const _kServerSellable = {'active', 'ใช้งาน', 'พร้อมขาย', 'published', 'available'};
 
 /// Columns of the tables (aicrm_product … as created by init-db-full-pg.js).
 const kTableColumns = {
@@ -33,17 +46,24 @@ const kTableColumns = {
 };
 
 /// Rows the server would match for `GET /api/entity/:module` with [qp].
-List<Map<String, dynamic>> serverEntitySearch(String module, List<Map<String, dynamic>> rows, Map<String, dynamic> qp) {
+List<Map<String, dynamic>> serverEntitySearch(String module, List<Map<String, dynamic>> rows, Map<String, dynamic> qp, {bool legacy = false}) {
   final q = '${qp['q'] ?? ''}'.trim().toLowerCase();
   final have = kTableColumns[module] ?? const <String>[];
   final cols = <String>[];
-  for (final c in [...?kServerSearchFloor[module], ...'${qp['search_cols'] ?? ''}'.split(',').map((x) => x.trim())]) {
+  for (final c in [...?(legacy ? kLegacyServerSearchFloor : kServerSearchFloor)[module], ...'${qp['search_cols'] ?? ''}'.split(',').map((x) => x.trim())]) {
     if (c.isNotEmpty && have.contains(c) && !cols.contains(c)) cols.add(c);
   }
   var out = [
     for (final r in rows)
       if (q.isEmpty || cols.any((c) => '${r[c] ?? ''}'.toLowerCase().contains(q))) r,
   ];
+  final statusCol = {'product': 'product_status', 'service': 'service_status'}[module];
+  if (!legacy && statusCol != null && '${qp['sellable'] ?? ''}' == '1') {
+    out = [
+      for (final r in out)
+        if ('${r[statusCol] ?? ''}'.trim().isEmpty || _kServerSellable.contains('${r[statusCol]}'.trim().toLowerCase())) r,
+    ];
+  }
   qp.forEach((k, v) {
     final m = RegExp(r'^filter\[(\w+)\]$').firstMatch(k);
     if (m == null || m[1] == 'account_id_any') return;
@@ -88,11 +108,25 @@ final fakeProducts = <Map<String, dynamic>>[
     'id': 35, 'product_no': 'PRD-00035', 'product_code': 'DELL-OP7010', 'product_name_th': 'Dell OptiPlex 7010 i5 / 16GB / 512GB', 'product_category': 'Hardware',
     'product_unit': 'เครื่อง', 'product_initial_price': 25900, 'product_selling_price': 24500, 'product_status': 'Active',
   },
+  // Not ready for sale — never listed in the quotation picker.
+  {
+    'id': 36, 'product_no': 'PRD-00036', 'product_code': 'KSOS-DRAFT', 'product_name_th': 'Kaspersky Small Office Security (ร่าง)', 'product_category': 'Software',
+    'product_unit': 'License', 'product_selling_price': 990, 'product_status': 'Draft',
+  },
+  {
+    'id': 37, 'product_no': 'PRD-00037', 'product_code': 'KTS-2019', 'product_name_th': 'Kaspersky Total Security 2019', 'product_category': 'Software',
+    'product_unit': 'License', 'product_selling_price': 700, 'product_status': 'Inactive',
+  },
+  {
+    'id': 38, 'product_no': 'PRD-00038', 'product_code': 'KAV-2015', 'product_name_th': 'Kaspersky Anti-Virus 2015', 'product_category': 'Software',
+    'product_unit': 'License', 'product_selling_price': 500, 'product_status': 'Discontinued',
+  },
 ];
 
 final fakeServices = <Map<String, dynamic>>[
   {'id': 51, 'service_no': 'SRV-00051', 'service_code': 'INS-CCTV', 'service_name_th': 'ค่าติดตั้งกล้องวงจรปิด (ต่อจุด)', 'service_category': 'Installation', 'service_unit': 'จุด', 'service_selling_price': 850},
   {'id': 52, 'service_no': 'SRV-00052', 'service_code': 'MA-1Y', 'service_name_th': 'MA รายปี ระบบเครือข่าย', 'service_category': 'Maintenance', 'service_unit': 'ปี', 'service_selling_price': 18000},
+  {'id': 53, 'service_no': 'SRV-00053', 'service_code': 'MA-OLD', 'service_name_th': 'MA รายปี (แพ็กเกจเก่า)', 'service_category': 'Maintenance', 'service_unit': 'ปี', 'service_selling_price': 15000, 'service_status': 'Inactive'},
 ];
 
 final fakeAccounts = <Map<String, dynamic>>[
@@ -180,10 +214,10 @@ Map<String, Object?> quoteFakeReplies({Map<String, Object?> extra = const {}}) =
         'terms': {'html': '<p><strong>ยืนราคา 30 วัน</strong></p><ul><li>ชำระเงินภายใน 30 วันหลังส่งมอบ</li><li>รับประกันสินค้า 1 ปี</li></ul>'},
         'footer': {'html': '<p>ขอบคุณที่ไว้วางใจ บริษัท เน็กซ์เอ็กซ์ จำกัด</p>'},
       },
+      // Stock (job parts) — the quotation picker must not ask for it.
       'GET /api/field-service/parts/catalog': {
         'list': [
           {'product_id': 31, 'name': kasperskyRow['product_name_th'], 'stock_qty': 42},
-          {'product_id': 32, 'name': 'Fortinet FortiGate 60F Firewall', 'stock_qty': 3},
           {'product_id': 33, 'name': 'กล้อง IP Hikvision 4MP Dome', 'stock_qty': 0},
         ],
       },
@@ -197,15 +231,15 @@ Map<String, Object?> quoteFakeReplies({Map<String, Object?> extra = const {}}) =
     };
 
 /// Answers the entity lists like the real server (see [serverEntitySearch]).
-void installQuoteFakeServer(FakeNextxAdapter adapter) {
+void installQuoteFakeServer(FakeNextxAdapter adapter, {bool legacy = false}) {
   final tables = {'product': fakeProducts, 'service': fakeServices, 'account': fakeAccounts, 'contact': fakeContacts, 'lead': fakeLeads};
   adapter.onRequest = (RequestOptions o) {
     final m = RegExp(r'^/api/entity/(\w+)$').firstMatch(o.path);
     if (m == null || o.method.toUpperCase() != 'GET') return;
     final rows = tables[m[1]];
     if (rows == null) return;
-    final list = serverEntitySearch(m[1]!, rows, o.queryParameters);
-    final all = serverEntitySearch(m[1]!, rows, {...o.queryParameters, 'limit': '100000', 'page': '1'});
+    final list = serverEntitySearch(m[1]!, rows, o.queryParameters, legacy: legacy);
+    final all = serverEntitySearch(m[1]!, rows, {...o.queryParameters, 'limit': '100000', 'page': '1'}, legacy: legacy);
     adapter.replies['GET ${o.path}'] = {'list': list, 'meta': {'total': all.length}};
   };
 }

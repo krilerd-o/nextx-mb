@@ -72,27 +72,34 @@ void main() {
   });
 
   group('product search (owner: "kas" found nothing)', () {
-    testWidgets('root cause: q alone only searches the server floor (product_no) — search_cols finds Kaspersky', (tester) async {
+    testWidgets('root cause: an old server floor (product_no) missed "kas" — search_cols finds Kaspersky; the fixed floor finds it with q alone', (tester) async {
       final h = DocFormHarness(tester);
       await h.pump(const SizedBox(), quoteFakeReplies());
-      installQuoteFakeServer(h.adapter);
+      installQuoteFakeServer(h.adapter, legacy: true);
       final api = h.config.apiClient;
-      // The old request (the form's inline box): GET /api/entity/product?q=kas → nothing.
+      // Older server: GET /api/entity/product?q=kas → nothing (MODULE_SEARCH_COLUMNS.product = productname / name / product_no).
       final old = await tester.runAsync(() => api.getEntityList('product', q: 'kas', limit: 8));
-      expect(old!.items, isEmpty, reason: 'MODULE_SEARCH_COLUMNS.product = productname / name / product_no: no name column exists');
-      // The picker names the real columns.
+      expect(old!.items, isEmpty, reason: 'legacy floor: no name column exists');
+      // The picker names the real columns, so it works there too.
       for (final q in ['kas', 'KAS', 'Kaspersky', 'KES-B']) {
-        final page = await tester.runAsync(() => api.searchPicker('product', q: q));
-        expect(page!.items.map((r) => r['id']), [31], reason: q);
+        final page = await tester.runAsync(() => api.searchPicker('product', q: q, sellableOnly: true));
+        expect(page!.items.map((r) => r['id']).where((id) => id == 31), [31], reason: q);
       }
       final c = h.adapter.calls.last;
       expect(c.queryParameters['search_cols'], 'product_name_th,product_name_en,product_code,product_no');
       expect(c.queryParameters['q'], 'KES-B');
+      expect(c.queryParameters['sellable'], '1');
       expect(pickerQueryParams('service', q: 'x')['search_cols'], contains('service_name_th'));
       expect(pickerQueryParams('product').containsKey('search_cols'), isFalse, reason: 'no text, no columns');
+      // Fixed server: q alone (the web picker) finds it, every status unless sellable=1.
+      installQuoteFakeServer(h.adapter);
+      final now = await tester.runAsync(() => api.getEntityList('product', q: 'kas', limit: 8));
+      expect(now!.items.map((r) => r['id']), [31, 36, 37, 38]);
+      final sellable = await tester.runAsync(() => api.searchPicker('product', q: 'kas', sellableOnly: true));
+      expect(sellable!.items.map((r) => r['id']), [31], reason: 'Draft / Inactive / Discontinued are not for sale');
     });
 
-    testWidgets('in the form: kas → Kaspersky with price / unit / stock, picked with a quantity', (tester) async {
+    testWidgets('in the form: kas → Kaspersky with price / unit (no stock), unsellable items hidden, picked with a quantity', (tester) async {
       final h = await openForm(tester);
       await pickSiamTech(h);
       await h.tap(const ValueKey('docform-next'));
@@ -100,14 +107,41 @@ void main() {
       expect(find.byKey(const ValueKey('catalog-picker')), findsOneWidget, reason: 'its own page, not a list in the form');
       await search(h, 'catalog-search', 'kas');
       expect(find.byKey(const ValueKey('catalog-hit-product-31')), findsOneWidget);
+      for (final id in [36, 37, 38]) {
+        expect(find.byKey(ValueKey('catalog-hit-product-$id')), findsNothing, reason: 'product $id is not ready for sale');
+      }
       expect(find.byKey(const ValueKey('picker-empty')), findsNothing);
       expect(find.text('฿1,290.00 / License'), findsOneWidget);
-      expect(find.text('คงเหลือ 42'), findsOneWidget, reason: 'stock from the parts catalog');
+      // Stock is irrelevant for a quotation: not asked for, not shown.
+      expect(h.called('GET', '/api/field-service/parts/catalog'), isFalse);
+      expect(find.textContaining('คงเหลือ'), findsNothing);
+      expect(find.text('หมดสต็อก'), findsNothing);
+      final req = h.adapter.calls.lastWhere((c) => c.path == '/api/entity/product');
+      expect(req.queryParameters['sellable'], '1');
       await h.tap(const ValueKey('catalog-hit-product-31'));
       await h.tap(const ValueKey('qty-plus'));
       await h.tap(const ValueKey('catalog-confirm'));
       expect(find.byKey(const ValueKey('catalog-picker')), findsNothing);
       expect(h.textOf(const ValueKey('qline-0-amount')), '฿2,580.00');
+    });
+
+    testWidgets('a server that ignores sellable=1: the picker still hides Draft / Inactive / Discontinued', (tester) async {
+      final h = DocFormHarness(tester);
+      await h.pump(opener(), quoteFakeReplies());
+      installQuoteFakeServer(h.adapter, legacy: true);
+      await h.tap(const ValueKey('open'));
+      await h.settle();
+      await pickSiamTech(h);
+      await h.tap(const ValueKey('docform-next'));
+      await h.tap(const ValueKey('qt-add-catalog'));
+      await search(h, 'catalog-search', 'kas');
+      expect(find.byKey(const ValueKey('catalog-hit-product-31')), findsOneWidget);
+      for (final id in [36, 37, 38]) {
+        expect(find.byKey(ValueKey('catalog-hit-product-$id')), findsNothing, reason: 'product $id filtered on the device');
+      }
+      await search(h, 'catalog-search', 'MA');
+      expect(find.byKey(const ValueKey('catalog-hit-service-52')), findsOneWidget, reason: 'no status = ready for sale');
+      expect(find.byKey(const ValueKey('catalog-hit-service-53')), findsNothing, reason: 'Inactive service');
     });
   });
 
@@ -395,9 +429,20 @@ void main() {
     expect(p['search_cols'], contains('account_taxid'));
     expect([p['sort'], p['order'], p['with_total'], p['filter[smownerid]'], p.containsKey('filter[x]')], ['account_name', 'asc', '1', '1', false]);
     final v = catalogItemView('product', kasperskyRow);
-    expect([v.name, v.code, v.unit, v.priceText, v.stock], [kasperskyRow['product_name_th'], 'KES-B-1Y', 'License', '฿1,290.00 / License', null]);
-    final merged = mergeCatalogStock([kasperskyRow], [{'product_id': 31, 'stock_qty': 4}]);
-    expect(catalogItemView('product', merged.single).stock, 4);
+    expect([v.name, v.code, v.unit, v.priceText], [kasperskyRow['product_name_th'], 'KES-B-1Y', 'License', '฿1,290.00 / License']);
+    // Sellable = Active (or no status); Draft / Inactive / Discontinued are not. Stock never matters.
+    for (final st in ['Active', 'active', ' ACTIVE ', 'ใช้งาน', 'พร้อมขาย', null, '']) {
+      expect(isSellableCatalogStatus(st), isTrue, reason: '$st');
+    }
+    for (final st in ['Draft', 'Inactive', 'Discontinued', 'ฉบับร่าง', 'ไม่ใช้งาน', 'เลิกผลิต']) {
+      expect(isSellableCatalogStatus(st), isFalse, reason: st);
+    }
+    expect(isSellableCatalogRow('product', {...kasperskyRow, 'stock_qty': 0}), isTrue, reason: 'out of stock still sells');
+    expect(isSellableCatalogRow('service', {'service_status': 'Inactive'}), isFalse);
+    expect(isSellableCatalogRow('account', {'account_status': 'Draft'}), isTrue);
+    expect(pickerQueryParams('product', sellableOnly: true)['sellable'], '1');
+    expect(pickerQueryParams('product').containsKey('sellable'), isFalse);
+    expect(pickerQueryParams('account', sellableOnly: true).containsKey('sellable'), isFalse);
     expect(customerRowSubtitle('account', fakeAccounts.first), 'ACC-0005 · 021234567 · purchase@siamtech.co.th · เลขภาษี 0105561000123');
     expect(customerRowSubtitle('lead', fakeLeads.first), 'ร้านกาแฟ คาซ่า · 0901112222');
     expect(ApiClient, isNotNull);

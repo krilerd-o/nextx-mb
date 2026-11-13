@@ -331,9 +331,10 @@ extension JourneyApi on ApiClient {
     int page = 1,
     int limit = 30,
     Map<String, String> filters = const {},
+    bool sellableOnly = false,
     CancelToken? cancel,
   }) =>
-      getEntityList(module, q: q, page: page, limit: limit, extra: pickerQueryParams(module, q: q, filters: filters), cancel: cancel);
+      getEntityList(module, q: q, page: page, limit: limit, extra: pickerQueryParams(module, q: q, filters: filters, sellableOnly: sellableOnly), cancel: cancel);
 
   // --------------------------------------------------------------- shared
 

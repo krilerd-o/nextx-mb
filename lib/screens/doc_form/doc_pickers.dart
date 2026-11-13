@@ -715,9 +715,11 @@ class _ContactPickerPageState extends State<ContactPickerPage> with _Debounced<C
 
 // ───────────────────────────────────────────────────────────── catalog
 
-/// Products + services: search by name / code / barcode, type and category
-/// filters, price / unit / stock / image per row, multi-select with
-/// quantities, "เพิ่ม N รายการ", and a typed line.
+/// Products + services for a quotation: search by name / code / barcode, type
+/// and category filters, price / unit / image per row, multi-select with
+/// quantities, "เพิ่ม N รายการ", and a typed line. Only ready-for-sale items
+/// are listed (`sellable=1`, re-checked here for servers that ignore it);
+/// stock is not shown — a quotation may offer what is not on hand.
 Future<CatalogPickResult?> showCatalogPicker(
   BuildContext context, {
   required ApiClient api,
@@ -756,7 +758,6 @@ class _CatalogPickerPageState extends State<CatalogPickerPage> with _Debounced<C
   bool _loading = false;
   Object? _error;
   int _token = 0;
-  bool _stockApi = true;
   final _scroll = ScrollController();
 
   static const _limit = 30;
@@ -812,18 +813,13 @@ class _CatalogPickerPageState extends State<CatalogPickerPage> with _Debounced<C
           () async {
             final page = more ? (_page[m] ?? 1) + 1 : 1;
             try {
-              final p = await widget.api.searchPicker(m, q: q, page: page, limit: _limit, filters: {
+              final p = await widget.api.searchPicker(m, q: q, page: page, limit: _limit, sellableOnly: true, filters: {
                 if (_category != null && _kind == m) catalogCategoryField(m): _category!,
               });
-              var rows = p.items;
-              if (m == 'product' && _stockApi && rows.isNotEmpty) {
-                try {
-                  rows = mergeCatalogStock(rows, await widget.api.searchPartCatalog(q));
-                } catch (_) {
-                  _stockApi = false;
-                }
-              }
-              got[m] = [for (final r in rows) (m, r)];
+              got[m] = [
+                for (final r in p.items)
+                  if (isSellableCatalogRow(m, r)) (m, r),
+              ];
               pages[m] = page;
               mores[m] = p.items.length >= _limit && (p.total == null || page * _limit < p.total!);
             } catch (e) {
@@ -1071,7 +1067,6 @@ class _CatalogRow extends StatelessWidget {
     final cs = theme.colorScheme;
     final tint = _kindColors[module] ?? cs.primary;
     final on = selected != null;
-    final stock = view.stock;
     final icon = Icon(_kindIcons[module], size: 22, color: tint);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -1104,11 +1099,6 @@ class _CatalogRow extends StatelessWidget {
                   Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
                     _Badge(text: _kindNames[module] ?? module, color: tint),
                     if (view.code.isNotEmpty) Text(view.code, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                    if (stock != null)
-                      _Badge(
-                        text: stock > 0 ? 'คงเหลือ ${_fmtQty(stock)}' : 'หมดสต็อก',
-                        color: stock > 0 ? const Color(0xFF16A34A) : cs.error,
-                      ),
                   ]),
                   const SizedBox(height: 3),
                   Text(view.priceText, key: ValueKey('catalog-price-$module'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: cs.primary)),
