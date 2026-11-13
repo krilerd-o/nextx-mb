@@ -58,6 +58,8 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = config.sessionRevokedNotice ? 'ถูกออกจากระบบจากอุปกรณ์อื่น กรุณาเข้าสู่ระบบใหม่' : 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
       WidgetsBinding.instance.addPostFrameCallback((_) => config.clearSessionExpiredNotice());
     }
+    final notice = config.takeLoginNotice();
+    if (notice != null) _error = notice;
     final recent = config.recentAccounts;
     if (recent.isNotEmpty && !RegExp(r'^\+?[0-9 -]+$').hasMatch(recent.first.loginId)) _id.text = recent.first.loginId;
     final invite = config.pendingInvite;

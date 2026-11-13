@@ -207,7 +207,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
     MenuItemDef(id: 'search', title: 'ค้นหา', subtitle: 'ค้นหาทุกโมดูล', icon: NxI.magnifyingGlass, route: AppRoutes.globalSearch, menuKeys: []),
     MenuItemDef(id: 'notifications', title: 'แจ้งเตือน', subtitle: 'การแจ้งเตือนทั้งหมด', icon: NxI.bell, route: AppRoutes.notifications, menuKeys: []),
     MenuItemDef(id: 'whats-new', title: 'มีอะไรใหม่', subtitle: 'ประกาศเวอร์ชันและฟีเจอร์ใหม่', icon: NxI.sparkle, route: AppRoutes.whatsNew, menuKeys: []),
-    MenuItemDef(id: 'settings', title: 'ตั้งค่า', subtitle: 'ธุรกิจ Package เมนูล่าง ธีม', icon: NxI.gear, route: AppRoutes.settings, menuKeys: []),
+    MenuItemDef(id: 'settings', title: 'ตั้งค่า', subtitle: 'ข้อมูลในเครื่อง เกี่ยวกับแอป ช่วยเหลือ', icon: NxI.gear, route: AppRoutes.settings, menuKeys: []),
   ];
 
   Future<void> _openMore() async {

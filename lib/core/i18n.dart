@@ -100,3 +100,16 @@ String? trn(String? th) => th == null ? null : L10n.translate(th);
 
 /// Year as shown in the UI: Buddhist Era in Thai, Gregorian in English.
 int uiYear(int gregorianYear) => L10n.isEn ? gregorianYear : gregorianYear + 543;
+
+/// Server text that comes in both languages (`label_th` / `label_en`): the
+/// current language's one, else the other.
+String trPair(Object? th, Object? en) {
+  String clean(Object? v) {
+    final s = '${v ?? ''}'.trim();
+    return s == 'null' ? '' : s;
+  }
+
+  final t = clean(th), e = clean(en);
+  if (L10n.isEn) return e.isNotEmpty ? e : t;
+  return t.isNotEmpty ? t : e;
+}

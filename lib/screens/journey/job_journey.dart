@@ -14,7 +14,6 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_status_stepper.dart';
 import '../../core/entity_display.dart' show userDisplayName;
 import '../calendar/activity_outcome_notes.dart';
-import '../profile/my_signatures_screen.dart' show SignaturePadScreen;
 import 'job_activity_gen.dart';
 import 'job_report_signatures.dart';
 import 'job_sign_link.dart';
@@ -364,14 +363,15 @@ class _JobSignaturesTabState extends State<JobSignaturesTab> {
         sigPath = (me['upload_signature_th'] ?? me['upload_signature_en'])?.toString();
       } catch (_) {}
       if (sigPath == null || sigPath.isEmpty) {
-        messenger.showSnackBar(SnackBar(content: Text(tr('ยังไม่มีลายเซ็นของฉัน — ตั้งได้ที่ โปรไฟล์ → ลายเซ็น'))));
+        messenger.showSnackBar(SnackBar(content: Text(tr('ยังไม่มีลายเซ็นของฉัน — ตั้งได้ที่ โปรไฟล์ → จัดการลายเซ็น'))));
         return;
       }
     } else {
       if (!mounted) return;
-      final png = await Navigator.of(context, rootNavigator: true).push<List<int>>(
-        MaterialPageRoute(fullscreenDialog: true, builder: (_) => const SignaturePadScreen()),
+      final signed = await Navigator.of(context, rootNavigator: true).push<JobSignResult>(
+        MaterialPageRoute(fullscreenDialog: true, builder: (_) => JobSignPage(title: tr('เซ็นชื่อ'), showName: false)),
       );
+      final png = signed?.png;
       if (png == null || png.isEmpty) return;
       sigPath = 'data:image/png;base64,${base64Encode(png)}';
     }

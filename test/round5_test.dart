@@ -10,7 +10,7 @@ import 'package:nextx_mobile/core/invite_link.dart';
 import 'package:nextx_mobile/core/recent_accounts.dart';
 import 'package:nextx_mobile/screens/auth/register_screen.dart';
 import 'package:nextx_mobile/screens/dashboard/team_overview_card.dart';
-import 'package:nextx_mobile/screens/profile/phone_verify_screen.dart';
+import 'package:nextx_mobile/screens/profile/phone_change_screen.dart';
 import 'package:nextx_mobile/screens/workspace/smart_checklist_section.dart';
 import 'package:nextx_mobile/services/app_lock.dart';
 import 'package:nextx_mobile/core/session_state.dart';
@@ -224,7 +224,7 @@ void main() {
     ]), (2, 3));
   });
 
-  testWidgets('phone verify: request then verify the code', (tester) async {
+  testWidgets('phone change: request then verify the code', (tester) async {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
     final config = AppConfig();
@@ -239,7 +239,7 @@ void main() {
       'POST /api/me/phone/otp/verify': {'verified': true},
     });
     config.apiClient.debugSetHttpAdapter(adapter);
-    await tester.pumpWidget(ChangeNotifierProvider.value(value: config, child: const MaterialApp(home: PhoneVerifyScreen())));
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: config, child: const MaterialApp(home: PhoneChangeScreen(currentPhone: '0811111111'))));
     Future<void> settle() async {
       await tester.pump(const Duration(milliseconds: 300));
       for (var i = 0; i < 4; i++) {
@@ -248,12 +248,14 @@ void main() {
       }
     }
 
-    await tester.enterText(find.byType(TextField).first, '0812345678');
-    await tester.tap(find.byType(NxHeroCta));
+    await tester.enterText(find.byKey(const ValueKey('phone-new')), '0812345678');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('phone-request')));
     await settle();
     expect(find.textContaining('AB12'), findsOneWidget);
-    await tester.enterText(find.byType(TextField).at(1), '123456');
-    await tester.tap(find.byType(NxHeroCta));
+    await tester.enterText(find.byKey(const ValueKey('phone-code')), '123456');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('phone-verify')));
     await settle();
     final verify = adapter.calls.singleWhere((c) => c.path == '/api/me/phone/otp/verify');
     expect(verify.data, {'phone': '0812345678', 'code': '123456'});

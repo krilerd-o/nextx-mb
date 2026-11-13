@@ -1,22 +1,38 @@
-import 'dart:ui' as ui;
-
-import '../../widgets/nx_skeleton.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
-import '../../services/api_client.dart';
-import '../../widgets/nx_app_header.dart';
-import '../../widgets/nx_icons.dart';
-import '../../widgets/nx_surface_card.dart';
 import '../../core/i18n.dart';
+import '../../services/api_client.dart';
+import '../../widgets/nx_confirm_sheet.dart';
+import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_skeleton.dart';
+import '../../widgets/settings_tiles.dart';
+import '../journey/job_report_signatures.dart' show JobSignPage, JobSignResult;
+import 'profile_ui.dart';
 
-/// "ลายเซ็นของฉัน" — TH / EN signature used on quotations and documents
-/// (`/api/me/signatures` + `POST /api/uploads/signature`).
+/// Opens the full-screen, rotatable signing page (the same one Job detail's
+/// summary uses) and returns the PNG, or null when cancelled.
+typedef SignaturePadLauncher = Future<List<int>?> Function(BuildContext context, String title);
+
+Future<List<int>?> _openJobSignPage(BuildContext context, String title) async {
+  final r = await Navigator.of(context, rootNavigator: true).push<JobSignResult>(
+    MaterialPageRoute(fullscreenDialog: true, builder: (_) => JobSignPage(title: title, subtitle: tr('ลายเซ็นของฉัน'), showName: false)),
+  );
+  return r?.png;
+}
+
+/// "จัดการลายเซ็น" — my TH / EN signature shown on quotations and documents
+/// (web and app read the same `/api/me/signatures`). "เซ็นใหม่" opens the
+/// Job signing page; the PNG goes to `POST /api/uploads/signature` and its
+/// path to `PUT /api/me/signatures`. Clear / replace ask first.
 class MySignaturesScreen extends StatefulWidget {
-  const MySignaturesScreen({super.key});
+  const MySignaturesScreen({super.key, this.padLauncher});
+
+  /// Tests replace the signing page.
+  final SignaturePadLauncher? padLauncher;
 
   @override
   State<MySignaturesScreen> createState() => _MySignaturesScreenState();
@@ -38,18 +54,29 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
   Future<void> _load() async {
     try {
       final d = await _api.getMySignatures();
-      if (mounted) setState(() => _data = d);
+      if (mounted) {
+        setState(() {
+          _data = d;
+          _error = null;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
   }
 
+  String _path(String slot) {
+    final v = '${_data?['upload_signature_$slot'] ?? ''}'.trim();
+    return v == 'null' ? '' : v;
+  }
+
   String? _url(String slot) {
-    final own = _data?['upload_signature_$slot']?.toString();
-    if (own == null || own.isEmpty) return null;
+    if (_path(slot).isEmpty) return null;
     final u = _data?[slot == 'th' ? 'signatureUrlTh' : 'signatureUrlEn']?.toString();
     return u == null || u.isEmpty ? null : _api.absoluteUrl(u);
   }
+
+  String _slotName(String slot) => slot == 'th' ? 'ภาษาไทย' : 'ภาษาอังกฤษ';
 
   Future<void> _save(String slot, List<int> bytes, String filename) async {
     setState(() => _busySlot = slot);
@@ -57,6 +84,75 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
     try {
       final path = await _api.uploadSignatureImage(bytes, filename);
       await _api.saveMySignatures(th: slot == 'th' ? path : null, en: slot == 'en' ? path : null);
+      await _load();
+      HapticFeedback.mediumImpact();
+      messenger.showSnackBar(SnackBar(content: Text(tr('บันทึกลายเซ็นแล้ว'))));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    } finally {
+      if (mounted) setState(() => _busySlot = null);
+    }
+  }
+
+  Future<bool> _confirmReplace(String slot) async {
+    if (_path(slot).isEmpty) return true;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const ValueKey('sig-replace-dialog'),
+        title: Text(tr('แทนที่ลายเซ็นเดิม?')),
+        content: Text(tr('ลายเซ็น${_slotName(slot)}ที่บันทึกไว้จะถูกแทนที่ เอกสารใหม่จะใช้ลายเซ็นใหม่')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(key: const ValueKey('sig-replace-ok'), onPressed: () => Navigator.pop(ctx, true), child: Text(tr('แทนที่'))),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _draw(String slot) async {
+    if (!await _confirmReplace(slot) || !mounted) return;
+    final launch = widget.padLauncher ?? _openJobSignPage;
+    final png = await launch(context, tr('ลายเซ็น${_slotName(slot)}'));
+    if (png != null && png.isNotEmpty && mounted) await _save(slot, png, 'signature_$slot.png');
+  }
+
+  Future<void> _pick(String slot) async {
+    if (!await _confirmReplace(slot) || !mounted) return;
+    final x = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 90);
+    if (x == null || !mounted) return;
+    await _save(slot, await x.readAsBytes(), x.name);
+  }
+
+  Future<void> _clear(String slot) async {
+    final ok = await showDeleteConfirm(
+      context,
+      name: tr('ลายเซ็น${_slotName(slot)}'),
+      loses: const ['ลายเซ็นนี้บนเอกสารที่ออกใหม่ (เอกสารเดิมไม่เปลี่ยน)'],
+      note: null,
+    );
+    if (!ok || !mounted) return;
+    setState(() => _busySlot = slot);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _api.saveMySignatures(clearTh: slot == 'th', clearEn: slot == 'en');
+      await _load();
+      messenger.showSnackBar(SnackBar(content: Text(tr('ลบลายเซ็นแล้ว'))));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
+    } finally {
+      if (mounted) setState(() => _busySlot = null);
+    }
+  }
+
+  /// Use the other language's signature for this slot too.
+  Future<void> _copyFrom(String slot, String from) async {
+    setState(() => _busySlot = slot);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final p = _path(from);
+      await _api.saveMySignatures(th: slot == 'th' ? p : null, en: slot == 'en' ? p : null);
       await _load();
       messenger.showSnackBar(SnackBar(content: Text(tr('บันทึกลายเซ็นแล้ว'))));
     } catch (e) {
@@ -66,189 +162,152 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
     }
   }
 
-  Future<void> _draw(String slot) async {
-    final png = await Navigator.of(context).push<List<int>>(
-      MaterialPageRoute(fullscreenDialog: true, builder: (_) => const SignaturePadScreen()),
-    );
-    if (png != null && mounted) await _save(slot, png, 'signature_$slot.png');
-  }
-
-  Future<void> _pick(String slot) async {
-    final x = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1200, imageQuality: 90);
-    if (x == null || !mounted) return;
-    await _save(slot, await x.readAsBytes(), x.name);
-  }
-
-  Future<void> _clear(String slot) async {
-    setState(() => _busySlot = slot);
-    try {
-      await _api.saveMySignatures(clearTh: slot == 'th', clearEn: slot == 'en');
-      await _load();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-    } finally {
-      if (mounted) setState(() => _busySlot = null);
-    }
-  }
-
-  Widget _slot(String slot, String title) {
+  Widget _slot(String slot, String title, String subtitle) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final url = _url(slot);
     final busy = _busySlot == slot;
-    return NxSurfaceCard(
+    final other = slot == 'th' ? 'en' : 'th';
+    final canCopy = url == null && _path(other).isNotEmpty;
+    const green = Color(0xFF16A34A);
+    return Container(
+      key: ValueKey('sig-card-$slot'),
       padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(24)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(children: [
-            Expanded(child: Text(tr(title), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
-            if (busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-          ]),
-          const SizedBox(height: 12),
-          Container(
-            height: 120,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-            ),
-            alignment: Alignment.center,
-            child: url == null
-                ? Text(tr('ยังไม่มีลายเซ็น'), style: theme.textTheme.bodySmall?.copyWith(color: Colors.black54))
-                : Image.network(url, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(NxI.image)),
-          ),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, children: [
-            FilledButton.tonalIcon(
-              onPressed: _busySlot != null ? null : () => _draw(slot),
-              icon: const Icon(NxI.pencilSimple, size: 18),
-              label: Text(tr('เซ็นบนจอ')),
-            ),
-            OutlinedButton.icon(
-              onPressed: _busySlot != null ? null : () => _pick(slot),
-              icon: const Icon(NxI.image, size: 18),
-              label: Text(tr('เลือกรูป')),
-            ),
-            if (url != null)
-              TextButton(onPressed: _busySlot != null ? null : () => _clear(slot), child: Text(tr('ลบ'))),
-          ]),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const NxAppHeader(title: 'ลายเซ็นของฉัน'),
-      body: _data == null
-          ? (_error == null
-              ? const NxSkeletonList(rows: 3)
-              : Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(tr(formatApiError(_error!)), textAlign: TextAlign.center))))
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text(tr('ใช้แสดงบนใบเสนอราคาและเอกสารที่ออกจากระบบ'), style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 16),
-                _slot('th', 'ลายเซ็น (ภาษาไทย)'),
-                const SizedBox(height: 12),
-                _slot('en', 'Signature (English)'),
-              ],
-            ),
-    );
-  }
-}
-
-/// Full-screen pad; pops PNG bytes (transparent background, black ink).
-class SignaturePadScreen extends StatefulWidget {
-  const SignaturePadScreen({super.key});
-
-  @override
-  State<SignaturePadScreen> createState() => _SignaturePadScreenState();
-}
-
-class _SignaturePadScreenState extends State<SignaturePadScreen> {
-  final _strokes = <List<Offset>>[];
-  final _key = GlobalKey();
-  bool _saving = false;
-
-  Future<void> _done() async {
-    if (_strokes.isEmpty) return;
-    setState(() => _saving = true);
-    final boundary = _key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-    final image = await boundary?.toImage(pixelRatio: 2);
-    final data = await image?.toByteData(format: ui.ImageByteFormat.png);
-    if (!mounted) return;
-    Navigator.of(context).pop(data?.buffer.asUint8List());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(tr('เซ็นชื่อ')),
-        actions: [
-          TextButton(onPressed: _strokes.isEmpty || _saving ? null : () => setState(_strokes.clear), child: Text(tr('ล้าง'))),
-          TextButton(onPressed: _strokes.isEmpty || _saving ? null : _done, child: Text(tr('บันทึก'))),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
             Expanded(
-              child: Container(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(tr(title), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                Text(tr(subtitle), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              ]),
+            ),
+            if (busy)
+              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                  color: (url == null ? cs.onSurfaceVariant : green).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: GestureDetector(
-                  onPanStart: (d) => setState(() => _strokes.add([d.localPosition])),
-                  onPanUpdate: (d) => setState(() => _strokes.last.add(d.localPosition)),
-                  child: RepaintBoundary(
-                    key: _key,
-                    child: CustomPaint(painter: _InkPainter(_strokes), size: Size.infinite),
-                  ),
+                child: Text(
+                  tr(url == null ? 'ยังไม่มี' : 'บันทึกแล้ว'),
+                  key: ValueKey('sig-status-$slot'),
+                  style: theme.textTheme.labelSmall?.copyWith(color: url == null ? cs.onSurfaceVariant : green, fontWeight: FontWeight.w800),
                 ),
               ),
+          ]),
+          const SizedBox(height: 12),
+          // The paper: white in both themes, like the printed document.
+          AspectRatio(
+            aspectRatio: 8 / 3,
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                key: ValueKey('sig-preview-$slot'),
+                onTap: _busySlot != null ? null : () => _draw(slot),
+                child: Stack(children: [
+                  Positioned.fill(
+                    child: url == null
+                        ? Center(
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(NxI.signature, color: Color(0xFF94A3B8), size: 30),
+                              const SizedBox(height: 4),
+                              Text(tr('แตะเพื่อเซ็น'), style: theme.textTheme.bodySmall?.copyWith(color: const Color(0xFF64748B))),
+                            ]),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Image.network(url, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Center(child: Icon(NxI.image, color: Color(0xFF94A3B8)))),
+                          ),
+                  ),
+                  const Positioned(left: 22, right: 22, bottom: 18, child: Divider(height: 1, thickness: 1, color: Color(0xFFE2E8F0))),
+                ]),
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(tr('เซ็นในกรอบด้านบน'), style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: FilledButton.icon(
+                key: ValueKey('sig-draw-$slot'),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                onPressed: _busySlot != null ? null : () => _draw(slot),
+                icon: const Icon(NxI.penLine, size: 18),
+                label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('เซ็นใหม่'), maxLines: 1)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                key: ValueKey('sig-pick-$slot'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                onPressed: _busySlot != null ? null : () => _pick(slot),
+                icon: const Icon(NxI.image, size: 18),
+                label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('เลือกรูป'), maxLines: 1)),
+              ),
+            ),
+            if (url != null) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                key: ValueKey('sig-clear-$slot'),
+                tooltip: tr('ลบลายเซ็น'),
+                onPressed: _busySlot != null ? null : () => _clear(slot),
+                icon: Icon(NxI.trash, color: kNxDangerRed.withValues(alpha: 0.9)),
+              ),
+            ],
+          ]),
+          if (canCopy)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: ValueKey('sig-copy-$slot'),
+                onPressed: _busySlot != null ? null : () => _copyFrom(slot, other),
+                icon: const Icon(NxI.copySimple, size: 16),
+                label: Text(tr('ใช้ลายเซ็น${_slotName(other)}')),
+              ),
+            ),
+        ],
       ),
     );
   }
-}
-
-class _InkPainter extends CustomPainter {
-  _InkPainter(this.strokes);
-  final List<List<Offset>> strokes;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = const Color(0xFF111827)
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-    for (final s in strokes) {
-      if (s.length == 1) {
-        canvas.drawCircle(s.first, 1.5, p..style = PaintingStyle.fill);
-        p.style = PaintingStyle.stroke;
-        continue;
-      }
-      final path = Path()..moveTo(s.first.dx, s.first.dy);
-      for (final o in s.skip(1)) {
-        path.lineTo(o.dx, o.dy);
-      }
-      canvas.drawPath(path, p);
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final List<Widget> children;
+    if (_data == null) {
+      children = [
+        if (_error == null)
+          const NxSkeletonList(rows: 3)
+        else
+          NxSoftNote(
+            icon: NxI.warningCircle,
+            color: cs.error,
+            text: formatApiError(_error!),
+            action: TextButton(onPressed: _load, child: Text(tr('ลองใหม่'))),
+          ),
+      ];
+    } else {
+      children = [
+        Text(tr('ใช้บนใบเสนอราคาและเอกสารที่ออกจากระบบ ทั้งในแอปและบนเว็บ'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+        const SizedBox(height: 14),
+        SettingsAppear(index: 0, child: _slot('th', 'ลายเซ็น (ภาษาไทย)', 'เอกสารภาษาไทย')),
+        const SizedBox(height: 12),
+        SettingsAppear(index: 1, child: _slot('en', 'Signature (English)', 'เอกสารภาษาอังกฤษ')),
+        const SizedBox(height: 14),
+        const NxSoftNote(
+          icon: NxI.deviceMobile,
+          text: 'หน้าเซ็นหมุนเป็นแนวนอนได้ เพื่อให้มีพื้นที่เซ็นกว้างขึ้น',
+        ),
+      ];
     }
+    return ProfileSubPage(title: 'จัดการลายเซ็น', maxWidth: 640, onRefresh: _load, children: children);
   }
-
-  @override
-  bool shouldRepaint(covariant _InkPainter old) => true;
 }

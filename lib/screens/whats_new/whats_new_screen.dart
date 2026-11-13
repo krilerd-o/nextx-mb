@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_config.dart';
+import '../../core/app_version.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
@@ -92,142 +92,144 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final items = _items;
-    Widget body;
+    final rows = <Widget>[const WhatsNewAppHeader()];
     if (_error != null && items == null) {
-      body = Center(
-        child: TextButton(
-          onPressed: _load,
-          child: Text(
-            tr('${formatApiError(_error!)}\nลองใหม่'),
-            textAlign: TextAlign.center,
+      rows.add(Padding(
+        padding: const EdgeInsets.only(top: 24),
+        child: Center(
+          child: TextButton(
+            onPressed: _load,
+            child: Text(tr('${formatApiError(_error!)}\nลองใหม่'), textAlign: TextAlign.center),
           ),
         ),
-      );
+      ));
     } else if (items == null) {
-      body = const NxSkeletonList();
+      rows.add(const NxSkeletonList());
     } else if (items.isEmpty) {
-      body = Center(
-        child: Text(tr('ยังไม่มีประกาศ'), style: theme.textTheme.bodyLarge),
-      );
-    } else {
-      body = NxRefresh(
-        onRefresh: _load,
-        child: Builder(
-          builder: (context) => ListView.builder(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              8 + NxScrollScaffold.topInset(context),
-              16,
-              32,
-            ),
-            itemCount: items.length,
-            itemBuilder: (context, i) {
-              final it = items[i];
-              final (label, color) = whatsNewType(it['type']?.toString());
-              final acked = it['acknowledged'] == true;
-              final link = it['link_path']?.toString() ?? '';
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: NxSurfaceCard(
-                  radius: 22,
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              tr(label),
-                              style: TextStyle(
-                                color: color,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
+      rows.add(Padding(
+        padding: const EdgeInsets.only(top: 32),
+        child: Center(child: Text(tr('ยังไม่มีประกาศ'), style: theme.textTheme.bodyLarge)),
+      ));
+    }
+    final list = items ?? const <Map<String, dynamic>>[];
+    final body = NxRefresh(
+      onRefresh: _load,
+      child: Builder(
+        builder: (context) => ListView.builder(
+          padding: EdgeInsets.fromLTRB(16, 8 + NxScrollScaffold.topInset(context), 16, 32),
+          itemCount: rows.length + list.length,
+          itemBuilder: (context, i) {
+            if (i < rows.length) return rows[i];
+            final it = list[i - rows.length];
+            final (label, color) = whatsNewType(it['type']?.toString());
+            final acked = it['acknowledged'] == true;
+            final version = '${it['version'] ?? ''}'.trim();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: NxSurfaceCard(
+                radius: 22,
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999)),
+                          child: Text(tr(label), style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+                        ),
+                        if (version.isNotEmpty && version != 'null') ...[
+                          const SizedBox(width: 6),
+                          Text('v$version', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+                        ],
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
                             thaiDate(it['date']?.toString().split('T').first ?? '', year: uiYear),
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        tr((it['title_th'] ?? it['title_en'] ?? '').toString()),
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      // 6 lines, then "ดูเพิ่มเติม"; short notes fit the card.
-                      WhatsNewBody(
-                        key: ValueKey('wn-body-${it['id'] ?? it['title_th']}'),
-                        child: NxHtmlView(
-                          html: (it['description_th'] ?? it['description_en'] ?? '').toString(),
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          if (link.isNotEmpty)
-                            TextButton.icon(
-                              onPressed: () {
-                                final base = context
-                                    .read<AppConfig>()
-                                    .apiBaseUrl
-                                    .replaceAll(RegExp(r'/+$'), '');
-                                launchUrl(
-                                  Uri.parse(
-                                    link.startsWith('http')
-                                        ? link
-                                        : '$base$link',
-                                  ),
-                                  mode: LaunchMode.externalApplication,
-                                );
-                              },
-                              icon: const Icon(NxI.arrowSquareOut, size: 16),
-                              label: Text(
-                                tr((it['link_label_th'] ?? 'เปิดดู').toString()),
-                              ),
-                            ),
-                          const Spacer(),
-                          acked
-                              ? Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Text(
-                                    tr('รับทราบแล้ว'),
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(color: cs.onSurfaceVariant),
-                                  ),
-                                )
-                              : TextButton(
-                                  onPressed: () => _ack(it),
-                                  child: Text(tr('รับทราบ')),
-                                ),
-                        ],
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      tr(trPair(it['title_th'], it['title_en'])),
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    // 6 lines, then "ดูเพิ่มเติม"; short notes fit the card.
+                    WhatsNewBody(
+                      key: ValueKey('wn-body-${it['id'] ?? it['title_th']}'),
+                      child: NxHtmlView(html: trPair(it['description_th'], it['description_en'])),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: acked
+                          ? Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(NxI.check, size: 14, color: cs.onSurfaceVariant),
+                                const SizedBox(width: 4),
+                                Text(tr('รับทราบแล้ว'), style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                              ]),
+                            )
+                          : TextButton(key: ValueKey('wn-ack-${it['id']}'), onPressed: () => _ack(it), child: Text(tr('รับทราบ'))),
+                    ),
+                  ],
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
-      );
-    }
+      ),
+    );
     return NxScrollScaffold(
       insetBody: false,
       header: const NxAppHeader(title: 'มีอะไรใหม่'),
       body: body,
+    );
+  }
+}
+
+/// Top of "มีอะไรใหม่": the app's launcher icon and the installed version.
+class WhatsNewAppHeader extends StatelessWidget {
+  const WhatsNewAppHeader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      key: const ValueKey('wn-app-header'),
+      padding: const EdgeInsets.fromLTRB(0, 12, 0, 22),
+      child: Column(children: [
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(26),
+            boxShadow: [BoxShadow(color: cs.primary.withValues(alpha: 0.25), blurRadius: 24, offset: const Offset(0, 8))],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(26),
+            child: Image.asset('assets/app_icon.png', key: const ValueKey('wn-app-icon'), width: 96, height: 96, fit: BoxFit.cover),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text('MOAI NEXT Mobile', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999)),
+          child: Text(
+            '${tr('เวอร์ชัน')} ${AppVersion.value}',
+            key: const ValueKey('wn-app-version'),
+            style: theme.textTheme.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
+          ),
+        ),
+      ]),
     );
   }
 }
