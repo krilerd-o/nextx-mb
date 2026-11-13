@@ -32,6 +32,7 @@ import 'order_summary_screen.dart';
 import '../../core/error_reporting.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../doc_form/doc_form_launcher.dart';
 
 typedef OpenEntityFn = void Function(String module, String id, {Map<String, dynamic>? row});
 
@@ -150,7 +151,8 @@ class EntityOpsSection extends StatelessWidget {
         if (module == 'service_contract') ...[
           CreateJobFromParentBar(
             label: 'สร้างใบสั่งงานจากสัญญา',
-            create: (api) => api.createJobFromContract(id),
+            parentModule: 'service_contract',
+            parent: row,
             onOpen: onOpen,
           ),
           const SizedBox(height: 12),
@@ -160,7 +162,8 @@ class EntityOpsSection extends StatelessWidget {
         if (module == 'case') ...[
           CreateJobFromParentBar(
             label: 'สร้างใบสั่งงานจากเคส',
-            create: (api) => api.createJobFromCase(id),
+            parentModule: 'case',
+            parent: row,
             onOpen: onOpen,
           ),
           const SizedBox(height: 12),
@@ -897,18 +900,13 @@ class QuotationMailApprovalBar extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         OutlinedButton(
+          // Revise in the step form (edit first, reason required) → POST /quotation/:id/revise.
           onPressed: () async {
-            try {
-              final data = await context.read<AppConfig>().apiClient.reviseQuotation(id);
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างฉบับแก้ไขแล้ว'))));
-              final nextId = pickRecordId(data, const ['quotation_id', 'id', 'new_id']);
-              if (nextId.isNotEmpty) onOpen('quotation', nextId, row: data);
-            } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-              }
-            }
+            final data = await openDocForm(context, module: 'quotation', mode: DocFormMode.revise, id: id);
+            if (data == null || !context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('สร้างฉบับแก้ไขแล้ว'))));
+            final nextId = pickRecordId(data, const ['quotation_id', 'id', 'new_id']);
+            if (nextId.isNotEmpty) onOpen('quotation', nextId, row: data);
           },
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           child: Text(tr('สร้างฉบับแก้ไข')),
@@ -1304,35 +1302,37 @@ class AssetGenerateJobsBar extends StatelessWidget {
   }
 }
 
+/// "สร้างใบสั่งงานจากเคส / สัญญา": the job step form pre-filled from the
+/// case / contract (same values the server's create-job writes), so the user
+/// reviews time, technician and place before the job exists.
 class CreateJobFromParentBar extends StatelessWidget {
   const CreateJobFromParentBar({
     super.key,
     required this.label,
-    required this.create,
+    required this.parentModule,
+    required this.parent,
     required this.onOpen,
   });
 
   final String label;
-  final Future<Map<String, dynamic>> Function(ApiClient api) create;
+  final String parentModule;
+  final Map<String, dynamic> parent;
   final OpenEntityFn onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return NxHeroCta(
-      label: label,
-      onPressed: () async {
-        try {
-          final data = await create(context.read<AppConfig>().apiClient);
-          if (!context.mounted) return;
+    return KeyedSubtree(
+      key: ValueKey('create-job-from-$parentModule'),
+      child: NxHeroCta(
+        label: label,
+        onPressed: () async {
+          final data = await openDocForm(context, module: 'job', parent: (module: parentModule, row: parent));
+          if (data == null || !context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('$labelแล้ว'))));
           final jobId = pickRecordId(data, const ['job_id', 'id']);
           if (jobId.isNotEmpty) onOpen('job', jobId, row: data);
-        } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
-          }
-        }
-      },
+        },
+      ),
     );
   }
 }

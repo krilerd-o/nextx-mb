@@ -87,6 +87,20 @@ String _notificationDeepLink(String path, {String? linkId, String? extra}) {
   }
   if ((extra ?? '').toLowerCase() == 'comm_ai_call' && linkId != null && linkId.isNotEmpty) return AppRoutes.commAiCall(linkId);
 
+  if (segs.length >= 3 && segs.first == 'modules') {
+    // The web's quotation / job form pages: /modules/<m>/new[?from=|?revise=], /modules/<m>/<id>/edit.
+    final module = EntityModules.normalize(segs[1]);
+    if (module == 'quotation' || module == 'job') {
+      final q = uri?.queryParameters ?? const <String, String>{};
+      if (segs[2] == 'new') {
+        final from = q['from'], revise = q['revise'];
+        if (revise != null && revise.isNotEmpty && module == 'quotation') return AppRoutes.docForm(module, mode: 'revise', id: revise);
+        if (from != null && from.isNotEmpty) return AppRoutes.docForm(module, mode: 'duplicate', id: from);
+        return AppRoutes.docForm(module);
+      }
+      if (segs.length >= 4 && segs[3] == 'edit') return AppRoutes.docForm(module, mode: 'edit', id: segs[2]);
+    }
+  }
   if (segs.length >= 2 && segs.first == 'modules') {
     final module = EntityModules.normalize(segs[1]);
     String? id;

@@ -25,7 +25,7 @@ import '../../core/deal_stage.dart';
 import '../fsm/contract_flows.dart';
 import '../fsm/service_more.dart';
 import '../journey/case_flows.dart';
-import '../journey/quotation_journey.dart' show duplicateQuotation;
+import '../doc_form/doc_form_launcher.dart';
 import '../journey/status_followups.dart';
 
 /// What the current user may do with one record (same rules as the web list:
@@ -470,6 +470,12 @@ class EntityRecordActions {
     bool? root,
   }) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
+    // Quotation / job: the step form (loads its own record + schema).
+    if (kStepFormModules.contains(module)) {
+      final r = await openDocForm(context, module: module, mode: DocFormMode.edit, id: '${row['id']}', root: root);
+      if (r != null) _snack(messenger, 'บันทึกแล้ว');
+      return r != null;
+    }
     var full = row;
     var f = fields;
     var p = picklists;
@@ -514,6 +520,15 @@ class EntityRecordActions {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final config = context.read<AppConfig>();
     final title = entityTitle(row, module: module);
+    // Quotation / job: a pre-filled step form (customer, lines / place, terms copied; number, status, dates cleared).
+    if (kStepFormModules.contains(module)) {
+      final r = await openDocForm(context, module: module, mode: DocFormMode.duplicate, id: '${row['id']}', root: root ?? true);
+      final newId = '${r?['id'] ?? ''}';
+      if (newId.isEmpty || newId == 'null') return false;
+      _snack(messenger, 'ทำซ้ำแล้ว — เปิดรายการใหม่');
+      if (context.mounted) nxPush<void>(context, EntityByIdLoader(module: module, id: newId), root: root);
+      return true;
+    }
     if (!kServerDuplicateModules.contains(module)) {
       var full = row;
       var f = fields;
@@ -554,9 +569,7 @@ class EntityRecordActions {
       }
     }
     if (!context.mounted) return false;
-    // Service Journey: copy as a brand-new quotation (fresh status, like the web).
-    final journeyQt = module == 'quotation' && await ServiceJourney.supported(config.apiClient);
-    if (!context.mounted) return false;
+    // Other server-side copies (lines and links come along).
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -571,18 +584,7 @@ class EntityRecordActions {
     );
     if (ok != true || !context.mounted) return false;
     try {
-      final String newId;
-      if (journeyQt) {
-        var full = row;
-        try {
-          final r = await config.apiClient.getEntity(module, '${row['id']}');
-          if (r.isNotEmpty) full = {...row, ...r};
-        } catch (_) {}
-        newId = await duplicateQuotation(config.apiClient, full) ?? '';
-      } else {
-        newId = await config.apiClient.duplicateEntity(module, '${row['id']}');
-        if (module == 'job' && newId.isNotEmpty) await resetDuplicatedJob(config.apiClient, newId);
-      }
+      final newId = await config.apiClient.duplicateEntity(module, '${row['id']}');
       if (newId.isEmpty) return false;
       _snack(messenger, 'ทำซ้ำแล้ว — เปิดรายการใหม่');
       if (context.mounted) nxPush<void>(context, EntityByIdLoader(module: module, id: newId), root: root);
@@ -755,18 +757,6 @@ class _CommentsSheetState extends State<_CommentsSheet> {
           EntityCommentsPanel(module: widget.module, id: _id, comments: _comments!, onChanged: _load),
       ],
     );
-  }
-}
-
-/// A copied job is a new job: older servers copy the source status (e.g.
-/// Completed); move it back to Open. New servers already do this.
-Future<void> resetDuplicatedJob(ApiClient api, String id) async {
-  try {
-    final j = await api.getEntity('job', id);
-    if (canonicalJobStatus(j['job_status']) == 'Open') return;
-    await api.putEntity('job', id, {'job_status': 'Open'});
-  } catch (e) {
-    debugPrint('[job duplicate] reset status: $e');
   }
 }
 

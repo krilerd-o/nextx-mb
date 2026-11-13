@@ -1913,9 +1913,12 @@ class ApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> scheduleJob(String id, {String? when}) async {
+  /// Appointment for the job (an activity in the calendar). The server reads
+  /// `date_start` / `date_end`; without them it uses the job's plan start / end.
+  Future<Map<String, dynamic>> scheduleJob(String id, {String? when, String? end}) async {
     return _dataMap(await _send('POST', '/api/field-service/jobs/$id/schedule', data: {
-      if (when != null) 'scheduled_at': when,
+      if (when != null) ...{'date_start': when, 'scheduled_at': when},
+      if (end != null) 'date_end': end,
     }));
   }
 

@@ -86,7 +86,10 @@ extension JourneyApi on ApiClient {
 
   Future<List<Map<String, dynamic>>> getJobActivityTemplates() async {
     final env = await _send('GET', '/api/settings/job/activity-templates', query: {'active': 1});
-    return extractMapList(env['data']);
+    final d = env['data'];
+    // The server answers `{templates: […], owner_rules: […]}`.
+    if (d is Map && d['templates'] is List) return extractMapList(d['templates']);
+    return extractMapList(d);
   }
 
   /// `{template_id}` or `{items:[…]}` (+ `overrides`).
@@ -220,6 +223,17 @@ extension JourneyApi on ApiClient {
       if (note != null && note.trim().isNotEmpty) 'revision_note': note.trim(),
     }));
   }
+
+  /// The web form's context: users, document templates, allowed layouts
+  /// (Template-1/2 per Business / Package), new-quotation defaults, branding.
+  Future<Map<String, dynamic>> getQuotationContext() async => _dataMap(await _send('GET', '/api/quotation/context'));
+
+  /// My default text blocks for a new quotation (`{intro|terms|footer|…: {html, templateIds, locale}}`).
+  Future<Map<String, dynamic>> resolveQuotationTextDefaults({String locale = 'th'}) async =>
+      _dataMap(await _send('GET', '/api/quotation/text-templates/defaults/resolve', query: {'locale': locale}));
+
+  /// Job form context: document templates, allowed layouts, job settings' document defaults.
+  Future<Map<String, dynamic>> getJobFormContext() async => _dataMap(await _send('GET', '/api/field-service/job-form-context'));
 
   Future<Map<String, dynamic>> getQuotationEmailStatus(String id) async =>
       _dataMap(await _send('GET', '/api/approvals/quotation/$id/email-status'));

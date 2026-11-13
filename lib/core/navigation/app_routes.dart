@@ -71,6 +71,10 @@ class AppRoutes {
   static String crmRecord(String module, String id) => '/crm/$module/$id';
   static String fsmModule(String module) => '/fsm/$module';
   static String fsmRecord(String module, String id) => '/fsm/$module/$id';
+
+  /// Quotation / job step form (`mode`: create | edit | duplicate | revise).
+  static String docForm(String module, {String mode = 'create', String? id}) =>
+      Uri(path: '/form/$module', queryParameters: {'mode': mode, if (id != null && id.isNotEmpty) 'id': id}).toString();
   static String activity(String id) => '/calendar/$id';
   static String job(String id) => '/jobs/$id';
   static String board(String id) => '/workspace/$id';
