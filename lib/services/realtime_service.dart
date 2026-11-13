@@ -14,6 +14,18 @@ class RealtimeEvent {
   String? get roomId => data['room_id']?.toString();
 }
 
+/// Socket.IO arguments of one notebook audio frame — the only place that knows the key format.
+///
+/// Calls send `stt:audio (callId, bytes)` (two positional args). A notebook recording is not a call,
+/// so its frames carry the recording in one object: `stt:audio ({recording_id, pcm})`, with `pcm`
+/// sent as a binary attachment (socket.io keeps nested binary as binary).
+Object notebookAudioArgs(String recordingId, Uint8List pcm) => {'recording_id': int.tryParse(recordingId) ?? recordingId, 'pcm': socketBytes(pcm)};
+
+/// [bytes] as its own buffer. socket_io_client sends a binary attachment's whole `.buffer`, so a view
+/// (e.g. a 4800-byte frame cut out of a bigger mic chunk by `rechunk`) would go out with the bytes around it.
+Uint8List socketBytes(Uint8List bytes) =>
+    bytes.offsetInBytes == 0 && bytes.lengthInBytes == bytes.buffer.lengthInBytes ? bytes : Uint8List.fromList(bytes);
+
 class RealtimeService extends ChangeNotifier {
   RealtimeService._();
   static final RealtimeService instance = RealtimeService._();
@@ -62,6 +74,10 @@ class RealtimeService extends ChangeNotifier {
     'ai:call_data_deleted',
     'ai:summary_deleted',
     'ai:export_job',
+    // ISAAC Notebook recordings (see services/notebook/notebook_recorder.dart): live captions come as
+    // stt:segment / stt:state with `recording_id`; the summary note when processing is done.
+    'ai:notebook_recording_ready',
+    'ai:notebook_recording_status',
   ];
 
   /// Synthetic event sent on every (re)connect.
@@ -178,7 +194,14 @@ class RealtimeService extends ChangeNotifier {
   void emitAudio(String callId, Uint8List pcm) {
     final s = _socket;
     if (s == null || !connected) return;
-    s.emit('stt:audio', [callId, pcm]);
+    s.emit('stt:audio', [callId, socketBytes(pcm)]);
+  }
+
+  /// Notebook recording audio (`stt:audio` keyed by recording, see [notebookAudioArgs]). Dropped while offline.
+  void emitNotebookAudio(String recordingId, Uint8List pcm) {
+    final s = _socket;
+    if (s == null || !connected) return;
+    s.emit('stt:audio', notebookAudioArgs(recordingId, pcm));
   }
 
   /// Emit and wait for the server's acknowledgement (`{ok, ...}`); `{ok: false, error: 'timeout'}` after [timeout].

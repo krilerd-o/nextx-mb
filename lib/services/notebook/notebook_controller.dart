@@ -5,8 +5,12 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/ai_assistant.dart';
 import '../../core/notebook/notebook_models.dart';
+import '../../core/notebook/notebook_recording.dart';
 import '../../screens/ai/assistant/ai_assistant_controller.dart' show aiErrorText;
 import '../api_client.dart';
+import '../audio/recording_upload_queue.dart';
+import '../realtime_service.dart';
+import 'notebook_recorder.dart';
 
 /// Friendly text + whether the feature is off, for any notebook error.
 ({String text, bool disabled, String? code}) notebookError(Object e) {
@@ -131,10 +135,20 @@ class StudioRun {
 }
 
 class NotebookController extends ChangeNotifier {
-  NotebookController(this.api, this.id);
+  NotebookController(this.api, this.id, {Stream<RealtimeEvent>? events, NotebookRecorder? recorder, RecordingUploadQueue? queue})
+      : _events = events,
+        _recorderOverride = recorder,
+        _queueOverride = queue;
 
   final ApiClient api;
   final String id;
+  final Stream<RealtimeEvent>? _events;
+  final NotebookRecorder? _recorderOverride;
+  final RecordingUploadQueue? _queueOverride;
+
+  /// The app-wide recorder (one recording at a time).
+  NotebookRecorder get recorder => _recorderOverride ?? NotebookRecorder.instance;
+  RecordingUploadQueue get _queue => _queueOverride ?? RecordingUploadQueue.instance;
 
   /// Time between background-job polls (tests shorten it).
   static Duration pollEvery = const Duration(milliseconds: 1500);
@@ -162,6 +176,10 @@ class NotebookController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _cancel?.cancel();
+    _recPoll?.cancel();
+    _rtSub?.cancel();
+    _finSub?.cancel();
+    _sentSub?.cancel();
     super.dispose();
   }
 
@@ -199,10 +217,200 @@ class NotebookController extends ChangeNotifier {
 
   /// Loads the notebook, then its chat and guide.
   Future<void> init() async {
+    _wireRecordings();
     await load();
     if (notebook == null) return;
-    await Future.wait([loadChat(), loadGuide()]);
+    await Future.wait([loadChat(), loadGuide(), loadRecordings()]);
   }
+
+  // ── recordings (meetings recorded into this notebook)
+
+  /// Recordings that are not a source yet: being uploaded / processed, failed, or live on another device.
+  List<NotebookRecording> recordings = [];
+
+  /// False on servers without notebook recordings (the record entry is hidden); null until known.
+  bool? recordingsSupported;
+
+  /// Time between status polls while a recording is processed (tests shorten it).
+  static Duration recordingPollEvery = const Duration(seconds: 4);
+
+  Timer? _recPoll;
+  StreamSubscription<RealtimeEvent>? _rtSub;
+  StreamSubscription<FinishedRecording>? _finSub;
+  StreamSubscription<RecordingPart>? _sentSub;
+  final Map<String, String> _csidOf = {}; // recording id (or local:<csid>) → client session id
+
+  /// Summary notes made from recordings (recording id → note id), from GET / the ready event.
+  final Map<String, String> recordingNotes = {};
+
+  bool get canRecord => canWrite && recordingsSupported != false;
+
+  /// The server answered 404 to a recording call: hide the record entry.
+  void markRecordingsUnsupported() {
+    recordingsSupported = false;
+    _notify();
+  }
+
+  void _wireRecordings() {
+    if (_rtSub != null) return;
+    _rtSub = (_events ?? RealtimeService.instance.events).listen(_onRealtime);
+    _finSub = recorder.finished.listen((f) {
+      if (f.notebookId == id) trackFinished(f);
+    });
+    _sentSub = _queue.sent.listen((p) {
+      if (p.target != RecordingTarget.notebook || p.notebookId != id) return;
+      if (p.op == RecordingOp.create) {
+        // Recorded offline: the recording exists on the server now.
+        final local = 'local:${p.clientSessionId}';
+        final i = recordings.indexWhere((r) => r.id == local);
+        if (i >= 0) {
+          final r = recordings[i];
+          recordings[i] = NotebookRecording(id: p.recordingId, notebookId: id, title: r.title, status: r.status, durationMs: r.durationMs);
+          _csidOf[p.recordingId] = p.clientSessionId;
+          _notify();
+        }
+      }
+      if (p.op == RecordingOp.stop) _schedulePoll(soon: true);
+    });
+  }
+
+  void _onRealtime(RealtimeEvent e) {
+    final d = e.data;
+    if ('${d['notebook_id']}' != id) return;
+    final rid = '${d['recording_id'] ?? ''}';
+    switch (e.type) {
+      case 'ai:notebook_recording_ready':
+        if (d['note_id'] != null) recordingNotes[rid] = '${d['note_id']}';
+        recordings = recordings.where((r) => r.id != rid).toList();
+        _notify();
+        unawaited(load(quiet: true));
+      case 'ai:notebook_recording_status':
+        final i = recordings.indexWhere((r) => r.id == rid);
+        if (i >= 0) {
+          recordings[i].status = RecordingStatus.of(d['status']);
+          _notify();
+          if (recordings[i].status == RecordingStatus.failed) unawaited(loadRecordings()); // with its error text
+        } else {
+          unawaited(loadRecordings());
+        }
+    }
+  }
+
+  Future<void> loadRecordings() async {
+    try {
+      final rows = await api.getNotebookRecordings(id);
+      recordingsSupported = true;
+      final fresh = [for (final r in rows) NotebookRecording.fromJson(r)];
+      for (final r in fresh) {
+        if (r.noteId != null) recordingNotes[r.id] = r.noteId!;
+      }
+      final local = recordings.where((r) => r.id.startsWith('local:') || (r.status.working && !fresh.any((x) => x.id == r.id))).toList();
+      bool show(NotebookRecording r) {
+        if (r.status == RecordingStatus.ready || (recorder.recordingId == r.id && recorder.active)) return false;
+        if (!r.status.active) return true;
+        // Live on another device: only fairly recent ones (an abandoned session stays "recording" on the server).
+        final started = DateTime.tryParse(r.startedAt ?? '');
+        return started != null && DateTime.now().difference(started).inHours < 12;
+      }
+
+      recordings = [...local, ...fresh.where(show)];
+    } catch (e) {
+      if (_isNotFound(e)) recordingsSupported = false;
+    }
+    _notify();
+    _schedulePoll();
+  }
+
+  /// A recording stopped on this phone: show it as "กำลังประมวลผล…" until it is a source.
+  void trackFinished(FinishedRecording f) {
+    final rid = f.recordingId ?? 'local:${f.clientSessionId}';
+    _csidOf[rid] = f.clientSessionId;
+    recordings = [
+      NotebookRecording(id: rid, notebookId: id, title: f.title, status: _uploading(rid) ? RecordingStatus.uploading : RecordingStatus.processing, durationMs: f.durationMs),
+      ...recordings.where((r) => r.id != rid),
+    ];
+    _notify();
+    _schedulePoll(soon: true);
+  }
+
+  bool _uploading(String rid) {
+    final csid = _csidOf[rid];
+    return _queue.pendingFor(clientSessionId: csid, recordingId: rid.startsWith('local:') ? null : rid).isNotEmpty;
+  }
+
+  void _schedulePoll({bool soon = false}) {
+    if (_disposed) return;
+    if (!recordings.any((r) => r.status.working)) {
+      _recPoll?.cancel();
+      _recPoll = null;
+      return;
+    }
+    if (_recPoll?.isActive == true && !soon) return;
+    _recPoll?.cancel();
+    _recPoll = Timer(soon ? const Duration(milliseconds: 300) : recordingPollEvery, () => unawaited(pollRecordings()));
+  }
+
+  /// One status round for the recordings being uploaded / processed.
+  Future<void> pollRecordings() async {
+    var becameReady = false;
+    for (final r in [...recordings]) {
+      if (_disposed) return;
+      if (!r.status.working) continue;
+      if (_uploading(r.id)) {
+        r.status = RecordingStatus.uploading;
+        continue;
+      }
+      if (r.id.startsWith('local:')) continue;
+      try {
+        final fresh = NotebookRecording.fromJson(await api.getNotebookRecording(id, r.id));
+        if (fresh.noteId != null) recordingNotes[r.id] = fresh.noteId!;
+        if (fresh.status == RecordingStatus.ready) {
+          recordings = recordings.where((x) => x.id != r.id).toList();
+          becameReady = true;
+        } else {
+          final i = recordings.indexWhere((x) => x.id == r.id);
+          // Still "recording" on the server = the stop is on its way: keep showing processing.
+          if (i >= 0) recordings[i] = fresh.status.active ? (r..status = RecordingStatus.processing) : fresh;
+        }
+      } catch (e) {
+        if (_isNotFound(e)) recordings = recordings.where((x) => x.id != r.id).toList();
+      }
+    }
+    if (becameReady) await load(quiet: true);
+    _notify();
+    _recPoll = null;
+    _schedulePoll();
+  }
+
+  Future<void> retryRecording(NotebookRecording r) async {
+    await api.retryNotebookRecording(id, r.id);
+    r.status = RecordingStatus.processing;
+    _notify();
+    _schedulePoll(soon: true);
+  }
+
+  Future<void> deleteRecording(NotebookRecording r) async {
+    if (!r.id.startsWith('local:')) await api.deleteNotebookRecording(id, r.id);
+    recordings = recordings.where((x) => x.id != r.id).toList();
+    _notify();
+  }
+
+  /// The recording behind a `recording` source (`source_config.recording_id`, else by `source_id`).
+  Future<NotebookRecording?> recordingForSource(NotebookSource s) async {
+    var rid = '${s.config['recording_id'] ?? ''}';
+    if (rid.isEmpty || rid == 'null') {
+      try {
+        final rows = await api.getNotebookRecordings(id);
+        rid = '${rows.where((r) => '${r['source_id']}' == s.id).firstOrNull?['id'] ?? ''}';
+      } catch (_) {}
+    }
+    if (rid.isEmpty || rid == 'null') return null;
+    final r = NotebookRecording.fromJson(await api.getNotebookRecording(id, rid));
+    if (r.noteId != null) recordingNotes[r.id] = r.noteId!;
+    return r;
+  }
+
+  NotebookNote? noteById(String? nid) => nid == null ? null : notes.where((n) => n.id == nid).firstOrNull;
 
   // ── notebook
 

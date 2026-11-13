@@ -118,6 +118,51 @@ extension NotebookApi on ApiClient {
         options: Options(receiveTimeout: const Duration(minutes: 2)),
       ));
 
+  // ── recordings (NEXTX notebook v2; 404 on older servers)
+
+  /// `{item:{id, notebook_id, title, status:'recording', started_at, locale}}` — idempotent on [clientSessionId].
+  Future<Map<String, dynamic>> createNotebookRecording(String id, {String? title, String? locale, String? deviceId, String? clientSessionId}) async =>
+      _item(await _send('POST', '/api/ai/notebooks/$id/recordings', data: {
+        if (title != null && title.trim().isNotEmpty) 'title': title.trim(),
+        'locale': ?locale,
+        if (deviceId != null && deviceId.isNotEmpty) 'device_id': deviceId,
+        if (clientSessionId != null && clientSessionId.isNotEmpty) 'client_session_id': clientSessionId,
+      }));
+
+  /// One WAV part (PCM16 mono 24 kHz) — `{received, part}`.
+  Future<Map<String, dynamic>> uploadNotebookRecordingPart(String id, String recordingId, String filePath,
+      {required int part, bool isFinal = false, int durationMs = 0, String deviceId = ''}) async {
+    final form = FormData.fromMap({
+      'part': '$part',
+      'final': isFinal ? 'true' : 'false',
+      if (isFinal) 'duration_ms': '$durationMs',
+      if (deviceId.isNotEmpty) 'device_id': deviceId,
+      'audio': await MultipartFile.fromFile(filePath, filename: 'part-$part.wav', contentType: DioMediaType.parse('audio/wav')),
+    });
+    return _dataMap(await _send('POST', '/api/ai/notebooks/$id/recordings/$recordingId/parts', data: form, options: Options(sendTimeout: const Duration(minutes: 5))));
+  }
+
+  Future<Map<String, dynamic>> pauseNotebookRecording(String id, String recordingId) async => _dataMap(await _send('POST', '/api/ai/notebooks/$id/recordings/$recordingId/pause'));
+
+  Future<Map<String, dynamic>> resumeNotebookRecording(String id, String recordingId) async => _dataMap(await _send('POST', '/api/ai/notebooks/$id/recordings/$recordingId/resume'));
+
+  /// `{status:'processing'}`. [parts]: how many parts were recorded (0 = no audio; the server waits for all).
+  Future<Map<String, dynamic>> stopNotebookRecording(String id, String recordingId, {required int durationMs, int parts = 0, List<Map<String, dynamic>> bookmarks = const []}) async =>
+      _dataMap(await _send('POST', '/api/ai/notebooks/$id/recordings/$recordingId/stop', data: {'duration_ms': durationMs, if (parts > 0) 'parts': parts, 'bookmarks': bookmarks}));
+
+  /// The recording with `segments[]`, `status`, `source_id`, `note_id`.
+  Future<Map<String, dynamic>> getNotebookRecording(String id, String recordingId) async => _item(await _send('GET', '/api/ai/notebooks/$id/recordings/$recordingId'));
+
+  Future<List<Map<String, dynamic>>> getNotebookRecordings(String id) async => _items(await _send('GET', '/api/ai/notebooks/$id/recordings'));
+
+  Future<void> deleteNotebookRecording(String id, String recordingId) async => _send('DELETE', '/api/ai/notebooks/$id/recordings/$recordingId');
+
+  Future<Map<String, dynamic>> retryNotebookRecording(String id, String recordingId) async => _dataMap(await _send('POST', '/api/ai/notebooks/$id/recordings/$recordingId/retry'));
+
+  /// The joined audio of a finished recording (needs the session).
+  Future<List<int>> downloadNotebookRecordingAudio(String id, String recordingId) =>
+      _downloadBytes('/api/ai/notebooks/$id/recordings/$recordingId/audio', receiveTimeout: const Duration(minutes: 3));
+
   // ── shares
 
   Future<List<Map<String, dynamic>>> getNotebookShares(String id) async => _items(await _send('GET', '/api/ai/notebooks/$id/shares'));

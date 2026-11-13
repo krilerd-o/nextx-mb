@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/i18n.dart';
 import '../../core/notebook/notebook_models.dart';
+import '../../core/notebook/notebook_recording.dart';
 import '../../core/nx_page_route.dart';
 import '../../services/file_open.dart';
 import '../../services/notebook/notebook_controller.dart';
@@ -19,8 +20,10 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_markdown.dart';
 import '../../widgets/nx_mermaid_view.dart';
 import '../comm_ai/comm_ai_isaac.dart';
+import '../comm_ai/comm_ai_widgets.dart' show CommAiSummaryView;
 import '../docs/document_preview.dart';
 import 'notebook_chat_pane.dart' show showCitationSheet;
+import 'notebook_recording_view.dart' show openRecordingSource;
 import 'notebook_widgets.dart';
 
 /// Opens a note / studio output in its native viewer.
@@ -145,6 +148,35 @@ class NotebookNoteBody extends StatelessWidget {
         if (qs.isNotEmpty) return QuizView(questions: qs);
     }
     final children = <Widget>[];
+    // "สรุปการประชุม" from a recording: the same 4 cards as a call summary.
+    final meeting = meetingSummaryOf(meta: n.meta, content: n.content);
+    if (meeting != null) {
+      final sourceId = '${n.meta['source_id'] ?? ''}';
+      final source = c.sourceById(sourceId.isEmpty ? null : sourceId);
+      return ListView(key: const ValueKey('notebook-meeting-summary'), padding: pad, children: [
+        if (source != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: NotebookCard(
+              key: const ValueKey('notebook-meeting-source'),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              onTap: () => openRecordingSource(context, c, source),
+              child: Row(children: [
+                const NotebookIconBadge(icon: LucideIcons300.audioLines, color: kRecordRed),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(source.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(tr('ฟังเสียงและอ่านข้อความเต็ม'), style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  ]),
+                ),
+                const Icon(NxI.caretRight, size: 18),
+              ]),
+            ),
+          ),
+        CommAiSummaryView(result: meeting, showSource: false),
+      ]);
+    }
     if (n.kind == 'audio') {
       final url = n.downloadUrl;
       children.add(url == null

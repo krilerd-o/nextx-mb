@@ -10,9 +10,11 @@ import 'core/app_config.dart';
 import 'screens/auth/app_lock_screen.dart';
 import 'screens/calls/call_overlay.dart';
 import 'screens/calls/live_captions.dart';
+import 'screens/notebook/notebook_recorder_overlay.dart';
 import 'services/app_lock.dart';
 import 'services/calls/call_service.dart';
 import 'services/calls/live_transcription.dart';
+import 'services/notebook/notebook_recorder.dart';
 import 'services/unread_service.dart';
 import 'core/app_theme.dart';
 import 'core/navigation/app_router.dart';
@@ -132,6 +134,17 @@ class _NextXMobileAppState extends State<NextXMobileApp>
                         if (sel.$4 && CallService.instance != null) Positioned.fill(child: CallOverlay(service: CallService.instance!)),
                         // "สรุปการสนทนาพร้อมแล้ว" after a call with AI notes.
                         if (sel.$4 && CallService.instance != null) CallSummaryToast(lt: LiveTranscription.instance, navigatorKey: _router.routerDelegate.navigatorKey),
+                        // ISAAC Notebook recording: floating bubble (clear of the call bubble) + "สรุปเสร็จแล้ว".
+                        if (sel.$4)
+                          Positioned.fill(
+                            child: NotebookRecorderOverlay(
+                              recorder: NotebookRecorder.instance,
+                              navigatorKey: _router.routerDelegate.navigatorKey,
+                              call: CallService.instance,
+                              open: (location) => _router.push(location),
+                              canPop: () => _router.canPop(),
+                            ),
+                          ),
                         if (AppLock.instance.locked && sel.$4)
                           const Positioned.fill(child: AppLockScreen()),
                         if (!sel.$4) const _AddSpaceCancelPill(),

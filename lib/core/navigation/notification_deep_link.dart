@@ -83,6 +83,18 @@ String? commAiHistoryRedirect(Uri uri) {
   return null;
 }
 
+/// Web notebook link → native: `/ai/notebook/<id>?recording_id=<rid>&note_id=<nid>` → `/notebook/<id>?recording=…&note=…`.
+String notebookWebRedirect(String id, Map<String, String> q) {
+  final rid = q['recording_id'] ?? q['recording'];
+  final nid = q['note_id'] ?? q['note'];
+  final out = <String, String>{
+    if (rid != null && rid.isNotEmpty) 'recording': rid,
+    if (nid != null && nid.isNotEmpty) 'note': nid,
+  };
+  final base = AppRoutes.notebookOf(id);
+  return out.isEmpty ? base : '$base?${Uri(queryParameters: out).query}';
+}
+
 String _notificationDeepLink(String path, {String? linkId, String? extra}) {
   final uri = _asUri(path);
   final segs = uri?.pathSegments.where((s) => s.isNotEmpty).toList() ?? [];
@@ -100,7 +112,15 @@ String _notificationDeepLink(String path, {String? linkId, String? extra}) {
 
   // Notebook links from the web: /ai/notebook[/<id>] → the native notebook (public links stay on the web).
   if (segs.length >= 2 && segs[0] == 'ai' && segs[1] == 'notebook') {
-    if (segs.length >= 3 && segs[2] != 'public') return AppRoutes.notebookOf(segs[2]);
+    // "ไอแซคสรุปบันทึกเสียงเสร็จแล้ว": ?recording_id=<rid> (or link_extra notebook_recording + link_id) opens its summary.
+    if (segs.length >= 3 && segs[2] != 'public') {
+      final q = {...?uri?.queryParameters};
+      // NEXTX sends link_id = notebook id, link_extra = recording id (older drafts: extra 'notebook_recording' + link_id).
+      final ex = (extra ?? '').trim();
+      if (RegExp(r'^\d+$').hasMatch(ex)) q['recording_id'] ??= ex;
+      if (ex.toLowerCase() == 'notebook_recording' && linkId != null && linkId.isNotEmpty && linkId != segs[2]) q['recording_id'] ??= linkId;
+      return notebookWebRedirect(segs[2], q);
+    }
     if (segs.length == 2) return AppRoutes.notebook;
   }
   if (segs.isNotEmpty && segs.first == 'notebook') return uri!.path;

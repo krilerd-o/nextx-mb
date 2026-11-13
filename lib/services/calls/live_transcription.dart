@@ -1,18 +1,22 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStream;
-import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
+import '../audio/mic_tap.dart';
+import '../audio/recording_upload_queue.dart';
+import '../audio/wav_parts.dart';
 import '../realtime_service.dart';
 import 'call_mic_tap_native.dart';
 import 'call_service.dart';
-import 'recording_upload_queue.dart';
+
+// The recording engine lives in services/audio (shared with notebook recordings).
+export '../audio/mic_tap.dart' show CallMicTap, MicTap, PausableMicTap, RecordMicTap;
+export '../audio/pcm.dart' show rechunk, wavHeader, pcmLevel;
 
 /// One line of live captions.
 class LiveCaption {
@@ -77,166 +81,21 @@ class CommAiDevice {
   }
 }
 
-/// Microphone → PCM16 mono 24 kHz in ~100 ms chunks while WebRTC keeps using the mic.
-/// Separate so a native tap can replace it on devices where a second recorder is refused.
-abstract class CallMicTap {
-  Future<Stream<Uint8List>> start();
-  Future<void> stop();
-}
-
-class RecordMicTap implements CallMicTap {
-  AudioRecorder? _rec;
-
-  @override
-  Future<Stream<Uint8List>> start() async {
-    final rec = AudioRecorder();
-    _rec = rec;
-    // iOS: keep WebRTC's audio session (playAndRecord) — do not let the recorder change it.
-    if (Platform.isIOS) await rec.ios?.manageAudioSession(false);
-    final raw = await rec.startStream(const RecordConfig(
-      encoder: AudioEncoder.pcm16bits,
-      sampleRate: 24000,
-      numChannels: 1,
-      echoCancel: true,
-      noiseSuppress: true,
-      androidConfig: AndroidRecordConfig(audioSource: AndroidAudioSource.voiceCommunication, manageBluetooth: false),
-    ));
-    return rechunk(raw, 4800);
-  }
-
-  @override
-  Future<void> stop() async {
-    final rec = _rec;
-    _rec = null;
-    if (rec == null) return;
-    try {
-      await rec.stop();
-    } catch (_) {}
-    await rec.dispose();
-  }
-}
-
-/// Re-slices a byte stream into fixed-size packets (the server expects even-length PCM16 frames).
-Stream<Uint8List> rechunk(Stream<Uint8List> input, int size) async* {
-  final buf = BytesBuilder(copy: false);
-  await for (final part in input) {
-    buf.add(part);
-    while (buf.length >= size) {
-      final all = buf.takeBytes();
-      yield Uint8List.sublistView(all, 0, size);
-      if (all.length > size) buf.add(Uint8List.sublistView(all, size));
-    }
-  }
-  final rest = buf.takeBytes();
-  if (rest.length >= 2) yield Uint8List.sublistView(rest, 0, rest.length - rest.length % 2);
-}
-
-/// Writes PCM16 mono 24 kHz into WAV parts of [partBytes] (~5 minutes) and hands each finished part
-/// to the upload queue, so a long call is never one huge file and nothing is lost if the app dies.
-class _WavParts {
-  _WavParts(this.dir, this.callId, {this.businessId, this.deviceId = ''});
-  final Directory dir;
-  final String callId;
-  final String? businessId;
-  final String deviceId;
-  static const partBytes = 48000 * 300; // 5 minutes of PCM16 24 kHz
-  IOSink? _sink;
-  File? _file;
-  int _bytes = 0; // in the current part
-  int _total = 0;
-  int _part = 0;
-
-  int get durationMs => _total ~/ 48;
-
-  void add(Uint8List pcm) {
-    if (_sink == null) {
-      _file = File('${dir.path}/call-${callId.replaceAll(RegExp(r'[^\w-]'), '')}-${DateTime.now().millisecondsSinceEpoch}-$_part.wav');
-      _sink = _file!.openWrite()..add(Uint8List(44));
-      _bytes = 0;
-    }
-    _sink!.add(pcm);
-    _bytes += pcm.length;
-    _total += pcm.length;
-    if (_bytes >= partBytes) unawaited(_closePart(isFinal: false));
-  }
-
-  Future<void> _closePart({required bool isFinal}) async {
-    final sink = _sink;
-    final file = _file;
-    final bytes = _bytes;
-    _sink = null;
-    _file = null;
-    if (sink != null && file != null) {
-      await sink.flush();
-      await sink.close();
-      final raf = await file.open(mode: FileMode.writeOnlyAppend);
-      await raf.setPosition(0);
-      await raf.writeFrom(wavHeader(bytes));
-      await raf.close();
-    }
-    if (file == null && !isFinal) return;
-    if (isFinal && _total < 48000) {
-      // < 1 s in total: nothing worth keeping.
-      if (file != null) file.delete().ignore();
-      return;
-    }
-    if (file == null) return; // final part already rolled; nothing new (handled by caller)
-    final n = _part++;
-    await RecordingUploadQueue.instance.add(RecordingPart(
-      callId: callId,
-      path: file.path,
-      part: n,
-      parts: isFinal ? _part : 0,
-      isFinal: isFinal,
-      durationMs: durationMs,
-      businessId: businessId,
-      deviceId: deviceId,
-    ));
-  }
-
-  /// Throws the unsent recording away (parts already queued stay queued).
-  Future<void> discard() async {
-    final sink = _sink;
-    final file = _file;
-    _sink = null;
-    _file = null;
-    await sink?.close();
-    file?.delete().ignore();
-  }
-
-  /// Closes the last part (marked final, with the total part count).
-  Future<void> close() async {
-    if (_sink == null && _part > 0) {
-      // The last part was just rolled over: send a tiny closing part so the server knows the total.
-      add(Uint8List(4800));
-    }
-    await _closePart(isFinal: true);
-  }
-}
-
-Uint8List wavHeader(int dataBytes, {int sampleRate = 24000}) {
-  final b = ByteData(44);
-  void str(int o, String s) {
-    for (var i = 0; i < s.length; i++) {
-      b.setUint8(o + i, s.codeUnitAt(i));
-    }
-  }
-
-  str(0, 'RIFF');
-  b.setUint32(4, 36 + dataBytes, Endian.little);
-  str(8, 'WAVE');
-  str(12, 'fmt ');
-  b.setUint32(16, 16, Endian.little);
-  b.setUint16(20, 1, Endian.little);
-  b.setUint16(22, 1, Endian.little);
-  b.setUint32(24, sampleRate, Endian.little);
-  b.setUint32(28, sampleRate * 2, Endian.little);
-  b.setUint16(32, 2, Endian.little);
-  b.setUint16(34, 16, Endian.little);
-  str(36, 'data');
-  b.setUint32(40, dataBytes, Endian.little);
-  return b.buffer.asUint8List();
-}
+/// The call tape: ~5-minute WAV parts of my voice, queued as call parts (target `call`).
+WavPartWriter callTapeWriter(Directory dir, String callId, {String? businessId, String deviceId = ''}) => WavPartWriter(
+      dir,
+      prefix: 'call-$callId',
+      onPart: (p) => RecordingUploadQueue.instance.add(RecordingPart(
+        callId: callId,
+        path: p.path,
+        part: p.part,
+        parts: p.parts,
+        isFinal: p.isFinal,
+        durationMs: p.durationMs,
+        businessId: businessId,
+        deviceId: deviceId,
+      )),
+    );
 
 /// Socket + upload seams so tests run without a server or a microphone.
 abstract class SttTransport {
@@ -306,7 +165,7 @@ class LiveTranscription extends ChangeNotifier {
 
   CallMicTap? _mic;
   StreamSubscription<Uint8List>? _micSub;
-  _WavParts? _wav;
+  WavPartWriter? _wav;
   CallService? _call;
 
   static const _choiceKey = 'commAi.sttChoice';
@@ -486,7 +345,7 @@ class LiveTranscription extends ChangeNotifier {
       final record = serverAllows && (decision?.record ?? false);
       if (record) {
         try {
-          _wav = _WavParts(await RecordingUploadQueue.instance.folder(), id, businessId: businessId, deviceId: deviceId);
+          _wav = callTapeWriter(await RecordingUploadQueue.instance.folder(), id, businessId: businessId, deviceId: deviceId);
         } catch (_) {
           _wav = null;
         }

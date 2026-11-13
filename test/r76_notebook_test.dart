@@ -282,7 +282,8 @@ void main() {
       });
       await tester.tap(find.byKey(const ValueKey('notebook-add-source')));
       await settle(tester);
-      expect(find.byKey(const ValueKey('notebook-add-record')), findsOneWidget); // "อัดเสียง (เร็วๆ นี้)" placeholder
+      // No `/recordings` on this (mocked) server → 404 → the record entry is hidden (see r77).
+      expect(find.byKey(const ValueKey('notebook-add-record')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('notebook-add-url')));
       await settle(tester);
       await tester.enterText(find.byKey(const ValueKey('notebook-url-field')), 'example.com');

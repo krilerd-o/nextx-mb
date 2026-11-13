@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
+import '../../core/notebook/notebook_recording.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../services/api_client.dart';
 import '../../services/notebook/notebook_controller.dart';
@@ -15,6 +16,7 @@ import '../../widgets/nx_sliding_segmented.dart';
 import 'notebook_chat_pane.dart';
 import 'notebook_home_screen.dart' show showNotebookEditSheet;
 import 'notebook_note_viewer.dart';
+import 'notebook_recorder_ui.dart';
 import 'notebook_share_sheet.dart';
 import 'notebook_sources_pane.dart';
 import 'notebook_studio_pane.dart';
@@ -26,8 +28,12 @@ enum NotebookTab { sources, chat, studio }
 /// tabs; a tablet shows sources + chat (studio switches with sources); wide
 /// screens show all three panes.
 class NotebookScreen extends StatefulWidget {
-  const NotebookScreen({super.key, required this.id, this.controller, this.initialTab});
+  const NotebookScreen({super.key, required this.id, this.controller, this.initialTab, this.openRecordingId, this.openNoteId});
   final String id;
+
+  /// From "ไอแซคสรุปบันทึกเสียงเสร็จแล้ว" (toast / push): open that recording's summary note after load.
+  final String? openRecordingId;
+  final String? openNoteId;
 
   /// For tests.
   final NotebookController? controller;
@@ -49,7 +55,37 @@ class _NotebookScreenState extends State<NotebookScreen> {
     _tab = widget.initialTab;
     _c.addListener(_onChange);
     _c.guideLocale = L10n.isEn ? 'en' : 'th';
-    WidgetsBinding.instance.addPostFrameCallback((_) => _c.init());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _c.init();
+      if (mounted) await _openFromLink();
+    });
+  }
+
+  /// `?recording=&note=`: show the summary note made from a recording.
+  Future<void> _openFromLink() async {
+    var nid = widget.openNoteId;
+    final rid = widget.openRecordingId;
+    if (_c.notebook == null || ((nid == null || nid.isEmpty) && (rid == null || rid.isEmpty))) return;
+    if ((nid == null || nid.isEmpty) && rid != null) {
+      nid = _c.recordingNotes[rid];
+      if (nid == null) {
+        try {
+          nid = NotebookRecording.fromJson(await _c.api.getNotebookRecording(widget.id, rid)).noteId;
+        } catch (_) {}
+      }
+    }
+    if (nid == null || !mounted) return;
+    var note = _c.noteById(nid);
+    if (note == null) {
+      await _c.load(quiet: true);
+      note = _c.noteById(nid);
+    }
+    if (note != null && mounted) await openNotebookNote(context, _c, note, onAsk: _ask);
+  }
+
+  Future<void> _record() async {
+    HapticFeedback.selectionClick();
+    await startNotebookRecording(context, _c);
   }
 
   @override
@@ -108,6 +144,8 @@ class _NotebookScreenState extends State<NotebookScreen> {
             title: title,
             subtitle: nb == null ? 'ไอแซคเอไอ' : tr('${_c.sources.length} แหล่ง · ${_c.notes.length} โน้ต'),
             actions: [
+              if (nb != null && _c.canRecord)
+                _RecordAction(c: _c, onTap: _record),
               if (nb != null && nb.canWrite)
                 IconButton(
                   key: const ValueKey('notebook-share-open'),
@@ -212,6 +250,35 @@ class _NotebookScreenState extends State<NotebookScreen> {
       ),
       Expanded(child: child),
     ]);
+  }
+}
+
+/// Header mic: starts a recording (red while this notebook is being recorded).
+class _RecordAction extends StatelessWidget {
+  const _RecordAction({required this.c, required this.onTap});
+  final NotebookController c;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: c.recorder,
+      builder: (context, _) {
+        final here = c.recorder.active && c.recorder.notebookId == c.id;
+        return IconButton(
+          key: const ValueKey('notebook-record'),
+          tooltip: tr(here ? 'เปิดหน้าบันทึกเสียง' : 'บันทึกเสียง'),
+          onPressed: onTap,
+          icon: here
+              ? Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(color: kRecordRed, shape: BoxShape.circle),
+                  child: const Icon(NxI.microphone, size: 16, color: Colors.white),
+                )
+              : const Icon(NxI.microphone),
+        );
+      },
+    );
   }
 }
 

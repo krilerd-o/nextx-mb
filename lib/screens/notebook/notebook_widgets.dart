@@ -9,6 +9,9 @@ import '../comm_ai/comm_ai_isaac.dart';
 
 const kNotebookAccent = Color(0xFF6366F1);
 
+/// Recording red (the record button, the live dot, the floating bubble).
+const kRecordRed = Color(0xFFE11D48);
+
 /// Gradient cover with the notebook's emoji.
 class NotebookCover extends StatelessWidget {
   const NotebookCover({super.key, required this.id, this.size = 48, this.radius = 14, this.emojiSize});

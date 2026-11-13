@@ -305,13 +305,22 @@ GoRouter createAppRouter(AppConfig config) {
       // ISAAC Notebook is native now; old ISAAC / web links land on it.
       GoRoute(path: AppRoutes.isaacNotebook, redirect: (_, _) => AppRoutes.notebook),
       GoRoute(path: AppRoutes.notebook, builder: (_, _) => const NotebookHomeScreen()),
-      GoRoute(path: '/notebook/:id', builder: (_, state) => NotebookScreen(id: state.pathParameters['id'] ?? '')),
+      GoRoute(
+        path: '/notebook/:id',
+        // ?recording=<rid>[&note=<nid>]: a finished recording's summary note opens after load.
+        builder: (_, state) => NotebookScreen(
+          key: ValueKey(state.uri.toString()),
+          id: state.pathParameters['id'] ?? '',
+          openRecordingId: state.uri.queryParameters['recording'],
+          openNoteId: state.uri.queryParameters['note'],
+        ),
+      ),
       GoRoute(
         path: '/notebook/:id/source/:sid',
         builder: (_, state) => NotebookSourceDeepLink(id: state.pathParameters['id'] ?? '', sourceId: state.pathParameters['sid'] ?? ''),
       ),
       GoRoute(path: '/ai/notebook', redirect: (_, _) => AppRoutes.notebook),
-      GoRoute(path: '/ai/notebook/:id', redirect: (_, state) => AppRoutes.notebookOf(state.pathParameters['id'] ?? '')),
+      GoRoute(path: '/ai/notebook/:id', redirect: (_, state) => notebookWebRedirect(state.pathParameters['id'] ?? '', state.uri.queryParameters)),
       GoRoute(path: AppRoutes.aiMinuteAuto, builder: (_, _) => const IsaacEmbedScreen(menu: 'minute_auto')),
       GoRoute(path: AppRoutes.isaacAgent, builder: (_, _) => const IsaacComingSoonScreen(product: 'agent')),
       GoRoute(path: AppRoutes.isaacSocialWatch, builder: (_, _) => const IsaacComingSoonScreen(product: 'social_watch')),

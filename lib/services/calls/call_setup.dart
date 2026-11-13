@@ -9,6 +9,7 @@ import '../../core/i18n.dart';
 import '../../screens/chat/room/chat_call_hooks.dart';
 import '../../screens/chat/room/chat_message_bubble.dart' show chatSenderName;
 import '../../widgets/nx_avatar.dart';
+import '../notebook/notebook_recorder.dart';
 import 'call_media_webrtc.dart';
 import 'call_service.dart';
 import 'call_system_ui.dart';
@@ -58,6 +59,8 @@ void bindCalls(AppConfig config) {
   // Recordings from earlier calls that did not finish uploading are sent now / when back online.
   RecordingUploadQueue.instance.start(api: config.apiClient, businessId: config.session.businessId);
   lt.ensureSettings();
+  // ISAAC Notebook recordings share the mic with calls (a call pauses them) and the upload queue.
+  bindNotebookRecorder(api: config.apiClient, businessId: config.session.businessId);
 }
 
 /// Group rooms with more than 4 people: choose up to 3 to call.

@@ -74,6 +74,12 @@
                 <data android:scheme="https" android:host="moainext.moai-crm.com" android:pathPrefix="/share/ai"/>
             </intent-filter>
         </activity>
+        <!-- ISAAC Notebook: keeps a meeting recording going with the screen off (ongoing notification
+             with pause / resume / stop). Started only from the app, while it is visible. -->
+        <service
+            android:name=".NotebookRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

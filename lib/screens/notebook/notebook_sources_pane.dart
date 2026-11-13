@@ -15,6 +15,8 @@ import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_markdown.dart';
+import 'notebook_recorder_ui.dart';
+import 'notebook_recording_view.dart';
 import 'notebook_widgets.dart';
 
 /// A picked file for upload.
@@ -48,7 +50,7 @@ class NotebookSourcesPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(listenable: c, builder: (context, _) => _build(context));
+    return ListenableBuilder(listenable: Listenable.merge([c, c.recorder]), builder: (context, _) => _build(context));
   }
 
   Widget _build(BuildContext context) {
@@ -56,19 +58,35 @@ class NotebookSourcesPane extends StatelessWidget {
     final cs = theme.colorScheme;
     final sources = c.sources;
     final bottom = 24 + MediaQuery.paddingOf(context).bottom;
-    if (sources.isEmpty && c.uploads.isEmpty) {
+    final rec = c.recorder;
+    final liveHere = rec.active && rec.notebookId == c.id;
+    if (sources.isEmpty && c.uploads.isEmpty && c.recordings.isEmpty && !liveHere) {
       return NotebookState(
         key: const ValueKey('notebook-sources-empty'),
         mood: 'book_flood',
         title: 'เพิ่มแหล่งข้อมูลแรก',
-        message: 'อัปโหลด PDF เอกสาร รูป ลิงก์เว็บ หรือวางข้อความ ไอแซคจะตอบจากแหล่งเหล่านี้เท่านั้น',
+        message: c.canRecord
+            ? 'อัปโหลด PDF เอกสาร รูป ลิงก์เว็บ วางข้อความ หรือบันทึกเสียงประชุม ไอแซคจะตอบจากแหล่งเหล่านี้เท่านั้น'
+            : 'อัปโหลด PDF เอกสาร รูป ลิงก์เว็บ หรือวางข้อความ ไอแซคจะตอบจากแหล่งเหล่านี้เท่านั้น',
         action: c.canWrite
-            ? FilledButton.icon(
-                key: const ValueKey('notebook-add-source-empty'),
-                onPressed: () => showAddSourceSheet(context, c),
-                icon: const Icon(NxI.plus, size: 18),
-                label: Text(tr('เพิ่มแหล่งข้อมูล')),
-              )
+            ? Column(mainAxisSize: MainAxisSize.min, children: [
+                FilledButton.icon(
+                  key: const ValueKey('notebook-add-source-empty'),
+                  onPressed: () => showAddSourceSheet(context, c),
+                  icon: const Icon(NxI.plus, size: 18),
+                  label: Text(tr('เพิ่มแหล่งข้อมูล')),
+                ),
+                if (c.canRecord) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    key: const ValueKey('notebook-record-empty'),
+                    style: TextButton.styleFrom(foregroundColor: kRecordRed),
+                    onPressed: () => startNotebookRecording(context, c),
+                    icon: const Icon(NxI.microphone, size: 18),
+                    label: Text(tr('บันทึกเสียงประชุม')),
+                  ),
+                ],
+              ])
             : null,
       );
     }
@@ -108,6 +126,8 @@ class NotebookSourcesPane extends StatelessWidget {
             ),
         ]),
       ),
+      if (liveHere) Padding(padding: const EdgeInsets.only(top: 10), child: NotebookLiveRecordingCard(recorder: rec)),
+      for (final r in c.recordings) Padding(padding: const EdgeInsets.only(top: 10), child: NotebookRecordingCard(c: c, r: r)),
       for (final up in c.uploads) Padding(padding: const EdgeInsets.only(top: 10), child: _UploadRow(c: c, up: up)),
       if (sources.length > 1 && c.canWrite)
         Padding(
@@ -199,7 +219,7 @@ class _SourceRow extends StatelessWidget {
     };
     return NotebookCard(
       padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-      onTap: () => showSourceViewer(context, c, s),
+      onTap: () => s.kind == 'recording' ? openRecordingSource(context, c, s) : showSourceViewer(context, c, s),
       child: Opacity(
         opacity: s.enabled ? 1 : 0.6,
         child: Row(children: [
@@ -242,11 +262,15 @@ Future<void> showAddSourceSheet(BuildContext context, NotebookController c) asyn
   final pick = await showAppBottomSheet<String>(
     context: context,
     title: 'เพิ่มแหล่งข้อมูล',
-    child: const _AddSourceGrid(),
+    child: _AddSourceGrid(record: c.canRecord),
   );
   if (pick == null || !context.mounted) return;
   final messenger = ScaffoldMessenger.maybeOf(context);
   void snack(String t) => messenger?.showSnackBar(SnackBar(content: Text(tr(t))));
+  if (pick == 'record') {
+    await startNotebookRecording(context, c);
+    return;
+  }
   try {
     switch (pick) {
       case 'file':
@@ -296,7 +320,10 @@ Future<void> showAddSourceSheet(BuildContext context, NotebookController c) asyn
 }
 
 class _AddSourceGrid extends StatelessWidget {
-  const _AddSourceGrid();
+  const _AddSourceGrid({this.record = true});
+
+  /// The server has notebook recordings (hidden on older servers).
+  final bool record;
 
   @override
   Widget build(BuildContext context) {
@@ -308,7 +335,7 @@ class _AddSourceGrid extends StatelessWidget {
       ('text', LucideIcons300.clipboardPaste, 'วางข้อความ', 'โน้ต อีเมล หรือบทความ', const Color(0xFF64748B), true),
       ('library', LucideIcons300.library, 'คลังความรู้', 'จากคลังของธุรกิจ', const Color(0xFFD97706), true),
       ('crm', LucideIcons300.database, 'ข้อมูล CRM', 'ลูกค้า ดีล เคส ที่คุณเห็น', const Color(0xFF7C3AED), true),
-      ('record', LucideIcons300.mic, 'อัดเสียง', 'เร็วๆ นี้', const Color(0xFFDB2777), false),
+      if (record) ('record', LucideIcons300.mic, 'บันทึกเสียง', 'ถอดข้อความสด + สรุปประชุม', kRecordRed, !kIsWeb),
     ];
     final theme = Theme.of(context);
     return LayoutBuilder(builder: (context, box) {

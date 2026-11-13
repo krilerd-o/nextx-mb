@@ -384,11 +384,14 @@ class StudioKind {
   static const infographic = StudioKind('infographic', 'อินโฟกราฟิก', 'การ์ด ไทม์ไลน์ หรือสถิติ', LucideIcons300.chartPie, [Color(0xFFEC4899), Color(0xFFC026D3)]);
   static const note = StudioKind('note', 'โน้ต', 'โน้ตของคุณ', LucideIcons300.stickyNote, [Color(0xFF6366F1), Color(0xFF8B5CF6)]);
 
+  /// Made by the server from a notebook recording (not in the studio grid).
+  static const meetingSummary = StudioKind('meeting_summary', 'สรุปการประชุม', 'สรุปจากบันทึกเสียง', LucideIcons300.audioLines, [Color(0xFFF43F5E), Color(0xFFBE123C)]);
+
   /// Grid order (most useful first).
   static const all = [audio, report, mindmap, flashcards, quiz, table, infographic, video, styleguide];
 
   static StudioKind? of(String id) {
-    for (final k in [...all, note]) {
+    for (final k in [...all, note, meetingSummary]) {
       if (k.id == id) return k;
     }
     return null;

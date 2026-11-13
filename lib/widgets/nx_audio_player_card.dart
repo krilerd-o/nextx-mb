@@ -12,6 +12,31 @@ import '../core/i18n.dart';
 import '../services/api_exceptions.dart';
 import 'nx_icons.dart';
 
+/// Lets a screen drive an [NxAudioPlayerCard] (tap a transcript line → jump there) and follow its
+/// position (highlight the line being played).
+class NxAudioPlayerController extends ChangeNotifier {
+  _NxAudioPlayerCardState? _state;
+  int positionMs = 0;
+  bool playing = false;
+
+  /// Last position asked for with [seekTo] (tests).
+  int? lastSeekMs;
+
+  /// Jumps to [ms] and plays from there (loads the file first when needed).
+  Future<void> seekTo(int ms, {bool play = true}) async {
+    lastSeekMs = ms;
+    notifyListeners();
+    await _state?._seekAndPlay(ms, play: play);
+  }
+
+  void _update(int pos, bool isPlaying) {
+    if (pos == positionMs && isPlaying == playing) return;
+    positionMs = pos;
+    playing = isPlaying;
+    notifyListeners();
+  }
+}
+
 /// ISAAC tape player look (from the call summary "เทปบันทึกการสนทนา"), as a
 /// shared card: play / pause, seek, 10 s back, speed 1–2×, share. The file is
 /// fetched by [load] on the first play (authenticated downloads), kept in a
@@ -27,7 +52,16 @@ class NxAudioPlayerCard extends StatefulWidget {
     this.mime = 'audio/mpeg',
     this.durationMs,
     this.trailing,
+    this.controller,
+    this.sniffType = false,
   });
+
+  /// The server's format is not known up front: pick the file extension from the bytes
+  /// (wav / mp3 / m4a / ogg / webm) so the platform player recognises it.
+  final bool sniffType;
+
+  /// Optional: seek from outside / follow the position.
+  final NxAudioPlayerController? controller;
 
   final String title;
   final String? subtitle;
@@ -53,6 +87,17 @@ class NxAudioPlayerCard extends StatefulWidget {
   State<NxAudioPlayerCard> createState() => _NxAudioPlayerCardState();
 }
 
+/// File extension of an audio file from its first bytes, or null when unknown.
+String? audioExtensionOf(List<int> b) {
+  bool at(int o, String s) => b.length >= o + s.length && String.fromCharCodes(b.sublist(o, o + s.length)) == s;
+  if (at(0, 'RIFF') && at(8, 'WAVE')) return 'wav';
+  if (at(0, 'ID3') || (b.length > 1 && b[0] == 0xFF && (b[1] & 0xE0) == 0xE0)) return 'mp3';
+  if (at(4, 'ftyp')) return 'm4a';
+  if (at(0, 'OggS')) return 'ogg';
+  if (b.length > 3 && b[0] == 0x1A && b[1] == 0x45 && b[2] == 0xDF && b[3] == 0xA3) return 'webm';
+  return null;
+}
+
 String _mmss(int ms) {
   final s = (ms / 1000).floor();
   final h = s ~/ 3600, m = (s % 3600) ~/ 60, r = s % 60;
@@ -72,7 +117,47 @@ class _NxAudioPlayerCardState extends State<NxAudioPlayerCard> {
   final _subs = <StreamSubscription<dynamic>>[];
 
   @override
+  void initState() {
+    super.initState();
+    widget.controller?._state = this;
+  }
+
+  @override
+  void didUpdateWidget(NxAudioPlayerCard old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      if (old.controller?._state == this) old.controller?._state = null;
+      widget.controller?._state = this;
+    }
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    widget.controller?._update(_posMs, _playing);
+  }
+
+  Future<void> _seekAndPlay(int ms, {required bool play}) async {
+    if (_loading) return;
+    setState(() {
+      _posMs = ms;
+      _loading = _player == null;
+      _error = null;
+    });
+    try {
+      final p = await _ensurePlayer(await _file());
+      await p.seek(Duration(milliseconds: ms));
+      if (play && !_playing) await p.resume();
+    } catch (e) {
+      if (mounted) setState(() => _error = formatApiError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
   void dispose() {
+    if (widget.controller?._state == this) widget.controller?._state = null;
     for (final s in _subs) {
       s.cancel();
     }
@@ -86,7 +171,12 @@ class _NxAudioPlayerCardState extends State<NxAudioPlayerCard> {
     if (hit != null) return hit;
     final bytes = await widget.load();
     final dir = await getTemporaryDirectory();
-    final safe = widget.fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._\-ก-๙]'), '_');
+    var name = widget.fileName;
+    if (widget.sniffType) {
+      final ext = audioExtensionOf(bytes);
+      if (ext != null) name = '${name.replaceAll(RegExp(r'\.[A-Za-z0-9]{2,4}$'), '')}.$ext';
+    }
+    final safe = name.replaceAll(RegExp(r'[^a-zA-Z0-9._\-ก-๙]'), '_');
     final f = File('${dir.path}/nx-audio-${widget.load.hashCode}-$safe');
     await f.writeAsBytes(bytes, flush: true);
     return _path = f.path;
