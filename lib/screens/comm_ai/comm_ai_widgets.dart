@@ -47,7 +47,7 @@ class CommAiHeadline extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('ISAAC AI', style: TextStyle(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+            Text(tr('ไอแซคเอไอ'), style: const TextStyle(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
             const SizedBox(height: 2),
             Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15, height: 1.35)),
           ]),
@@ -274,7 +274,7 @@ class _CommAiSummaryViewState extends State<CommAiSummaryView> {
               Row(children: [
                 const IsaacAvatar(mood: 'idea', size: 30, ring: false, animate: false),
                 const SizedBox(width: 8),
-                Expanded(child: Text(tr('ISAAC แนะนำให้เปิดงาน'), style: const TextStyle(fontWeight: FontWeight.w800, color: kIsaacViolet))),
+                Expanded(child: Text(tr('ไอแซคแนะนำให้เปิดงาน'), style: const TextStyle(fontWeight: FontWeight.w800, color: kIsaacViolet))),
               ]),
               const SizedBox(height: 10),
               for (final s in suggestions) _SuggestionCard(s: s, sourceNote: widget.sourceNote),
@@ -403,7 +403,7 @@ Future<void> createFromSuggestion(BuildContext context, Map<String, dynamic> s, 
   await nxPush<bool>(
     context,
     ActivityFormScreen(
-      title: tr('สร้างจากคำแนะนำ ISAAC'),
+      title: tr('สร้างจากคำแนะนำไอแซค'),
       initial: {'subject': '${s['subject']}', 'description': desc, 'activitytype': '${s['activitytype'] ?? 'Task'}'},
       start: due == null ? null : DateTime(due.year, due.month, due.day, 9),
     ),
@@ -426,7 +426,7 @@ Future<void> _workspaceTask(BuildContext context, String title, String desc) asy
     title: tr('สร้างงานใน Workspace'),
     child: StatefulBuilder(
       builder: (ctx, setS) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const IsaacTip('ISAAC เติมชื่องานและรายละเอียดจากบทสนทนาให้แล้ว — ตรวจแล้วกดสร้างได้เลย', mood: 'planning'),
+        const IsaacTip('ไอแซคเติมชื่องานและรายละเอียดจากบทสนทนาให้แล้ว — ตรวจแล้วกดสร้างได้เลย', mood: 'planning'),
         const SizedBox(height: 14),
         DropdownButtonFormField<String>(
           isExpanded: true,

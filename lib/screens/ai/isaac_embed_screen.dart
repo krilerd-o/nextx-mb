@@ -123,7 +123,7 @@ class _IsaacEmbedScreenState extends State<IsaacEmbedScreen> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const CircularProgressIndicator(),
             const SizedBox(height: 14),
-            Text(tr(widget.isMinute ? 'กำลังเปิด ISAAC Minute Auto…' : 'กำลังเปิด ISAAC Notebook…')),
+            Text(tr(widget.isMinute ? 'กำลังเปิดไอแซค Minute Auto…' : 'กำลังเปิดไอแซค Notebook…')),
           ]),
         );
       case _Phase.ready:
@@ -165,7 +165,7 @@ class _IsaacEmbedScreenState extends State<IsaacEmbedScreen> {
             bottom: false,
             child: NxAppHeader(
               title: widget.title,
-              subtitle: 'ISAAC AI',
+              subtitle: 'ไอแซคเอไอ',
               actions: [
                 IconButton(tooltip: tr('เปิดใหม่'), icon: const Icon(NxI.arrowsClockwise), onPressed: _phase == _Phase.loading ? null : _launch),
               ],

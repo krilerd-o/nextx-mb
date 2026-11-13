@@ -614,7 +614,7 @@ class IsaacSuggestionCard extends StatelessWidget {
     return Semantics(
       container: true,
       button: true,
-      label: '${tr('ISAAC แนะนำ')}: ${tr(text)}',
+      label: '${tr('ไอแซคแนะนำ')}: ${tr(text)}',
       excludeSemantics: true,
       child: HomeCardShadow(
         frost: true,
@@ -657,7 +657,7 @@ class IsaacSuggestionCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(tr('ISAAC แนะนำ'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+                        Text(tr('ไอแซคแนะนำ'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
                         const SizedBox(height: 2),
                         Text(
                           tr(text),

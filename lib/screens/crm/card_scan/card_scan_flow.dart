@@ -120,8 +120,8 @@ class IsaacReadingDialog extends StatefulWidget {
 
 class _IsaacReadingDialogState extends State<IsaacReadingDialog> with TickerProviderStateMixin {
   static const _steps = [
-    (state: 'uploading', label: 'ส่งรูปนามบัตรให้ Isaac', after: 0),
-    (state: 'reading', label: 'Isaac กำลังอ่านข้อความบนบัตร', after: 700),
+    (state: 'uploading', label: 'ส่งรูปนามบัตรให้ไอแซค', after: 0),
+    (state: 'reading', label: 'ไอแซคกำลังอ่านข้อความบนบัตร', after: 700),
     (state: 'analyzing', label: 'วิเคราะห์ชื่อ ตำแหน่ง บริษัท เบอร์ อีเมล', after: 2200),
     (state: 'checking', label: 'ตรวจกับข้อมูลบนบัตร + หารายการซ้ำ', after: 4000),
   ];
@@ -222,10 +222,10 @@ class _IsaacReadingDialogState extends State<IsaacReadingDialog> with TickerProv
                       duration: const Duration(milliseconds: 220),
                       child: Text(
                         ok
-                            ? tr('Isaac อ่านเสร็จใน $secs วินาที · พบ ${_result!.fields.length} ช่อง')
+                            ? tr('ไอแซคอ่านเสร็จใน $secs วินาที · พบ ${_result!.fields.length} ช่อง')
                             : _done
-                                ? tr('Isaac อ่านบัตรนี้ไม่ได้')
-                                : tr('Isaac กำลังอ่านนามบัตร…'),
+                                ? tr('ไอแซคอ่านบัตรนี้ไม่ได้')
+                                : tr('ไอแซคกำลังอ่านนามบัตร…'),
                         key: ValueKey('$ok$_done'),
                         textAlign: TextAlign.center,
                         style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),

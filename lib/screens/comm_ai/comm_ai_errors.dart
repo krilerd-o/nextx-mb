@@ -16,7 +16,7 @@ String commAiQuotaText(String? kind, dynamic used, dynamic limit) {
   return switch (kind) {
     'stt_minutes' || 'stt' => tr('ใช้นาทีถอดเสียงครบโควตาของเดือนนี้แล้ว ($u/$l นาที) — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ'),
     'translations' => tr('ใช้การแปลคำบรรยายครบโควตาของเดือนนี้แล้ว ($u/$l ครั้ง) — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ'),
-    _ => tr('ใช้การสรุปของ ISAAC ครบโควตาของเดือนนี้แล้ว ($u/$l ครั้ง) — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ'),
+    _ => tr('ใช้การสรุปของไอแซคครบโควตาของเดือนนี้แล้ว ($u/$l ครั้ง) — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ'),
   };
 }
 
@@ -32,7 +32,7 @@ String commAiErrorText(Object e) {
     }
     switch (e.errorCode) {
       case 'COMM_AI_NOT_IN_PACKAGE':
-        return tr('แพ็กเกจของธุรกิจนี้ยังไม่มี ISAAC AI การสื่อสาร');
+        return tr('แพ็กเกจของธุรกิจนี้ยังไม่มีไอแซคเอไอ การสื่อสาร');
       case 'smtp_not_configured':
         return tr('ยังไม่ได้ตั้งค่าการส่งอีเมล (ตั้งค่า → อีเมล)');
       case 'EXPORT_EXPIRED':
@@ -54,7 +54,7 @@ String commAiSttErrorText(String error, {Map<String, dynamic>? quota}) => switch
       'quota_exceeded' => quota != null && quota['limit'] != null
           ? tr('ใช้นาทีถอดเสียงของแพ็กเกจครบแล้วในเดือนนี้ (${_num((quota['used'] as num?)?.floor() ?? quota['used'])}/${_num(quota['limit'])} นาที) — สายยังคุยต่อได้ตามปกติ')
           : tr('ใช้นาทีถอดเสียงของแพ็กเกจครบแล้วในเดือนนี้ — สายยังคุยต่อได้ตามปกติ'),
-      'not_in_package' => tr('แพ็กเกจของธุรกิจนี้ยังไม่มี ISAAC AI การสื่อสาร'),
+      'not_in_package' => tr('แพ็กเกจของธุรกิจนี้ยังไม่มีไอแซคเอไอ การสื่อสาร'),
       'stt_busy' => tr('ระบบถอดเสียงไม่ว่างชั่วคราว ลองใหม่อีกครั้ง'),
       _ => tr('เริ่มถอดข้อความไม่สำเร็จ — สายยังคุยต่อได้ตามปกติ'),
     };

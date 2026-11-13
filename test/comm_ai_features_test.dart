@@ -506,11 +506,11 @@ void main() {
     testWidgets('history header opens insights only with the menu and the package', (tester) async {
       final history = {'GET /api/comm-ai/history': {'list': [], 'next_before': null}};
       await _pump(tester, const CommAiHistoryScreen(), {...history, 'GET /api/comm-ai/settings': {'settings': _settings, 'available': true, 'insights_available': true}});
-      expect(find.byTooltip('แดชบอร์ด ISAAC'), findsOneWidget);
+      expect(find.byTooltip('แดชบอร์ดไอแซค'), findsOneWidget);
       await _pump(tester, const CommAiHistoryScreen(), {...history, 'GET /api/comm-ai/settings': {'settings': _settings, 'available': true, 'insights_available': false}});
-      expect(find.byTooltip('แดชบอร์ด ISAAC'), findsNothing);
+      expect(find.byTooltip('แดชบอร์ดไอแซค'), findsNothing);
       await _pump(tester, const CommAiHistoryScreen(), {...history, 'GET /api/comm-ai/settings': {'settings': _settings, 'available': true, 'insights_available': true}}, session: _member);
-      expect(find.byTooltip('แดชบอร์ด ISAAC'), findsNothing);
+      expect(find.byTooltip('แดชบอร์ดไอแซค'), findsNothing);
     });
   });
 
@@ -586,7 +586,7 @@ void main() {
     testWidgets('history explains; chat summary sheet has no run button', (tester) async {
       await _pump(tester, const CommAiHistoryScreen(), {'GET /api/comm-ai/settings': off, 'GET /api/comm-ai/history': {'list': [], 'next_before': null}});
       expect(find.byKey(const ValueKey('comm-ai-unavailable')), findsOneWidget);
-      expect(find.byTooltip('แดชบอร์ด ISAAC'), findsNothing);
+      expect(find.byTooltip('แดชบอร์ดไอแซค'), findsNothing);
       await _pump(tester, const SingleChildScrollView(child: ChatSummaryPanel(roomId: '9', roomName: 'ทีม')), {'GET /api/comm-ai/settings': off, 'GET /api/comm-ai/chat/rooms/9/summaries': {'list': []}});
       expect(find.byKey(const ValueKey('chat-summary-run')), findsNothing);
       expect(find.byKey(const ValueKey('comm-ai-unavailable')), findsOneWidget);

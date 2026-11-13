@@ -12,7 +12,7 @@ import 'comm_ai_widgets.dart';
 /// Quota kinds of `GET /api/comm-ai/usage` → (label, unit).
 const kCommAiQuotaKinds = <String, (String, String)>{
   'stt_minutes': ('นาทีถอดเสียง', 'นาที'),
-  'summaries': ('การสรุปของ ISAAC', 'ครั้ง'),
+  'summaries': ('การสรุปของไอแซค', 'ครั้ง'),
   'translations': ('การแปลคำบรรยาย', 'ครั้ง'),
 };
 
@@ -118,7 +118,7 @@ class CommAiUsagePanel extends StatelessWidget {
         if (exceeded)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(tr('ครบโควตาแล้ว — ISAAC หยุดส่วนนี้จนถึงเดือนถัดไป'), style: const TextStyle(fontSize: 12, color: _errorColor)),
+            child: Text(tr('ครบโควตาแล้ว — ไอแซคหยุดส่วนนี้จนถึงเดือนถัดไป'), style: const TextStyle(fontSize: 12, color: _errorColor)),
           ),
       ]),
     );
@@ -155,7 +155,7 @@ class CommAiQuotaNotice extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text.rich(TextSpan(children: [
-            TextSpan(text: '${tr(exceeded ? 'ใช้โควตา ISAAC ครบแล้ว' : 'ใช้โควตา ISAAC ไปเกิน 80% แล้ว')}  ', style: TextStyle(fontWeight: FontWeight.w700, color: color)),
+            TextSpan(text: '${tr(exceeded ? 'ใช้โควตาไอแซคครบแล้ว' : 'ใช้โควตาไอแซคไปเกิน 80% แล้ว')}  ', style: TextStyle(fontWeight: FontWeight.w700, color: color)),
             TextSpan(text: parts.join(' · '), style: const TextStyle(fontSize: 12.5)),
           ])),
         ),

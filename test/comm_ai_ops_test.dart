@@ -137,7 +137,7 @@ void main() {
         'GET /api/comm-ai/ops/overview': {'usage': _usage, 'prefs': {'digest': true, 'digest_email': false}, 'is_admin': false, 'health': null},
       });
       expect(find.byKey(const ValueKey('comm-ai-quota-notice')), findsOneWidget);
-      expect(find.textContaining('ใช้โควตา ISAAC ไปเกิน 80% แล้ว', findRichText: true), findsOneWidget);
+      expect(find.textContaining('ใช้โควตาไอแซคไปเกิน 80% แล้ว', findRichText: true), findsOneWidget);
       expect(find.textContaining('นาทีถอดเสียง 85.5/100 (86%)', findRichText: true), findsOneWidget);
       await _show(tester, find.byKey(const ValueKey('comm-ai-usage')));
       expect(find.text('85.5 / 100 นาที'), findsOneWidget);
@@ -163,7 +163,7 @@ void main() {
       expect(find.byKey(const ValueKey('comm-ai-quota-notice')), findsNothing);
       await _pump(tester, const CommAiSettingsScreen(), {'GET /api/comm-ai/settings': {'settings': _settings, 'available': true}});
       expect(find.byKey(const ValueKey('comm-ai-usage')), findsNothing);
-      expect(find.text('ISAAC AI การสื่อสาร'), findsWidgets);
+      expect(find.text('ไอแซคเอไอ การสื่อสาร'), findsWidgets);
     });
 
     testWidgets('captions: stt:start quota_exceeded → minutes used up with the numbers (not a generic error)', (tester) async {
@@ -224,7 +224,7 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('call-summary-summarize')));
       await _settle(tester);
-      expect(find.text('ใช้การสรุปของ ISAAC ครบโควตาของเดือนนี้แล้ว (50/50 ครั้ง) — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ'), findsOneWidget);
+      expect(find.text('ใช้การสรุปของไอแซคครบโควตาของเดือนนี้แล้ว (50/50 ครั้ง) — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ'), findsOneWidget);
     });
 
     testWidgets('a summary that failed on the quota says so', (tester) async {
@@ -242,7 +242,7 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('chat-summary-run')));
       await _settle(tester);
-      expect(find.text('ใช้การสรุปของ ISAAC ครบโควตาของเดือนนี้แล้ว (50/50 ครั้ง) — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ'), findsOneWidget);
+      expect(find.text('ใช้การสรุปของไอแซคครบโควตาของเดือนนี้แล้ว (50/50 ครั้ง) — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ'), findsOneWidget);
     });
 
     test('commAiErrorText: kinds, English UI, other errors unchanged', () {

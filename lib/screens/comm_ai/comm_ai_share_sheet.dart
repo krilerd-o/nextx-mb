@@ -132,7 +132,7 @@ class CommAiCrmSuggestionChips extends StatelessWidget {
         Row(mainAxisSize: MainAxisSize.min, children: [
           const Icon(NxI.sparkle, size: 14, color: kIsaacViolet),
           const SizedBox(width: 4),
-          Text(tr('ISAAC แนะนำ:'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kIsaacViolet)),
+          Text(tr('ไอแซคแนะนำ:'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kIsaacViolet)),
         ]),
         for (final x in shown)
           Tooltip(
@@ -649,7 +649,7 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
   List<Widget> _crmTab() {
     final api = context.read<AppConfig>().apiClient;
     return [
-      Text(tr('ISAAC จะบันทึกสรุปและงานที่ต้องทำต่อเป็น Activity บนไทม์ไลน์ของรายการที่เลือก'), style: TextStyle(fontSize: 13, color: Theme.of(context).hintColor)),
+      Text(tr('ไอแซคจะบันทึกสรุปและงานที่ต้องทำต่อเป็น Activity บนไทม์ไลน์ของรายการที่เลือก'), style: TextStyle(fontSize: 13, color: Theme.of(context).hintColor)),
       const SizedBox(height: 12),
       CommAiCrmSuggestionChips(list: _suggestions ?? const [], value: _crm, onPick: (v) => setState(() => _crm = v)),
       CommAiCrmRecordPicker(value: _crm, onChanged: (v) => setState(() => _crm = v)),
@@ -716,7 +716,7 @@ class _CommAiShareSheetState extends State<CommAiShareSheet> {
     final showInclude = _tab == 'device' || _tab == 'email' || _tab == 'link';
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (_tab != 'history') ...[
-        const IsaacTip('ISAAC แนะนำ: แชร์ให้ลูกค้าเลือกแค่ "สรุป" และ "งานที่ต้องทำต่อ" — บทสนทนาเต็มเก็บไว้ใช้ภายในทีม'),
+        const IsaacTip('ไอแซคแนะนำ: แชร์ให้ลูกค้าเลือกแค่ "สรุป" และ "งานที่ต้องทำต่อ" — บทสนทนาเต็มเก็บไว้ใช้ภายในทีม'),
         const SizedBox(height: 14),
       ],
       NxSlidingSegmented<String>(

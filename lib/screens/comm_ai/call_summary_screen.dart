@@ -481,7 +481,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
               style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
               onPressed: _summarize,
               icon: const Icon(NxI.arrowsClockwise, size: 16),
-              label: Text(tr('ให้ ISAAC สรุปใหม่')),
+              label: Text(tr('ให้ไอแซคสรุปใหม่')),
             ),
           ),
         if (result['source_edited'] != null && result['source_edited'] != false)
@@ -518,24 +518,24 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
     } else if (status == 'failed' && !_summarizing) {
       body = CommAiIsaacState(
         mood: 'error',
-        title: 'ISAAC สรุปไม่สำเร็จ',
+        title: 'ไอแซคสรุปไม่สำเร็จ',
         message: summary?['error'] == 'quota_exceeded' ? 'ใช้โควตาการสรุปของแพ็กเกจครบแล้วในเดือนนี้ — ยังดูบทสนทนาและฟังเสียงได้ตามปกติ' : 'ยังดูบทสนทนาและฟังเสียงได้ตามปกติ',
         action: _available && transcript.isNotEmpty
             ? FilledButton.icon(key: const ValueKey('call-summary-summarize'), onPressed: _summarize, icon: const Icon(NxI.arrowsClockwise, size: 16), label: Text(tr('ลองสรุปอีกครั้ง')))
             : OutlinedButton.icon(onPressed: _load, icon: const Icon(NxI.arrowsClockwise, size: 16), label: Text(tr('ลองโหลดใหม่'))),
       );
     } else if (transcript.isNotEmpty && busy) {
-      body = const CommAiIsaacState(key: ValueKey('call-summary-busy'), mood: 'typing', title: 'ISAAC กำลังสรุปการสนทนา…', message: 'ใช้เวลาไม่นาน หน้านี้จะอัปเดตเอง', busy: true);
+      body = const CommAiIsaacState(key: ValueKey('call-summary-busy'), mood: 'typing', title: 'ไอแซคกำลังสรุปการสนทนา…', message: 'ใช้เวลาไม่นาน หน้านี้จะอัปเดตเอง', busy: true);
     } else if (transcript.isNotEmpty) {
       body = CommAiIsaacState(
         mood: 'idea',
         title: 'ยังไม่มีสรุปของสายนี้',
         action: _available
-            ? FilledButton.icon(key: const ValueKey('call-summary-summarize'), onPressed: _summarize, icon: const Icon(NxI.sparkle, size: 16), label: Text(tr('ให้ ISAAC สรุปตอนนี้')))
+            ? FilledButton.icon(key: const ValueKey('call-summary-summarize'), onPressed: _summarize, icon: const Icon(NxI.sparkle, size: 16), label: Text(tr('ให้ไอแซคสรุปตอนนี้')))
             : null,
       );
     } else {
-      body = const CommAiIsaacState(mood: 'shrug', title: 'สายนี้ไม่ได้เปิดให้ ISAAC จดบทสนทนา', message: 'ครั้งหน้ากด "เริ่มจดบทสนทนา" ตอนรับสายหรือระหว่างคุย');
+      body = const CommAiIsaacState(mood: 'shrug', title: 'สายนี้ไม่ได้เปิดให้ไอแซคจดบทสนทนา', message: 'ครั้งหน้ากด "เริ่มจดบทสนทนา" ตอนรับสายหรือระหว่างคุย');
     }
     return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [body]);
   }
@@ -598,7 +598,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
           padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
           decoration: BoxDecoration(color: kIsaacIndigo.withValues(alpha: theme.brightness == Brightness.dark ? 0.18 : 0.07), borderRadius: BorderRadius.circular(14)),
           child: Row(children: [
-            Expanded(child: Text(tr('แก้บทสนทนาแล้ว — ให้ ISAAC สรุปใหม่จากข้อความที่แก้ไหม?'), style: const TextStyle(fontSize: 13, height: 1.35))),
+            Expanded(child: Text(tr('แก้บทสนทนาแล้ว — ให้ไอแซคสรุปใหม่จากข้อความที่แก้ไหม?'), style: const TextStyle(fontSize: 13, height: 1.35))),
             const SizedBox(width: 6),
             FilledButton(
               key: const ValueKey('call-transcript-resummarize'),
@@ -643,7 +643,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
           ),
         ],
       ]),
-      if (_translating) Padding(padding: const EdgeInsets.only(top: 6), child: Text(tr('ISAAC กำลังแปล…'), style: TextStyle(fontSize: 12, color: hint))),
+      if (_translating) Padding(padding: const EdgeInsets.only(top: 6), child: Text(tr('ไอแซคกำลังแปล…'), style: TextStyle(fontSize: 12, color: hint))),
       const SizedBox(height: 8),
       if (transcript.isEmpty)
         const CommAiIsaacState(mood: 'shrug', title: 'ยังไม่มีบทสนทนา', size: 72)
@@ -748,7 +748,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
         ),
       );
     } else if (d == null) {
-      body = const Center(child: CommAiIsaacState(mood: 'reading', title: 'ISAAC กำลังเปิดบทสนทนา…', busy: true));
+      body = const Center(child: CommAiIsaacState(mood: 'reading', title: 'ไอแซคกำลังเปิดบทสนทนา…', busy: true));
     } else {
       body = LayoutBuilder(builder: (context, c) {
         if (c.maxWidth >= 900) {
@@ -774,7 +774,7 @@ class _CallSummaryScreenState extends State<CallSummaryScreen> {
     }
     return NxScrollScaffold(
       header: NxAppHeader(
-        title: 'ISAAC สรุปการสนทนา',
+        title: 'ไอแซคสรุปการสนทนา',
         subtitle: [isVideo ? tr('วิดีโอคอล') : tr('โทร'), if (when.isNotEmpty) when, if (people.isNotEmpty) people].join(' · '),
         actions: [
           if (d != null && (_canDeleteMine || _canDeleteAll))

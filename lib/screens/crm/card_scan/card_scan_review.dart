@@ -397,8 +397,8 @@ class IsaacSummary extends StatelessWidget {
     final headline = r.offline
         ? 'อ่านด้วยเครื่อง (เฉพาะภาษาอังกฤษ) ได้ ${r.fields.length} ช่อง — ช่วยตรวจอีกนิดนะครับ'
         : secs != null
-            ? 'Isaac อ่านได้ ${r.fields.length} ช่องใน $secs วินาที'
-            : 'Isaac อ่านได้ ${r.fields.length} ช่อง';
+            ? 'ไอแซคอ่านได้ ${r.fields.length} ช่องใน $secs วินาที'
+            : 'ไอแซคอ่านได้ ${r.fields.length} ช่อง';
     Color levelColor(String l) => switch (l) {
           'ok' => const Color(0xFF16A34A),
           'warn' => const Color(0xFFF59E0B),

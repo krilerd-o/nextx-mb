@@ -46,7 +46,7 @@ void main() {
       'call-log': 'บันทึกการโทร', // nav.callLog
       'chat': 'แชททีม', // nav.communityChat
       'comm-ai': 'ประวัติ AI การสนทนา', // nav.commAiHistory
-      'comm-ai-insights': 'แดชบอร์ด ISAAC การสื่อสาร', // nav.commAiInsights
+      'comm-ai-insights': 'แดชบอร์ดไอแซค การสื่อสาร', // nav.commAiInsights (ISAAC → ไอแซค in Thai)
       'hr': 'HR', // nav.hrDashboard
       'attendance': 'ลงเวลาเข้า-ออก', // nav.attendance
       'leave': 'ขอลา', // nav.leaveRequest
@@ -62,7 +62,7 @@ void main() {
       expect(titles[e.key], e.value, reason: e.key);
     }
     // Group titles = web rail titles.
-    expect([for (final g in kMenuGroups) g.title], ['งานของฉัน', 'ลูกค้า', 'งานขาย', 'งานบริการ', 'สื่อสาร', 'ISAAC AI', 'แอปอื่น']);
+    expect([for (final g in kMenuGroups) g.title], ['งานของฉัน', 'ลูกค้า', 'งานขาย', 'งานบริการ', 'สื่อสาร', 'ไอแซคเอไอ', 'แอปอื่น']);
   });
 
   test('every renamed label has an English string', () {

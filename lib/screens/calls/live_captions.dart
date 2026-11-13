@@ -64,7 +64,7 @@ class _CallConsentPanelState extends State<CallConsentPanel> {
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Center(child: IsaacAvatar(mood: 'listening', size: 72)),
         const SizedBox(height: 10),
-        Text(tr('ให้ ISAAC ช่วยจดบทสนทนาไหม?'), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+        Text(tr('ให้ไอแซคช่วยจดบทสนทนาไหม?'), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
         Text(
           tr(widget.callerMode
@@ -216,7 +216,7 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                   if (lt.request != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
-                      child: Text('🔴 ${tr('${lt.request!['by_name']} เปิดให้ ISAAC จดบทสนทนาในสายนี้')}', style: const TextStyle(color: Color(0xFFFDA4AF), fontSize: 12)),
+                      child: Text('🔴 ${tr('${lt.request!['by_name']} เปิดให้ไอแซคจดบทสนทนาในสายนี้')}', style: const TextStyle(color: Color(0xFFFDA4AF), fontSize: 12)),
                     ),
                   Row(children: [
                     Stack(clipBehavior: Clip.none, children: [
@@ -232,7 +232,7 @@ class _LiveCaptionsPanelState extends State<LiveCaptionsPanel> {
                       ),
                     ]),
                     const SizedBox(width: 8),
-                    Expanded(child: Text('${tr('ISAAC กำลังจดบทสนทนา')}${names.isEmpty ? '' : ' · $names'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                    Expanded(child: Text('${tr('ไอแซคกำลังจดบทสนทนา')}${names.isEmpty ? '' : ' · $names'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12))),
                     if (lt.status == 'reconnecting' || lt.status == 'connecting') const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFCD34D))),
                     if (lt.running)
                       IconButton(
@@ -394,7 +394,7 @@ class CallSummaryToast extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                    Text(tr('ISAAC สรุปการสนทนาเสร็จแล้ว'), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(tr('ไอแซคสรุปการสนทนาเสร็จแล้ว'), style: const TextStyle(fontWeight: FontWeight.w700)),
                     Text('${ready['headline'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
                   ]),
                 ),

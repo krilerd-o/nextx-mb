@@ -15,7 +15,7 @@ class IsaacMenu {
   IsaacMenu._();
 
   static const assistant = IsaacMenuItem('ai-assistant', '/ai', 'AI Assistant', 'ผู้ช่วย AI ถามตอบงาน CRM');
-  static const notebook = IsaacMenuItem('isaac-notebook', '/isaac', 'AI Notebook', 'สมุดโน้ต AI จาก ISAAC');
+  static const notebook = IsaacMenuItem('isaac-notebook', '/isaac', 'AI Notebook', 'สมุดโน้ต AI จากไอแซค');
   static const minuteAuto = IsaacMenuItem('ai-minute-auto', '/ai-minute-auto', 'AI Minute Auto', 'จดบันทึกการประชุมอัตโนมัติ');
   static const agent = IsaacMenuItem('isaac-ai-agent', '/isaac-ai-agent', 'AI Agent', 'เร็วๆ นี้');
   static const socialWatch = IsaacMenuItem('isaac-social-watch', '/isaac-social-watch', 'AI Social Watch', 'เร็วๆ นี้');
@@ -98,13 +98,13 @@ String isaacLaunchErrorText(String code, {String? message}) {
   if (message != null && message.trim().isNotEmpty) return message.trim();
   final c = code.toUpperCase();
   if (c.contains('NOT_CONFIGURED') || c.contains('NOT_READY')) {
-    return 'ยังไม่ได้ตั้งค่าหรือ Activate ISAAC — ให้ผู้ดูแลระบบตั้งค่าที่ Plugin Settings';
+    return 'ยังไม่ได้ตั้งค่าหรือ Activate ไอแซค — ให้ผู้ดูแลระบบตั้งค่าที่ Plugin Settings';
   }
-  if (c.contains('PLUGIN_DISABLED')) return 'ธุรกิจนี้ยังไม่ได้เปิดใช้ ISAAC AI';
-  if (c.contains('MENU_DISABLED')) return 'เมนูนี้ถูกปิดในการตั้งค่า ISAAC AI';
+  if (c.contains('PLUGIN_DISABLED')) return 'ธุรกิจนี้ยังไม่ได้เปิดใช้ไอแซคเอไอ';
+  if (c.contains('MENU_DISABLED')) return 'เมนูนี้ถูกปิดในการตั้งค่าไอแซคเอไอ';
   if (c.contains('NO_ACCESS') || c.contains('FORBIDDEN') || c.contains('NOT_ALLOWED')) return 'คุณยังไม่มีสิทธิ์ใช้เมนูนี้';
   if (c.contains('429') || c.contains('RATE_LIMIT')) return 'เปิดบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่';
-  return 'เปิด ISAAC ไม่สำเร็จ กรุณาลองใหม่';
+  return 'เปิดไอแซคไม่สำเร็จ กรุณาลองใหม่';
 }
 
 /// Last ISAAC access per business (60 s, like the web hook).
