@@ -82,21 +82,31 @@ void main() {
         'GET /api/entity/quotation/55': {'id': 55},
       },
     );
+    // ทำซ้ำ opens the quotation step form pre-filled (R69); review → save.
     await tester.tap(find.text('dup'));
+    for (var i = 0; i < 10; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.tap(find.byKey(const ValueKey('docform-step-3')));
     await _frames(tester);
-    await tester.tap(find.text('ทำซ้ำ'));
-    await _frames(tester);
+    await tester.tap(find.byKey(const ValueKey('docform-save')));
+    for (var i = 0; i < 10; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     final b = _body(a, 'POST /api/quotation/save');
     expect(b.containsKey('id'), isFalse, reason: 'create, not update');
     final f = Map<String, dynamic>.from(b['fields'] as Map);
-    expect(f['title_th'], '[QA] R50 dup');
+    expect(f['title_th'], '[QA] R50 dup (Copy)');
     expect(f['account_id'], 31);
     for (final k in ['quotation_status', 'outcome_result', 'approval_state', 'public_token', 'quotation_no', 'id']) {
       expect(f.containsKey(k), isFalse, reason: '$k must not be copied');
     }
     final lines = (b['lines'] as List).cast<Map>();
     expect(lines.single.containsKey('id'), isFalse);
-    expect(lines.single['qty'], 2);
+    expect(lines.single['quantity'], 2);
+    expect(lines.single['unit_price'], 100);
     expect(a.callKeys, isNot(contains('POST /api/entity/quotation/9/duplicate')));
   });
 

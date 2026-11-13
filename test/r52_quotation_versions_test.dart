@@ -79,36 +79,48 @@ void main() {
     expect(find.text('6'), findsOneWidget);
   });
 
-  testWidgets('revise: edit lines first, then POST revise with fields + lines', (tester) async {
+  testWidgets('revise: edit lines first in the step form (reason required), then POST revise with fields + lines', (tester) async {
     final a = await pump(
       tester,
       Builder(builder: (context) => Scaffold(body: Center(child: TextButton(onPressed: () => openQuotationRevise(context, {'id': 9, 'quotation_no': 'Q26-0001', 'title_th': '[QA] กล้อง', 'valid_until': '2026-12-01'}), child: const Text('go'))))),
       {
+        'GET /api/entity/quotation/9': {'id': 9, 'quotation_no': 'Q26-0001', 'title_th': '[QA] กล้อง', 'customer_name': '[QA] ลูกค้า', 'valid_until': '2026-12-01', 'quote_date': '2026-11-01', 'smownerid': 2},
         'GET /api/quotation/9/lines': {'list': [{'id': 1, 'product_id': 5, 'description': '[QA] กล้อง', 'quantity': 4, 'unit_price': 2500}]},
+        'GET /api/quotation/9/revisions': {'list': <Object>[]},
         'POST /api/quotation/9/revise': {'id': 10, 'quotation_no': 'Q26-0001-R1', 'revision_no': 1},
       },
     );
+    Future<void> frames() async {
+      for (var i = 0; i < 10; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+        await tester.pump(const Duration(milliseconds: 60));
+      }
+    }
+
+    Finder input(String name) => find.descendant(of: find.byKey(ValueKey('nx-field-$name')), matching: find.byType(TextField)).first;
     await tester.tap(find.text('go'));
-    for (var i = 0; i < 10; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
-      await tester.pump(const Duration(milliseconds: 60));
-    }
-    await tester.enterText(find.byKey(const ValueKey('revise-qty-0')), '6');
+    await frames();
+    await tester.tap(find.byKey(const ValueKey('docform-step-1')));
+    await frames();
+    await tester.enterText(input('qline-0-qty'), '6');
     await tester.pump();
-    expect(find.text('15,000.00'), findsWidgets);
-    await tester.tap(find.byKey(const ValueKey('revise-add-line')));
+    expect(find.text('฿15,000.00'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('qt-add-text-line')));
     await tester.pump();
-    await tester.enterText(find.descendant(of: find.byKey(const ValueKey('revise-line-1')), matching: find.byType(TextField)).first, '[QA] ค่าติดตั้ง');
-    await tester.enterText(find.byKey(const ValueKey('revise-price-1')), '3000');
+    await tester.enterText(input('qline-1-desc'), '[QA] ค่าติดตั้ง');
+    await tester.enterText(input('qline-1-price'), '3000');
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('revise-save')));
-    for (var i = 0; i < 8; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
-      await tester.pump(const Duration(milliseconds: 60));
-    }
+    await tester.ensureVisible(find.byKey(const ValueKey('docform-step-3')));
+    await tester.tap(find.byKey(const ValueKey('docform-step-3')));
+    await frames();
+    await tester.enterText(input('revision_note'), '[QA] เพิ่มกล้อง + ค่าติดตั้ง');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('docform-save')));
+    await frames();
     final call = a.calls.lastWhere((c) => c.path == '/api/quotation/9/revise');
     final body = call.data is String ? jsonDecode(call.data as String) as Map : call.data as Map;
     expect(body['fields']['valid_until'], '2026-12-01');
+    expect(body['revision_note'], '[QA] เพิ่มกล้อง + ค่าติดตั้ง');
     final lines = body['lines'] as List;
     expect(lines.length, 2);
     expect([lines[0]['product_id'], lines[0]['quantity'], lines[1]['description'], lines[1]['unit_price']], [5, 6, '[QA] ค่าติดตั้ง', 3000]);

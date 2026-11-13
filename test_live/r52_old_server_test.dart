@@ -11,7 +11,7 @@ import 'package:nextx_mobile/core/navigation/notification_deep_link.dart';
 import 'package:nextx_mobile/core/service_journey.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/crm/entity_detail_screen.dart';
-import 'package:nextx_mobile/screens/crm/entity_record_actions.dart' show resetDuplicatedJob;
+import 'package:nextx_mobile/core/doc_form/doc_form_rules.dart' show jobDuplicateValues;
 import 'package:nextx_mobile/screens/journey/case_flows.dart';
 import 'package:nextx_mobile/services/api_client.dart';
 import 'package:nextx_mobile/services/unread_service.dart';
@@ -58,14 +58,13 @@ void main() {
         expect(String.fromCharCodes(pdf.take(5)), '%PDF-');
       }
 
-      // Job duplicate: old server copies the status; the app puts it back to Open.
+      // Job duplicate (step form): a new job from the copy rules — status always starts at Open.
       final j = await api.postEntity('job', {'job_name': '[QA] R52 old job $stamp', 'job_status': 'In Progress'});
       final src = '${j['id'] ?? (j['data'] is Map ? (j['data'] as Map)['id'] : '')}';
-      final dup = await api.duplicateEntity('job', src);
-      final before = (await api.getEntity('job', dup))['job_status'];
-      await resetDuplicatedJob(api, dup);
-      final after = (await api.getEntity('job', dup))['job_status'];
-      print('[old] job duplicate status: $before → $after');
+      final copy = jobDuplicateValues(await api.getEntity('job', src));
+      final d = await api.postEntity('job', {for (final e in copy.entries) if (e.value is! Map && e.value is! List) e.key: e.value});
+      final after = (await api.getEntity('job', '${d['id']}'))['job_status'];
+      print('[old] job duplicate status: $after');
       expect(after, 'Open');
       jobId = src;
 

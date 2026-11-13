@@ -80,93 +80,7 @@ class NxEntityFormState extends State<NxEntityForm> {
   @override
   void initState() {
     super.initState();
-    _host = NxFieldHost(
-      loadUsers: widget.api == null
-          ? null
-          : (q) async {
-              final rows = await widget.api!.getUsers(q: q);
-              return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
-            },
-      loadEntities: widget.api == null
-          ? null
-          : (module, q) async {
-              final page = await widget.api!.getEntityList(module, limit: 30, q: q);
-              return [
-                for (final row in page.items)
-                  NxPickOption(
-                    value: strId(row['id']),
-                    label: entityTitle(row, module: module),
-                    subtitle: entitySubtitle(row),
-                  ),
-              ];
-            },
-      loadTags: widget.api == null
-          ? null
-          : (q) async {
-              final rows = await widget.api!.getTags(module: widget.module, q: q);
-              return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
-            },
-      loadPackages: widget.api == null
-          ? null
-          : () async {
-              final rows = await widget.api!.getBusinessPackages();
-              return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
-            },
-      loadPicklist: widget.api == null
-          ? null
-          : (name) async {
-              final rows = await widget.api!.getPicklistValues(name);
-              return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
-            },
-      pickMedia: widget.api == null ? null : _pickMedia,
-      uploadBytes: widget.api == null ? null : _uploadBytes,
-      captureGps: () async {
-        try {
-          final fix = await LocationService().currentFix();
-          return (lat: fix.latitude, lng: fix.longitude);
-        } catch (_) {
-          return null;
-        }
-      },
-    );
-  }
-
-  Future<String?> _uploadBytes(List<int> bytes, String filename) async {
-    try {
-      final data = await widget.api!.uploadFiles([
-        MultipartFile.fromBytes(bytes, filename: filename),
-      ]);
-      return extractUploadedMedia(data);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<String?> _pickMedia(NxMediaKind kind) async {
-    final api = widget.api!;
-    try {
-      MultipartFile? part;
-      if (kind == NxMediaKind.video) {
-        final file = await ImagePicker().pickVideo(source: ImageSource.gallery);
-        if (file == null) return null;
-        part = MultipartFile.fromBytes(await file.readAsBytes(), filename: file.name);
-      } else if (kind == NxMediaKind.image) {
-        final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-        if (file == null) return null;
-        part = MultipartFile.fromBytes(await file.readAsBytes(), filename: file.name);
-      } else {
-        final picked = await FilePicker.platform.pickFiles(withData: true);
-        final f = picked?.files.single;
-        if (f == null) return null;
-        final bytes = f.bytes;
-        if (bytes == null) return null;
-        part = MultipartFile.fromBytes(bytes, filename: f.name);
-      }
-      final data = await api.uploadFiles([part]);
-      return extractUploadedMedia(data);
-    } catch (_) {
-      return null;
-    }
+    _host = nxFieldHostFor(widget.api, module: widget.module);
   }
 
   List<NxPickOption> _optionsFor(Map<String, dynamic> field) {
@@ -312,16 +226,10 @@ class NxEntityFormState extends State<NxEntityForm> {
         const SizedBox(width: 8),
         Padding(
           padding: const EdgeInsets.only(top: 22),
-          child: SegmentedButton<String>(
+          child: NxDiscountTypeToggle(
             key: ValueKey('discount-type-$name'),
-            showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            segments: [
-              ButtonSegment(value: 'amount', label: Text(tr('บาท'))),
-              const ButtonSegment(value: 'percent', label: Text('%')),
-            ],
-            selected: {percent ? 'percent' : 'amount'},
-            onSelectionChanged: widget.enabled ? (v) => widget.onChanged(typeKey, v.first) : null,
+            percent: percent,
+            onChanged: widget.enabled ? (p) => widget.onChanged(typeKey, p ? 'percent' : 'amount') : null,
           ),
         ),
       ],
@@ -573,6 +481,27 @@ class NxEntityFormState extends State<NxEntityForm> {
   }
 }
 
+/// บาท / % switch next to a discount number (catalog discounts, quotation
+/// lines, end-of-bill discount): the same control everywhere in the app.
+class NxDiscountTypeToggle extends StatelessWidget {
+  const NxDiscountTypeToggle({super.key, required this.percent, this.onChanged});
+
+  final bool percent;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) => SegmentedButton<String>(
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        segments: [
+          ButtonSegment(value: 'amount', label: Text(tr('บาท'))),
+          const ButtonSegment(value: 'percent', label: Text('%')),
+        ],
+        selected: {percent ? 'percent' : 'amount'},
+        onSelectionChanged: onChanged == null ? null : (v) => onChanged!(v.first == 'percent'),
+      );
+}
+
 bool _isShortField(FieldUiType type) {
   switch (type) {
     case FieldUiType.phone:
@@ -586,6 +515,85 @@ bool _isShortField(FieldUiType type) {
       return true;
     default:
       return false;
+  }
+}
+
+/// Pickers / uploads behind the shared field widgets (users, records, tags,
+/// packages, picklists, media, GPS) — what [NxEntityForm] gives its fields,
+/// for screens that draw [NxFormField]s themselves.
+NxFieldHost nxFieldHostFor(ApiClient? api, {String? module}) {
+  if (api == null) return const NxFieldHost(captureGps: _captureGps);
+  Future<String?> uploadBytes(List<int> bytes, String filename) async {
+    try {
+      final data = await api.uploadFiles([MultipartFile.fromBytes(bytes, filename: filename)]);
+      return extractUploadedMedia(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> pickMedia(NxMediaKind kind) async {
+    try {
+      MultipartFile? part;
+      if (kind == NxMediaKind.video) {
+        final file = await ImagePicker().pickVideo(source: ImageSource.gallery);
+        if (file == null) return null;
+        part = MultipartFile.fromBytes(await file.readAsBytes(), filename: file.name);
+      } else if (kind == NxMediaKind.image) {
+        final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+        if (file == null) return null;
+        part = MultipartFile.fromBytes(await file.readAsBytes(), filename: file.name);
+      } else {
+        final picked = await FilePicker.platform.pickFiles(withData: true);
+        final f = picked?.files.single;
+        if (f == null) return null;
+        final bytes = f.bytes;
+        if (bytes == null) return null;
+        part = MultipartFile.fromBytes(bytes, filename: f.name);
+      }
+      final data = await api.uploadFiles([part]);
+      return extractUploadedMedia(data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  return NxFieldHost(
+    loadUsers: (q) async {
+      final rows = await api.getUsers(q: q);
+      return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
+    },
+    loadEntities: (m, q) async {
+      final page = await api.getEntityList(m, limit: 30, q: q);
+      return [
+        for (final row in page.items)
+          NxPickOption(value: strId(row['id']), label: entityTitle(row, module: m), subtitle: entitySubtitle(row)),
+      ];
+    },
+    loadTags: (q) async {
+      final rows = await api.getTags(module: module, q: q);
+      return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
+    },
+    loadPackages: () async {
+      final rows = await api.getBusinessPackages();
+      return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
+    },
+    loadPicklist: (name) async {
+      final rows = await api.getPicklistValues(name);
+      return rows.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
+    },
+    pickMedia: pickMedia,
+    uploadBytes: uploadBytes,
+    captureGps: _captureGps,
+  );
+}
+
+Future<({double lat, double lng})?> _captureGps() async {
+  try {
+    final fix = await LocationService().currentFix();
+    return (lat: fix.latitude, lng: fix.longitude);
+  } catch (_) {
+    return null;
   }
 }
 

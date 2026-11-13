@@ -18,6 +18,9 @@ List<String>? requiredMenusFor(String path) {
     case 'fsm':
       if (segs.length >= 2) return [EntityModules.menuKeyOf(segs[1])];
       return MenuAccess.fsmKeys;
+    case 'form':
+      if (segs.length >= 2) return [EntityModules.menuKeyOf(segs[1])];
+      return null;
     case 'modules':
       // Generic module links (/modules/:module[/...]) follow the same menu rule.
       if (segs.length >= 2) return [EntityModules.menuKeyOf(segs[1])];

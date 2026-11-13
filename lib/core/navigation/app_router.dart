@@ -63,6 +63,7 @@ import '../qr_login.dart';
 import 'route_access.dart';
 import '../i18n.dart';
 import '../../screens/profile/profile_hub_screen.dart';
+import '../../screens/doc_form/doc_form_launcher.dart';
 
 GoRouter createAppRouter(AppConfig config) {
   return GoRouter(
@@ -352,6 +353,18 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: '/modules/:module/:id',
         redirect: (_, state) => notificationDeepLink(state.uri.toString()),
+      ),
+      GoRoute(
+        path: '/modules/:module/:id/edit',
+        redirect: (_, state) => notificationDeepLink(state.uri.toString()),
+      ),
+      // Quotation / job step forms (web form links + in-app links).
+      GoRoute(
+        path: '/form/:module',
+        builder: (_, state) {
+          final q = state.uri.queryParameters;
+          return DocFormRoutePage(module: state.pathParameters['module'] ?? 'quotation', mode: docFormModeOf(q['mode']), id: q['id']);
+        },
       ),
       GoRoute(
         path: '/crm/:module/:id',

@@ -10,7 +10,8 @@ import 'package:dio/dio.dart' show MultipartFile, DioMediaType;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:nextx_mobile/core/journey_rules.dart';
-import 'package:nextx_mobile/screens/journey/quotation_journey.dart' show duplicateQuotation;
+import 'package:nextx_mobile/core/doc_form/doc_form_rules.dart';
+import 'package:nextx_mobile/core/thai_time.dart';
 import 'package:nextx_mobile/services/api_client.dart';
 import 'package:nextx_mobile/services/photo_pipeline.dart';
 
@@ -67,7 +68,12 @@ void main() {
         final nextWon = quotationNextAction(qt, hasJob: out['job_id'] != null);
         print('[qt] next after won=${nextWon.key}');
 
-        final dupId = await duplicateQuotation(api, qt);
+        // ทำซ้ำ like the step form: the copy rules + POST /quotation/save.
+        final copy = await api.saveQuotation(
+          fields: {for (final e in quotationDuplicateValues(qt, userId: null, today: thaiNow()).entries) if (e.value is! List) e.key: e.value},
+          lines: quotationLinesPayload(copyQuotationLines(await api.getQuotationLines(qtId))),
+        );
+        final String? dupId = copy['id']?.toString();
         expect(dupId, isNotNull);
         cleanup.add(('quotation', dupId!));
         final dup = await api.getEntity('quotation', dupId);
