@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/html_display.dart';
 import '../../core/nx_breakpoint.dart';
 import '../nx_avatar.dart';
 import '../nx_html_view.dart';
+import '../nx_rich_text_editor.dart';
 import 'field_format.dart';
 import 'field_ui_type.dart';
 import 'nx_canvas_field.dart';
@@ -142,14 +142,14 @@ class NxFormField extends StatelessWidget {
           enabled: _on,
         );
       case FieldUiType.richText:
-        return _wrap(
-          context,
-          isEmpty: (value?.toString() ?? '').isEmpty,
-          child: _RichTextBox(
-            html: value?.toString() ?? '',
-            onChanged: _on ? (v) => onChanged?.call(v) : null,
-            enabled: _on,
-          ),
+        return NxRichTextField(
+          label: label,
+          html: value?.toString() ?? '',
+          required: required,
+          hint: hint,
+          errorText: trn(errorText),
+          enabled: _on,
+          onChanged: _on ? (v) => onChanged?.call(v) : null,
         );
       case FieldUiType.email:
         return _text(
@@ -219,9 +219,14 @@ class NxFormField extends StatelessWidget {
           keyboard: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: const [NxDecimalInputFormatter()],
           align: TextAlign.right,
+          // Centred on the value's line (it used to sit low and small).
           prefix: Padding(
-            padding: EdgeInsets.only(left: 12, top: 12),
-            child: Text(tr('฿')),
+            padding: const EdgeInsets.only(left: 14, right: 2),
+            child: Align(
+              widthFactor: 1,
+              heightFactor: 1,
+              child: Text('฿', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _muted(context))),
+            ),
           ),
           enabled: _on,
         );
@@ -1135,50 +1140,139 @@ class _TextBoxState extends State<_TextBox> {
   }
 }
 
-class _RichTextBox extends StatelessWidget {
-  const _RichTextBox({required this.html, this.onChanged, this.enabled = true});
+/// Rich text field: its label on its own line, then one bordered box with
+/// the formatting toolbar on top and the text under it (no floating label
+/// over the buttons, no box inside a box). Emits HTML.
+class NxRichTextField extends StatefulWidget {
+  const NxRichTextField({
+    super.key,
+    required this.label,
+    required this.html,
+    this.onChanged,
+    this.enabled = true,
+    this.required = false,
+    this.errorText,
+    this.hint,
+    this.minLines = 4,
+  });
+
+  final String label;
   final String html;
   final ValueChanged<String>? onChanged;
   final bool enabled;
+  final bool required;
+  final String? errorText;
+  final String? hint;
+  final int minLines;
 
-  String get _plain {
-    return stripHtmlPreview(html, maxLen: 8000);
+  @override
+  State<NxRichTextField> createState() => _NxRichTextFieldState();
+}
+
+class _NxRichTextFieldState extends State<NxRichTextField> {
+  late final NxRichTextController _c = NxRichTextController(html: widget.html);
+  final _focus = FocusNode();
+  late String _emitted = widget.html;
+  late String _shown;
+
+  @override
+  void initState() {
+    super.initState();
+    _shown = _c.toHtml();
+    _c.addListener(_changed);
+  }
+
+  @override
+  void didUpdateWidget(covariant NxRichTextField old) {
+    super.didUpdateWidget(old);
+    // Changed from outside (template defaults, draft restore): show it.
+    if (widget.html != _emitted && widget.html != old.html) {
+      _emitted = widget.html;
+      _syncing = true;
+      _c.setHtml(widget.html);
+      _syncing = false;
+      _shown = _c.toHtml();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.removeListener(_changed);
+    _c.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  var _syncing = false;
+
+  void _changed() {
+    if (_syncing) return;
+    final html = _c.toHtml();
+    if (html == _shown) return; // caret / selection only
+    _shown = html;
+    _emitted = html;
+    widget.onChanged?.call(html);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!enabled) {
-      return NxHtmlView(html: html);
-    }
-    return Column(
-      children: [
-        if (looksLikeHtmlString(html)) ...[
-          Align(alignment: Alignment.centerLeft, child: NxHtmlView(html: html)),
-          const SizedBox(height: 8),
-        ],
-        Row(
-          children: [
-            IconButton(
-              tooltip: tr('ตัวหนา'),
-              onPressed: () => onChanged?.call('<b>$_plain</b>'),
-              icon: const Icon(NxI.textB, size: 20),
-            ),
-            IconButton(
-              tooltip: tr('รายการ'),
-              onPressed: () => onChanged?.call('<ul><li>$_plain</li></ul>'),
-              icon: const Icon(NxI.listBullets, size: 20),
-            ),
-          ],
-        ),
-        _TextBox(
-          text: _plain,
-          onChanged: onChanged,
-          maxLines: 5,
-          enabled: enabled,
-          bare: true,
-        ),
-      ],
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final err = widget.errorText;
+    final label = Padding(
+      key: const ValueKey('rte-label'),
+      padding: const EdgeInsets.only(left: 4, bottom: 6),
+      child: Text.rich(
+        TextSpan(children: [
+          TextSpan(text: tr(widget.label)),
+          if (widget.required) TextSpan(text: ' *', style: TextStyle(color: cs.error)),
+        ]),
+        style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600),
+      ),
     );
+    final Widget box;
+    if (!widget.enabled) {
+      box = Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(NxFieldStyle.radius), border: Border.all(color: cs.outlineVariant)),
+        child: widget.html.trim().isEmpty ? Text('—', style: TextStyle(color: cs.onSurfaceVariant)) : NxHtmlView(html: widget.html),
+      );
+    } else {
+      box = AnimatedBuilder(
+        animation: _focus,
+        builder: (context, _) => DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.brightness == Brightness.dark ? cs.surfaceContainerHighest.withValues(alpha: 0.35) : cs.surface,
+            borderRadius: BorderRadius.circular(NxFieldStyle.radius),
+            border: Border.all(
+              color: err != null ? cs.error : (_focus.hasFocus ? cs.primary : cs.outline.withValues(alpha: 0.6)),
+              width: _focus.hasFocus || err != null ? 1.6 : 1,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(NxFieldStyle.radius),
+            child: NxRichTextEditor(
+              controller: _c,
+              focusNode: _focus,
+              fieldKey: const ValueKey('rte-field'),
+              bordered: false,
+              minLines: widget.minLines,
+              hint: widget.hint ?? 'พิมพ์ข้อความ…',
+            ),
+          ),
+        ),
+      );
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+      label,
+      box,
+      if (err != null)
+        Padding(
+          padding: const EdgeInsets.only(left: 12, top: 6),
+          child: Text(err, style: theme.textTheme.bodySmall?.copyWith(color: cs.error)),
+        ),
+    ]);
   }
 }
 

@@ -6,6 +6,7 @@ import '../core/ai_assistant.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/app_alice.dart';
+import '../core/doc_form/doc_pick_rules.dart' show pickerQueryParams;
 import 'api_exceptions.dart';
 
 export 'api_exceptions.dart';

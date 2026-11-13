@@ -585,12 +585,14 @@ bool fieldIsReadonly(Map<String, dynamic> field) {
   return field['readonly'] == true || field['readonly'] == 1;
 }
 
-String fieldLabel(Map<String, dynamic> field) =>
-    field['label_th']?.toString() ??
-    field['label']?.toString() ??
-    field['labelTh']?.toString() ??
-    field['name']?.toString() ??
-    '';
+/// The field's label for people: a storage hint such as " (HTML)" (quotation
+/// text blocks: "เงื่อนไข (HTML)") is not shown.
+String fieldLabel(Map<String, dynamic> field) => (field['label_th']?.toString() ??
+        field['label']?.toString() ??
+        field['labelTh']?.toString() ??
+        field['name']?.toString() ??
+        '')
+    .replaceAll(RegExp(r'\s*\(\s*html\s*\)\s*$', caseSensitive: false), '');
 
 String fieldName(Map<String, dynamic> field) =>
     field['name']?.toString() ?? field['key']?.toString() ?? '';

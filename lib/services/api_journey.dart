@@ -322,6 +322,19 @@ extension JourneyApi on ApiClient {
     return page.items;
   }
 
+  /// One page of a quotation picker (customer / contact / product / service):
+  /// searches the real name columns ([kPickerSearchCols]) — `q` alone only
+  /// matched the running number of products on the server.
+  Future<EntityListPage> searchPicker(
+    String module, {
+    String q = '',
+    int page = 1,
+    int limit = 30,
+    Map<String, String> filters = const {},
+    CancelToken? cancel,
+  }) =>
+      getEntityList(module, q: q, page: page, limit: limit, extra: pickerQueryParams(module, q: q, filters: filters), cancel: cancel);
+
   // --------------------------------------------------------------- shared
 
   /// `{quotations, jobs, activities}` linked to a quotation / job / activity.
