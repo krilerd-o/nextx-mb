@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/history_events.dart' show historyActionTitle;
 import '../../core/i18n.dart';
+import '../../core/status_labels.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
 import '../../core/entity_display.dart';
@@ -780,7 +782,8 @@ String _historyLabel(String action) => tr(switch (action) {
       'resume' => 'ทำต่อ',
       'cancel' => 'ยกเลิกเคส',
       'close' => 'ปิดเคส',
-      _ => action,
+      // Never the raw key (see history_events.dart).
+      _ => historyActionTitle('case.$action').title,
     });
 
 class _HistoryRow extends StatelessWidget {
@@ -797,8 +800,8 @@ class _HistoryRow extends StatelessWidget {
     final details = e['details'] is Map ? e['details'] as Map : const {};
     final note = '${details['note'] ?? details['to_owner_name'] ?? ''}'.trim();
     final when = formatThaiField(e['at'], 'at', year: uiYear);
-    final from = '${e['from_status'] ?? ''}'.trim();
-    final to = '${e['to_status'] ?? ''}'.trim();
+    final from = statusValueLabel(e['from_status'], module: 'case');
+    final to = statusValueLabel(e['to_status'], module: 'case');
     return IntrinsicHeight(
       child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         SizedBox(

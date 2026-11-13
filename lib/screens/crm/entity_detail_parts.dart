@@ -22,6 +22,7 @@ import '../../core/i18n.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../core/thai_time.dart';
 import '../../core/entity_display.dart';
+import '../../core/history_events.dart';
 import '../../widgets/nx_overlay_panel.dart';
 
 /// Field that holds a record's status / stage for [module] (first one present).
@@ -536,70 +537,32 @@ class EntityFilesPanel extends StatelessWidget {
   }
 }
 
-/// Plain-language line for one timeline event.
+/// Plain-language line for one timeline event (see [describeHistoryEvent]).
 ({IconData icon, String title, String? detail}) describeTimelineEvent(
   Map<String, dynamic> e, {
+  String? module,
   String Function(String field, String value)? valueLabel,
+  String Function(String field)? fieldLabel,
 }) {
-  final field = e['field_name']?.toString() ?? '';
-  String plain(dynamic v) {
-    final s = v?.toString() ?? '';
-    if (s.isEmpty || s == 'null') return '—';
-    final clean = stripTags(s);
-    return valueLabel == null || field.isEmpty ? clean : valueLabel(field, clean);
-  }
-
-  switch (e['type']?.toString()) {
-    case 'field_change':
-      final label = e['field_label_th']?.toString() ?? e['field_name']?.toString() ?? 'ฟิลด์';
-      return (icon: NxI.pencilSimple, title: 'แก้ $label', detail: '${plain(e['old_value'])} → ${plain(e['new_value'])}');
-    case 'audit':
-      final action = e['action']?.toString() ?? '';
-      final t = switch (action.toLowerCase()) {
-        final a when a.contains('create') => 'สร้างรายการ',
-        final a when a.contains('delete') => 'ลบรายการ',
-        final a when a.contains('update') || a.contains('edit') => 'แก้ไขรายการ',
-        final a when a.contains('duplicate') => 'ทำซ้ำรายการ',
-        final a when a.contains('convert') => 'แปลงรายการ',
-        _ => action.isEmpty ? 'กิจกรรม' : action,
-      };
-      final d = e['details'];
-      return (icon: NxI.clockCounterClockwise, title: t, detail: d is String && d.isNotEmpty && d.length < 160 ? d : null);
-    case 'engagement':
-      final kind = (e['event_type'] ?? e['source'])?.toString() ?? '';
-      const names = {
-        'comment': 'คอมเม้นท์',
-        'email_open': 'เปิดอีเมล',
-        'email_click': 'คลิกลิงก์ในอีเมล',
-        'email_sent': 'ส่งอีเมล',
-        'call': 'โทรหา',
-        'meeting': 'นัดประชุม',
-        'activity': 'กิจกรรม',
-        'web_visit': 'เข้าชมเว็บไซต์',
-        'form_submit': 'กรอกฟอร์ม',
-      };
-      return (icon: NxI.chatCircle, title: names[kind] ?? 'การมีส่วนร่วม', detail: null);
-    case 'status':
-    case 'status_change':
-      return (icon: NxI.flag, title: 'เปลี่ยนสถานะ', detail: '${plain(e['from_status'] ?? e['old_value'])} → ${plain(e['to_status'] ?? e['new_value'])}');
-    default:
-      return (
-        icon: NxI.info,
-        title: e['title']?.toString() ?? e['label']?.toString() ?? e['type']?.toString() ?? 'กิจกรรม',
-        detail: e['description']?.toString() ?? e['summary']?.toString(),
-      );
-  }
+  final d = describeHistoryEvent(e, module: module, valueLabel: valueLabel, fieldLabel: fieldLabel);
+  return (icon: d.icon, title: d.title, detail: d.detail);
 }
 
 String stripTags(String s) => s.replaceAll(RegExp(r'<[^>]*>'), '').trim();
 
 class EntityHistoryPanel extends StatelessWidget {
-  const EntityHistoryPanel({super.key, required this.events, required this.loading, this.valueLabel});
+  const EntityHistoryPanel({super.key, required this.events, required this.loading, this.valueLabel, this.fieldLabel, this.module});
   final List<Map<String, dynamic>> events;
   final bool loading;
 
   /// Maps stored picklist values to their Thai labels (`Contacted` → `ติดต่อแล้ว`).
   final String Function(String field, String value)? valueLabel;
+
+  /// Field label from the module's field metadata (`title` → `ชื่องาน`).
+  final String Function(String field)? fieldLabel;
+
+  /// Record module (status words differ: a job "Completed" is "ปิดงาน").
+  final String? module;
 
   @override
   Widget build(BuildContext context) {
@@ -617,13 +580,18 @@ class EntityHistoryPanel extends StatelessWidget {
       child: NxTimeline(entries: [
         for (final e in events)
           () {
-            final d = describeTimelineEvent(e, valueLabel: valueLabel);
-            final who = e['user_name']?.toString();
+            final d = describeHistoryEvent(e, module: module, valueLabel: valueLabel, fieldLabel: fieldLabel);
+            final who = e['user_name']?.toString().trim();
+            final at = parseThai(e['at'] ?? e['created_at'] ?? e['createdtime']);
+            final time = at == null ? null : '${NxTimeline.two(at.hour)}:${NxTimeline.two(at.minute)}';
             return NxTimelineEntry(
-              at: parseThai(e['at'] ?? e['created_at'] ?? e['createdtime']),
+              at: at,
               icon: d.icon,
-              title: Text(tr(d.title)),
-              body: d.detail == null || d.detail!.trim().isEmpty ? null : Text(tr(d.detail!)),
+              color: d.color,
+              // Already in the current language.
+              title: Text(d.title),
+              body: d.detail == null || d.detail!.trim().isEmpty ? null : Text(d.detail!),
+              chip: time == null && (who ?? '').isEmpty ? null : [?time, if (who != null && who.isNotEmpty) who].join(' · '),
               who: who,
               whoImage: e['user_avatar']?.toString() ?? e['avatar']?.toString(),
             );

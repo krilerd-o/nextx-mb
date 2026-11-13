@@ -32,6 +32,7 @@ import 'order_summary_screen.dart';
 import '../../core/error_reporting.dart';
 import '../../core/thai_time.dart';
 import '../../core/i18n.dart';
+import '../../core/status_labels.dart';
 
 typedef OpenEntityFn = void Function(String module, String id, {Map<String, dynamic>? row});
 
@@ -2098,7 +2099,7 @@ class RelatedItemTile extends StatelessWidget {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
                             decoration: BoxDecoration(color: sc.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
-                            child: Text(tr(status), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall?.copyWith(color: sc, fontWeight: FontWeight.w700)),
+                            child: Text(statusValueLabel(status, module: module), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall?.copyWith(color: sc, fontWeight: FontWeight.w700)),
                           ),
                         ),
                       ],
