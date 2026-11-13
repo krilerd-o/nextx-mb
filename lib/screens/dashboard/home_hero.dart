@@ -88,12 +88,17 @@ class HomeHero extends StatelessWidget {
   /// How far [overlap] hangs below the scene.
   static const double overlapDepth = 40;
 
+  /// Without an [overlap] card, the scene keeps painting this far below the hero's own box, so
+  /// the first Home widget sits over the hills (the scene fades out under it).
+  static const double sceneUnderlap = 70;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
     final top = MediaQuery.paddingOf(context).top;
     final hasName = name != null && name!.trim().isNotEmpty;
+    final under = overlap == null && headline == null ? sceneUnderlap : 0.0;
 
     Widget limit(Widget child) => Center(
       child: ConstrainedBox(
@@ -151,12 +156,14 @@ class HomeHero extends StatelessWidget {
       value: SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent),
       child: Stack(
         key: const ValueKey('home-hero'),
+        // The scene runs on under the widgets below (they paint after the hero, on top of it).
+        clipBehavior: Clip.none,
         children: [
           // Ends 1px early and clipped: some renderers leave the mask's last pixel row unmasked.
-          Positioned(left: 0, right: 0, top: 0, bottom: 1, child: ClipRect(child: scene)),
+          Positioned(left: 0, right: 0, top: 0, bottom: 1 - under, child: ClipRect(child: scene)),
           // The scene layer's last, partly covered pixel row can show as a hairline at a
           // fractional height; the page colour covers it (the fade is already transparent there).
-          Positioned(left: 0, right: 0, bottom: 0, height: 3, child: ColoredBox(color: NxAtmosphereTokens.of(context).top)),
+          Positioned(left: 0, right: 0, bottom: -under, height: 3, child: ColoredBox(color: NxAtmosphereTokens.of(context).top)),
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -203,7 +210,7 @@ class HomeHero extends StatelessWidget {
               ),
               if (headline != null) ...[const SizedBox(height: 18), limit(headline!)],
               // Open sky under the greeting; without a card this is where the scene fades out.
-              SizedBox(height: headline != null ? 28 : (overlap == null ? 150 : 170)),
+              SizedBox(height: headline != null ? 28 : (overlap == null ? 150 - under : 170)),
               if (overlap != null) limit(overlap!),
               SizedBox(height: overlap == null ? 0 : 18),
             ],
