@@ -26,6 +26,7 @@ import '../fsm/contract_flows.dart';
 import '../fsm/service_more.dart';
 import '../journey/case_flows.dart';
 import '../doc_form/doc_form_launcher.dart';
+import '../journey/job_report_signatures.dart' show handleJobCloseSignatureError;
 import '../journey/status_followups.dart';
 
 /// What the current user may do with one record (same rules as the web list:
@@ -342,6 +343,14 @@ class EntityRecordActions {
       return picked;
     } catch (e) {
       if (before != null) onChanged?.call(key, before);
+      // Job closed by a plain status update: 409 JOB_SIGNATURES_REQUIRED → "เซ็นตอนนี้".
+      if (module == 'job' &&
+          context.mounted &&
+          await handleJobCloseSignatureError(context, e, jobId: id, row: row, openSignatures: () {
+            if (context.mounted) nxPush<void>(context, EntityByIdLoader(module: 'job', id: id, tab: 'signatures'));
+          })) {
+        return null;
+      }
       _snack(messenger, formatApiError(e));
       return null;
     }

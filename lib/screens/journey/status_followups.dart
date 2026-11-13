@@ -12,6 +12,7 @@ import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../deep_link_loaders.dart';
+import 'job_report_signatures.dart' show handleJobCloseSignatureError, jobSignaturesRequiredText, showJobSignaturesRequired;
 
 /// Friendly Thai text for Service Journey error codes (web wording).
 String journeyErrorText(Object e) {
@@ -21,6 +22,8 @@ String journeyErrorText(Object e) {
         return 'มีคนเปลี่ยนสถานะไปแล้ว — โหลดข้อมูลล่าสุดให้แล้ว';
       case 'JOB_SIGNATURE_INCOMPLETE':
         return 'ยังเก็บลายเซ็นไม่ครบ — เซ็นให้ครบก่อนปิดงาน';
+      case 'JOB_SIGNATURES_REQUIRED':
+        return 'ต้องมีลายเซ็นทั้งช่างและลูกค้าก่อนปิดงาน';
       case 'QUOTATION_LOCKED':
         return 'ใบเสนอราคานี้ถูกล็อก แก้ไขได้เฉพาะสถานะเปิด/ไม่อนุมัติ — ใช้ Revise หรือทำสำเนา';
       case 'QUOTATION_CLOSED':
@@ -270,6 +273,12 @@ class JobFlows {
     final fromColor = jobStatusTone(cs, expected);
     final to = target == null ? null : jobStatusLabel(target);
     final toColor = target == null ? null : jobStatusTone(cs, target);
+    // "เซ็นตอนนี้" → the signature section: on the job page scroll to it,
+    // elsewhere (list long-press) open the job on it.
+    final VoidCallback goSign = openSignatures ??
+        () {
+          if (context.mounted) nxPush<void>(context, EntityByIdLoader(module: 'job', id: jobId, tab: 'signatures'));
+        };
     try {
       switch (action) {
         case 'accept':
@@ -371,7 +380,7 @@ class JobFlows {
           if (context.mounted) _snack(context, 'ยกเลิกงานแล้ว');
           return true;
         case 'close':
-          return await _close(context, jobId, expected, openSignatures, header: (record: record, from: from, fromColor: fromColor, to: to, toColor: toColor));
+          return await _close(context, jobId, expected, goSign, row: row, header: (record: record, from: from, fromColor: fromColor, to: to, toColor: toColor));
         case 'reopen':
           final f = await _askForm(
             context,
@@ -393,6 +402,8 @@ class JobFlows {
           return true;
       }
     } catch (e) {
+      // 409 JOB_SIGNATURES_REQUIRED (close.require_both_signatures): explain + "เซ็นตอนนี้".
+      if (context.mounted && await handleJobCloseSignatureError(context, e, jobId: jobId, row: row, openSignatures: goSign)) return true;
       if (context.mounted) _snack(context, journeyErrorText(e));
       if (e is ApiEnvelopeException && e.errorCode == 'VERSION_CONFLICT') return true; // reload
     }
@@ -404,6 +415,7 @@ class JobFlows {
     String jobId,
     String? expected,
     VoidCallback? openSignatures, {
+    Map<String, dynamic> row = const {},
     ({String record, String? from, Color fromColor, String? to, Color? toColor})? header,
   }) async {
     final api = context.read<AppConfig>().apiClient;
@@ -419,6 +431,16 @@ class JobFlows {
     if (preview['can_close'] == false) {
       _snack(context, 'ปิดงานได้เฉพาะเจ้าของงานหรือผู้ดูแล');
       return false;
+    }
+    // The server's own check (close-preview.signatures): business setting
+    // close.require_both_signatures, signed staff / customer slots counted.
+    final sigStatus = preview['signatures'];
+    if (sigStatus is Map && sigStatus['require_both_signatures'] != false) {
+      final need = jobSignatureRolesFromServer(sigStatus['missing']);
+      if (need.isNotEmpty) {
+        await showJobSignaturesRequired(context, jobId: jobId, row: row, missing: need, message: jobSignaturesRequiredText(need), openSignatures: openSignatures);
+        return true; // reload: a signature may have been added
+      }
     }
     final slots = [for (final s in (sigs['slots'] as List? ?? const [])) if (s is Map) Map<String, dynamic>.from(s)];
     final missing = [for (final s in slots) if ((s['signature_path'] ?? '').toString().isEmpty) s];

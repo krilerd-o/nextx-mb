@@ -66,6 +66,9 @@ Settings → Secrets and variables → Actions ทุกตัวไม่บั
      เพื่อการทำงานของแอปเท่านั้น ไม่ขาย ไม่แชร์เพื่อโฆษณา เข้ารหัสระหว่างส่ง ผู้ใช้ขอลบได้
      - เสียงและบทถอดเสียงในสาย (ISAAC AI การสื่อสาร): เก็บเมื่อผู้ใช้ยินยอมในสายเท่านั้น, ส่งให้ผู้ให้บริการ AI
        (OpenAI) เพื่อถอดเสียง/สรุป, เก็บตามระยะที่ผู้ดูแลธุรกิจตั้ง แล้วลบอัตโนมัติ, ผู้ใช้ลบของตัวเองได้
+     - เสียงประชุมที่อัดใน ISAAC Notebook: อัดเมื่อผู้ใช้กดอัดเองเท่านั้น, ถอดเสียง/สรุปด้วย OpenAI,
+       เก็บตามระยะเดียวกับ AI การสื่อสาร (ดูข้อ 7.4), ลบได้ทีละรายการ / ทั้งเล่ม / "ลบข้อมูลของฉัน"
+   - **Foreground service permissions**: ประกาศ `microphone` (อัดเสียงประชุม) — ข้อความและวิดีโออยู่ในข้อ 7.1
    - **Account deletion**: ใส่ลิงก์ `https://<เซิร์ฟเวอร์>/account-deletion` และบอกว่าลบในแอปได้ที่ โปรไฟล์ → บัญชีและความปลอดภัย → ลบบัญชี
    - **Location permission**: ใช้ขณะใช้งานแอปเท่านั้น (เช็คอิน ลงเวลา)
    - Privacy policy URL
@@ -82,10 +85,13 @@ Settings → Secrets and variables → Actions ทุกตัวไม่บั
 4. Google Cloud → สร้าง OAuth client ชนิด **iOS** (bundle id `com.moai.nextt.mobile`) ในโปรเจกต์เดียวกับ Web client ของเซิร์ฟเวอร์ → secret `IOS_GOOGLE_CLIENT_ID`
 5. App Store Connect:
    - **App Privacy**: ตรงกับ `ios/Runner/PrivacyInfo.xcprivacy` (ไม่มีการติดตามผู้ใช้)
-     — มี **Audio Data** (เสียงในสายเมื่อยินยอม, ข้อความเสียง, AI Minute Auto) และ **Other User Content** (บทถอดเสียง / สรุป)
-     ใช้เพื่อ App Functionality, ผูกกับผู้ใช้, ไม่ใช้ติดตาม; ข้อความขอสิทธิ์ไมโครโฟนพูดถึงการโทร การถอดเสียง และการบันทึกเมื่อยินยอม
+     — มี **Audio Data** (เสียงในสายเมื่อยินยอม, ข้อความเสียง, AI Minute Auto, เสียงประชุมใน ISAAC Notebook)
+     และ **Other User Content** (บทถอดเสียง / สรุป / โน้ต)
+     ใช้เพื่อ App Functionality, ผูกกับผู้ใช้, ไม่ใช้ติดตาม; ข้อความขอสิทธิ์ไมโครโฟนพูดถึงการโทร คำบรรยายสด
+     การบันทึกเมื่อยินยอม AI Minute Auto และการอัดประชุมใน ISAAC Notebook
    - บัญชีทดสอบสำหรับผู้ตรวจ (เป็นผู้ใช้ทดสอบ ไม่ใช่บัญชีลูกค้าจริง)
    - หมายเหตุถึงผู้ตรวจ: ลบบัญชีได้ที่ โปรไฟล์ → บัญชีและความปลอดภัย → ลบบัญชี
+     และเหตุผลที่ใช้ `UIBackgroundModes` → `audio` (ข้อความในข้อ 7.2)
 6. ภาพหน้าจอ: iPhone 6.9" หรือ 6.7", iPhone 6.5", iPad 13"
 7. iPad รองรับ Split View / Stage Manager แล้ว (`UIRequiresFullScreen = false`) ทดสอบหน้าสองช่องที่หลายขนาดหน้าต่าง
 
@@ -164,3 +170,117 @@ Apple รีวิว beta ปกติราว 1 วัน; อนุมัต
 - [ ] iPhone: แจ้งเตือน, เข้าสู่ระบบด้วย Apple / Google / LINE, ข้อความขอสิทธิ์เป็นภาษาของเครื่อง
 - [ ] iPad: Split View, Stage Manager, หมุนจอทุกทิศ
 - [ ] ลบบัญชี (ใช้บัญชีทดสอบเท่านั้น): ยืนยัน OTP แล้วเข้าสู่ระบบด้วยบัญชีนั้นไม่ได้อีก ข้อมูลงานของธุรกิจยังอยู่
+- [ ] อัดเสียงประชุมใน ISAAC Notebook (ปิดจอ / สลับแอป / สายเข้า / หูฟัง Bluetooth / เน็ตหลุด) — ทำตาม `QA_NOTEBOOK_RECORDING.md`
+
+## 7. ไมโครโฟน · อัดเสียงเบื้องหลัง · นโยบายความเป็นส่วนตัว (ISAAC Notebook)
+
+สิ่งที่แอปใช้ (ตรวจแล้วในโค้ด):
+
+| แพลตฟอร์ม | ตั้งค่า | ใช้ทำอะไร |
+|---|---|---|
+| Android | `RECORD_AUDIO`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`, `POST_NOTIFICATIONS`, `WAKE_LOCK` | อัดเสียงประชุม + การโทร |
+| Android | `NotebookRecordingService` `android:foregroundServiceType="microphone"` (`startForeground(…, FOREGROUND_SERVICE_TYPE_MICROPHONE)` บน Android 10+) | อัดต่อเมื่อปิดจอ / สลับแอป, แจ้งเตือนมีปุ่ม หยุดชั่วคราว / อัดต่อ / จบ |
+| Android | `FOREGROUND_SERVICE_PHONE_CALL`, `FOREGROUND_SERVICE_CAMERA` | โทรและวิดีโอคอล (ประกาศแยกใน Play Console ด้วย) |
+| iOS | `NSMicrophoneUsageDescription` (Info.plist + `en.lproj` / `th.lproj`) | โทร/วิดีโอคอล, คำบรรยายสด, บันทึกในสายเมื่อยินยอม, AI Minute Auto, ISAAC Notebook, ข้อความเสียง |
+| iOS | `UIBackgroundModes`: `audio`, `voip`, `fetch`, `remote-notification` | `audio` = อัดประชุมต่อเมื่อล็อกจอ + เล่นเสียงตอนล็อกจอ (ข้อ 7.2) |
+| iOS | `PrivacyInfo.xcprivacy` → `NSPrivacyCollectedDataTypeAudioData` (Linked, ไม่ Tracking, App Functionality) | ตรงกับ App Privacy ใน App Store Connect |
+
+### 7.1 Google Play — Foreground service types (microphone)
+
+Play Console → App content → **Foreground service permissions** → เลือก `FOREGROUND_SERVICE_MICROPHONE`
+→ ประเภทงาน **Microphone** → ใส่คำอธิบายและลิงก์วิดีโอด้านล่าง
+
+**คำอธิบาย (ภาษาไทย — ร่าง)**
+
+> MOAI NEXT ใช้ foreground service ชนิด microphone เฉพาะตอนที่ผู้ใช้กด "บันทึกเสียงประชุม" ในสมุดโน้ต ISAAC Notebook เอง
+> ขณะแอปเปิดอยู่บนจอ การอัดต้องไม่หยุดเมื่อจอดับหรือผู้ใช้สลับไปดูเอกสาร/สไลด์ระหว่างประชุม
+> ระหว่างอัดมีการแจ้งเตือนค้างไว้ตลอด แสดงเวลาที่อัด พร้อมปุ่ม หยุดชั่วคราว / อัดต่อ / จบ
+> เซอร์วิสหยุดทันทีเมื่อผู้ใช้กดจบ ไม่เคยเริ่มเองหรือเริ่มจากเบื้องหลัง
+> เสียงถูกส่งไปยังเซิร์ฟเวอร์ของธุรกิจผู้ใช้ (NEXTX) เพื่อถอดเป็นข้อความและสรุปเป็นโน้ตในสมุดเล่มนั้น
+> ไมโครโฟนยังใช้ในการโทร/วิดีโอคอล (คำบรรยายสดเมื่อผู้ร่วมสายยินยอม) ซึ่งประกาศแยกเป็น phoneCall
+
+**Description (English — draft)**
+
+> MOAI NEXT starts a foreground service of type microphone only when the user taps "Record meeting" inside an
+> ISAAC Notebook while the app is on screen. The recording must keep going when the screen turns off or the user
+> switches to another app (for example to read slides or notes during the meeting). While recording, an ongoing
+> notification shows the elapsed time with Pause / Resume / Stop actions. The service stops as soon as the user
+> taps Stop; it is never started automatically or from the background. The audio is uploaded to the user's own
+> business server (NEXTX) to produce a transcript and a summary note in that notebook. The microphone is also used
+> in voice/video calls (live captions only when participants agree), declared separately as phoneCall.
+
+**วิดีโอที่ต้องแนบ (30–90 วินาที, YouTube แบบ Unlisted หรือลิงก์ที่เปิดได้โดยไม่ต้องล็อกอิน)**
+
+- [ ] เปิดแอป → ISAAC → AI Notebook → เปิดสมุด 1 เล่ม → แตะ **บันทึกเสียงประชุม**
+- [ ] ให้เห็นหน้าขอสิทธิ์ไมโครโฟน (ติดตั้งใหม่หรือรีเซ็ตสิทธิ์ก่อนอัดวิดีโอ) และกดอนุญาต
+- [ ] ดึงแถบแจ้งเตือนลง: เห็น "กำลังบันทึกเสียง" + เวลา + ปุ่ม หยุดชั่วคราว / อัดต่อ / จบ
+- [ ] ปิดจอ ~10 วินาที แล้วเปิด: เวลาเดินต่อ คำถอดเสียงยังขึ้น
+- [ ] สลับไปแอปอื่นแล้วกลับมา: ยังอัดอยู่
+- [ ] กด หยุดชั่วคราว จากแจ้งเตือน → อัดต่อ → จบ
+- [ ] หลังกดจบ แจ้งเตือนหายไป (เซอร์วิสหยุด) และสมุดขึ้น "กำลังประมวลผล…" แล้วได้โน้ตสรุป
+- [ ] ใช้บัญชีทดสอบ / ข้อมูลทดสอบเท่านั้น ไม่มีข้อมูลลูกค้าจริงในวิดีโอ
+
+### 7.2 App Store — หมายเหตุถึงผู้ตรวจ (Background audio)
+
+ใส่ใน App Store Connect → App Review Information → Notes (ภาษาอังกฤษ):
+
+> **Why `UIBackgroundModes` → `audio`:**
+> 1. *Meeting recording (ISAAC Notebook).* The user starts a recording themselves (AI Notebook → open a notebook →
+>    "Record meeting"). Recording continues when the screen locks or the user switches apps so a whole meeting is
+>    captured; the system microphone indicator stays visible and the in-app bar offers Pause / Resume / Stop.
+>    It stops when the user taps Stop. Audio is sent to the customer's own business server for transcription and a
+>    summary note.
+> 2. *Playback.* Notebook audio overviews and recorded calls/meetings keep playing when the screen locks
+>    (AVAudioSession category playback), like a podcast.
+> 3. Voice/video calls use `voip` + CallKit; live captions run only after the participants agree.
+>
+> The app never plays silent audio or keeps a session alive without a user-started recording or playback.
+> To test: sign in with the demo account below → ISAAC → AI Notebook → "QA notebook" → Record meeting → lock the
+> phone for 30 seconds → unlock → Stop. A summary note appears in the notebook after processing.
+
+(ใส่บัญชีทดสอบและเตรียมสมุด "QA notebook" ไว้ในบัญชีนั้นก่อนส่ง)
+
+### 7.3 ข้อความขอสิทธิ์ไมโครโฟน (iOS)
+
+| ภาษา | ข้อความ |
+|---|---|
+| ไทย (`Info.plist`, `th.lproj`) | ใช้ไมโครโฟนสำหรับโทรและวิดีโอคอล, คำบรรยายสดและบันทึกเสียงในสาย (เมื่อคุณยินยอม) ให้ ISAAC สรุปการโทร, อัดเสียงประชุมใน ISAAC Notebook (อัดต่อได้แม้ปิดจอ) กับ AI Minute Auto และส่งข้อความเสียง |
+| English (`en.lproj`) | Uses the microphone for voice and video calls, live call captions and call recording (only when you agree) so ISAAC can summarise calls, to record meetings in ISAAC Notebook (recording continues with the screen off) and AI Minute Auto, and for voice messages. |
+
+### 7.4 นโยบายความเป็นส่วนตัว — ต้องเพิ่ม / แก้ (ร่าง)
+
+หน้า Privacy policy บนเว็บ (ลิงก์เดียวกับที่ใส่ใน Play / App Store / AppGallery) ต้องมีหัวข้อนี้
+อ้างอิงพฤติกรรมเซิร์ฟเวอร์ `backend/src/services/aiNotebookRecording/recordingLifecycle.js`
+
+> ⚠ "ลบข้อมูลของฉัน" สำหรับบันทึกเสียงในสมุดมีที่เซิร์ฟเวอร์แล้ว (`DELETE /api/comm-ai/me/notebook-recordings`)
+> แต่ยังไม่มีปุ่มในแอปและเว็บ — เพิ่มปุ่มก่อนเผยแพร่ข้อความนี้ หรือตัดข้อนั้นออกจนกว่าจะมี
+
+**ไทย**
+
+> **การบันทึกเสียงใน ISAAC Notebook**
+> - เราบันทึกเสียงเมื่อคุณกดเริ่มอัดในสมุดโน้ตเท่านั้น และอาจอัดต่อขณะปิดจอจนกว่าคุณจะกดจบ
+>   คุณมีหน้าที่แจ้งผู้ร่วมประชุมก่อนบันทึก
+> - ข้อมูลที่เก็บ: ไฟล์เสียง, ข้อความถอดเสียง, โน้ตสรุป, ชื่อ/เวลา/ความยาวของการบันทึก และผู้ที่บันทึก
+> - ใช้เพื่อถอดเสียง สรุป และตอบคำถามจากเนื้อหาในสมุดของธุรกิจคุณเท่านั้น ไม่ขาย ไม่ใช้เพื่อโฆษณา
+>   การถอดเสียงและสรุปประมวลผลผ่านผู้ให้บริการ AI (OpenAI) ตามที่ธุรกิจตั้งค่าไว้
+> - การเก็บรักษา: ใช้ระยะเวลาเดียวกับ "AI การสื่อสาร" ที่ผู้ดูแลธุรกิจตั้ง เมื่อครบกำหนด ไฟล์เสียงและบทถอดเสียง
+>   รายบรรทัดจะถูกลบอัตโนมัติ ส่วนข้อความแหล่งข้อมูลและโน้ตสรุปจะเก็บไว้ในสมุด เว้นแต่ผู้ดูแลเลือกให้ลบด้วย
+>   ถ้าธุรกิจยังไม่ได้ตั้งระยะเวลา จะเก็บไว้จนกว่าจะมีการลบ
+> - การลบ: ลบบันทึกเสียงทีละรายการ, ลบทั้งสมุด (เสียงและข้อความในสมุดถูกลบทั้งหมด), เมนู **ลบข้อมูลของฉัน**
+>   (ลบทุกบันทึกเสียงที่คุณอัดในธุรกิจนั้น พร้อมบทถอดเสียง แหล่งข้อมูล และโน้ตสรุปที่เกิดจากบันทึกนั้น)
+>   และการลบบัญชี
+
+**English**
+
+> **Recordings in ISAAC Notebook**
+> - Audio is recorded only after you start a recording in a notebook; it may continue with the screen off until you
+>   tap Stop. You are responsible for telling other participants before recording.
+> - We store the audio file, the transcript, the summary note, the recording's title / time / length and who made it.
+> - It is used only to transcribe, summarise and answer questions about your business's notebook content. It is not
+>   sold or used for advertising. Transcription and summaries are processed by an AI provider (OpenAI) as configured
+>   by your business.
+> - Retention follows the "Communication AI" retention period set by your business admin. When it passes, the audio
+>   and line-by-line transcript are deleted automatically; the notebook source text and summary note are kept unless
+>   the admin chooses to delete them too. If no period is set, recordings are kept until deleted.
+> - Deletion: delete a single recording, delete the whole notebook, use **Delete my data** (removes every recording
+>   you made in that business with its transcript, source and summary note), or delete your account.

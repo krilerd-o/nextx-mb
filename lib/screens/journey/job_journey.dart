@@ -99,21 +99,28 @@ class JobSummaryTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final ov = ctrl.overview;
-    final next = jobNextAction(row, ov, canEdit: canEdit, requireReportSignatures: true);
+    // Business setting close.require_both_signatures (default on); signed
+    // staff / customer slots count like on the server.
+    final requireBoth = ctrl.requireBothSignatures;
+    final slots = ctrl.signatureSlots;
+    final next = jobNextAction(row, ov, canEdit: canEdit, requireReportSignatures: requireBoth, slots: slots);
     final acts = _m(ov['activities']);
     final sig = _m(ov['signatures']);
     final hasOwner = ov['has_owner'] ?? (_n(row['smownerid']) > 0);
     final owner = (row['smownerid_name'] ?? row['owner_name'] ?? row['assigned_user_name'] ?? '').toString();
     final planStart = row['plan_start'] ?? row['planned_start'] ?? row['date_start'];
     final nextAt = acts['next_at'];
-    final checklist = jobCloseChecklist(row, ov, requireReportSignatures: true);
+    final checklist = jobCloseChecklist(row, ov, requireReportSignatures: requireBoth, slots: slots);
     final status = canonicalJobStatus(row['job_status']);
     final qt = _m(ov['quotation']);
     final account = (row['account_name'] ?? row['accountid_name'] ?? '').toString();
     final activities = ctrl.linked('activities');
     final photos = jobEvidencePhotos(row);
-    final reportSigned = 2 - jobReportMissing(row).length;
-    final sigSigned = reportSigned + _n(sig['signed']);
+    // Close rule: technician + customer (a signed slot of that role counts).
+    final reportSigned = 2 - jobReportMissing(row, slots: slots).length;
+    final sigSigned = 2 - jobReportMissing(row).length + _n(sig['signed']);
+    const ok = Color(0xFF16A34A);
+    final badgeColor = reportSigned == 2 ? ok : (requireBoth ? const Color(0xFFD97706) : theme.colorScheme.onSurfaceVariant);
     final sigTotal = 2 + _n(sig['total']);
     final ownerName = () {
       if (owner.isNotEmpty) return owner;
@@ -167,8 +174,10 @@ class JobSummaryTab extends StatelessWidget {
             icon: NxI.penLine,
             label: tr('ลายเซ็น'),
             value: '$sigSigned/$sigTotal',
-            hint: reportSigned < 2 ? tr('ต้องมีลายเซ็น 2 รายการ') : null,
-            tone: sigTotal > sigSigned ? 'warning' : 'success',
+            hint: requireBoth && reportSigned < 2 ? tr('ต้องมีลายเซ็น 2 รายการ') : null,
+            tone: sigTotal <= sigSigned
+                ? 'success'
+                : ((requireBoth && reportSigned < 2) || _n(sig['total']) > _n(sig['signed']) ? 'warning' : 'neutral'),
             onTap: () => onGoTab('signatures'),
           ),
         ]),
@@ -229,10 +238,10 @@ class JobSummaryTab extends StatelessWidget {
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
               decoration: BoxDecoration(
-                color: (reportSigned == 2 ? const Color(0xFF16A34A) : const Color(0xFFD97706)).withValues(alpha: 0.14),
+                color: badgeColor.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(99),
               ),
-              child: Text('$reportSigned/2', style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w800, color: reportSigned == 2 ? const Color(0xFF16A34A) : const Color(0xFFD97706))),
+              child: Text('$reportSigned/2', key: const ValueKey('job-signatures-badge'), style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w800, color: badgeColor)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -691,9 +700,11 @@ Future<bool> runJobAction(
     case 'gen_activity':
       return showJobActivityGenSheet(context, jobId: id);
     case 'close':
-      // "ทุกใบงานจะต้องมีลายเซ็น": both report signatures before closing.
-      if (jobReportMissing(row).isNotEmpty) {
-        await showJobSignaturesRequired(context, jobId: id, row: row);
+      // close.require_both_signatures (business setting, default on): both
+      // report signatures — or signed staff / customer slots — before closing.
+      final missing = ctrl.closeSignaturesMissing(row);
+      if (missing.isNotEmpty) {
+        await showJobSignaturesRequired(context, jobId: id, row: row, missing: missing, openSignatures: () => goTab('signatures'));
         return true; // reload: a signature may have been added
       }
     case 'open_activities':

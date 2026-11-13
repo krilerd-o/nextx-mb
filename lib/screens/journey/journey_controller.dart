@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/journey_rules.dart' show jobReportMissing, jobRequireBothSignatures;
 import '../../services/api_client.dart';
 
 /// Extra data a Service Journey detail page needs besides the record itself.
@@ -80,6 +81,20 @@ class JourneyController extends ChangeNotifier {
     final v = links[key];
     return v is List ? [for (final x in v) if (x is Map) Map<String, dynamic>.from(x)] : const [];
   }
+
+  // ---- job settings helpers
+  /// `close.require_both_signatures` (default ON, like the server).
+  bool get requireBothSignatures => jobRequireBothSignatures(jobSettings);
+
+  /// The job's signature slots (`GET /jobs/:id/signatures`).
+  List<Map<String, dynamic>> get signatureSlots => [
+        for (final s in (signatures['slots'] as List? ?? const []))
+          if (s is Map) Map<String, dynamic>.from(s),
+      ];
+
+  /// Report signers the close still needs (empty when the setting is off).
+  List<String> closeSignaturesMissing(Map<String, dynamic> row) =>
+      requireBothSignatures ? jobReportMissing(row, slots: signatureSlots) : const [];
 
   // ---- quotation settings helpers
   Map<String, dynamic> get _qtConfig => qtSettings['config'] is Map ? Map<String, dynamic>.from(qtSettings['config']) : const {};

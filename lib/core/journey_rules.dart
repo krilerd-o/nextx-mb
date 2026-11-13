@@ -345,8 +345,39 @@ const kJobReportSigners = ['technician', 'customer'];
 
 bool jobReportSigned(Map<String, dynamic>? r, String role) => _norm(r?['${role}_signature']).isNotEmpty && _norm(r?['${role}_signature']) != 'null';
 
-/// Report signers still missing (`technician`, `customer`).
-List<String> jobReportMissing(Map<String, dynamic>? r) => [for (final k in kJobReportSigners) if (!jobReportSigned(r, k)) k];
+/// A signed signature slot (`aicrm_job_signature`) of [role]: like the server
+/// (`missingBothSignatures`), a slot of `signer_role` customer counts as the
+/// customer signature and any other signed slot (staff) as the technician's.
+bool jobSlotSigned(List<Map<String, dynamic>> slots, String role) => slots.any((s) {
+      final p = _norm(s['signature_path']);
+      if (p.isEmpty || p == 'null') return false;
+      final customer = _lower(s['signer_role']) == 'customer';
+      return role == 'customer' ? customer : !customer;
+    });
+
+/// Report signers still missing (`technician`, `customer`). With [slots]
+/// (the job's signature slots) a signed staff / customer slot also counts —
+/// the same rule the server checks before closing.
+List<String> jobReportMissing(Map<String, dynamic>? r, {List<Map<String, dynamic>> slots = const []}) =>
+    [for (final k in kJobReportSigners) if (!jobReportSigned(r, k) && !jobSlotSigned(slots, k)) k];
+
+/// Business setting `close.require_both_signatures` from `GET /api/settings/job`
+/// (`{config: {close: {...}}}`; a bare config also works). Default ON: only an
+/// explicit `false` turns it off.
+bool jobRequireBothSignatures(Map<String, dynamic>? settings) {
+  final s = settings ?? const <String, dynamic>{};
+  final cfg = s['config'] is Map ? _map(s['config']) : s;
+  return _map(cfg['close'])['require_both_signatures'] != false;
+}
+
+/// Server signature keys (`technician_signature` / `customer_signature`, from
+/// `close-preview.signatures.missing` or a 409 `JOB_SIGNATURES_REQUIRED`)
+/// → app roles (`technician` / `customer`).
+List<String> jobSignatureRolesFromServer(Object? missing) => [
+      if (missing is List)
+        for (final k in kJobReportSigners)
+          if (missing.any((m) => _norm(m) == '${k}_signature' || _norm(m) == k)) k,
+    ];
 
 /// Job priority as on the web (`picklistLabel(job_priority)` — the seeded
 /// values Urgent / High / Normal / Low); unknown values pass through.
@@ -399,9 +430,16 @@ String jobPickLabel(Object? v, {List<Map<String, dynamic>> options = const []}) 
   return L10n.isEn ? l[1] : l[0];
 }
 
-/// [requireReportSignatures]: the app's rule "ทุกใบงานจะต้องมีลายเซ็น" — both
-/// report signatures (ผู้ให้บริการ + ลูกค้า) before the job can be closed.
-NextAction jobNextAction(Map<String, dynamic>? r, Map<String, dynamic>? overview, {bool canEdit = true, bool requireReportSignatures = false}) {
+/// [requireReportSignatures]: the business setting `close.require_both_signatures`
+/// ([jobRequireBothSignatures]) — both report signatures (ผู้ให้บริการ + ลูกค้า)
+/// before the job can be closed; signed [slots] count as on the server.
+NextAction jobNextAction(
+  Map<String, dynamic>? r,
+  Map<String, dynamic>? overview, {
+  bool canEdit = true,
+  bool requireReportSignatures = false,
+  List<Map<String, dynamic>> slots = const [],
+}) {
   final status = canonicalJobStatus(r?['job_status']);
   final ov = overview ?? const {};
   final sig = _map(ov['signatures']);
@@ -425,7 +463,7 @@ NextAction jobNextAction(Map<String, dynamic>? r, Map<String, dynamic>? overview
   if (_int(acts['total']) == 0) return const NextAction('gen_activity', 'primary', 'gen_activity', ['wait']);
   if (_int(acts['open']) > 0) return const NextAction('work_activities', 'primary', 'open_activities', ['wait']);
   if (_int(sig['total']) > _int(sig['signed'])) return const NextAction('collect_signatures', 'warning', 'open_signatures');
-  if (requireReportSignatures && jobReportMissing(r).isNotEmpty) return const NextAction('report_signatures', 'warning', 'open_signatures');
+  if (requireReportSignatures && jobReportMissing(r, slots: slots).isNotEmpty) return const NextAction('report_signatures', 'warning', 'open_signatures');
   if (ov['can_close'] == true) return const NextAction('ready_to_close', 'success', 'close');
   return const NextAction('owner_closes', 'neutral', null);
 }
@@ -438,8 +476,14 @@ class ChecklistItem {
   final bool info;
 }
 
-List<ChecklistItem> jobCloseChecklist(Map<String, dynamic>? r, Map<String, dynamic>? overview, {bool requireReportSignatures = false}) {
+List<ChecklistItem> jobCloseChecklist(
+  Map<String, dynamic>? r,
+  Map<String, dynamic>? overview, {
+  bool requireReportSignatures = false,
+  List<Map<String, dynamic>> slots = const [],
+}) {
   final ov = overview ?? const {};
+  final reportMissing = jobReportMissing(r, slots: slots).length;
   final sig = _map(ov['signatures']);
   final acts = _map(ov['activities']);
   final total = _int(acts['total']), open = _int(acts['open']);
@@ -448,7 +492,7 @@ List<ChecklistItem> jobCloseChecklist(Map<String, dynamic>? r, Map<String, dynam
     ChecklistItem('owner', (ov['has_owner'] ?? (_int(r?['smownerid']) > 0)) == true),
     ChecklistItem('activities', open == 0, value: '${total - open}/$total'),
     if (requireReportSignatures)
-      ChecklistItem('report_signatures', jobReportMissing(r).isEmpty, value: '${2 - jobReportMissing(r).length}/2'),
+      ChecklistItem('report_signatures', reportMissing == 0, value: '${2 - reportMissing}/2'),
     if (!requireReportSignatures || st > 0) ChecklistItem('signatures', st == 0 || ss >= st, value: '$ss/$st'),
     ChecklistItem('parts', _int(ov['parts']) > 0, value: '${_int(ov['parts'])}', info: true),
   ];

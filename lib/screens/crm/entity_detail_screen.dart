@@ -45,6 +45,7 @@ import 'entity_share_sheet.dart';
 import '../fsm/inspection_lines.dart';
 import '../fsm/inspection_summary.dart';
 import '../journey/job_journey.dart';
+import '../journey/job_report_signatures.dart' show handleJobCloseSignatureError;
 import '../journey/journey_controller.dart';
 import '../journey/journey_widgets.dart';
 import '../../widgets/nx_scroll_tabs.dart';
@@ -570,6 +571,13 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _row = {..._row, key: before});
+      // Job closed by a plain status update: 409 JOB_SIGNATURES_REQUIRED → "เซ็นตอนนี้".
+      if (widget.module == 'job' &&
+          await handleJobCloseSignatureError(context, e, jobId: _id, row: {..._row, 'id': _id}, openSignatures: () => _goTab('signatures'))) {
+        if (mounted) await _reload();
+        return;
+      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));
     }
   }

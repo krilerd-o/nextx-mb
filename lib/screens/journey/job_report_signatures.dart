@@ -10,7 +10,7 @@ import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/journey_rules.dart';
 import '../../core/thai_time.dart';
-import '../../services/api_exceptions.dart' show formatApiError;
+import '../../services/api_exceptions.dart' show ApiEnvelopeException, formatApiError;
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
@@ -86,12 +86,43 @@ Future<bool> signJobReport(BuildContext context, {required String jobId, require
   }
 }
 
-/// "ทุกใบงานจะต้องมีลายเซ็น": before closing, both report signatures must be
-/// there. Shows what is missing with a "เซ็นตอนนี้" shortcut; true = signed
-/// everything from here (the caller may go on closing after a reload).
-Future<bool> showJobSignaturesRequired(BuildContext context, {required String jobId, required Map<String, dynamic> row}) async {
-  final missing = jobReportMissing(row);
-  if (missing.isEmpty) return true;
+/// 409 `JOB_SIGNATURES_REQUIRED` (server setting `close.require_both_signatures`)
+/// → the report signers still missing (`technician` / `customer`); null for any
+/// other error.
+List<String>? jobSignaturesRequiredMissing(Object e) {
+  if (e is! ApiEnvelopeException || e.errorCode != 'JOB_SIGNATURES_REQUIRED') return null;
+  final m = jobSignatureRolesFromServer(e.details?['missing']);
+  return m.isEmpty ? List<String>.of(kJobReportSigners) : m;
+}
+
+/// Friendly text for a close blocked by missing signatures (same wording as the web).
+String jobSignaturesRequiredText(List<String> missing) {
+  final th = [for (final r in missing) r == 'technician' ? 'ลายเซ็นช่าง/ผู้ให้บริการ' : 'ลายเซ็นลูกค้า'];
+  final en = [for (final r in missing) r == 'technician' ? 'technician signature' : 'customer signature'];
+  return L10n.isEn
+      ? 'Cannot close yet: both the technician and the customer must sign — missing ${en.join(' and ')}'
+      : 'ปิดงานไม่ได้: ต้องมีลายเซ็นทั้งช่างและลูกค้า — ยังขาด${th.join(' และ ')}';
+}
+
+const _kOpenSection = '__section';
+
+/// Close needs both report signatures (business setting
+/// `close.require_both_signatures`, default on; a signed staff / customer slot
+/// counts). Shows what is missing with a "เซ็นตอนนี้" shortcut per signer and,
+/// with [openSignatures], a button that scrolls to / opens the signature
+/// section. [missing] defaults to the row's report boxes; [message] replaces
+/// the explanation (e.g. after a 409 from the server). true = signed everything
+/// from here (the caller may go on closing after a reload).
+Future<bool> showJobSignaturesRequired(
+  BuildContext context, {
+  required String jobId,
+  required Map<String, dynamic> row,
+  List<String>? missing,
+  String? message,
+  VoidCallback? openSignatures,
+}) async {
+  final need = missing ?? jobReportMissing(row);
+  if (need.isEmpty) return true;
   final role = await showAppBottomSheet<String>(
     context: context,
     title: tr('ต้องมีลายเซ็นก่อนปิดงาน'),
@@ -104,27 +135,59 @@ Future<bool> showJobSignaturesRequired(BuildContext context, {required String jo
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(tr('ทุกใบงานต้องมีลายเซ็น 2 รายการ — ผู้ให้บริการ และลูกค้า'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+            Text(
+              message ?? tr('ทุกใบงานต้องมีลายเซ็น 2 รายการ — ผู้ให้บริการ และลูกค้า'),
+              key: const ValueKey('job-close-needs-signatures-text'),
+              style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+            ),
             const SizedBox(height: 12),
             for (final r in kJobReportSigners)
               ListTile(
                 key: ValueKey('job-close-sig-$r'),
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(missing.contains(r) ? NxI.warningCircle : NxI.checkCircle, color: missing.contains(r) ? const Color(0xFFD97706) : const Color(0xFF16A34A)),
+                leading: Icon(need.contains(r) ? NxI.warningCircle : NxI.checkCircle, color: need.contains(r) ? const Color(0xFFD97706) : const Color(0xFF16A34A)),
                 title: Text(tr(jobSignerTitle(r).th)),
-                subtitle: Text(tr(missing.contains(r) ? 'ยังไม่ได้เซ็น' : 'เซ็นแล้ว')),
-                trailing: missing.contains(r)
+                subtitle: Text(tr(need.contains(r) ? 'ยังไม่ได้เซ็น' : 'เซ็นแล้ว')),
+                trailing: need.contains(r)
                     ? FilledButton.tonalIcon(key: ValueKey('job-close-sign-$r'), onPressed: () => Navigator.pop(ctx, r), icon: const Icon(NxI.penLine, size: 16), label: Text(tr('เซ็นตอนนี้')))
                     : null,
               ),
+            if (openSignatures != null) ...[
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                key: const ValueKey('job-close-open-signatures'),
+                onPressed: () => Navigator.pop(ctx, _kOpenSection),
+                icon: const Icon(NxI.penLine, size: 18),
+                label: Text(tr('ไปที่ส่วนลายเซ็น')),
+              ),
+            ],
           ],
         );
       },
     ),
   );
   if (role == null || !context.mounted) return false;
+  if (role == _kOpenSection) {
+    openSignatures?.call();
+    return false;
+  }
   final ok = await signJobReport(context, jobId: jobId, row: row, role: role);
-  return ok && missing.length == 1;
+  return ok && need.length == 1;
+}
+
+/// A close failed with 409 `JOB_SIGNATURES_REQUIRED`: explain and offer
+/// "เซ็นตอนนี้" (see [showJobSignaturesRequired]). false = not that error.
+Future<bool> handleJobCloseSignatureError(
+  BuildContext context,
+  Object e, {
+  required String jobId,
+  required Map<String, dynamic> row,
+  VoidCallback? openSignatures,
+}) async {
+  final missing = jobSignaturesRequiredMissing(e);
+  if (missing == null || !context.mounted) return false;
+  await showJobSignaturesRequired(context, jobId: jobId, row: row, missing: missing, message: jobSignaturesRequiredText(missing), openSignatures: openSignatures);
+  return true;
 }
 
 /// The two report signature boxes on the job summary: "ผู้ให้บริการ"
