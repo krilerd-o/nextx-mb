@@ -17,12 +17,15 @@ import 'nx_mermaid_view.dart';
 /// a rounded box that scrolls sideways, code blocks with a language label +
 /// copy + fold, links handed to [onOpenLink], a blinking caret while streaming.
 class NxMarkdown extends StatelessWidget {
-  const NxMarkdown({super.key, required this.data, this.onOpenLink, this.streaming = false, this.selectable = true});
+  const NxMarkdown({super.key, required this.data, this.onOpenLink, this.streaming = false, this.selectable = true, this.linkStyle});
 
   final String data;
   final ValueChanged<String>? onOpenLink;
   final bool streaming;
   final bool selectable;
+
+  /// Style of links (e.g. notebook citation markers); default underlined primary.
+  final TextStyle? linkStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +42,7 @@ class NxMarkdown extends StatelessWidget {
       h2Padding: const EdgeInsets.only(top: 10, bottom: 4),
       h3Padding: const EdgeInsets.only(top: 8, bottom: 2),
       strong: const TextStyle(fontWeight: FontWeight.w700),
-      a: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, decoration: TextDecoration.underline, decorationColor: cs.primary.withValues(alpha: 0.4)),
+      a: linkStyle ?? TextStyle(color: cs.primary, fontWeight: FontWeight.w600, decoration: TextDecoration.underline, decorationColor: cs.primary.withValues(alpha: 0.4)),
       listBullet: base,
       listIndent: 22,
       blockSpacing: 10,

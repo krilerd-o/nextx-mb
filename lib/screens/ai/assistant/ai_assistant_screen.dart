@@ -1080,7 +1080,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             ),
           ),
         const SizedBox(height: 6),
-        // Agent and Notebook stay on the web (signed in automatically).
+        // Agent stays on the web (signed in automatically); Notebook is native.
         ListTile(
           dense: true,
           leading: Icon(NxI.robot, color: cs.primary),
@@ -1096,17 +1096,14 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
           },
         ),
         ListTile(
+          key: const ValueKey('ai-open-notebook'),
           dense: true,
           leading: Icon(NxI.bookOpen, color: cs.primary),
           title: Text(tr('Notebook')),
           subtitle: Text(tr('ถามจากแหล่งข้อมูลในสมุดของคุณ')),
           onTap: () {
             close();
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const WebSessionScreen(path: '/ai/notebook', title: 'AI Notebook', subtitle: 'ไอแซคเอไอ'),
-              ),
-            );
+            context.push(AppRoutes.notebook);
           },
         ),
         const Divider(),
@@ -1373,6 +1370,9 @@ String? aiInAppRoute(String href, {String? serverOrigin}) {
   }
   final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
   if (segs.length >= 3 && segs[0] == 'share' && segs[1] == 'ai') return AppRoutes.aiShared(segs[2]);
+  if (segs.length >= 2 && segs[0] == 'ai' && segs[1] == 'notebook' && (segs.length == 2 || segs[2] != 'public')) {
+    return segs.length == 2 ? AppRoutes.notebook : AppRoutes.notebookOf(segs[2]);
+  }
   if (segs.isEmpty || !_inAppPrefixes.contains(segs.first)) return null;
   final path = '/${segs.join('/')}${uri.hasQuery ? '?${uri.query}' : ''}';
   return notificationDeepLink(path);

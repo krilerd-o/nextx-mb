@@ -44,7 +44,12 @@ class AppRoutes {
   /// AI Assistant about one record (web context_module / context_id).
   static String aiAsk({required String module, required String id, String? title}) =>
       Uri(path: aiChat, queryParameters: {'ctx_module': module, 'ctx_id': id, if (title != null && title.isNotEmpty) 'ctx_title': title}).toString();
+  /// Legacy ISAAC embed path of the notebook menu; redirects to [notebook].
   static const String isaacNotebook = '/isaac';
+
+  /// Native ISAAC Notebook (NEXTX `/api/ai/notebooks`).
+  static const String notebook = '/notebook';
+  static String notebookOf(String id) => '/notebook/${Uri.encodeComponent(id)}';
   static const String aiMinuteAuto = '/ai-minute-auto';
   static const String isaacAgent = '/isaac-ai-agent';
   static const String isaacSocialWatch = '/isaac-social-watch';

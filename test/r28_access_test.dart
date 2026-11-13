@@ -26,7 +26,7 @@ void main() {
     expect(accessRedirectFor(_s, '/isaac'), isNull);
   });
 
-  test('plugin off: Notebook / Minute Auto links go home; Assistant stays', () async {
+  test('plugin off: Minute Auto goes home; Assistant and the native Notebook (NEXTX AI) stay', () async {
     await _load({
       'GET /api/ai/settings': {
         'settings': {'ai_chat': true},
@@ -35,7 +35,8 @@ void main() {
         'config': {'enabled': false},
       },
     });
-    expect(accessRedirectFor(_s, '/isaac'), AppRoutes.mainShell);
+    expect(accessRedirectFor(_s, '/isaac'), isNull);
+    expect(accessRedirectFor(_s, '/notebook/3'), isNull);
     expect(accessRedirectFor(_s, '/ai-minute-auto'), AppRoutes.mainShell);
     expect(accessRedirectFor(_s, '/ai'), isNull);
   });
@@ -50,6 +51,8 @@ void main() {
       },
     });
     expect(accessRedirectFor(_s, '/ai'), AppRoutes.mainShell);
+    expect(accessRedirectFor(_s, '/notebook'), AppRoutes.mainShell);
+    expect(isaacItemFor('/notebook/3')?.key, 'isaac-notebook');
     expect(isaacItemFor('/ai-minute-auto')?.key, 'ai-minute-auto');
     expect(isaacItemFor('/ai/shared/x')?.key, 'ai-assistant');
     expect(isaacItemFor('/workspace'), isNull);

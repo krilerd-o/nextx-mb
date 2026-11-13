@@ -65,6 +65,10 @@ List<String>? requiredMenusFor(String path) {
 /// The ISAAC AI menu item a path opens, or null.
 IsaacMenuItem? isaacItemFor(String path) {
   final p = Uri.tryParse(path)?.path ?? path;
+  // Native notebook (and the old ISAAC / web notebook links) before the /ai/* Assistant.
+  if (p == IsaacMenu.notebook.route || p.startsWith('${IsaacMenu.notebook.route}/') || p == '/isaac' || p == '/ai/notebook' || p.startsWith('/ai/notebook/')) {
+    return IsaacMenu.notebook;
+  }
   for (final item in IsaacMenu.all) {
     if (p == item.route || (item.route == '/ai' && p.startsWith('/ai/'))) return item;
   }
@@ -82,7 +86,12 @@ String? accessRedirectFor(SessionState session, String path) {
   final isaac = isaacItemFor(path);
   if (isaac != null) {
     final access = IsaacAccessCache.peek(session.businessId ?? '');
-    if (access != null && !access.visible(isaac, session)) return AppRoutes.mainShell;
+    // The notebook runs on NEXTX AI (`ai_chat`): the Assistant's "Notebook" entry
+    // opens it even when the ISAAC plugin menu item is hidden.
+    final allowed = access == null ||
+        access.visible(isaac, session) ||
+        (isaac.key == IsaacMenu.notebook.key && access.visible(IsaacMenu.assistant, session));
+    if (!allowed) return AppRoutes.mainShell;
   }
   final keys = requiredMenusFor(path);
   if (keys == null) return null;

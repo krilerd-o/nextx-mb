@@ -31,6 +31,8 @@ void main() {
     test('plugin on: all 5 in web order', () {
       final a = IsaacAccess.fromResponses(aiSettings: {'settings': {'ai_chat': true}}, pluginEffective: _plugin());
       expect(_keys(a), ['ai-assistant', 'isaac-notebook', 'ai-minute-auto', 'isaac-ai-agent', 'isaac-social-watch']);
+      // The notebook is native now (NEXTX /api/ai/notebooks), not the ISAAC embed.
+      expect(IsaacMenu.notebook.route, '/notebook');
     });
 
     test('plugin off: Assistant + coming-soon only (as on the QA server today)', () {

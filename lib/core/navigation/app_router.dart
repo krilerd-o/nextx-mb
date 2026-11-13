@@ -8,6 +8,8 @@ import '../../screens/ai/assistant/ai_assistant_screen.dart';
 import '../../screens/ai/assistant/ai_shared_chat_screen.dart';
 import '../../screens/ai/isaac_coming_soon_screen.dart';
 import '../../screens/ai/isaac_embed_screen.dart';
+import '../../screens/notebook/notebook_home_screen.dart';
+import '../../screens/notebook/notebook_screen.dart';
 import '../../screens/approvals/approvals_screen.dart';
 import '../../screens/commerce/commerce_home_screen.dart';
 import '../../screens/app_shell.dart';
@@ -300,7 +302,16 @@ GoRouter createAppRouter(AppConfig config) {
         builder: (_, state) => AiSharedChatScreen(token: state.pathParameters['token'] ?? ''),
       ),
       // ISAAC AI (same routes as the web menu group).
-      GoRoute(path: AppRoutes.isaacNotebook, builder: (_, _) => const IsaacEmbedScreen(menu: 'bot')),
+      // ISAAC Notebook is native now; old ISAAC / web links land on it.
+      GoRoute(path: AppRoutes.isaacNotebook, redirect: (_, _) => AppRoutes.notebook),
+      GoRoute(path: AppRoutes.notebook, builder: (_, _) => const NotebookHomeScreen()),
+      GoRoute(path: '/notebook/:id', builder: (_, state) => NotebookScreen(id: state.pathParameters['id'] ?? '')),
+      GoRoute(
+        path: '/notebook/:id/source/:sid',
+        builder: (_, state) => NotebookSourceDeepLink(id: state.pathParameters['id'] ?? '', sourceId: state.pathParameters['sid'] ?? ''),
+      ),
+      GoRoute(path: '/ai/notebook', redirect: (_, _) => AppRoutes.notebook),
+      GoRoute(path: '/ai/notebook/:id', redirect: (_, state) => AppRoutes.notebookOf(state.pathParameters['id'] ?? '')),
       GoRoute(path: AppRoutes.aiMinuteAuto, builder: (_, _) => const IsaacEmbedScreen(menu: 'minute_auto')),
       GoRoute(path: AppRoutes.isaacAgent, builder: (_, _) => const IsaacComingSoonScreen(product: 'agent')),
       GoRoute(path: AppRoutes.isaacSocialWatch, builder: (_, _) => const IsaacComingSoonScreen(product: 'social_watch')),

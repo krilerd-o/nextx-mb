@@ -8,12 +8,14 @@ class NxSearchField extends StatelessWidget {
     required this.controller,
     this.hint = 'ค้นหา',
     this.onSubmitted,
+    this.onChanged,
     this.suffix,
   });
 
   final TextEditingController controller;
   final String hint;
   final ValueChanged<String>? onSubmitted;
+  final ValueChanged<String>? onChanged;
   final Widget? suffix;
 
   @override
@@ -22,6 +24,7 @@ class NxSearchField extends StatelessWidget {
       controller: controller,
       textInputAction: TextInputAction.search,
       onSubmitted: onSubmitted,
+      onChanged: onChanged,
       decoration: InputDecoration(
         hintText: trn(hint),
         prefixIcon: const Icon(NxI.magnifyingGlass),

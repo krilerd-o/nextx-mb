@@ -11,6 +11,7 @@ import 'api_exceptions.dart';
 export 'api_exceptions.dart';
 
 part 'api_journey.dart';
+part 'notebook/notebook_api.dart';
 
 /// Default production CRM API. Override with `--dart-define=API_BASE_URL=` or Settings.
 const String kDefaultApiBaseUrl = String.fromEnvironment(
@@ -1761,10 +1762,10 @@ class ApiClient {
   }
 
   /// `{id, url, original_name, kind, extract_status?, extracted_text?, ...}`.
-  Future<Map<String, dynamic>> uploadAiAttachment(MultipartFile file, {String? conversationId}) async {
+  Future<Map<String, dynamic>> uploadAiAttachment(MultipartFile file, {String? conversationId, ProgressCallback? onSendProgress, CancelToken? cancel}) async {
     final form = FormData()..files.add(MapEntry('file', file));
     if (conversationId != null) form.fields.add(MapEntry('conversation_id', conversationId));
-    return _dataMap(await _send('POST', '/api/ai/attachments', data: form));
+    return _dataMap(await _send('POST', '/api/ai/attachments', data: form, onSendProgress: onSendProgress, cancel: cancel));
   }
 
   Future<Map<String, dynamic>> confirmAiTool(String proposalId, {String? boardId}) async =>

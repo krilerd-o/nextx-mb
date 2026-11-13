@@ -98,6 +98,13 @@ String _notificationDeepLink(String path, {String? linkId, String? extra}) {
   }
   if ((extra ?? '').toLowerCase() == 'comm_ai_call' && linkId != null && linkId.isNotEmpty) return AppRoutes.commAiCall(linkId);
 
+  // Notebook links from the web: /ai/notebook[/<id>] → the native notebook (public links stay on the web).
+  if (segs.length >= 2 && segs[0] == 'ai' && segs[1] == 'notebook') {
+    if (segs.length >= 3 && segs[2] != 'public') return AppRoutes.notebookOf(segs[2]);
+    if (segs.length == 2) return AppRoutes.notebook;
+  }
+  if (segs.isNotEmpty && segs.first == 'notebook') return uri!.path;
+
   if (segs.length >= 3 && segs.first == 'modules') {
     // The web's quotation / job form pages: /modules/<m>/new[?from=|?revise=], /modules/<m>/<id>/edit.
     final module = EntityModules.normalize(segs[1]);

@@ -15,7 +15,7 @@ class IsaacMenu {
   IsaacMenu._();
 
   static const assistant = IsaacMenuItem('ai-assistant', '/ai', 'AI Assistant', 'ผู้ช่วย AI ถามตอบงาน CRM');
-  static const notebook = IsaacMenuItem('isaac-notebook', '/isaac', 'AI Notebook', 'สมุดโน้ต AI จากไอแซค');
+  static const notebook = IsaacMenuItem('isaac-notebook', '/notebook', 'AI Notebook', 'สมุดโน้ต AI จากไอแซค');
   static const minuteAuto = IsaacMenuItem('ai-minute-auto', '/ai-minute-auto', 'AI Minute Auto', 'จดบันทึกการประชุมอัตโนมัติ');
   static const agent = IsaacMenuItem('isaac-ai-agent', '/isaac-ai-agent', 'AI Agent', 'เร็วๆ นี้');
   static const socialWatch = IsaacMenuItem('isaac-social-watch', '/isaac-social-watch', 'AI Social Watch', 'เร็วๆ นี้');
