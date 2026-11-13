@@ -57,7 +57,7 @@ Future<FakeNextxAdapter> _pump(WidgetTester tester, Map<String, Object?> replies
   });
   final config = AppConfig();
   await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 150)));
-  config.debugOverrideSession(const SessionState(accessToken: 't', userId: '2', businessId: '1', displayName: 'QA Me', menusLoaded: true, menuKeys: ['job', 'quotation', 'activity', 'pending-approvals']));
+  config.debugOverrideSession(const SessionState(accessToken: 't', userId: '2', businessId: '1', displayName: 'QA Me', menusLoaded: true, menuKeys: ['job', 'quotation', 'activity', 'pending-approvals', 'inspection']));
   config.apiClient.debugSetHttpAdapter(adapter);
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -150,7 +150,8 @@ void main() {
     expect(labels, isNot(contains('กิจกรรม')));
     expect(labels, isNot(contains('ลายเซ็น')));
     expect(labels.first, 'สรุป');
-    // All the sections are on the one summary page.
+    // All the sections are on the one summary page ("งานสนาม" needs the
+    // Workspace or Inspection menu — the harness user has Inspection).
     for (final k in ['next-accept', 'kpi-schedule', 'job-work-info', 'job-activities', 'journey-photo-camera', 'job-report-section', 'job-signatures-section', 'job-field-ops']) {
       expect(find.byKey(ValueKey(k)), findsOneWidget, reason: k);
     }

@@ -103,7 +103,13 @@ DocumentSource jobDocumentSource(Map<String, dynamic> row) {
       DocVariant(id: 'birt', label: tr('ตามเทมเพลต'), fetch: (api) => api.getJobBirtPdf(id), fallback: 'std'),
       DocVariant(id: 'std', label: tr('แบบสำรอง'), birt: false, hidden: true, suffix: '-standard', fetch: (api) => api.getJobStandardPdf(id)),
     ],
-    publicLink: (api) => api.jobPublicLink(id),
+    // Reuse the job's signing link: a POST makes a new token and the link
+    // the customer already has would stop working.
+    publicLink: (api) async {
+      final token = '${row['public_token'] ?? ''}'.trim();
+      if (token.isEmpty) return api.jobPublicLink(id);
+      return {'token': token, 'path': '/public/job/$token', 'pdf_path': '/api/public/field-service/jobs/public/$token/birt-pdf'};
+    },
   );
 }
 

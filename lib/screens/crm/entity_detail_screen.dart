@@ -175,7 +175,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   final Map<String, GlobalKey> _jobSections = {'ops': GlobalKey(), 'activities': GlobalKey(), 'signatures': GlobalKey()};
 
   void _scrollToSection(String id) {
-    final ctx = _jobSections[id]?.currentContext;
+    // No "งานสนาม" card (no Workspace / Inspection menu): นัดหมาย / ช่าง go to
+    // the activities, where the visit is created.
+    final ctx = _jobSections[id]?.currentContext ?? (id == 'ops' ? _jobSections['activities']?.currentContext : null);
     if (ctx == null || !mounted) return;
     Scrollable.ensureVisible(ctx, alignment: 0.06, duration: const Duration(milliseconds: 380), curve: Curves.easeOutCubic);
   }
@@ -1225,17 +1227,23 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
   }
 
   /// "งานสนาม" card of the job summary: PDF, schedule, matching technicians,
-  /// skills, parts, Workspace and the job's inspection.
-  Widget _jobOps(bool canEdit, SessionState session) {
+  /// skills, parts, Workspace and the job's inspection. "ส่งเข้า Workspace"
+  /// needs the Workspace menu, "ใบตรวจรับของงานนี้" the Inspection menu; with
+  /// neither the whole card is hidden (product owner's rule) — null.
+  Widget? _jobOps(bool canEdit, SessionState session) {
+    final workspace = MenuAccess.allow(session, MenuAccess.workspace);
+    final inspection = MenuAccess.allow(session, MenuAccess.inspection);
+    if (!workspace && !inspection) return null;
     return JobExtrasPanel(
       id: _id,
       row: {..._row, 'id': _id},
       canEdit: canEdit,
       sectioned: true,
+      workspace: workspace,
       onOpen: (module, id, {row}) => _openRecord(module, id),
       extra: [
-        if (canEdit) ...[const SizedBox(height: 12), Align(alignment: Alignment.centerLeft, child: JobWorkspaceButton(jobId: _id))],
-        if (MenuAccess.allow(session, MenuAccess.inspection)) ...[
+        if (canEdit && workspace) ...[const SizedBox(height: 12), Align(alignment: Alignment.centerLeft, child: JobWorkspaceButton(jobId: _id))],
+        if (inspection) ...[
           const SizedBox(height: 12),
           OutlinedButton.icon(
             key: const ValueKey('job-inspection-cta'),

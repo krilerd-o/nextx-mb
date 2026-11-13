@@ -15,13 +15,18 @@ import '../../widgets/nx_status_stepper.dart';
 import '../../core/entity_display.dart' show userDisplayName;
 import '../calendar/activity_outcome_notes.dart';
 import '../profile/my_signatures_screen.dart' show SignaturePadScreen;
+import 'job_activity_gen.dart';
 import 'job_report_signatures.dart';
+import 'job_sign_link.dart';
 import 'job_work_sections.dart';
 import 'journey_controller.dart';
 import 'journey_photos.dart';
 import '../docs/document_preview.dart';
 import 'journey_widgets.dart';
 import 'status_followups.dart';
+
+export 'job_activity_gen.dart' show showJobActivityGenSheet;
+export 'job_sign_link.dart' show showPublicLinkSheet, PublicLinkHooks;
 
 const _danger = Color(0xFFE11D48);
 
@@ -419,24 +424,12 @@ class _JobSignaturesTabState extends State<JobSignaturesTab> {
     }
   }
 
-  Future<void> _customerLink() async {
-    final api = context.read<AppConfig>().apiClient;
-    try {
-      final r = await api.jobPublicLink(widget.jobId);
-      if (!mounted) return;
-      await showPublicLinkSheet(context, api.absoluteUrl((r['path'] ?? '').toString()), pdf: r['pdf_path'] == null ? null : api.absoluteUrl(r['pdf_path'].toString()));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(journeyErrorText(e)))));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final api = context.read<AppConfig>().apiClient;
     final slots = _slots;
-    final ack = (widget.ctrl.overview['customer_ack_status'] ?? '').toString();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -499,192 +492,16 @@ class _JobSignaturesTabState extends State<JobSignaturesTab> {
           ),
           const SizedBox(height: 12),
         ],
-        if (widget.embedded) ...[
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-              child: Text(
-                '${tr('ลิงก์ให้ลูกค้าตอบรับ / เซ็นเอง')} · ${_ackLabel(ack)}',
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-              ),
-            ),
-            TextButton.icon(
-              key: const ValueKey('job-public-link'),
-              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-              onPressed: _customerLink,
-              icon: const Icon(NxI.link, size: 16),
-              label: Text(tr('สร้างลิงก์')),
-            ),
-          ]),
-        ] else ...[
-        DocumentCard(source: () => jobDocumentSource(widget.row)),
-        const SizedBox(height: 12),
-        JourneySection(
-          title: tr('ลิงก์ให้ลูกค้าตอบรับ / เซ็น'),
-          icon: NxI.link,
-          trailing: Chip(visualDensity: VisualDensity.compact, label: Text(_ackLabel(ack))),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(key: const ValueKey('job-public-link'), onPressed: _customerLink, icon: const Icon(NxI.link, size: 18), label: Text(tr('สร้างลิงก์ลูกค้า'))),
-          ),
-        ),
+        if (widget.embedded)
+          JobSignLinkCard(jobId: widget.jobId, row: widget.row, overview: widget.ctrl.overview, canEdit: widget.canEdit, onChanged: widget.onChanged)
+        else ...[
+          DocumentCard(source: () => jobDocumentSource(widget.row)),
+          const SizedBox(height: 12),
+          JobSignLinkCard(jobId: widget.jobId, row: widget.row, overview: widget.ctrl.overview, canEdit: widget.canEdit, onChanged: widget.onChanged, embedded: false),
         ],
       ],
     );
   }
-
-  String _ackLabel(String s) => switch (s) {
-        'signed' => tr('ลูกค้าเซ็นแล้ว'),
-        'accepted' => tr('ลูกค้าตอบรับแล้ว'),
-        'link_sent' || 'sent' => tr('ส่งลิงก์แล้ว'),
-        _ => tr('ยังไม่มีลิงก์'),
-      };
-}
-
-/// Link + copy / share for a customer page.
-Future<void> showPublicLinkSheet(BuildContext context, String url, {String? pdf}) {
-  return showAppBottomSheet<void>(
-    context: context,
-    title: tr('ลิงก์สำหรับลูกค้า'),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SelectableText(url, key: const ValueKey('public-link-url')),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-            child: FilledButton.icon(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: url));
-                Navigator.pop(context);
-                ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(tr('คัดลอกลิงก์แล้ว'))));
-              },
-              icon: const Icon(NxI.copySimple, size: 18),
-              label: Text(tr('คัดลอกลิงก์')),
-            ),
-          ),
-        ]),
-        if (pdf != null) ...[
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: pdf));
-              Navigator.pop(context);
-            },
-            icon: const Icon(NxI.filePdf, size: 18),
-            label: Text(tr('คัดลอกลิงก์ PDF')),
-          ),
-        ],
-      ],
-    ),
-  );
-}
-
-/// "สร้างกิจกรรม": from a template (server settings) or a quick single visit.
-Future<bool> showJobActivityGenSheet(BuildContext context, {required String jobId}) async {
-  final api = context.read<AppConfig>().apiClient;
-  List<Map<String, dynamic>> templates = const [];
-  try {
-    templates = await api.getJobActivityTemplates();
-  } catch (_) {}
-  if (!context.mounted) return false;
-  final subject = TextEditingController(text: tr('เข้าหน้างาน'));
-  var offset = 0;
-  var time = const TimeOfDay(hour: 9, minute: 0);
-  var busy = false;
-  final created = await showAppBottomSheet<bool>(
-    context: context,
-    title: tr('สร้างกิจกรรมของงาน'),
-    child: StatefulBuilder(builder: (ctx, setS) {
-      final theme = Theme.of(ctx);
-      Future<void> run(Map<String, dynamic> body) async {
-        setS(() => busy = true);
-        try {
-          final r = await api.generateJobActivities(jobId, body);
-          HapticFeedback.mediumImpact();
-          if (ctx.mounted) {
-            ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(SnackBar(content: Text(tr('สร้างกิจกรรม ${r['created'] ?? (r['activity_ids'] as List?)?.length ?? ''} รายการแล้ว'))));
-            Navigator.pop(ctx, true);
-          }
-        } catch (e) {
-          setS(() => busy = false);
-          if (ctx.mounted) ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(SnackBar(content: Text(tr(journeyErrorText(e)))));
-        }
-      }
-
-      String two(int n) => n.toString().padLeft(2, '0');
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (templates.isNotEmpty) ...[
-            Text(tr('จากเทมเพลต'), style: theme.textTheme.titleSmall),
-            const SizedBox(height: 6),
-            for (final t in templates)
-              ListTile(
-                key: ValueKey('act-template-${t['id']}'),
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(NxI.listChecks),
-                title: Text((t['name'] ?? '').toString()),
-                subtitle: Text(tr('${(t['items'] as List?)?.length ?? 0} กิจกรรม')),
-                trailing: const Icon(NxI.caretRight, size: 16),
-                onTap: busy ? null : () => run({'template_id': t['id']}),
-              ),
-            const Divider(height: 24),
-          ],
-          Text(tr('สร้างด่วน 1 กิจกรรม'), style: theme.textTheme.titleSmall),
-          const SizedBox(height: 6),
-          TextField(key: const ValueKey('quick-act-subject'), controller: subject, decoration: InputDecoration(labelText: tr('หัวข้อ'))),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final d in const [0, 1, 2, 7])
-                ChoiceChip(
-                  label: Text(tr(d == 0 ? 'วันนัด' : '+$d วัน')),
-                  selected: offset == d,
-                  onSelected: (_) => setS(() => offset = d),
-                ),
-              ActionChip(
-                avatar: const Icon(NxI.clock, size: 16),
-                label: Text('${two(time.hour)}:${two(time.minute)}'),
-                onPressed: () async {
-                  final t = await showTimePicker(context: ctx, initialTime: time);
-                  if (t != null) setS(() => time = t);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 50,
-            child: FilledButton(
-              key: const ValueKey('quick-act-create'),
-              onPressed: busy || subject.text.trim().isEmpty
-                  ? null
-                  : () => run({
-                        'items': [
-                          {
-                            'key': 'k1',
-                            'subject': subject.text.trim(),
-                            'activitytype': 'Visit',
-                            'offset_days': offset,
-                            'start_time': '${two(time.hour)}:${two(time.minute)}',
-                            'duration_min': 60,
-                            'owner_rule': 'job_owner',
-                          },
-                        ],
-                      }),
-              child: Text(tr('สร้างกิจกรรม')),
-            ),
-          ),
-        ],
-      );
-    }),
-  );
-  return created == true;
 }
 
 /// Run a job next-step / step action.
@@ -698,7 +515,9 @@ Future<bool> runJobAction(
   final id = '${row['id']}';
   switch (action) {
     case 'gen_activity':
-      return showJobActivityGenSheet(context, jobId: id);
+      final ok = await showJobActivityGenSheet(context, jobId: id, row: row);
+      if (ok) goTab('activities');
+      return ok;
     case 'close':
       // close.require_both_signatures (business setting, default on): both
       // report signatures — or signed staff / customer slots — before closing.

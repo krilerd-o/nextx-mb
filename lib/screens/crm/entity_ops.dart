@@ -128,8 +128,8 @@ class EntityOpsSection extends StatelessWidget {
         ],
         if (module == 'lead') LeadConvertBar(id: id, row: row, onOpen: onOpen),
         if (module == 'job' && !journey) ...[
-          JobExtrasPanel(id: id, row: row, canEdit: canEdit, onOpen: onOpen),
-          if (canEdit) ...[const SizedBox(height: 8), JobWorkspaceButton(jobId: id)],
+          JobExtrasPanel(id: id, row: row, canEdit: canEdit, onOpen: onOpen, workspace: MenuAccess.allow(session, MenuAccess.workspace)),
+          if (canEdit && MenuAccess.allow(session, MenuAccess.workspace)) ...[const SizedBox(height: 8), JobWorkspaceButton(jobId: id)],
         ],
         if (module == 'asset') ...[
           AssetGenerateJobsBar(id: id, onOpen: onOpen),
@@ -982,6 +982,7 @@ class JobExtrasPanel extends StatefulWidget {
     this.canEdit = true,
     this.sectioned = false,
     this.extra = const [],
+    this.workspace = true,
   });
 
   final String id;
@@ -994,6 +995,9 @@ class JobExtrasPanel extends StatefulWidget {
 
   /// More rows at the end of the card (Workspace, inspection…).
   final List<Widget> extra;
+
+  /// The user has the Workspace menu: load / show the job's board items.
+  final bool workspace;
 
   @override
   State<JobExtrasPanel> createState() => _JobExtrasPanelState();
@@ -1043,7 +1047,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
     }
       var workspace = <Map<String, dynamic>>[];
       try {
-        workspace = await api.getJobWorkspaceItems(widget.id);
+        if (widget.workspace) workspace = await api.getJobWorkspaceItems(widget.id);
       } catch (e, s) {
       ErrorReporting.report(e, s);
     }
@@ -1144,7 +1148,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
                 icon: const Icon(NxI.clock),
                 label: Text(tr('เช็คอิน')),
               ),
-            if (_workspace.isNotEmpty)
+            if (widget.workspace && _workspace.isNotEmpty)
               OutlinedButton.icon(
                 onPressed: () {
                   final item = _workspace.first;
@@ -1165,7 +1169,7 @@ class _JobExtrasPanelState extends State<JobExtrasPanel> {
                       setState(() => _busy = true);
                       try {
                         final data = await context.read<AppConfig>().apiClient.matchJobUsers(widget.id);
-                        if (mounted) setState(() => _matches = extractMapList(data));
+                        if (mounted) setState(() => _matches = extractMapList(data['candidates'] ?? data)); // {required, candidates}
                       } catch (e) {
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(formatApiError(e)))));

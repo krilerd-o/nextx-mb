@@ -65,6 +65,8 @@ dependencies:
   audioplayers: ^6.8.1
   flutter_image_compress: ^2.5.1
   printing: ^5.15.1
+  # QR of the customer signing link (pure Dart; already in the build through printing → pdf → barcode).
+  qr: ^3.0.2
 
 dev_dependencies:
   flutter_test:
