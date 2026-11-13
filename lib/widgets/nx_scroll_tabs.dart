@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -189,6 +191,11 @@ class NxStickyTabs extends StatefulWidget {
 class _NxStickyTabsState extends State<NxStickyTabs> {
   bool _show = false;
 
+  /// While the pinned copy is shown, re-check a few times a second: content above the real row
+  /// can grow or shrink (late loads, another tab) without any scroll event. A timer (not a
+  /// ticker) so no frames are forced while nothing changes.
+  Timer? _watch;
+
   @override
   void initState() {
     super.initState();
@@ -202,11 +209,27 @@ class _NxStickyTabsState extends State<NxStickyTabs> {
       old.controller.removeListener(_check);
       widget.controller.addListener(_check);
     }
+    // The page rebuilt (e.g. another tab was picked): the content above / below the real row
+    // can change size and the scroll offset can be clamped without a scroll event, so the
+    // pinned copy could stay visible while the real row is on screen. Re-check after layout.
+    _recheckAfterLayout();
+  }
+
+  bool _recheckQueued = false;
+  void _recheckAfterLayout() {
+    if (_recheckQueued) return;
+    _recheckQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _recheckQueued = false;
+      if (!mounted) return;
+      _check(); // re-measures whenever the real row is laid out; otherwise keeps the last pin point
+    });
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_check);
+    _watch?.cancel();
     super.dispose();
   }
 
@@ -233,6 +256,14 @@ class _NxStickyTabsState extends State<NxStickyTabs> {
     if (at == null) return;
     final show = offset > at;
     if (show != _show) setState(() => _show = show);
+    if (_show && _watch == null) {
+      _watch = Timer.periodic(const Duration(milliseconds: 300), (_) {
+        if (mounted) _check();
+      });
+    } else if (!_show && _watch != null) {
+      _watch!.cancel();
+      _watch = null;
+    }
   }
 
   @override
