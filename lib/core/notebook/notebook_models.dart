@@ -40,6 +40,7 @@ class Notebook {
     this.updatedAt,
     this.sources,
     this.notes,
+    this.chatSettings,
   });
 
   final String id;
@@ -60,6 +61,9 @@ class Notebook {
   List<NotebookSource>? sources;
   List<NotebookNote>? notes;
 
+  /// `chat_settings` (NEXTX notebook v5); null on older servers.
+  ChatSettings? chatSettings;
+
   bool get isBusiness => visibility == 'business';
 
   /// Sources shown on the card: the list when loaded, else the server count.
@@ -79,15 +83,76 @@ class Notebook {
         updatedAt: _str(m['updated_at'] ?? m['created_at']),
         sources: m['sources'] is List ? [for (final s in _maps(m['sources'])) NotebookSource.fromJson(s)] : null,
         notes: m['notes'] is List ? [for (final n in _maps(m['notes'])) NotebookNote.fromJson(n)] : null,
+        chatSettings: m['chat_settings'] is Map ? ChatSettings.fromJson(_map(m['chat_settings'])) : null,
       );
 
   /// Keeps loaded sources / notes when a PATCH returns only the notebook row.
   Notebook merge(Notebook fresh) {
     fresh.sources ??= sources;
     fresh.notes ??= notes;
+    fresh.chatSettings ??= chatSettings;
     return fresh;
   }
 }
+
+/// How ISAAC answers in this notebook's chat (`PATCH /notebooks/:id {chat_settings}`).
+class ChatSettings {
+  const ChatSettings({this.goal = 'default', this.customPrompt, this.persona, this.length = 'default'});
+
+  /// default | learning_guide | custom
+  final String goal;
+  final String? customPrompt;
+  final String? persona;
+
+  /// shorter | default | longer
+  final String length;
+
+  static const defaults = ChatSettings();
+  static const goals = ['default', 'learning_guide', 'custom'];
+  static const lengths = ['shorter', 'default', 'longer'];
+  static const customPromptMax = 4000;
+  static const personaMax = 500;
+
+  factory ChatSettings.fromJson(Map<String, dynamic> m) {
+    final g = '${m['goal'] ?? 'default'}';
+    final l = '${m['length'] ?? 'default'}';
+    return ChatSettings(
+      goal: goals.contains(g) ? g : 'default',
+      customPrompt: _str(m['custom_prompt']),
+      persona: _str(m['persona']),
+      length: lengths.contains(l) ? l : 'default',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'goal': goal,
+        'custom_prompt': (customPrompt ?? '').trim().isEmpty ? null : customPrompt!.trim(),
+        'persona': (persona ?? '').trim().isEmpty ? null : persona!.trim(),
+        'length': length,
+      };
+
+  /// Nothing changed from the defaults (no indicator in the chat).
+  bool get isDefault => goal == 'default' && length == 'default' && (persona ?? '').trim().isEmpty;
+
+  /// "ผู้ช่วยการเรียนรู้ · สั้นลง" (Thai; wrap each part with tr()).
+  List<String> get summaryParts => [
+        if (goal != 'default') chatGoalLabel(goal),
+        if ((persona ?? '').trim().isNotEmpty) 'บทบาทกำหนดเอง',
+        if (length != 'default') chatLengthLabel(length),
+      ];
+}
+
+String chatGoalLabel(String goal) => switch (goal) {
+      'learning_guide' => 'ผู้ช่วยการเรียนรู้',
+      'custom' => 'กำหนดเอง',
+      _ => 'ค่าเริ่มต้น',
+    };
+
+String chatLengthLabel(String length) => switch (length) {
+      'shorter' => 'สั้นลง',
+      'longer' => 'ยาวขึ้น',
+      _ => 'ปกติ',
+    };
 
 /// Library filters (ของฉัน / แชร์กับฉัน / ทั้งธุรกิจ).
 enum NotebookScope { all, mine, shared, business }
@@ -348,10 +413,15 @@ class NotebookNote {
       if (n > 0) return '$n ข้อ';
     }
     if (k == 'infographic') return 'อินโฟกราฟิก HTML';
-    if (k == 'mindmap') {
+    if (k == 'mindmap' || k == 'mindmap_json') {
+      final tree = k == 'mindmap_json' ? meta['mindmap'] : null;
+      final label = tree is Map && tree['root'] is Map ? _str((tree['root'] as Map)['label']) : null;
+      if (label != null) return label;
       final root = parseMindmap(content);
       if (root != null) return root.label;
     }
+    if (k == 'faq' && meta['faq'] is List && (meta['faq'] as List).isNotEmpty) return '${(meta['faq'] as List).length} คำถาม';
+    if (k == 'timeline' && meta['timeline'] is List && (meta['timeline'] as List).isNotEmpty) return '${(meta['timeline'] as List).length} เหตุการณ์';
     final plain = content
         .replaceAll(RegExp(r'```[\s\S]*?```'), ' ')
         .replaceAll(RegExp(r'<[^>]+>'), ' ')
@@ -384,14 +454,23 @@ class StudioKind {
   static const infographic = StudioKind('infographic', 'อินโฟกราฟิก', 'การ์ด ไทม์ไลน์ หรือสถิติ', LucideIcons300.chartPie, [Color(0xFFEC4899), Color(0xFFC026D3)]);
   static const note = StudioKind('note', 'โน้ต', 'โน้ตของคุณ', LucideIcons300.stickyNote, [Color(0xFF6366F1), Color(0xFF8B5CF6)]);
 
+  // Phase 3: native views from `meta` (markdown `content` as the fallback).
+  static const studyGuide = StudioKind('study_guide', 'คู่มือการเรียน', 'แบบทดสอบ เรียงความ คำศัพท์', LucideIcons300.graduationCap, [Color(0xFF14B8A6), Color(0xFF0891B2)]);
+  static const faq = StudioKind('faq', 'คำถามที่พบบ่อย', 'ถาม–ตอบจากแหล่งข้อมูล', LucideIcons300.messageCircleQuestion, [Color(0xFF0EA5E9), Color(0xFF6366F1)]);
+  static const briefing = StudioKind('briefing', 'สรุปสำหรับผู้บริหาร', 'ประเด็นหลักและคำพูดสำคัญ', LucideIcons300.briefcaseBusiness, [Color(0xFF334155), Color(0xFF4F46E5)]);
+  static const timeline = StudioKind('timeline', 'ไทม์ไลน์', 'ลำดับเหตุการณ์และบุคคล', LucideIcons300.calendarClock, [Color(0xFFF59E0B), Color(0xFFEA580C)]);
+  static const mindmapJson = StudioKind('mindmap_json', 'แผนผังความคิด', 'แตะเพื่อขยายทีละกิ่ง', LucideIcons300.network, [Color(0xFFF43F5E), Color(0xFFEC4899)]);
+
   /// Made by the server from a notebook recording (not in the studio grid).
   static const meetingSummary = StudioKind('meeting_summary', 'สรุปการประชุม', 'สรุปจากบันทึกเสียง', LucideIcons300.audioLines, [Color(0xFFF43F5E), Color(0xFFBE123C)]);
 
   /// Grid order (most useful first).
-  static const all = [audio, report, mindmap, flashcards, quiz, table, infographic, video, styleguide];
+  /// The interactive mind map (`mindmap_json`) replaces the Mermaid-only `mindmap` tile;
+  /// older `mindmap` notes still open with their own viewer.
+  static const all = [audio, studyGuide, briefing, faq, timeline, mindmapJson, report, flashcards, quiz, table, infographic, video, styleguide];
 
   static StudioKind? of(String id) {
-    for (final k in [...all, note, meetingSummary]) {
+    for (final k in [...all, mindmap, note, meetingSummary]) {
       if (k.id == id) return k;
     }
     return null;
@@ -607,8 +686,23 @@ MindNode? parseMindmap(String content) {
 
 // ----------------------------------------------------------------- citations
 
+/// One matched passage of a citation: the quote and its `start..end` offsets
+/// into the source `content` (null when the server could not place it).
+class NotebookPassage {
+  const NotebookPassage({required this.quote, this.chunkIndex, this.start, this.end});
+  final String quote;
+  final int? chunkIndex;
+  final int? start;
+  final int? end;
+
+  factory NotebookPassage.fromJson(Map<String, dynamic> m) =>
+      NotebookPassage(quote: '${m['quote'] ?? ''}'.trim(), chunkIndex: _int(m['chunk_index']), start: _int(m['start']), end: _int(m['end']));
+
+  bool get hasRange => start != null && end != null && end! > start! && start! >= 0;
+}
+
 class NotebookCitation {
-  const NotebookCitation({required this.n, this.sourceId, this.title = '', this.loc = '', this.quote, this.chunkIndex});
+  const NotebookCitation({required this.n, this.sourceId, this.title = '', this.loc = '', this.quote, this.chunkIndex, this.passages = const []});
   final int n;
   final String? sourceId;
   final String title;
@@ -617,6 +711,9 @@ class NotebookCitation {
   /// Exact passage (server ≥ notebook v2), shown in the citation sheet.
   final String? quote;
   final int? chunkIndex;
+
+  /// Passages behind `[n]` (server ≥ notebook v5); empty on older answers.
+  final List<NotebookPassage> passages;
 
   factory NotebookCitation.fromJson(Map<String, dynamic> m, int index) {
     final loc = '${m['loc'] ?? ''}';
@@ -628,6 +725,7 @@ class NotebookCitation {
       loc: loc,
       quote: _str(m['quote'] ?? m['snippet']),
       chunkIndex: _int(m['chunk_index']),
+      passages: [for (final p in _maps(m['passages'])) if ('${p['quote'] ?? ''}'.trim().isNotEmpty || _int(p['start']) != null) NotebookPassage.fromJson(p)],
     );
   }
 
@@ -673,6 +771,18 @@ int? citationFromHref(String href) => href.startsWith('nxcite:') ? int.tryParse(
   // First 40 characters as a fallback anchor.
   if (q.length > 40) return findQuote(content, q.substring(0, 40));
   return null;
+}
+
+/// Where to highlight a cited passage in [content]: the server offsets when they
+/// fit (and still match the quote), else a search for [quote], else null.
+({int start, int end})? passageRange(String content, {int? start, int? end, String? quote}) {
+  if (start != null && end != null && start >= 0 && end > start && end <= content.length) {
+    final q = (quote ?? '').trim();
+    String norm(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final slice = content.substring(start, end);
+    if (q.isEmpty || norm(slice) == norm(q) || norm(slice).contains(norm(q)) || norm(q).contains(norm(slice))) return (start: start, end: end);
+  }
+  return findQuote(content, quote);
 }
 
 // --------------------------------------------------------------------- guide

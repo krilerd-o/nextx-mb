@@ -15,6 +15,7 @@ import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_markdown.dart';
 import '../comm_ai/comm_ai_isaac.dart';
+import 'notebook_chat_settings.dart';
 import 'notebook_sources_pane.dart';
 import 'notebook_widgets.dart';
 
@@ -84,6 +85,22 @@ class NotebookChatPaneState extends State<NotebookChatPane> {
     setState(() => _guideOpen = false);
     c.send(text);
     _toBottom();
+  }
+
+  /// Puts [text] in the composer (e.g. "ถามในแชท" from a mind map node) without sending.
+  void draft(String text) {
+    if (text.trim().isEmpty) return;
+    HapticFeedback.selectionClick();
+    setState(() => _guideOpen = false);
+    _input.text = text;
+    _input.selection = TextSelection.collapsed(offset: text.length);
+    _focus.requestFocus();
+  }
+
+  Future<void> _settings() async {
+    HapticFeedback.selectionClick();
+    // Saved settings show in the indicator above the composer (no snackbar over the input).
+    await showNotebookChatSettingsSheet(context, c);
   }
 
   void _send() {
@@ -442,11 +459,42 @@ class NotebookChatPaneState extends State<NotebookChatPane> {
     final cs = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
     final canSend = _input.text.trim().isNotEmpty && !noSources;
+    final settings = c.chatSettings;
+    final custom = !settings.isDefault;
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
-        child: Container(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (custom)
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 6),
+              child: Material(
+                color: kIsaacIndigo.withValues(alpha: dark ? 0.22 : 0.1),
+                shape: const StadiumBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  key: const ValueKey('notebook-chat-settings-indicator'),
+                  onTap: c.canWrite ? _settings : null,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 5, 12, 5),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(LucideIcons300.slidersHorizontal, size: 14, color: dark ? const Color(0xFFA5B4FC) : kIsaacIndigo),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          [for (final p in settings.summaryParts) tr(p)].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700, color: dark ? const Color(0xFFC7D2FE) : const Color(0xFF4338CA)),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          Container(
           padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
           decoration: BoxDecoration(
             color: dark ? const Color(0xFF1C1D26) : Colors.white,
@@ -455,6 +503,18 @@ class NotebookChatPaneState extends State<NotebookChatPane> {
             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: dark ? 0.3 : 0.06), blurRadius: 16, offset: const Offset(0, 4))],
           ),
           child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            if (c.canWrite)
+              IconButton(
+                key: const ValueKey('notebook-chat-settings'),
+                tooltip: tr('ตั้งค่าแชท'),
+                onPressed: _settings,
+                icon: Badge(
+                  isLabelVisible: custom,
+                  smallSize: 8,
+                  backgroundColor: kIsaacIndigo,
+                  child: Icon(LucideIcons300.slidersHorizontal, color: custom ? kIsaacIndigo : null),
+                ),
+              ),
             IconButton(
               key: const ValueKey('notebook-mic'),
               tooltip: tr(_listening ? 'หยุดฟัง' : 'พูดคำถาม'),
@@ -502,7 +562,8 @@ class NotebookChatPaneState extends State<NotebookChatPane> {
                     ),
             ),
           ]),
-        ),
+          ),
+        ]),
       ),
     );
   }
@@ -528,8 +589,9 @@ class NotebookLinks {
   };
 }
 
-/// The passage behind `[n]`: source title, the quoted text (when the server
-/// sends it) or the source's opening lines, and "ไปที่แหล่ง".
+/// The passage behind `[n]`: source title, the quoted passage(s) (server
+/// `passages`, else `quote`) or the source's opening lines, and "ไปที่แหล่ง",
+/// which opens the source scrolled to the passage and highlighted.
 Future<void> showCitationSheet(BuildContext context, NotebookController c, NotebookCitation cite) {
   final source = c.sourceById(cite.sourceId) ?? (cite.sourceId == null && cite.n - 1 < c.enabledSources.length && cite.n > 0 ? c.enabledSources[cite.n - 1] : null);
   return showAppBottomSheet<void>(
@@ -538,9 +600,51 @@ Future<void> showCitationSheet(BuildContext context, NotebookController c, Noteb
     child: Builder(builder: (ctx) {
       final theme = Theme.of(ctx);
       final cs = theme.colorScheme;
+      final dark = theme.brightness == Brightness.dark;
       final st = source == null ? null : sourceKindStyle(source);
       final preview = source == null ? '' : (source.excerpt.trim().isNotEmpty ? source.excerpt.trim() : source.body.trim());
+      final passages = cite.passages.where((p) => p.quote.isNotEmpty).take(4).toList();
       final quote = cite.quote;
+      void go({NotebookPassage? p}) {
+        if (source == null) return;
+        HapticFeedback.selectionClick();
+        Navigator.pop(ctx);
+        final first = p ?? passages.firstOrNull;
+        if (first != null) {
+          showSourceViewer(context, c, source, highlight: first.quote, start: first.start, end: first.end);
+        } else {
+          showSourceViewer(context, c, source, highlight: quote);
+        }
+      }
+
+      Widget quoteCard(String text, {Key? key, VoidCallback? onTap, int maxLines = 10, String? label}) => Material(
+            key: key,
+            color: const Color(0xFFFDE68A).withValues(alpha: dark ? 0.16 : 0.4),
+            borderRadius: BorderRadius.circular(16),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+                decoration: const BoxDecoration(border: Border(left: BorderSide(color: Color(0xFFF59E0B), width: 3))),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Icon(LucideIcons300.quote, size: 18, color: const Color(0xFFB45309).withValues(alpha: 0.8)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: label == null
+                          ? const SizedBox.shrink()
+                          : Text(label, style: theme.textTheme.labelSmall?.copyWith(color: dark ? const Color(0xFFFCD34D) : const Color(0xFFB45309), fontWeight: FontWeight.w700)),
+                    ),
+                    if (onTap != null) Icon(NxI.arrowRight, size: 16, color: const Color(0xFFB45309).withValues(alpha: 0.8)),
+                  ]),
+                  const SizedBox(height: 6),
+                  Text(text, maxLines: maxLines, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium?.copyWith(height: 1.55)),
+                ]),
+              ),
+            ),
+          );
+
       return Column(key: const ValueKey('notebook-citation-sheet'), mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
           Container(
@@ -563,27 +667,29 @@ Future<void> showCitationSheet(BuildContext context, NotebookController c, Noteb
                 Row(children: [
                   Icon(st!.icon, size: 13, color: st.color),
                   const SizedBox(width: 4),
-                  Text(tr(notebookSourceKindLabel(source)), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                  Flexible(child: Text(tr(notebookSourceKindLabel(source)), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
+                  if (passages.length > 1) ...[
+                    const SizedBox(width: 6),
+                    Text('· ${tr('${passages.length} ข้อความ')}', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                  ],
                 ]),
             ]),
           ),
         ]),
         const SizedBox(height: 14),
-        if (quote != null)
-          Container(
-            key: const ValueKey('notebook-citation-quote'),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFDE68A).withValues(alpha: theme.brightness == Brightness.dark ? 0.16 : 0.4),
-              borderRadius: BorderRadius.circular(16),
-              border: const Border(left: BorderSide(color: Color(0xFFF59E0B), width: 3)),
+        if (passages.isNotEmpty) ...[
+          for (final (i, p) in passages.indexed) ...[
+            if (i > 0) const SizedBox(height: 8),
+            quoteCard(
+              p.quote,
+              key: ValueKey('notebook-citation-passage-$i'),
+              maxLines: passages.length > 1 ? 6 : 10,
+              label: passages.length > 1 ? tr('ข้อความที่ ${i + 1}') : tr('ข้อความที่อ้างอิง'),
+              onTap: source == null ? null : () => go(p: p),
             ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(LucideIcons300.quote, size: 18, color: const Color(0xFFB45309).withValues(alpha: 0.8)),
-              const SizedBox(height: 6),
-              Text(quote, maxLines: 10, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium?.copyWith(height: 1.55)),
-            ]),
-          )
+          ],
+        ] else if (quote != null)
+          quoteCard(quote, key: const ValueKey('notebook-citation-quote'), label: tr('ข้อความที่อ้างอิง'), onTap: source == null ? null : go)
         else if (preview.isNotEmpty)
           Container(
             padding: const EdgeInsets.all(14),
@@ -596,10 +702,7 @@ Future<void> showCitationSheet(BuildContext context, NotebookController c, Noteb
         if (source != null)
           FilledButton.icon(
             key: const ValueKey('notebook-citation-goto'),
-            onPressed: () {
-              Navigator.pop(ctx);
-              showSourceViewer(context, c, source, highlight: quote);
-            },
+            onPressed: go,
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48), backgroundColor: kIsaacIndigo),
             icon: const Icon(NxI.arrowRight, size: 18),
             label: Text(tr('ไปที่แหล่ง')),

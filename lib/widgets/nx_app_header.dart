@@ -399,7 +399,10 @@ class _PageBar extends StatelessWidget {
             ] else
               const SizedBox(width: 4),
             Expanded(
-              child: Column(
+              // Title + subtitle share a fixed 56 pt row: cap large text so they never spill out of it.
+              child: MediaQuery.withClampedTextScaling(
+                maxScaleFactor: header.subtitle == null && header.subtitleWidget == null ? 1.6 : 1.1,
+                child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -442,6 +445,7 @@ class _PageBar extends StatelessWidget {
                       ),
                     ),
                 ],
+              ),
               ),
             ),
             for (final a in chromeActions)

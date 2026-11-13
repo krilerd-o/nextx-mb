@@ -22,19 +22,25 @@ import '../../widgets/nx_mermaid_view.dart';
 import '../comm_ai/comm_ai_isaac.dart';
 import '../comm_ai/comm_ai_widgets.dart' show CommAiSummaryView;
 import '../docs/document_preview.dart';
+import '../../core/notebook/notebook_studio_meta.dart';
+import 'notebook_audio_overview.dart';
 import 'notebook_chat_pane.dart' show showCitationSheet;
+import 'notebook_mind_tree.dart';
 import 'notebook_recording_view.dart' show openRecordingSource;
+import 'notebook_studio_views.dart';
 import 'notebook_widgets.dart';
 
 /// Opens a note / studio output in its native viewer.
-Future<void> openNotebookNote(BuildContext context, NotebookController c, NotebookNote note, {ValueChanged<String>? onAsk}) =>
-    nxPush<void>(context, NotebookNoteScreen(c: c, note: note, onAsk: onAsk));
+/// [onAsk] sends a question in the chat; [onDraft] only puts it in the composer.
+Future<void> openNotebookNote(BuildContext context, NotebookController c, NotebookNote note, {ValueChanged<String>? onAsk, ValueChanged<String>? onDraft}) =>
+    nxPush<void>(context, NotebookNoteScreen(c: c, note: note, onAsk: onAsk, onDraft: onDraft));
 
 class NotebookNoteScreen extends StatefulWidget {
-  const NotebookNoteScreen({super.key, required this.c, required this.note, this.onAsk});
+  const NotebookNoteScreen({super.key, required this.c, required this.note, this.onAsk, this.onDraft});
   final NotebookController c;
   final NotebookNote note;
   final ValueChanged<String>? onAsk;
+  final ValueChanged<String>? onDraft;
 
   @override
   State<NotebookNoteScreen> createState() => _NotebookNoteScreenState();
@@ -113,13 +119,24 @@ class _NotebookNoteScreenState extends State<NotebookNoteScreen> {
           top: false,
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: NotebookNoteBody(c: widget.c, note: _n, onAsk: widget.onAsk == null
-                  ? null
-                  : (q) {
-                      Navigator.of(context).maybePop();
-                      widget.onAsk!(q);
-                    }),
+              // The mind map canvas uses the whole width (tablets); text stays readable at 760.
+              constraints: BoxConstraints(maxWidth: _n.kind == 'mindmap_json' && _n.meta['mindmap'] is Map ? double.infinity : 760),
+              child: NotebookNoteBody(
+                c: widget.c,
+                note: _n,
+                onAsk: widget.onAsk == null
+                    ? null
+                    : (q) {
+                        Navigator.of(context).maybePop();
+                        widget.onAsk!(q);
+                      },
+                onDraft: widget.onDraft == null
+                    ? null
+                    : (q) {
+                        Navigator.of(context).maybePop();
+                        widget.onDraft!(q);
+                      },
+              ),
             ),
           ),
         ),
@@ -130,15 +147,39 @@ class _NotebookNoteScreenState extends State<NotebookNoteScreen> {
 
 /// The note rendered by kind (used full-screen and in tests).
 class NotebookNoteBody extends StatelessWidget {
-  const NotebookNoteBody({super.key, required this.c, required this.note, this.onAsk});
+  const NotebookNoteBody({super.key, required this.c, required this.note, this.onAsk, this.onDraft});
   final NotebookController c;
   final NotebookNote note;
   final ValueChanged<String>? onAsk;
+
+  /// Puts a question in the chat composer (mind map "ถามในแชท", essay practice).
+  final ValueChanged<String>? onDraft;
 
   @override
   Widget build(BuildContext context) {
     final n = note;
     final pad = EdgeInsets.fromLTRB(16, 8, 16, 32 + MediaQuery.paddingOf(context).bottom);
+    // Phase 3 outputs: a native view from `meta`, else the markdown below.
+    switch (n.kind) {
+      case 'study_guide':
+        final g = StudyGuide.fromMeta(n.meta);
+        if (g != null) return StudyGuideView(c: c, note: n, guide: g, onDraft: onDraft);
+      case 'faq':
+        final items = faqFromMeta(n.meta);
+        if (items != null) return FaqView(c: c, note: n, items: items);
+      case 'briefing':
+        final b = Briefing.fromMeta(n.meta);
+        if (b != null) return BriefingView(c: c, note: n, briefing: b);
+      case 'timeline':
+        final t = Timeline.fromMeta(n.meta);
+        if (t != null) return TimelineView(c: c, note: n, timeline: t);
+      case 'mindmap_json':
+        final root = MindTreeNode.fromMeta(n.meta);
+        if (root != null) return MindTreeView(c: c, root: root, sources: studioSources(n.meta), onDraft: onDraft ?? onAsk);
+      case 'audio':
+        final o = AudioOverview.fromMeta(n.meta);
+        if (o != null) return AudioOverviewView(c: c, note: n, overview: o);
+    }
     switch (n.kind) {
       case 'flashcards':
         final cards = parseFlashcards(n.content);
@@ -195,7 +236,7 @@ class NotebookNoteBody extends StatelessWidget {
               trailing: const IsaacAvatar(mood: 'speaking', size: 34, ring: false, animate: false),
             ));
       children.add(const NotebookSectionLabel('สคริปต์'));
-    } else if (n.kind == 'mindmap') {
+    } else if (n.kind == 'mindmap' || n.kind == 'mindmap_json') {
       final root = parseMindmap(n.content);
       if (root != null) {
         children.add(MindmapView(root: root, onAsk: onAsk));
@@ -223,7 +264,9 @@ class NotebookNoteBody extends StatelessWidget {
       return ListView(padding: pad, children: children);
     }
     if (n.downloadUrl != null && n.kind != 'audio') children.add(NotebookDownloadCard(c: c, note: n));
-    final cites = NotebookCitation.list([for (final x in (n.meta['citations'] is List ? n.meta['citations'] as List : const [])) if (x is Map) Map<String, dynamic>.from(x)]);
+    final saved = NotebookCitation.list([for (final x in (n.meta['citations'] is List ? n.meta['citations'] as List : const [])) if (x is Map) Map<String, dynamic>.from(x)]);
+    // Studio outputs number their sources in `meta.sources` (`[n]` in the markdown).
+    final cites = saved.isNotEmpty ? saved : studioCitations(n.meta);
     final question = '${n.meta['question'] ?? ''}'.trim();
     if (question.isNotEmpty) {
       children.add(Padding(
