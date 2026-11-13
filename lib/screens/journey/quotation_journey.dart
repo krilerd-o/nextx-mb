@@ -6,6 +6,7 @@ import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
 import '../../core/journey_rules.dart';
+import '../../core/status_labels.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
@@ -233,7 +234,7 @@ class QuotationSummaryTab extends StatelessWidget {
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(NxI.wrench),
                     title: Text((j['title'] ?? '').toString()),
-                    subtitle: Text((j['status'] ?? '').toString()),
+                    subtitle: Text(statusValueLabel(j['status'], module: 'job')),
                     trailing: const Icon(NxI.caretRight, size: 16),
                     onTap: () => onOpen('job', '${j['id']}'),
                   ),
@@ -270,7 +271,7 @@ class QuotationSummaryTab extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(NxI.calendarCheck),
                       title: Text((a['title'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text([a['subtitle'], a['status']].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
+                      subtitle: Text([a['subtitle'], statusValueLabel(a['status'], module: 'activity')].where((x) => x != null && '$x'.isNotEmpty).join(' · ')),
                       trailing: const Icon(NxI.caretRight, size: 16),
                       onTap: () => onOpen('activity', '${a['id']}'),
                     ),

@@ -34,6 +34,7 @@ import '../../core/recent_records.dart';
 import '../../core/detail_fields_pref.dart';
 import '../../core/journey_rules.dart';
 import '../../core/service_journey.dart';
+import '../../core/status_labels.dart';
 import '../journey/case_flows.dart';
 import '../docs/document_preview.dart';
 import '../docs/document_tab.dart';
@@ -392,6 +393,14 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     return value;
   }
 
+  /// History field label from the module's field metadata ('' when unknown).
+  String _historyFieldLabel(String field) {
+    for (final f in _fields) {
+      if (fieldName(f) == field) return fieldLabel(f);
+    }
+    return '';
+  }
+
   /// Record names for ids in the history (`1591 → 1592` becomes account names).
   final Map<String, String> _refNames = {};
 
@@ -726,7 +735,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ],
-                if (status != null && statusOptions.isEmpty && !_journey) ...[const SizedBox(height: 10), Chip(label: Text(tr(status)), visualDensity: VisualDensity.compact)],
+                if (status != null && statusOptions.isEmpty && !_journey) ...[const SizedBox(height: 10), Chip(label: Text(statusValueLabel(status, module: widget.module)), visualDensity: VisualDensity.compact)],
                 const SizedBox(height: 12),
                 EntityQuickActions(row: _row, onDuplicate: canEdit ? _duplicate : null),
                 if (canConvert) ...[
@@ -838,7 +847,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                   focusCommentId: widget.focusCommentId,
                 ),
                 'files' => EntityFilesPanel(comments: _comments, onAdd: _quickAttach),
-                'history' => EntityHistoryPanel(events: _timeline, loading: _timelineLoading, valueLabel: _valueLabel),
+                'history' => EntityHistoryPanel(events: _timeline, loading: _timelineLoading, valueLabel: _valueLabel, fieldLabel: _historyFieldLabel, module: widget.module),
                 'activities' => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

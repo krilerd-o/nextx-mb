@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/history_events.dart';
 import '../../core/html_display.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
@@ -86,7 +88,7 @@ class WsLookups {
     case 'assignee_change':
       return (icon: NxI.user, text: tr('เปลี่ยนผู้รับผิดชอบ'), from: l.user(oldV), to: l.user(newV));
     case 'comment':
-      return (icon: NxI.chatCircle, text: tr('คอมเม้นท์'), from: null, to: val(newV));
+      return (icon: NxI.chatCircle, text: historyText('เพิ่มคอมเมนต์'), from: null, to: val(newV));
     case 'worklog':
       return (icon: NxI.clock, text: tr('ลงเวลา ${newV ?? ''}').trim(), from: null, to: null);
     case 'worklog_update':
@@ -98,8 +100,21 @@ class WsLookups {
     case 'field_change':
       if (field == 'description') return (icon: NxI.pencilSimple, text: tr('แก้ไขคำอธิบาย'), from: null, to: null);
       return (icon: NxI.pencilSimple, text: tr('แก้ไข ${wsFieldLabel(field)}'), from: val(oldV) ?? tr('ว่าง'), to: val(newV) ?? tr('ว่าง'));
+    // Jira import: summary / description edits.
+    case 'edit':
+      return (icon: NxI.pencilSimple, text: tr('แก้ไข ${wsFieldLabel(field)}'), from: null, to: null);
+    case 'delete' || 'deleted':
+      return (icon: NxI.trash, text: tr('ลบรายการ'), from: null, to: null);
+    // workspaceSoftDelete: new_value = the item's title.
+    case 'trash_delete':
+      return (icon: NxI.trash, text: historyText('ย้ายไปถังขยะ'), from: null, to: val(newV));
+    case 'trash_restore':
+      return (icon: NxI.arrowCounterClockwise, text: historyText('กู้คืนจากถังขยะ'), from: null, to: val(newV));
   }
-  return (icon: NxI.info, text: action.replaceAll('_', ' '), from: val(oldV), to: val(newV));
+  // Unknown action: a readable title, never the raw key.
+  final t = historyActionTitle(action);
+  if (!t.known && kDebugMode) debugPrint('[history] unknown workspace action "$action"');
+  return (icon: t.kind == HistoryKind.other ? NxI.info : kHistoryKindStyle[t.kind]!.$1, text: t.title, from: val(oldV), to: val(newV));
 }
 
 /// Activity area under the task: comments / time logs / change history.

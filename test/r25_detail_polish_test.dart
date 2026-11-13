@@ -19,7 +19,7 @@ void main() {
     ));
     expect(find.text('[QA] related'), findsOneWidget);
     expect(find.text('C26110800002'), findsOneWidget);
-    expect(find.text('Active'), findsOneWidget);
+    expect(find.text('มีผล'), findsOneWidget); // "Active" in Thai
   });
 
   testWidgets('stepper: passed stages get a green check, later ones do not', (tester) async {
