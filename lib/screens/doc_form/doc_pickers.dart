@@ -314,6 +314,81 @@ class _Badge extends StatelessWidget {
   }
 }
 
+// ───────────────────────── the same chrome for other forms' pickers (job)
+
+/// Page frame of a picker (job_pickers.dart uses the quotation's look).
+class DocPickerFrame extends StatelessWidget {
+  const DocPickerFrame({super.key, required this.title, required this.search, required this.body, this.filters, this.bottom, this.actions, this.pageKey});
+  final String title;
+  final Widget search;
+  final Widget? filters;
+  final Widget body;
+  final Widget? bottom;
+  final List<Widget>? actions;
+  final Key? pageKey;
+
+  @override
+  Widget build(BuildContext context) =>
+      _PickerFrame(title: title, search: search, body: body, filters: filters, bottom: bottom, actions: actions, pageKey: pageKey);
+}
+
+/// Search box of a picker.
+class DocPickerSearchBox extends StatelessWidget {
+  const DocPickerSearchBox({super.key, required this.controller, required this.hint, required this.fieldKey, this.loading = false, this.autofocus = true});
+  final TextEditingController controller;
+  final String hint;
+  final Key fieldKey;
+  final bool loading;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) => _SearchBox(controller: controller, hint: hint, fieldKey: fieldKey, loading: loading, autofocus: autofocus);
+}
+
+/// Horizontal filter chips of a picker.
+class DocPickerChips extends StatelessWidget {
+  const DocPickerChips({super.key, required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => _ChipRow(children: children);
+}
+
+Widget docPickerFilterChip(BuildContext context, {required Key key, required String label, required bool selected, required VoidCallback onTap, IconData? icon}) =>
+    _filterChip(context, key: key, label: label, selected: selected, onTap: onTap, icon: icon);
+
+/// Empty / error state of a picker.
+class DocPickerState extends StatelessWidget {
+  const DocPickerState({super.key, required this.icon, required this.title, this.text, this.action});
+  final IconData icon;
+  final String title;
+  final String? text;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => _StateView(icon: icon, title: title, text: text, action: action);
+}
+
+/// Section label of a picker list.
+class DocPickerSection extends StatelessWidget {
+  const DocPickerSection(this.text, {super.key, this.trailing});
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => _SectionLabel(text, trailing: trailing);
+}
+
+/// Small coloured badge of a picker row.
+class DocPickerBadge extends StatelessWidget {
+  const DocPickerBadge({super.key, required this.text, required this.color});
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => _Badge(text: text, color: color);
+}
+
 /// Debounced text → [onSearch] (300 ms), skipping repeats.
 mixin _Debounced<T extends StatefulWidget> on State<T> {
   final query = TextEditingController();
@@ -565,15 +640,18 @@ class _CustomerPickerPageState extends State<CustomerPickerPage> with _Debounced
 
 /// Contact of the chosen account (search inside them, or all contacts), with
 /// "ไม่ระบุผู้ติดต่อ". Returns [PickedRecord] (`none` = clear).
-Future<PickedRecord?> showContactPicker(BuildContext context, {required ApiClient api, String? accountId, String? accountName, String? selectedId}) =>
-    showDocPicker<PickedRecord>(context, (_) => ContactPickerPage(api: api, accountId: accountId, accountName: accountName, selectedId: selectedId));
+Future<PickedRecord?> showContactPicker(BuildContext context, {required ApiClient api, String? accountId, String? accountName, String? selectedId, String? noneSubtitle}) =>
+    showDocPicker<PickedRecord>(context, (_) => ContactPickerPage(api: api, accountId: accountId, accountName: accountName, selectedId: selectedId, noneSubtitle: noneSubtitle));
 
 class ContactPickerPage extends StatefulWidget {
-  const ContactPickerPage({super.key, required this.api, this.accountId, this.accountName, this.selectedId});
+  const ContactPickerPage({super.key, required this.api, this.accountId, this.accountName, this.selectedId, this.noneSubtitle});
   final ApiClient api;
   final String? accountId;
   final String? accountName;
   final String? selectedId;
+
+  /// Second line of "ไม่ระบุผู้ติดต่อ" (the job form: no named person on site).
+  final String? noneSubtitle;
 
   @override
   State<ContactPickerPage> createState() => _ContactPickerPageState();
@@ -677,7 +755,7 @@ class _ContactPickerPageState extends State<ContactPickerPage> with _Debounced<C
           module: 'contact',
           showBadge: false,
           title: tr('ไม่ระบุผู้ติดต่อ'),
-          subtitle: tr('ส่งถึงลูกค้าโดยไม่ระบุชื่อคน'),
+          subtitle: tr(widget.noneSubtitle ?? 'ส่งถึงลูกค้าโดยไม่ระบุชื่อคน'),
           selected: widget.selectedId == null,
           trailing: widget.selectedId == null ? Icon(NxI.check, color: cs.primary, size: 20) : null,
           onTap: () => Navigator.of(context).pop(const PickedRecord('none', {})),

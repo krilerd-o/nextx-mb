@@ -9,34 +9,43 @@ import 'package:provider/provider.dart';
 import '../../core/app_config.dart';
 import '../../core/doc_form/doc_form_draft.dart';
 import '../../core/doc_form/doc_form_rules.dart';
+import '../../core/doc_form/doc_pick_rules.dart' show quotationTemplateLabel;
+import '../../core/doc_form/job_form_rules.dart';
 import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
 import '../../services/geo_address.dart';
+import '../../widgets/fields/field_format.dart' show isTruthyFieldValue;
 import '../../widgets/fields/field_ui_type.dart';
 import '../../widgets/fields/field_validate.dart';
 import '../../widgets/fields/nx_entity_form.dart';
-import '../../widgets/fields/nx_entity_picker_sheet.dart';
 import '../../widgets/fields/nx_form_field.dart';
-import '../../widgets/fields/nx_pick_option.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_map_pin_picker.dart';
 import '../crm/entity_detail_parts.dart' show pickAttachments;
 import '../docs/document_tab.dart';
 import 'barcode_scan_sheet.dart';
 import 'doc_form_shell.dart';
+import 'doc_pickers.dart';
+import 'job_form_parts.dart';
+import 'job_pickers.dart';
 
 const _steps = [
   DocStepInfo('งานอะไร', NxI.wrench),
-  DocStepInfo('ลูกค้าและสถานที่', NxI.mapPin),
+  // A zero-width space marks where a narrow phone may wrap the title.
+  DocStepInfo('ลูกค้าและ\u200Bสถาน\u2060ที่', NxI.mapPin),
   DocStepInfo('เมื่อไร / ใคร', NxI.calendarClock),
-  DocStepInfo('รายละเอียดและตรวจสร้าง', NxI.checkCircle),
+  DocStepInfo('รายละเอียด\u200Bและตรวจ', NxI.checkCircle),
 ];
 
+const _slate = Color(0xFF64748B);
+
 /// Job (ใบสั่งงาน) create / edit / duplicate in 4 steps: งานอะไร → ลูกค้าและ
-/// สถานที่ → เมื่อไร / ใคร → รายละเอียดและตรวจสร้าง. Saves like the web
-/// (`POST /api/entity/job` · `PUT /api/entity/job/:id`); the status always
+/// สถานที่ → เมื่อไร / ใคร → รายละเอียดและตรวจ. Every lookup (customer,
+/// contact, case, contract, site, asset, technician, job type, template) opens
+/// its own search page — nothing is listed inside the form. Saves like the
+/// web (`POST /api/entity/job` · `PUT /api/entity/job/:id`); the status always
 /// starts at "Open" on the server and actual start / end come from check-in.
 class JobStepForm extends StatefulWidget {
   const JobStepForm({super.key, this.mode = DocFormMode.create, this.recordId, this.initialValues, this.parent, this.embedded = false, this.onFinished, this.initialStep});
@@ -84,9 +93,24 @@ class JobStepFormState extends State<JobStepForm> {
   List<Map<String, dynamic>> _accountContacts = const [];
   List<Map<String, dynamic>> _activityTemplates = const [];
   List<Map<String, dynamic>> _users = const [];
-  List<Map<String, dynamic>> _matches = const [];
-  bool _matching = false;
-  bool _showLinks = false;
+
+  /// Rows of the linked case / contract (for their cards).
+  final Map<String, Map<String, dynamic>> _links = {};
+
+  /// The picked account (its addresses for the site picker).
+  Map<String, dynamic>? _account;
+
+  /// What linking a case / contract filled in.
+  String? _linkNote;
+
+  // Folded parts.
+  bool _moreOpen = false;
+  bool _contactOpen = false;
+  bool _manualCustomer = false;
+  bool _siteEdit = false;
+  bool _customEnd = false;
+  bool _docOpen = false;
+  bool _reportOpen = false;
 
   // Created with the job (not columns of the job).
   bool _appointment = false;
@@ -97,6 +121,7 @@ class JobStepFormState extends State<JobStepForm> {
 
   ApiClient get _api => context.read<AppConfig>().apiClient;
   DocFormMode get _mode => widget.mode;
+  bool get _en => L10n.isEn;
 
   @override
   void initState() {
@@ -156,7 +181,7 @@ class JobStepFormState extends State<JobStepForm> {
             _lockReason = 'ใบสั่งงานนี้ปิด / ยกเลิกแล้ว — แก้ไขไม่ได้ ทำซ้ำเป็นใบใหม่แทน';
           }
         case DocFormMode.duplicate:
-          values = jobDuplicateValues(row, ctx: ctx);
+          values = jobDuplicateValues(row, ctx: ctx, userId: session.userId);
           if (normLayout(row['template_key']) != values['template_key'] || '${row['job_template_id'] ?? ''}' != '${values['job_template_id'] ?? ''}' && '${row['job_template_id'] ?? ''}'.isNotEmpty) {
             _templateNotice = 'รูปแบบ / เทมเพลตเอกสารของใบต้นทางปิดใช้แล้ว — ใช้ค่าเริ่มต้นแทน';
           }
@@ -195,6 +220,7 @@ class JobStepFormState extends State<JobStepForm> {
       _parentModule = parent?.module ?? (_mode == DocFormMode.create ? jobParentOf(values) : null);
       if (parent != null) {
         _parentLabel = entityTitle(parent.row, module: parent.module);
+        if (parent.module != 'quotation') _links[parent.module] = parent.row;
       } else if (_parentModule != null) {
         _parentLabel = '#${values[_parentKey(_parentModule!)] ?? ''}';
       }
@@ -210,14 +236,27 @@ class JobStepFormState extends State<JobStepForm> {
         _maxStep = _mode == DocFormMode.create ? _step : _steps.length - 1;
         _loading = false;
       });
+      // Cards of the linked case / contract (edit / copy / prefilled link).
+      for (final (key, module) in const [('related_case_id', 'case'), ('related_contract_id', 'service_contract')]) {
+        final id = '${unwrapFieldValue(values[key]) ?? ''}';
+        if (id.isEmpty || id == 'null' || _links.containsKey(module)) continue;
+        api.getEntity(module, id).then((r) {
+          if (mounted && r.isNotEmpty) setState(() => _links[module] = {'id': id, ...r});
+        }).catchError((_) {});
+      }
       final acc = '${unwrapFieldValue(values['related_account_id']) ?? ''}';
       if (acc.isNotEmpty && acc != 'null') {
         _loadAccountContacts(acc);
         if (_mode == DocFormMode.create) {
           // Pre-filled link (case / contract / account page): fill the customer like a pick.
           await _pickAccount({'id': acc});
-        } else if (values['related_account_id'] is! Map && !isBlankValue(values['customer_name'])) {
-          _values['related_account_id'] = {'id': acc, 'label': '${values['customer_name']}'};
+        } else {
+          if (values['related_account_id'] is! Map && !isBlankValue(values['customer_name'])) {
+            _values['related_account_id'] = {'id': acc, 'label': '${values['customer_name']}'};
+          }
+          api.getEntity('account', acc).then((a) {
+            if (mounted && a.isNotEmpty) setState(() => _account = {'id': acc, ...a});
+          }).catchError((_) {});
         }
       }
       final con = '${unwrapFieldValue(values['related_contact_id']) ?? ''}';
@@ -227,6 +266,14 @@ class JobStepFormState extends State<JobStepForm> {
         } else if (_values['related_contact_id'] is! Map && !isBlankValue(values['customer_contact_name'])) {
           _values['related_contact_id'] = {'id': con, 'label': '${values['customer_contact_name']}'};
         }
+      }
+      final asset = '${unwrapFieldValue(values['related_asset_id']) ?? ''}';
+      if (asset.isNotEmpty && asset != 'null' && values['related_asset_id'] is! Map) {
+        api.getEntity('asset', asset).then((a) {
+          if (mounted && a.isNotEmpty && unwrapFieldValue(_values['related_asset_id'])?.toString() == asset) {
+            setState(() => _values['related_asset_id'] = {'id': asset, 'label': entityTitle(a, module: 'asset')});
+          }
+        }).catchError((_) {});
       }
       if (mounted) setState(() {});
       _baseline = _snapshot();
@@ -249,15 +296,16 @@ class JobStepFormState extends State<JobStepForm> {
       };
 
   void _userLabels(Map<String, dynamic> v, String? me, String? myName) {
-    for (final k in const ['smownerid', 'engineer_user_id']) {
+    for (final k in const ['smownerid', 'engineer_user_id', 'salesperson_user_id']) {
       final o = v[k];
       if (o == null || o is Map || '$o'.isEmpty) continue;
       String? label;
       for (final u in _users) {
-        if ('${u['id'] ?? u['user_id']}' == '$o') label = '${u['display_name'] ?? u['name'] ?? u['label'] ?? ''}';
+        if ('${u['id'] ?? u['user_id']}' == '$o') label = jobUserName(u);
       }
       if ((label == null || label.isEmpty) && '$o' == me) label = myName;
       if ((label == null || label.isEmpty) && k == 'engineer_user_id') label = '${v['engineer_name'] ?? ''}';
+      if ((label == null || label.isEmpty) && k == 'salesperson_user_id') label = '${v['salesperson_name'] ?? ''}';
       if (label != null && label.isNotEmpty) v[k] = {'id': '$o', 'label': label};
     }
   }
@@ -323,12 +371,6 @@ class JobStepFormState extends State<JobStepForm> {
   void _set(String name, dynamic v) {
     setState(() {
       _values[name] = v;
-      // End follows the start (keeps the length) unless set later.
-      if (name == 'plan_start') {
-        final s = _dt(v);
-        final e = _dt(_values['plan_end']);
-        if (s != null && (e == null || !e.isAfter(s))) _values['plan_end'] = wallDateTime(s.add(const Duration(hours: 2)));
-      }
       if (name == 'engineer_user_id') _fillUser(v, 'engineer_name', 'engineer_phone');
       if (name == 'salesperson_user_id') _fillUser(v, 'salesperson_name', 'salesperson_phone');
     });
@@ -337,13 +379,18 @@ class JobStepFormState extends State<JobStepForm> {
 
   void _fillUser(Object? v, String nameKey, String phoneKey) {
     final id = '${unwrapFieldValue(v) ?? ''}';
+    if (id.isEmpty || id == 'null') {
+      _values[nameKey] = '';
+      _values[phoneKey] = '';
+      return;
+    }
     final u = _users.where((x) => '${x['id'] ?? x['user_id']}' == id).firstOrNull;
     if (u == null) {
       if (v is Map && v['label'] != null) _values[nameKey] = '${v['label']}';
       return;
     }
-    _values[nameKey] = '${u['display_name'] ?? u['name'] ?? ([u['first_name'], u['last_name']].where((x) => '${x ?? ''}'.isNotEmpty).join(' '))}';
-    final phone = '${u['phone_mobile'] ?? u['phone_work'] ?? u['phone'] ?? ''}';
+    _values[nameKey] = jobUserName(u);
+    final phone = userPhoneOf(u);
     if (phone.isNotEmpty) _values[phoneKey] = phone;
   }
 
@@ -356,6 +403,27 @@ class JobStepFormState extends State<JobStepForm> {
 
   DateTime? _dt(Object? v) => parseThaiField(unwrapFieldValue(v), 'plan_start', module: 'job');
 
+  String _str(String key) {
+    final v = unwrapFieldValue(_values[key]);
+    return v == null || '$v' == 'null' ? '' : '$v'.trim();
+  }
+
+  String _idOf(String key) {
+    final v = _str(key);
+    return v;
+  }
+
+  String _label(String key) {
+    final v = _values[key];
+    if (v is Map) return '${v['label'] ?? v['id'] ?? ''}';
+    return isBlankValue(v) ? '' : '$v';
+  }
+
+  /// Optional columns some servers lack: drawn only when the schema has them.
+  bool _shows(String name) => !_schema.hides(name) && (_schema.all.isEmpty || _schema.has(name));
+
+  bool _lockedField(String name) => _locked || _schema.locks(name);
+
   Future<void> _pickAccount(Map<String, dynamic> hit) async {
     var row = hit;
     try {
@@ -363,15 +431,18 @@ class JobStepFormState extends State<JobStepForm> {
       if (full.isNotEmpty) row = {...hit, ...full};
     } catch (_) {}
     if (!mounted) return;
-    final prevAcc = '${unwrapFieldValue(_values['related_account_id']) ?? ''}';
+    final prevAcc = _idOf('related_account_id');
     final p = jobAccountPatch(row, _values);
     final changed = prevAcc.isNotEmpty && prevAcc != '${row['id']}';
+    _account = row;
     _patch({
       ...p,
       'related_account_id': {'id': '${row['id']}', 'label': p['customer_name']},
       if (changed) ...{'related_contact_id': null, 'customer_contact_name': '', 'related_asset_id': null, 'related_location_id': null},
       if (isBlankValue(_values['site_address_snapshot']) || changed) 'site_address_snapshot': siteAddressOf(row),
+      if ((isBlankValue(_values['location_name_snapshot']) || changed) && siteAddressOf(row).isNotEmpty) 'location_name_snapshot': p['customer_name'],
     });
+    setState(() => _manualCustomer = false);
     _loadAccountContacts('${row['id']}');
   }
 
@@ -404,9 +475,9 @@ class JobStepFormState extends State<JobStepForm> {
       if (!_schema.editable(e.key)) continue;
       if (_schema.requires(e.key) && isBlankValue(_values[e.key])) out[e.value][e.key] = 'จำเป็นต้องกรอก';
     }
-    if (_schema.editable('job_name') && '${_values['job_name'] ?? ''}'.trim().isEmpty) out[0]['job_name'] = 'ตั้งชื่องาน';
     if (_schema.editable('job_type') && isBlankValue(_values['job_type'])) out[0]['job_type'] = 'เลือกประเภทงาน';
-    final email = '${_values['customer_email'] ?? ''}'.trim();
+    if (_schema.editable('job_name') && _str('job_name').isEmpty) out[0]['job_name'] = 'ตั้งชื่องาน';
+    final email = _str('customer_email');
     if (email.isNotEmpty) {
       final err = validateFieldValue(FieldUiType.email, email, required: false);
       if (err != null) out[1]['customer_email'] = err;
@@ -434,12 +505,21 @@ class JobStepFormState extends State<JobStepForm> {
     setState(() {
       _shownErrors.add(step);
       _go(step);
+      // Open the folded parts that hold a missing field.
+      if (step == 0 && miss.keys.any(_inMore)) _moreOpen = true;
+      if (step == 1 && miss.keys.any(const {'customer_contact_name', 'customer_department', 'customer_email', 'contract_po_no'}.contains)) _contactOpen = true;
+      if (step == 1 && miss.keys.any(const {'location_name_snapshot', 'site_address_snapshot'}.contains)) _siteEdit = true;
+      if (step == 2 && miss.containsKey('plan_end')) _customEnd = true;
+      if (step == 3 && miss.keys.any(_inReport)) _reportOpen = true;
     });
     HapticFeedback.heavyImpact();
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted || miss.isEmpty) return;
     await _anchors.reveal(miss.keys.first, miss.keys);
   }
+
+  bool _inMore(String name) => name == 'job_code' || _schema.extraFor(0).any((f) => fieldName(f) == name);
+  bool _inReport(String name) => _schema.extraFor(3, group: kJobReportGroup).any((f) => fieldName(f) == name);
 
   Future<void> _next() async {
     final miss = _missing[_step];
@@ -583,8 +663,7 @@ class JobStepFormState extends State<JobStepForm> {
 
   String _startTime() {
     final s = _dt(_values['plan_start']);
-    String two(int n) => n.toString().padLeft(2, '0');
-    return s == null ? '09:00' : '${two(s.hour)}:${two(s.minute)}';
+    return s == null ? '09:00' : jobClock(s);
   }
 
   void _close(Map<String, dynamic>? result) {
@@ -627,6 +706,9 @@ class JobStepFormState extends State<JobStepForm> {
   @override
   Widget build(BuildContext context) {
     final missing = _loading ? const <Map<String, String>>[] : _missing;
+    // Warn on a step only once it matters: visited and left, checked, or
+    // (edit / copy) a prefilled step other than the current one.
+    bool flag(int i) => (i <= _maxStep && i != _step) || _shownErrors.contains(i) || (_mode != DocFormMode.create && i != _step);
     return PopScope(
       // Back / swipe leaves at once; unsaved work stays as a local draft.
       onPopInvokedWithResult: (didPop, _) {
@@ -637,20 +719,55 @@ class JobStepFormState extends State<JobStepForm> {
         subtitle: _mode == DocFormMode.edit ? '${_source['job_no'] ?? ''}' : (_mode == DocFormMode.duplicate ? '${tr('จาก')} ${_source['job_no'] ?? ''}' : null),
         steps: _steps,
         current: _step,
-        missing: [for (final m in missing) m.length],
+        missing: [for (var i = 0; i < missing.length; i++) flag(i) ? missing[i].length : 0],
+        complete: [
+          for (var i = 0; i < missing.length; i++) missing[i].isEmpty && ((i <= _maxStep && i != _step) || _mode != DocFormMode.create) && i < _steps.length - 1,
+        ],
         canOpen: _canOpen,
         onStep: (i) => setState(() => _go(i)),
         loading: _loading,
         embedded: widget.embedded,
         onClose: _leave,
-        banners: [
-          if (_locked && _lockReason != null) DocBanner(key: const ValueKey('docform-locked'), icon: NxI.lock, color: Theme.of(context).colorScheme.error, text: _lockReason!),
-        ],
-        body: _loading ? const SizedBox.shrink() : _loadError != null ? Center(child: Text(tr(formatApiError(_loadError!)))) : _body(missing),
+        banners: _loading ? const [] : _banners(),
+        body: _loading ? const SizedBox.shrink() : _loadError != null ? _errorBody() : _body(missing),
         bottom: _loading || _loadError != null ? const SizedBox.shrink() : _bottom(),
-        side: _loading || _loadError != null ? null : SingleChildScrollView(padding: const EdgeInsets.all(16), child: _review()),
+        side: _loading || _loadError != null ? null : SingleChildScrollView(padding: const EdgeInsets.all(16), child: _sideSummary()),
       ),
     );
+  }
+
+  Widget _errorBody() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(tr(formatApiError(_loadError!)), textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            OutlinedButton(onPressed: () => _close(null), child: Text(tr('กลับ'))),
+          ]),
+        ),
+      );
+
+  List<Widget> _banners() {
+    final cs = Theme.of(context).colorScheme;
+    final no = '${_source['job_no'] ?? ''}';
+    return [
+      if (_locked && _lockReason != null) DocBanner(key: const ValueKey('docform-locked'), icon: NxI.lock, color: cs.error, text: _lockReason!),
+      // Mode notes only on the first step: the other steps keep their room.
+      if (_step == 0 && _mode == DocFormMode.duplicate)
+        DocBanner(
+          key: const ValueKey('job-duplicate-banner'),
+          icon: NxI.copySimple,
+          title: 'สำเนาจาก $no',
+          text: 'ใบใหม่ เลขใหม่ สถานะเปิดงาน — ลูกค้า สถานที่ และรายละเอียดคัดลอกมาแล้ว กำหนดเวลาใหม่ในขั้น "เมื่อไร / ใคร"',
+        ),
+      if (_step == 0 && _mode == DocFormMode.edit && !_locked)
+        DocBanner(
+          key: const ValueKey('job-edit-banner'),
+          icon: NxI.pencilSimple,
+          title: 'แก้ไข $no',
+          text: 'บันทึกทับใบเดิม — สถานะงานเปลี่ยนจากหน้ารายละเอียด (รับงาน / ปิดงาน)',
+        ),
+    ];
   }
 
   Widget _body(List<Map<String, String>> missing) {
@@ -694,32 +811,25 @@ class JobStepFormState extends State<JobStepForm> {
             ),
           ),
         ...children,
-        ..._extraGroups(_step, missing[_step]),
       ]),
     );
   }
 
-  List<NxPickOption> _options(String name, List<(String, String)> fallback) {
-    final raw = _schema.picklists[name] ?? const [];
-    final opts = raw.map(NxPickOption.fromMap).where((o) => o.value.isNotEmpty).toList();
-    return opts.isNotEmpty ? opts : [for (final (v, l) in fallback) NxPickOption(value: v, label: l)];
-  }
-
-  Widget _field(String name, FieldUiType type, String label, Map<String, String> miss, {String? hint, List<NxPickOption> options = const [], bool required = false, ValueChanged<dynamic>? onChanged}) {
+  /// A field the form draws (fixed label, schema required / read-only / hidden).
+  Widget _field(String name, FieldUiType type, Map<String, String> miss, {String? hint, String? label, bool required = false, ValueChanged<dynamic>? onChanged, double gap = 16}) {
     if (_schema.hides(name)) return const SizedBox.shrink();
     return _anchors.wrap(
       name,
       Padding(
-        padding: const EdgeInsets.only(bottom: 16),
+        padding: EdgeInsets.only(bottom: gap),
         child: NxFormField(
           uiType: type,
-          label: _schema.labelOf(name, label),
+          label: tr(label ?? jobFieldLabel(name)),
           name: name,
           value: _values[name],
-          options: options,
-          hint: hint,
+          hint: hint == null ? null : tr(hint),
           required: required || _schema.requires(name),
-          readOnly: _locked || _schema.locks(name),
+          readOnly: _lockedField(name),
           errorText: trn(_err(name, miss)),
           host: _host,
           onChanged: onChanged ?? (v) => _set(name, v),
@@ -728,37 +838,161 @@ class JobStepFormState extends State<JobStepForm> {
     );
   }
 
+  Widget _extraForm(int step, String group, Map<String, String> miss) => NxEntityForm(
+        key: _anchors.formKey('$step:$group'),
+        fields: _schema.extraFor(step, group: group),
+        values: _values,
+        picklists: _schema.picklists,
+        api: _api,
+        module: 'job',
+        enabled: !_locked,
+        errors: _shownErrors.contains(step) ? miss : const {},
+        onChanged: _set,
+      );
+
+  /// Business fields of [step] in their groups (the report group folds).
   List<Widget> _extraGroups(int step, Map<String, String> miss) => [
         for (final g in _schema.groupsFor(step))
-          DocSectionCard(
-            key: ValueKey('docform-extra-$step-$g'),
-            title: g,
-            icon: NxI.note,
-            color: const Color(0xFF64748B),
-            child: NxEntityForm(
-              key: _anchors.formKey('$step:$g'),
-              fields: _schema.extraFor(step, group: g),
-              values: _values,
-              picklists: _schema.picklists,
-              api: _api,
-              module: 'job',
-              enabled: !_locked,
-              errors: _shownErrors.contains(step) ? miss : const {},
-              onChanged: _set,
-            ),
-          ),
+          if (g == kJobReportGroup)
+            JobCollapsible(
+              key: ValueKey('docform-extra-$step-$g'),
+              toggleKey: const ValueKey('job-report-toggle'),
+              title: g,
+              icon: NxI.clipboardText,
+              color: const Color(0xFF0EA5E9),
+              summary: _mode == DocFormMode.create ? 'ช่างกรอกตอนปิดงานได้ — เปิดเมื่อมีข้อมูลแล้ว' : 'ปัญหาที่พบ วิธีแก้ไข ข้อเสนอแนะ',
+              open: _reportOpen || (_mode == DocFormMode.edit && _schema.extraFor(step, group: g).any((f) => !isBlankValue(_values[fieldName(f)]))) ||
+                  (_shownErrors.contains(step) && miss.keys.any(_inReport)),
+              onToggle: () => setState(() => _reportOpen = !_reportOpen),
+              child: _extraForm(step, g, miss),
+            )
+          else
+            DocSectionCard(key: ValueKey('docform-extra-$step-$g'), title: g, icon: NxI.note, color: _slate, child: _extraForm(step, g, miss)),
       ];
 
-  // Step 1 ------------------------------------------------------------------
+  // Step 1 · งานอะไร ----------------------------------------------------------
+
+  List<JobChoice> get _typeChoices => jobChoices('job_type', _schema.picklists, kJobTypeFallback, en: _en);
+  List<JobChoice> get _priorityChoices => jobChoices('job_priority', _schema.picklists, kJobPriorityFallback, en: _en);
+  List<JobChoice> get _categoryChoices => jobChoices('job_category', _schema.picklists, kJobCategoryFallback, en: _en);
+
+  Future<void> _openTypePicker() async {
+    final v = await showDocOptionPicker(
+      context,
+      title: 'ประเภทงาน',
+      keyPrefix: 'jobtype',
+      selected: _str('job_type'),
+      options: [for (final c in _typeChoices) DocOption(c.value, c.label, subtitle: c.help, icon: c.value == 'request' ? NxI.lifeBuoy : NxI.wrench)],
+    );
+    if (v == null || !mounted) return;
+    _set('job_type', v);
+    // The service report follows the job type (web create-job), unless chosen already.
+    final deliverable = v == 'request' ? 'request_report' : 'service_report';
+    if (_mode != DocFormMode.edit && const {'service_report', 'request_report', ''}.contains(_str('deliverable_template'))) _set('deliverable_template', deliverable);
+  }
+
+  Future<void> _openLinkPicker(String module) async {
+    final s = context.read<AppConfig>().session;
+    final key = module == 'case' ? 'related_case_id' : 'related_contract_id';
+    final acc = _idOf('related_account_id');
+    final picker = module == 'case' ? showJobCasePicker : showJobContractPicker;
+    final picked = await picker(
+      context,
+      api: _api,
+      userId: s.userId,
+      accountId: acc.isEmpty ? null : acc,
+      accountName: _str('customer_name').isEmpty ? null : _str('customer_name'),
+      selectedId: _idOf(key).isEmpty ? null : _idOf(key),
+    );
+    if (picked == null || !mounted) return;
+    if (picked.isNone) {
+      setState(() {
+                  _links.remove(module);
+                  _linkNote = null;
+                });
+      _set(key, null);
+      return;
+    }
+    var row = picked.row;
+    try {
+      final full = await _api.getEntity(module, '${row['id']}');
+      if (full.isNotEmpty) row = {...row, ...full};
+    } catch (_) {}
+    if (!mounted) return;
+    final hadAccount = !isBlankValue(_values['related_account_id']);
+    final p = jobLinkPatch(module, row, _values);
+    setState(() => _links[module] = row);
+    _patch(p);
+    final filled = <String>[
+      if (p.containsKey('related_account_id')) 'ลูกค้า',
+      if (p.containsKey('due_datetime')) 'กำหนดเสร็จ',
+      if (p.containsKey('job_name')) 'ชื่องาน',
+    ];
+    if (!hadAccount && p['related_account_id'] != null) {
+      await _pickAccount({'id': p['related_account_id']});
+      if (p['related_contact_id'] != null) await _pickContact({'id': p['related_contact_id']});
+    }
+    // Said under the card (a snackbar would cover the ถัดไป button).
+    if (mounted) setState(() => _linkNote = filled.isEmpty ? null : 'เติม${filled.join(' ')}จาก${module == 'case' ? 'เคส' : 'สัญญา'}แล้ว');
+  }
+
+  Widget _linkRow(String module, Map<String, String> miss) {
+    final key = module == 'case' ? 'related_case_id' : 'related_contract_id';
+    final k = module == 'case' ? 'case' : 'contract';
+    if (_schema.hides(key)) return const SizedBox.shrink();
+    final id = _idOf(key);
+    final isParent = _parentModule == module;
+    final locked = _lockedField(key) || isParent;
+    final row = _links[module];
+    Widget child;
+    if (id.isEmpty) {
+      child = JobFieldRow(
+        key: ValueKey('job-$k-pick'),
+        icon: module == 'case' ? NxI.lifeBuoy : NxI.fileText,
+        label: jobFieldLabel(key),
+        value: tr('ไม่เชื่อม'),
+        muted: true,
+        hint: tr(module == 'case' ? 'ค้นหาเคสที่เปิดอยู่ของลูกค้า' : 'ค้นหาสัญญาที่ใช้งานอยู่ของลูกค้า'),
+        error: trn(_err(key, miss)),
+        onTap: locked ? null : () => _openLinkPicker(module),
+      );
+    } else {
+      child = JobLinkCard(
+        key: ValueKey('job-$k-card'),
+        module: module,
+        parent: isParent,
+        view: row == null ? JobLinkView(no: '#$id', title: '', customer: '', status: '') : jobLinkView(module, row),
+        onChange: locked ? null : () => _openLinkPicker(module),
+        onClear: locked
+            ? null
+            : () {
+                setState(() {
+                  _links.remove(module);
+                  _linkNote = null;
+                });
+                _set(key, null);
+              },
+      );
+    }
+    return _anchors.wrap(key, Padding(padding: const EdgeInsets.only(bottom: 10), child: child));
+  }
 
   List<Widget> _whatStep(Map<String, String> miss) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final type = _str('job_type');
+    final typeChoice = _typeChoices.where((c) => c.value == type).firstOrNull;
+    final category = _str('job_category');
     final parentTitle = switch (_parentModule) {
       'case' => 'สร้างจากเคส',
       'service_contract' => 'สร้างจากสัญญาบริการ',
       'quotation' => 'สร้างจากใบเสนอราคา',
       _ => '',
     };
+    final moreErr = _shownErrors.contains(0) && miss.keys.any(_inMore);
+    final moreOpen = _moreOpen || moreErr;
+    final extraCount = _schema.extraFor(0).length;
+    final code = _str('job_code');
     return [
       if (_parentModule != null)
         DocBanner(
@@ -771,181 +1005,335 @@ class JobStepFormState extends State<JobStepForm> {
         title: 'งานอะไร',
         icon: NxI.wrench,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          _field('job_type', FieldUiType.picklist, 'ประเภทงาน', miss, required: true, options: _options('job_type', const [('service', 'Service Job'), ('request', 'Request Job')])),
-          _field('job_name', FieldUiType.text, 'ชื่องาน', miss, required: true, hint: 'เช่น ล้างแอร์ประจำปี อาคาร B'),
+          if (!_schema.hides('job_type'))
+            _anchors.wrap(
+              'job_type',
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: JobFieldRow(
+                  key: const ValueKey('job-type-pick'),
+                  icon: type == 'request' ? NxI.lifeBuoy : NxI.wrench,
+                  label: jobFieldLabel('job_type'),
+                  required: true,
+                  value: typeChoice?.label ?? (type.isEmpty ? tr('เลือกประเภทงาน') : type),
+                  valueKey: const ValueKey('job-type-value'),
+                  muted: type.isEmpty,
+                  hint: typeChoice?.help == null ? null : tr(typeChoice!.help!),
+                  error: trn(_err('job_type', miss)),
+                  onTap: _lockedField('job_type') ? null : _openTypePicker,
+                ),
+              ),
+            ),
+          _field('job_name', FieldUiType.text, miss, required: true, hint: 'เช่น ล้างแอร์ประจำปี อาคาร B'),
           if (!_schema.hides('job_priority')) ...[
-            Text(tr(_schema.labelOf('job_priority', 'ความสำคัญ')), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
+            const JobLabel('ความสำคัญ'),
             _anchors.wrap(
               'job_priority',
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
+                child: JobPrioritySegment(
+                  choices: _priorityChoices,
+                  value: _str('job_priority'),
+                  onChanged: _lockedField('job_priority') ? null : (v) => _set('job_priority', v),
+                ),
+              ),
+            ),
+          ],
+          if (_shows('job_category')) ...[
+            JobLabel('ลักษณะงาน', trailing: Text(tr('แสดงบนรายงานบริการ'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
+            _anchors.wrap(
+              'job_category',
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
                 child: Wrap(spacing: 8, runSpacing: 8, children: [
-                  for (final o in _options('job_priority', const [('Urgent', 'เร่งด่วน'), ('High', 'สูง'), ('Normal', 'ปกติ'), ('Low', 'ต่ำ')]))
+                  for (final c in _categoryChoices)
                     ChoiceChip(
-                      key: ValueKey('job-priority-${o.value}'),
-                      label: Text(tr(o.label)),
-                      selected: '${unwrapFieldValue(_values['job_priority']) ?? ''}' == o.value,
-                      onSelected: _locked || _schema.locks('job_priority') ? null : (_) => _set('job_priority', o.value),
+                      key: ValueKey('job-category-${c.value}'),
+                      label: Text(tr(c.label)),
+                      selected: category == c.value,
+                      onSelected: _lockedField('job_category') ? null : (on) => _set('job_category', on ? c.value : null),
                     ),
                 ]),
               ),
             ),
+            if (category == 'other' && _shows('job_category_other')) _field('job_category_other', FieldUiType.text, miss, hint: 'เช่น ย้ายเครื่อง / ตรวจรับงาน'),
           ],
         ]),
       ),
-      if (_parentModule == null)
+      if (!_schema.hides('related_case_id') || !_schema.hides('related_contract_id'))
         DocSectionCard(
+          key: const ValueKey('job-links'),
           title: 'เชื่อมกับเคส / สัญญา',
-          subtitle: 'ไม่บังคับ',
+          subtitle: 'ไม่บังคับ — เติมลูกค้าและกำหนดเสร็จให้',
           icon: NxI.link,
-          color: const Color(0xFF64748B),
-          trailing: IconButton(
-            key: const ValueKey('job-links-toggle'),
-            onPressed: () => setState(() => _showLinks = !_showLinks),
-            icon: Icon(_showLinks ? NxI.caretUp : NxI.caretDown, size: 18),
-          ),
-          child: !_showLinks && isBlankValue(_values['related_case_id']) && isBlankValue(_values['related_contract_id'])
-              ? Text(tr('แตะเพื่อเลือกเคสหรือสัญญาบริการที่งานนี้เกี่ยวข้อง'), style: theme.textTheme.bodySmall)
-              : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  _field('related_case_id', FieldUiType.caseSelect, 'เคส', miss),
-                  _field('related_contract_id', FieldUiType.contractSelect, 'สัญญาบริการ', miss),
-                ]),
+          color: _slate,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            _linkRow('case', miss),
+            _linkRow('service_contract', miss),
+            if (_linkNote != null)
+              Row(children: [
+                const Icon(NxI.checkCircle, size: 16, color: Color(0xFF16A34A)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(tr(_linkNote!), key: const ValueKey('job-link-note'), style: theme.textTheme.bodySmall?.copyWith(color: const Color(0xFF16A34A), fontWeight: FontWeight.w600))),
+              ]),
+          ]),
+        ),
+      if (_shows('job_code') || extraCount > 0)
+        JobCollapsible(
+          key: const ValueKey('job-more'),
+          toggleKey: const ValueKey('job-more-toggle'),
+          title: 'ข้อมูลเพิ่มเติม',
+          icon: NxI.note,
+          color: _slate,
+          summary: code.isNotEmpty ? '${tr('รหัสอ้างอิง')} $code' : 'รหัสอ้างอิงงาน${extraCount > 0 ? ' และช่องของธุรกิจ $extraCount ช่อง' : ''} (ไม่บังคับ)',
+          open: moreOpen,
+          onToggle: () => setState(() => _moreOpen = !moreOpen),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (_shows('job_code')) _field('job_code', FieldUiType.text, miss, hint: 'เช่น เลขงานจากระบบของลูกค้า — เลขที่ใบสั่งงานระบบออกให้เอง'),
+            for (final g in _schema.groupsFor(0)) ...[
+              if (_schema.groupsFor(0).length > 1 || g != 'ข้อมูลเพิ่มเติม') JobLabel(g),
+              _extraForm(0, g, miss),
+            ],
+          ]),
         ),
     ];
   }
 
-  // Step 2 ------------------------------------------------------------------
+  // Step 2 · ลูกค้าและสถานที่ ---------------------------------------------------
+
+  Future<void> _openCustomerPicker() async {
+    final s = context.read<AppConfig>().session;
+    final picked = await showCustomerPicker(context, api: _api, modules: const ['account', 'contact'], userId: s.userId, businessId: s.businessId);
+    if (picked == null || !mounted) return;
+    if (picked.module == 'contact') {
+      await _pickContact(picked.row);
+    } else {
+      await _pickAccount(picked.row);
+    }
+  }
+
+  Future<void> _openContactPicker() async {
+    final acc = _idOf('related_account_id');
+    final picked = await showContactPicker(
+      context,
+      api: _api,
+      accountId: acc.isEmpty ? null : acc,
+      accountName: _str('customer_name').isEmpty ? null : _str('customer_name'),
+      selectedId: _idOf('related_contact_id').isEmpty ? null : _idOf('related_contact_id'),
+      noneSubtitle: 'ไม่มีชื่อผู้ติดต่อบนใบงาน',
+    );
+    if (picked == null || !mounted) return;
+    if (picked.isNone) {
+      _patch({'related_contact_id': null, 'customer_contact_name': ''});
+      return;
+    }
+    await _pickContact(picked.row);
+  }
+
+  Future<void> _openSitePicker() async {
+    final acc = _idOf('related_account_id');
+    final pick = await showJobSitePicker(
+      context,
+      api: _api,
+      accountId: acc.isEmpty ? null : acc,
+      accountName: _str('customer_name').isEmpty ? null : _str('customer_name'),
+      account: _account,
+      selectedLocationId: _idOf('related_location_id').isEmpty ? null : _idOf('related_location_id'),
+    );
+    if (pick == null || !mounted) return;
+    _applySite(pick);
+  }
+
+  void _applySite(JobSitePick pick) {
+    switch (pick.kind) {
+      case 'location':
+        final row = pick.location ?? const <String, dynamic>{};
+        final p = jobLocationPatch(row, _values);
+        _patch({...p, 'related_location_id': {'id': '${row['id']}', 'label': p['location_name_snapshot']}});
+      case 'pin':
+        _patch({
+          'site_address_snapshot': pick.address,
+          if (isBlankValue(_values['location_name_snapshot'])) 'location_name_snapshot': pick.name,
+          'related_location_id': null,
+        });
+      default:
+        _patch({
+          'site_address_snapshot': pick.address,
+          if (pick.name.isNotEmpty) 'location_name_snapshot': pick.name,
+          'related_location_id': null,
+        });
+    }
+  }
 
   Future<void> _pinOnMap() async {
     final hook = DocFormHooks.pickPin;
     final p = hook != null ? await hook(context) : await showNxMapPinPicker(context, title: tr('ปักหมุดสถานที่ทำงาน'));
     if (p == null || !mounted) return;
-    final lookup = DocFormHooks.reverseGeocode;
-    final addr = lookup != null ? await lookup(p.lat, p.lng) : await GeoAddress.lookup(p.lat, p.lng);
+    final current = siteAddressText(_values['site_address_snapshot']);
+    var addr = current;
+    if (addr.isEmpty) {
+      final lookup = DocFormHooks.reverseGeocode;
+      addr = (lookup != null ? await lookup(p.lat, p.lng) : await GeoAddress.lookup(p.lat, p.lng)) ?? '';
+    }
     if (!mounted) return;
-    final coord = '${p.lat.toStringAsFixed(6)},${p.lng.toStringAsFixed(6)}';
-    _patch({
-      'site_address_snapshot': [if (addr != null && addr.trim().isNotEmpty) addr.replaceAll('\n', ' '), '($coord)'].join(' '),
-      if (isBlankValue(_values['location_name_snapshot'])) 'location_name_snapshot': tr('จุดที่ปักหมุด'),
-      'related_location_id': null,
-    });
+    _applySite(JobSitePick(kind: 'pin', name: tr('จุดที่ปักหมุด'), address: siteAddressWithPin(addr, p.lat, p.lng)));
   }
 
-  Future<void> _pickLocation() async {
-    final acc = '${unwrapFieldValue(_values['related_account_id']) ?? ''}';
-    final opt = await showNxEntityPickerSheet(
-      context: context,
-      title: tr('พื้นที่บริการของลูกค้า'),
-      search: (q) async {
-        final page = await _api.getEntityList('service_location', q: q, limit: 30, extra: {if (acc.isNotEmpty) 'related_account_id': acc});
-        return [for (final r in page.items) NxPickOption(value: strId(r['id']), label: entityTitle(r, module: 'service_location'), subtitle: siteAddressOf(r))];
-      },
+  Future<void> _openAssetPicker() async {
+    final acc = _idOf('related_account_id');
+    final picked = await showJobAssetPicker(
+      context,
+      api: _api,
+      accountId: acc.isEmpty ? null : acc,
+      accountName: _str('customer_name').isEmpty ? null : _str('customer_name'),
+      selectedId: _idOf('related_asset_id').isEmpty ? null : _idOf('related_asset_id'),
     );
-    if (opt == null || !mounted) return;
-    var row = <String, dynamic>{'id': opt.value, 'location_name': opt.label};
-    try {
-      final full = await _api.getEntity('service_location', opt.value);
-      if (full.isNotEmpty) row = {...row, ...full};
-    } catch (_) {}
-    if (!mounted) return;
-    final p = jobLocationPatch(row, _values);
-    _patch({...p, 'related_location_id': {'id': opt.value, 'label': p['location_name_snapshot']}});
-  }
-
-  Future<void> _pickAsset() async {
-    final acc = '${unwrapFieldValue(_values['related_account_id']) ?? ''}';
-    final opt = await showNxEntityPickerSheet(
-      context: context,
-      title: tr(acc.isEmpty ? 'สินทรัพย์' : 'สินทรัพย์ของลูกค้า'),
-      search: (q) async {
-        final page = await _api.getEntityList('asset', q: q, limit: 30, extra: {if (acc.isNotEmpty) 'related_account_id': acc});
-        return [for (final r in page.items) NxPickOption(value: strId(r['id']), label: entityTitle(r, module: 'asset'), subtitle: '${r['serial_no'] ?? r['asset_code'] ?? ''}')];
-      },
-    );
-    if (opt != null) _set('related_asset_id', {'id': opt.value, 'label': opt.label});
+    if (picked == null || !mounted) return;
+    _set('related_asset_id', picked.isNone ? null : {'id': '${picked.row['id']}', 'label': entityTitle(picked.row, module: 'asset')});
   }
 
   List<Widget> _customerStep(Map<String, String> miss) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final hasAcc = !isBlankValue(_values['related_account_id']);
-    final assetLabel = () {
-      final v = _values['related_asset_id'];
-      if (v is Map) return '${v['label'] ?? v['id']}';
-      return isBlankValue(v) ? '' : '#$v';
-    }();
+    final name = _str('customer_name');
+    final hasCustomer = hasAcc || name.isNotEmpty;
+    final lockedCustomer = _lockedField('related_account_id');
+    final contactName = _str('customer_contact_name');
+    final siteName = _str('location_name_snapshot');
+    final siteAddr = siteAddressText(_values['site_address_snapshot']);
+    final hasSite = siteName.isNotEmpty || siteAddr.isNotEmpty;
+    final contactErr = _shownErrors.contains(1) && miss.keys.any(const {'customer_contact_name', 'customer_department', 'customer_email', 'contract_po_no'}.contains);
+    final contactOpen = _contactOpen || contactErr;
+    final siteErr = _shownErrors.contains(1) && miss.keys.any(const {'location_name_snapshot', 'site_address_snapshot'}.contains);
+    final siteEdit = _siteEdit || siteErr || (!hasSite && _locked);
+    final accAddr = _account == null ? '' : siteAddressOf(_account!);
+    final assetLabel = _label('related_asset_id');
     return [
       DocSectionCard(
         title: 'ลูกค้า',
         icon: NxI.buildings,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          _field('related_account_id', FieldUiType.accountSelect, 'บัญชีลูกค้า', miss, onChanged: (v) {
-            final id = '${unwrapFieldValue(v) ?? ''}';
-            if (id.isEmpty) {
-              _patch({'related_account_id': null, 'related_contact_id': null});
-              setState(() => _accountContacts = const []);
-            } else {
-              _pickAccount({'id': id});
-            }
-          }),
-          if (!hasAcc) _field('customer_name', FieldUiType.text, 'ชื่อลูกค้า (ถ้ายังไม่มีบัญชี)', miss),
-          if (_accountContacts.isNotEmpty && !_locked) ...[
-            Text(tr('ผู้ติดต่อของลูกค้า'), style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final c in _accountContacts.take(12))
-                  ChoiceChip(
-                    key: ValueKey('job-contact-${c['id']}'),
-                    label: Text(entityTitle(c, module: 'contact')),
-                    selected: '${unwrapFieldValue(_values['related_contact_id']) ?? ''}' == '${c['id']}',
-                    onSelected: (_) => _pickContact(c),
+        child: _anchors.wrap(
+          'related_account_id',
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            if (hasCustomer && !_manualCustomer)
+              JobCustomerCard(
+                name: name.isEmpty ? _label('related_account_id') : name,
+                kind: hasAcc ? 'บัญชีลูกค้า' : 'พิมพ์เอง',
+                lines: [
+                  if (accAddr.isNotEmpty) (NxI.mapPin, accAddr),
+                  if ([_str('customer_mobile'), _str('customer_email')].any((x) => x.isNotEmpty))
+                    (NxI.phone, [_str('customer_mobile'), _str('customer_email')].where((x) => x.isNotEmpty).join(' · ')),
+                ],
+                onChange: lockedCustomer ? null : _openCustomerPicker,
+                onClear: lockedCustomer
+                    ? null
+                    : () {
+                        _patch({'related_account_id': null, 'related_contact_id': null, 'customer_name': '', 'customer_contact_name': ''});
+                        setState(() {
+                          _account = null;
+                          _accountContacts = const [];
+                        });
+                      },
+              )
+            else ...[
+              JobPickTile(
+                key: const ValueKey('job-customer-pick'),
+                icon: NxI.magnifyingGlass,
+                title: 'เลือกลูกค้า',
+                subtitle: 'ค้นหาบัญชีลูกค้าหรือผู้ติดต่อ — เติมที่อยู่และเบอร์ให้',
+                error: _err('related_account_id', miss) != null,
+                onTap: lockedCustomer ? null : _openCustomerPicker,
+              ),
+              if (_err('related_account_id', miss) != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, left: 4),
+                  child: Text(tr(_err('related_account_id', miss)!), key: const ValueKey('job-customer-error'), style: theme.textTheme.bodySmall?.copyWith(color: cs.error, fontWeight: FontWeight.w600)),
+                ),
+              if (_manualCustomer || (!hasAcc && name.isNotEmpty)) ...[
+                const SizedBox(height: 12),
+                _field('customer_name', FieldUiType.text, miss, label: 'ชื่อลูกค้า (ยังไม่มีในระบบ)', gap: 4),
+              ] else if (!lockedCustomer)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const ValueKey('job-customer-manual'),
+                    onPressed: () => setState(() => _manualCustomer = true),
+                    icon: const Icon(NxI.pencilSimple, size: 16),
+                    label: Text(tr('ไม่มีในระบบ? พิมพ์ชื่อลูกค้าเอง')),
                   ),
-              ]),
-            ),
-          ],
-          _field('related_contact_id', FieldUiType.contactSelect, 'ผู้ติดต่อ', miss, onChanged: (v) {
-            final id = '${unwrapFieldValue(v) ?? ''}';
-            if (id.isEmpty) {
-              _patch({'related_contact_id': null});
-            } else {
-              _pickContact({'id': id});
-            }
-          }),
-          _field('customer_mobile', FieldUiType.phone, 'มือถือผู้ติดต่อหน้างาน', miss),
-          _field('customer_email', FieldUiType.email, 'อีเมลผู้ติดต่อ', miss),
-        ]),
+                ),
+            ],
+            if (hasCustomer && !_schema.hides('related_contact_id')) ...[
+              const SizedBox(height: 10),
+              _anchors.wrap(
+                'related_contact_id',
+                JobFieldRow(
+                  key: const ValueKey('job-contact-pick'),
+                  icon: NxI.addressBook,
+                  label: jobFieldLabel('related_contact_id'),
+                  value: contactName.isEmpty ? tr('ไม่ระบุ') : contactName,
+                  valueKey: const ValueKey('job-contact-value'),
+                  muted: contactName.isEmpty,
+                  hint: hasAcc && _accountContacts.isNotEmpty ? tr('เลือกจาก ${_accountContacts.length} คนของลูกค้านี้') : null,
+                  error: trn(_err('related_contact_id', miss)),
+                  onTap: _lockedField('related_contact_id') ? null : _openContactPicker,
+                ),
+              ),
+            ],
+          ]),
+        ),
       ),
+      if (hasCustomer)
+        JobCollapsible(
+          key: const ValueKey('job-contact-details'),
+          toggleKey: const ValueKey('job-contact-details-toggle'),
+          title: 'ผู้ติดต่อบนใบงาน',
+          icon: NxI.idCard,
+          color: const Color(0xFF0EA5E9),
+          summary: [contactName, _str('customer_department'), _str('customer_email')].where((x) => x.isNotEmpty).join(' · ').isEmpty
+              ? 'ชื่อ แผนก อีเมล และเลขที่ PO ที่แสดงบนรายงาน'
+              : [contactName, _str('customer_department'), _str('customer_email')].where((x) => x.isNotEmpty).join(' · '),
+          open: contactOpen,
+          onToggle: () => setState(() => _contactOpen = !contactOpen),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            _field('customer_contact_name', FieldUiType.text, miss),
+            if (_shows('customer_department')) _field('customer_department', FieldUiType.text, miss),
+            _field('customer_email', FieldUiType.email, miss),
+            if (_shows('contract_po_no')) _field('contract_po_no', FieldUiType.text, miss, gap: 4),
+          ]),
+        ),
       DocSectionCard(
         title: 'สถานที่ทำงาน',
+        subtitle: 'ที่ช่างต้องไป และเบอร์ติดต่อหน้างาน',
         icon: NxI.mapPin,
         color: const Color(0xFF8B5CF6),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (!_locked)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Wrap(spacing: 8, runSpacing: 8, children: [
-                if (hasAcc)
-                  ActionChip(
-                    key: const ValueKey('job-place-account'),
-                    avatar: const Icon(NxI.buildings, size: 16),
-                    label: Text(tr('ที่อยู่ลูกค้า')),
-                    onPressed: () => _pickAccount({'id': '${unwrapFieldValue(_values['related_account_id'])}'}).then((_) async {
-                      try {
-                        final a = await _api.getEntity('account', '${unwrapFieldValue(_values['related_account_id'])}');
-                        if (mounted) _patch({'site_address_snapshot': siteAddressOf(a), 'related_location_id': null});
-                      } catch (_) {}
-                    }),
-                  ),
-                if (!_schema.hides('related_location_id'))
-                  ActionChip(key: const ValueKey('job-place-location'), avatar: const Icon(NxI.mapTrifold, size: 16), label: Text(tr('พื้นที่บริการ')), onPressed: _pickLocation),
-                ActionChip(key: const ValueKey('job-place-pin'), avatar: const Icon(NxI.mapPinned, size: 16), label: Text(tr('ปักหมุดบนแผนที่')), onPressed: _pinOnMap),
-              ]),
+          if (hasSite)
+            JobSiteCard(
+              name: siteName,
+              address: siteAddr,
+              pinned: siteCoordsOf(_values['site_address_snapshot']) != null,
+              onChange: _locked ? null : _openSitePicker,
+              onPin: _locked ? null : _pinOnMap,
+              onEdit: _locked ? null : () => setState(() => _siteEdit = !siteEdit),
+              editing: siteEdit,
+            )
+          else
+            JobPickTile(
+              key: const ValueKey('job-site-pick'),
+              icon: NxI.mapPinned,
+              title: 'เลือกสถานที่ทำงาน',
+              subtitle: hasAcc ? 'ที่อยู่ลูกค้า พื้นที่บริการ ปักหมุด หรือระบุเอง' : 'ปักหมุด หรือระบุที่อยู่เอง',
+              onTap: _locked ? null : _openSitePicker,
             ),
-          _field('location_name_snapshot', FieldUiType.text, 'ชื่อสถานที่', miss),
-          _field('site_address_snapshot', FieldUiType.longText, 'ที่อยู่หน้างาน', miss),
+          if (siteEdit) ...[
+            const SizedBox(height: 14),
+            _field('location_name_snapshot', FieldUiType.text, miss, hint: 'เช่น อาคาร B ชั้น 3'),
+            _field('site_address_snapshot', FieldUiType.longText, miss, gap: 4),
+          ],
+          const SizedBox(height: 14),
+          _field('customer_mobile', FieldUiType.phone, miss, hint: 'ช่างโทรหาก่อนเข้าหน้างาน', gap: 0),
         ]),
       ),
       if (!_schema.hides('related_asset_id'))
@@ -954,127 +1342,298 @@ class JobStepFormState extends State<JobStepForm> {
           subtitle: 'ไม่บังคับ',
           icon: NxI.hardDrives,
           color: const Color(0xFF0EA5E9),
-          child: _anchors.wrap(
-            'related_asset_id',
-            Row(children: [
-              Expanded(child: Text(assetLabel.isEmpty ? tr('ยังไม่ได้เลือก') : assetLabel, key: const ValueKey('job-asset-label'), style: theme.textTheme.bodyMedium?.copyWith(color: assetLabel.isEmpty ? cs.onSurfaceVariant : null))),
-              if (!_locked && !_schema.locks('related_asset_id')) ...[
-                if (assetLabel.isNotEmpty) IconButton(tooltip: tr('ล้าง'), onPressed: () => _set('related_asset_id', null), icon: const Icon(NxI.x, size: 18)),
-                TextButton.icon(key: const ValueKey('job-asset-pick'), onPressed: _pickAsset, icon: const Icon(NxI.magnifyingGlass, size: 16), label: Text(tr('เลือก'))),
-              ],
-            ]),
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            _anchors.wrap(
+              'related_asset_id',
+              JobFieldRow(
+                key: const ValueKey('job-asset-pick'),
+                icon: NxI.hardDrives,
+                label: 'เครื่อง / สินทรัพย์',
+                value: assetLabel.isEmpty ? tr('ยังไม่ได้เลือก') : assetLabel,
+                valueKey: const ValueKey('job-asset-label'),
+                muted: assetLabel.isEmpty,
+                onTap: _lockedField('related_asset_id') ? null : _openAssetPicker,
+              ),
+            ),
+            if (_shows('in_warranty'))
+              _anchors.wrap(
+                'in_warranty',
+                SwitchListTile(
+                  key: const ValueKey('job-in-warranty'),
+                  contentPadding: EdgeInsets.zero,
+                  value: isTruthyFieldValue(_values['in_warranty']),
+                  onChanged: _lockedField('in_warranty') ? null : (v) => _set('in_warranty', v),
+                  title: Text(tr(jobFieldLabel('in_warranty'))),
+                  subtitle: Text(tr('แสดงบนรายงานบริการ')),
+                ),
+              ),
+          ]),
         ),
+      ..._extraGroups(1, miss),
     ];
   }
 
-  // Step 3 ------------------------------------------------------------------
+  // Step 3 · เมื่อไร / ใคร ------------------------------------------------------
+
+  void _setPlan(DateTime? start, DateTime? end) {
+    _patch({'plan_start': start == null ? null : wallDateTime(start), 'plan_end': end == null ? null : wallDateTime(end)});
+  }
+
+  Future<void> _openUserPicker(String key) async {
+    final s = context.read<AppConfig>().session;
+    final title = switch (key) {
+      'engineer_user_id' => 'เลือกวิศวกรบริการ',
+      'salesperson_user_id' => 'เลือกฝ่ายขาย',
+      _ => 'เลือกช่าง / ผู้รับผิดชอบ',
+    };
+    final start = _dt(_values['plan_start']);
+    final picked = await showTechnicianPicker(
+      context,
+      api: _api,
+      title: title,
+      keyPrefix: key == 'smownerid' ? 'tech' : (key == 'engineer_user_id' ? 'engineer' : 'sales'),
+      jobId: _mode == DocFormMode.edit ? widget.recordId : null,
+      start: key == 'salesperson_user_id' ? null : start,
+      end: key == 'salesperson_user_id' ? null : _dt(_values['plan_end']),
+      selectedId: _idOf(key).isEmpty ? null : _idOf(key),
+      meId: s.userId,
+      businessId: s.businessId,
+      allowNone: key != 'smownerid',
+    );
+    if (picked == null || !mounted) return;
+    _set(key, picked.isNone ? null : {'id': '${picked.row['id'] ?? picked.row['user_id']}', 'label': jobUserName(picked.row)});
+  }
 
   List<Widget> _whenStep(Map<String, String> miss) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final now = thaiNow();
     final start = _dt(_values['plan_start']);
-    final saved = _mode == DocFormMode.edit ? widget.recordId : null;
+    final end = _dt(_values['plan_end']);
+    final due = _dt(_values['due_datetime']);
+    final len = start != null && end != null && end.isAfter(start) ? end.difference(start) : null;
+    final canPlan = !_locked && _schema.editable('plan_start');
+    final summary = jobWhenSummary(start, end, en: _en);
+    final endErr = _err('plan_end', miss);
+    final customEnd = _customEnd || endErr != null || (len != null && !kJobDurationHours.any((h) => len == Duration(hours: h)));
+    final appointmentDone = !isBlankValue(_source['related_activity_id']);
+    String userValue(String key, String empty) => _label(key).isEmpty ? tr(empty) : _label(key);
     return [
       DocSectionCard(
+        key: const ValueKey('job-schedule'),
         title: 'กำหนดการ',
         icon: NxI.calendarClock,
+        trailing: start != null && canPlan
+            ? TextButton(key: const ValueKey('job-when-clear'), onPressed: () => _setPlan(null, null), child: Text(tr('ล้าง')))
+            : null,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (!_locked && _schema.editable('plan_start'))
+          // The plan in one line.
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(color: (start == null ? cs.onSurfaceVariant : cs.primary).withValues(alpha: 0.08), borderRadius: BorderRadius.circular(14)),
+            child: Row(children: [
+              Icon(start == null ? NxI.calendarBlank : NxI.calendarCheck, color: start == null ? cs.onSurfaceVariant : cs.primary, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(
+                    summary.isEmpty ? tr('ยังไม่กำหนดเวลา') : summary,
+                    key: const ValueKey('job-when-summary'),
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: start == null ? cs.onSurfaceVariant : null),
+                  ),
+                  Text(
+                    len == null ? tr('เลือกเวลาด่วนด้านล่าง หรือวันที่และเวลาเริ่ม') : '${tr('ใช้เวลา')} ${jobDurationText(len, en: _en)}',
+                    key: const ValueKey('job-when-length'),
+                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ]),
+              ),
+            ]),
+          ),
+          if (canPlan)
             Padding(
-              padding: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.only(bottom: 12),
               child: Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final s in jobQuickSlots(now))
+                for (final s in jobQuickSlots(now, length: len ?? kJobDefaultLength))
                   ChoiceChip(
                     key: ValueKey('job-slot-${s.key}'),
                     label: Text(tr(s.label)),
                     selected: start != null && start == s.start,
-                    onSelected: (_) => _patch({'plan_start': wallDateTime(s.start), 'plan_end': wallDateTime(s.end)}),
+                    onSelected: (_) => _setPlan(s.start, s.end),
                   ),
               ]),
             ),
-          _field('plan_start', FieldUiType.dateTime, 'เริ่ม (แผน)', miss),
-          _field('plan_end', FieldUiType.dateTime, 'สิ้นสุด (แผน)', miss),
-          if (start != null && !_locked && _schema.editable('plan_end'))
+          _anchors.wrap(
+            'plan_start',
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                flex: 3,
+                child: NxFormField(
+                  key: const ValueKey('job-start-date'),
+                  uiType: FieldUiType.date,
+                  label: tr('วันที่'),
+                  name: 'job_plan_date',
+                  value: start == null ? null : ymd(start),
+                  readOnly: !canPlan,
+                  errorText: trn(_err('plan_start', miss)),
+                  host: _host,
+                  onChanged: (v) {
+                    final d = parseYmd(v);
+                    if (d == null) return;
+                    final m = jobMoveStart(start, end, jobOnDay(start, d));
+                    _setPlan(m.start, m.end);
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: NxFormField(
+                  key: const ValueKey('job-start-time'),
+                  uiType: FieldUiType.time,
+                  label: tr('เวลาเริ่ม'),
+                  name: 'job_plan_time',
+                  value: start == null ? null : jobClock(start),
+                  readOnly: !canPlan,
+                  host: _host,
+                  onChanged: (v) {
+                    final m = RegExp(r'(\d{1,2}):(\d{2})').firstMatch('${v ?? ''}');
+                    if (m == null) return;
+                    final base = start ?? DateTime(now.year, now.month, now.day);
+                    final moved = jobMoveStart(start, end, jobAtTime(base, int.parse(m.group(1)!), int.parse(m.group(2)!)));
+                    _setPlan(moved.start, moved.end);
+                  },
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 12),
+          if (canPlan && _schema.editable('plan_end')) ...[
+            const JobLabel('ใช้เวลา'),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final h in kJobDurationHours)
+                ChoiceChip(
+                  key: ValueKey('job-dur-$h'),
+                  label: Text(tr(h == 8 ? 'ทั้งวัน (8 ชม.)' : '$h ชม.')),
+                  selected: len == Duration(hours: h),
+                  onSelected: (_) {
+                    final s = start ?? jobQuickSlots(now).first.start;
+                    setState(() => _customEnd = false);
+                    _setPlan(s, s.add(Duration(hours: h)));
+                  },
+                ),
+              ChoiceChip(
+                key: const ValueKey('job-dur-custom'),
+                label: Text(tr('กำหนดเอง')),
+                selected: customEnd,
+                onSelected: (_) => setState(() => _customEnd = !customEnd),
+              ),
+            ]),
+            const SizedBox(height: 12),
+          ],
+          if (customEnd) _field('plan_end', FieldUiType.dateTime, miss, label: 'สิ้นสุด (แผน)'),
+          _field('due_datetime', FieldUiType.dateTime, miss, gap: 8),
+          if (!_lockedField('due_datetime'))
             Padding(
-              padding: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.only(bottom: 12),
               child: Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final h in const [1, 2, 4, 8])
-                  ActionChip(
-                    key: ValueKey('job-end-plus-$h'),
-                    label: Text(tr('+$h ชม.')),
-                    onPressed: () => _set('plan_end', wallDateTime(start.add(Duration(hours: h)))),
+                for (final q in jobDueQuick(now, planEnd: end))
+                  ChoiceChip(
+                    key: ValueKey('job-due-${q.key}'),
+                    label: Text(tr(q.label)),
+                    selected: due != null && due == q.at,
+                    onSelected: (_) => _set('due_datetime', wallDateTime(q.at)),
                   ),
               ]),
             ),
-          _field('due_datetime', FieldUiType.dateTime, 'กำหนดเสร็จ', miss),
-          Text(tr('เวลาเริ่ม / เสร็จจริงบันทึกจากการเช็คอินหน้างาน'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text(tr('เวลาเริ่ม / เสร็จจริงบันทึกจากการเช็คอินหน้างาน'), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          const Divider(height: 24),
+          if (appointmentDone)
+            Row(children: [
+              const Icon(NxI.calendarCheck, size: 18, color: Color(0xFF10B981)),
+              const SizedBox(width: 8),
+              Expanded(child: Text(tr('งานนี้มีนัดหมายในปฏิทินแล้ว'), key: const ValueKey('job-appointment-done'), style: theme.textTheme.bodyMedium)),
+            ])
+          else
+            SwitchListTile(
+              key: const ValueKey('job-appointment'),
+              contentPadding: EdgeInsets.zero,
+              value: _appointment,
+              onChanged: _locked
+                  ? null
+                  : (v) {
+                      setState(() => _appointment = v);
+                      _touched();
+                    },
+              title: Text(tr('สร้างนัดหมายในปฏิทินของช่าง')),
+              subtitle: Text(tr('ใช้เวลาตามแผน — ลูกค้าเห็นนัดเดียวกับที่ช่างเห็น')),
+            ),
         ]),
       ),
       DocSectionCard(
+        key: const ValueKey('job-people'),
         title: 'ใครทำ',
         icon: NxI.users,
         color: const Color(0xFFF97316),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          _field('smownerid', FieldUiType.owner, 'ช่างผู้รับผิดชอบ', miss),
-          if (_schema.has('engineer_user_id')) _field('engineer_user_id', FieldUiType.owner, 'วิศวกรบริการ', miss),
-          if (saved != null && !_locked) ...[
-            OutlinedButton.icon(
-              key: const ValueKey('job-match-users'),
-              onPressed: _matching
-                  ? null
-                  : () async {
-                      setState(() => _matching = true);
-                      try {
-                        final d = await _api.matchJobUsers(saved);
-                        if (mounted) setState(() => _matches = extractMapList(d));
-                      } catch (e) {
-                        _snack(tr(formatApiError(e)));
-                      } finally {
-                        if (mounted) setState(() => _matching = false);
-                      }
-                    },
-              icon: const Icon(NxI.userCheck, size: 18),
-              label: Text(tr('ช่างที่ตรงทักษะของงานนี้')),
-            ),
-            for (final u in _matches)
-              ListTile(
-                key: ValueKey('job-match-${u['id'] ?? u['user_id']}'),
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(NxI.userCircle),
-                title: Text('${u['display_name'] ?? u['name'] ?? u['email'] ?? ''}'),
-                subtitle: u['email'] == null ? null : Text('${u['email']}'),
-                trailing: const Icon(NxI.plus, size: 18),
-                onTap: () => _set('smownerid', {'id': '${u['id'] ?? u['user_id']}', 'label': '${u['display_name'] ?? u['name'] ?? ''}'}),
+          if (!_schema.hides('smownerid'))
+            _anchors.wrap(
+              'smownerid',
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: JobFieldRow(
+                  key: const ValueKey('job-owner-pick'),
+                  icon: NxI.userCircle,
+                  label: jobFieldLabel('smownerid'),
+                  value: userValue('smownerid', 'ยังไม่ได้เลือก'),
+                  valueKey: const ValueKey('job-owner-value'),
+                  muted: _label('smownerid').isEmpty,
+                  hint: tr(start == null ? 'ค้นหา ดูทักษะ และใครว่าง' : 'ดูว่าใครว่างช่วง ${jobClock(start)} และตรงทักษะ'),
+                  error: trn(_err('smownerid', miss)),
+                  onTap: _lockedField('smownerid') ? null : () => _openUserPicker('smownerid'),
+                ),
               ),
-          ] else
-            Text(tr('หลังสร้างงาน ระบบช่วยหาช่างที่ตรงทักษะของงานได้ในแท็บปฏิบัติงาน'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ),
+          if (_shows('engineer_user_id'))
+            _anchors.wrap(
+              'engineer_user_id',
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: JobFieldRow(
+                  key: const ValueKey('job-engineer-pick'),
+                  icon: NxI.userCheck,
+                  label: jobFieldLabel('engineer_user_id'),
+                  value: userValue('engineer_user_id', 'ไม่ระบุ'),
+                  valueKey: const ValueKey('job-engineer-value'),
+                  muted: _label('engineer_user_id').isEmpty,
+                  hint: _str('engineer_phone').isEmpty ? null : _str('engineer_phone'),
+                  onTap: _lockedField('engineer_user_id') ? null : () => _openUserPicker('engineer_user_id'),
+                ),
+              ),
+            ),
+          if (_shows('assign_group')) _field('assign_group', FieldUiType.text, miss, hint: 'เช่น ทีมแอร์ A / ทีมเครือข่าย', gap: 10),
+          if (_shows('salesperson_user_id'))
+            _anchors.wrap(
+              'salesperson_user_id',
+              JobFieldRow(
+                key: const ValueKey('job-sales-pick'),
+                icon: NxI.briefcase,
+                label: jobFieldLabel('salesperson_user_id'),
+                value: userValue('salesperson_user_id', 'ไม่ระบุ'),
+                valueKey: const ValueKey('job-sales-value'),
+                muted: _label('salesperson_user_id').isEmpty,
+                hint: _str('salesperson_phone').isEmpty ? null : _str('salesperson_phone'),
+                onTap: _lockedField('salesperson_user_id') ? null : () => _openUserPicker('salesperson_user_id'),
+              ),
+            ),
         ]),
       ),
-      DocSectionCard(
-        title: 'นัดหมายลูกค้า',
-        icon: NxI.calendarCheck,
-        color: const Color(0xFF10B981),
-        child: !isBlankValue(_source['related_activity_id'])
-            ? Text(tr('งานนี้มีนัดหมายในปฏิทินแล้ว'), style: theme.textTheme.bodyMedium)
-            : SwitchListTile(
-                key: const ValueKey('job-appointment'),
-                contentPadding: EdgeInsets.zero,
-                value: _appointment,
-                onChanged: _locked
-                    ? null
-                    : (v) {
-                        setState(() => _appointment = v);
-                        _touched();
-                      },
-                title: Text(tr('สร้างนัดหมายกับลูกค้าในปฏิทินของช่าง')),
-                subtitle: Text(tr('ใช้เวลาเริ่มตามแผน — ลูกค้าเห็นนัดเดียวกับที่ช่างเห็น')),
-              ),
-      ),
+      ..._extraGroups(2, miss),
     ];
   }
 
-  // Step 4 ------------------------------------------------------------------
+  // Step 4 · รายละเอียดและตรวจ --------------------------------------------------
 
   Future<void> _attach() async {
     final hook = DocFormHooks.pickFiles;
@@ -1083,18 +1642,60 @@ class JobStepFormState extends State<JobStepForm> {
     setState(() => _files.addAll(files));
   }
 
+  static const _layoutLabels = {'template1': 'Template-1 · Service Report เดิม', 'template2': 'Template-2 · Service Report แบบใหม่'};
+
+  String _templateLabel() {
+    final id = _str('job_template_id');
+    if (id.isEmpty) return tr('ค่าเริ่มต้นของรูปแบบ');
+    final t = templatesOf(_ctx).where((t) => '${t['id']}' == id).firstOrNull;
+    return t == null ? '#$id' : quotationTemplateLabel(t, th: !_en);
+  }
+
+  Future<void> _openTemplatePicker() async {
+    final layout = normLayout(_values['template_key']);
+    final list = templatesOfLayout(templatesOf(_ctx), layout);
+    final v = await showDocOptionPicker(
+      context,
+      title: 'เทมเพลตเอกสาร',
+      keyPrefix: 'jobtpl',
+      selected: _str('job_template_id'),
+      options: [
+        DocOption('', tr('ค่าเริ่มต้นของรูปแบบ'), icon: NxI.fileText),
+        for (final t in list) DocOption('${t['id']}', quotationTemplateLabel(t, th: !_en), icon: NxI.fileText),
+      ],
+    );
+    if (v == null || !mounted) return;
+    _set('job_template_id', v.isEmpty ? null : int.tryParse(v) ?? v);
+  }
+
+  Future<void> _openDeliverablePicker() async {
+    final v = await showDocOptionPicker(
+      context,
+      title: 'แบบรายงานส่งมอบ',
+      keyPrefix: 'deliverable',
+      selected: _str('deliverable_template'),
+      options: [for (final c in jobChoices('deliverable_template', _schema.picklists, kDeliverableFallback, en: _en)) DocOption(c.value, c.label)],
+    );
+    if (v != null && mounted) _set('deliverable_template', v);
+  }
+
   List<Widget> _detailsStep(Map<String, String> miss) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final templates = templatesOf(_ctx);
     final layouts = layoutChoices(allowedLayoutsOf(_ctx), _values['template_key'], _mode);
     final layout = normLayout(_values['template_key']);
+    final templates = templatesOfLayout(templatesOf(_ctx), layout);
     final edit = _mode == DocFormMode.edit;
+    final descField = _schema.all['description'];
+    final descType = descField != null && resolveFieldUiType(descField) == FieldUiType.richText ? FieldUiType.richText : FieldUiType.longText;
+    final deliverables = jobChoices('deliverable_template', _schema.picklists, kDeliverableFallback, en: _en);
+    final showDoc = (layouts.length > 1 && !_schema.hides('template_key')) || templates.isNotEmpty || _shows('deliverable_template');
     return [
       DocSectionCard(
         title: 'รายละเอียดงาน',
+        subtitle: 'ช่างอ่านก่อนเข้าหน้างาน',
         icon: NxI.note,
-        child: _field('description', FieldUiType.longText, 'รายละเอียด / สิ่งที่ต้องทำ', miss),
+        child: _field('description', descType, miss, hint: 'อาการ / สิ่งที่ต้องทำ / ข้อควรระวัง', gap: 0),
       ),
       if (!edit)
         DocSectionCard(
@@ -1173,26 +1774,59 @@ class JobStepFormState extends State<JobStepForm> {
             ),
           ]),
         ),
-      if (layouts.length > 1 && !_schema.hides('template_key'))
-        DocSectionCard(
-          title: 'รูปแบบเอกสาร',
+      ..._extraGroups(3, miss),
+      if (showDoc)
+        JobCollapsible(
+          key: const ValueKey('job-doc'),
+          toggleKey: const ValueKey('job-doc-toggle'),
+          title: 'เอกสาร (รายงานบริการ)',
           icon: NxI.fileText,
           color: const Color(0xFF6366F1),
+          summary: [tr(_layoutLabels[layout] ?? layout), if (_shows('deliverable_template')) jobChoiceLabel(deliverables, _values['deliverable_template'])].where((x) => x.isNotEmpty).join(' · '),
+          open: _docOpen || _templateNotice != null,
+          onToggle: () => setState(() => _docOpen = !_docOpen),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             if (_templateNotice != null)
-              Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(tr(_templateNotice!), style: theme.textTheme.bodySmall?.copyWith(color: const Color(0xFFD97706)))),
-            Wrap(spacing: 8, children: [
-              for (final k in layouts)
-                ChoiceChip(
-                  key: ValueKey('job-layout-$k'),
-                  label: Text(tr(k == 'template2' ? 'เทมเพลต 2' : 'เทมเพลต 1')),
-                  selected: layout == k,
-                  onSelected: _locked ? null : (_) => _patch({'template_key': k, 'job_template_id': defaultTemplateOfLayout(templates, k, firstAsFallback: true)}),
-                ),
-            ]),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(tr(_templateNotice!), key: const ValueKey('job-template-notice'), style: theme.textTheme.bodySmall?.copyWith(color: const Color(0xFFD97706), fontWeight: FontWeight.w600)),
+              ),
+            if (layouts.length > 1 && !_schema.hides('template_key')) ...[
+              const JobLabel('รูปแบบเอกสาร'),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final k in layouts)
+                  ChoiceChip(
+                    key: ValueKey('job-layout-$k'),
+                    label: Text(tr(_layoutLabels[k] ?? k)),
+                    selected: layout == k,
+                    onSelected: _locked ? null : (_) => _patch({'template_key': k, 'job_template_id': defaultTemplateOfLayout(templatesOf(_ctx), k, firstAsFallback: true)}),
+                  ),
+              ]),
+              const SizedBox(height: 12),
+            ],
+            if (templates.isNotEmpty) ...[
+              JobFieldRow(
+                key: const ValueKey('job-template-pick'),
+                icon: NxI.fileText,
+                label: 'เทมเพลตเอกสาร (โลโก้ / หัวเอกสาร)',
+                value: _templateLabel(),
+                valueKey: const ValueKey('job-template-value'),
+                onTap: _locked || _schema.locks('job_template_id') ? null : _openTemplatePicker,
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (_shows('deliverable_template'))
+              JobFieldRow(
+                key: const ValueKey('job-deliverable-pick'),
+                icon: NxI.clipboardText,
+                label: jobFieldLabel('deliverable_template'),
+                value: jobChoiceLabel(deliverables, _values['deliverable_template']).isEmpty ? tr('ไม่ระบุ') : jobChoiceLabel(deliverables, _values['deliverable_template']),
+                valueKey: const ValueKey('job-deliverable-value'),
+                onTap: _lockedField('deliverable_template') ? null : _openDeliverablePicker,
+              ),
           ]),
         ),
-      _review(),
+      ..._review(),
       if (edit && widget.recordId != null)
         DocSectionCard(
           title: 'เอกสารจริง',
@@ -1204,41 +1838,91 @@ class JobStepFormState extends State<JobStepForm> {
     ];
   }
 
-  String _label(String key) {
-    final v = _values[key];
-    if (v is Map) return '${v['label'] ?? v['id'] ?? ''}';
-    return isBlankValue(v) ? '' : '$v';
-  }
+  Widget _editLink(int step) => TextButton.icon(
+        key: ValueKey('job-review-edit-$step'),
+        onPressed: () => setState(() => _go(step)),
+        icon: const Icon(NxI.pencilSimple, size: 16),
+        label: Text(tr('แก้ไข')),
+      );
 
   String _when(Object? v) {
     final d = _dt(v);
     if (d == null) return '';
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${d.day}/${d.month}/${uiYear(d.year)} ${two(d.hour)}:${two(d.minute)}';
+    return '${jobDayLabel(d, en: _en)} ${jobClock(d)}';
   }
 
-  Widget _review() {
-    final type = _options('job_type', const [('service', 'Service Job'), ('request', 'Request Job')])
-        .where((o) => o.value == '${unwrapFieldValue(_values['job_type']) ?? ''}')
-        .firstOrNull
-        ?.label;
+  List<Widget> _review() {
+    final start = _dt(_values['plan_start']), end = _dt(_values['plan_end']);
+    final len = start != null && end != null && end.isAfter(start) ? end.difference(start) : null;
+    final caseRow = _links['case'], contractRow = _links['service_contract'];
+    final site = [_str('location_name_snapshot'), siteAddressText(_values['site_address_snapshot'])].where((x) => x.isNotEmpty).join(' · ');
+    return [
+      DocSectionCard(
+        key: const ValueKey('job-review'),
+        title: 'งาน',
+        icon: NxI.wrench,
+        trailing: _editLink(0),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          DocKeyValue('ชื่องาน', _str('job_name'), valueKey: const ValueKey('job-sum-name')),
+          DocKeyValue('ประเภทงาน', jobChoiceLabel(_typeChoices, _values['job_type']), valueKey: const ValueKey('job-sum-type')),
+          DocKeyValue('ความสำคัญ', tr(jobChoiceLabel(_priorityChoices, _values['job_priority']))),
+          if (_str('job_category').isNotEmpty)
+            DocKeyValue('ลักษณะงาน', _str('job_category') == 'other' && _str('job_category_other').isNotEmpty ? _str('job_category_other') : tr(jobChoiceLabel(_categoryChoices, _values['job_category']))),
+          if (_idOf('related_case_id').isNotEmpty) DocKeyValue('เคส', caseRow == null ? '#${_idOf('related_case_id')}' : jobLinkView('case', caseRow).heading),
+          if (_idOf('related_contract_id').isNotEmpty) DocKeyValue('สัญญาบริการ', contractRow == null ? '#${_idOf('related_contract_id')}' : jobLinkView('service_contract', contractRow).heading),
+          if (_str('job_code').isNotEmpty) DocKeyValue('รหัสอ้างอิง', _str('job_code')),
+        ]),
+      ),
+      DocSectionCard(
+        key: const ValueKey('job-review-customer'),
+        title: 'ลูกค้าและสถานที่',
+        icon: NxI.mapPin,
+        color: const Color(0xFF8B5CF6),
+        trailing: _editLink(1),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          DocKeyValue('ลูกค้า', _str('customer_name'), valueKey: const ValueKey('job-sum-customer')),
+          if (_str('customer_contact_name').isNotEmpty) DocKeyValue('ผู้ติดต่อ', _str('customer_contact_name'), valueKey: const ValueKey('job-sum-contact')),
+          if (_str('customer_mobile').isNotEmpty) DocKeyValue('โทรหน้างาน', _str('customer_mobile')),
+          DocKeyValue('สถานที่', site, valueKey: const ValueKey('job-sum-site')),
+          if (_label('related_asset_id').isNotEmpty) DocKeyValue('สินทรัพย์', _label('related_asset_id')),
+        ]),
+      ),
+      DocSectionCard(
+        key: const ValueKey('job-review-when'),
+        title: 'เมื่อไร / ใคร',
+        icon: NxI.calendarClock,
+        color: const Color(0xFFF97316),
+        trailing: _editLink(2),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          DocKeyValue('เวลา', jobWhenSummary(start, end, en: _en), valueKey: const ValueKey('job-sum-start')),
+          if (len != null) DocKeyValue('ใช้เวลา', jobDurationText(len, en: _en)),
+          if (!isBlankValue(_values['due_datetime'])) DocKeyValue('กำหนดเสร็จ', _when(_values['due_datetime']), valueKey: const ValueKey('job-sum-due')),
+          DocKeyValue('ช่าง', _label('smownerid'), valueKey: const ValueKey('job-sum-tech')),
+          if (_label('engineer_user_id').isNotEmpty) DocKeyValue('วิศวกรบริการ', _label('engineer_user_id')),
+          if (_str('assign_group').isNotEmpty) DocKeyValue('ทีม', _str('assign_group')),
+          if (_appointment) DocKeyValue('นัดหมาย', tr('สร้างในปฏิทินหลังบันทึก')),
+          if (_checklistTemplate != null || _checklist.isNotEmpty)
+            DocKeyValue('เช็กลิสต์', _checklistTemplate != null ? '${_activityTemplates.where((t) => '${t['id']}' == '$_checklistTemplate').firstOrNull?['name'] ?? ''}' : tr('${_checklist.length} รายการ')),
+          if (_files.isNotEmpty) DocKeyValue('ไฟล์แนบ', tr('${_files.length} ไฟล์')),
+        ]),
+      ),
+    ];
+  }
+
+  /// Tablet side panel: the job at a glance.
+  Widget _sideSummary() {
+    final start = _dt(_values['plan_start']), end = _dt(_values['plan_end']);
     return DocSectionCard(
-      key: const ValueKey('job-review'),
-      title: 'ตรวจก่อนบันทึก',
+      title: 'สรุป',
       icon: NxI.listChecks,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        DocKeyValue('ชื่องาน', '${_values['job_name'] ?? ''}', valueKey: const ValueKey('job-sum-name')),
-        DocKeyValue('ประเภท', type ?? '${_values['job_type'] ?? ''}'),
-        DocKeyValue('ลูกค้า', '${_values['customer_name'] ?? ''}', valueKey: const ValueKey('job-sum-customer')),
-        if ('${_values['customer_contact_name'] ?? ''}'.isNotEmpty) DocKeyValue('ผู้ติดต่อ', '${_values['customer_contact_name']}'),
-        DocKeyValue('สถานที่', ['${_values['location_name_snapshot'] ?? ''}', '${_values['site_address_snapshot'] ?? ''}'].where((x) => x.trim().isNotEmpty).join(' · ')),
-        DocKeyValue('เริ่ม', _when(_values['plan_start']), valueKey: const ValueKey('job-sum-start')),
-        DocKeyValue('สิ้นสุด', _when(_values['plan_end'])),
-        DocKeyValue('ช่าง', _label('smownerid'), valueKey: const ValueKey('job-sum-tech')),
-        if (_appointment) DocKeyValue('นัดหมาย', tr('สร้างในปฏิทินหลังบันทึก')),
-        if (_checklistTemplate != null || _checklist.isNotEmpty)
-          DocKeyValue('เช็กลิสต์', _checklistTemplate != null ? '${_activityTemplates.where((t) => '${t['id']}' == '$_checklistTemplate').firstOrNull?['name'] ?? ''}' : tr('${_checklist.length} รายการ')),
-        if (_files.isNotEmpty) DocKeyValue('ไฟล์แนบ', tr('${_files.length} ไฟล์')),
+        DocKeyValue('ชื่องาน', _str('job_name')),
+        DocKeyValue('ประเภทงาน', jobChoiceLabel(_typeChoices, _values['job_type'])),
+        DocKeyValue('ลูกค้า', _str('customer_name')),
+        if (_str('customer_contact_name').isNotEmpty) DocKeyValue('ผู้ติดต่อ', _str('customer_contact_name')),
+        DocKeyValue('สถานที่', [_str('location_name_snapshot'), siteAddressText(_values['site_address_snapshot'])].where((x) => x.isNotEmpty).join(' · ')),
+        DocKeyValue('เวลา', jobWhenSummary(start, end, en: _en)),
+        DocKeyValue('ช่าง', _label('smownerid')),
       ]),
     );
   }
@@ -1248,17 +1932,24 @@ class JobStepFormState extends State<JobStepForm> {
     final cs = theme.colorScheme;
     final last = _step == _steps.length - 1;
     final busy = _busy != null;
-    final when = _when(_values['plan_start']);
+    final start = _dt(_values['plan_start']), end = _dt(_values['plan_end']);
+    final when = jobWhenSummary(start, end, en: _en);
+    final name = _str('job_name');
     final summary = Row(children: [
-      Icon(NxI.wrench, size: 18, color: cs.primary),
-      const SizedBox(width: 8),
+      Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(color: jobPriorityColor(_str('job_priority')).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(11)),
+        child: Icon(NxI.wrench, size: 18, color: jobPriorityColor(_str('job_priority'))),
+      ),
+      const SizedBox(width: 10),
       Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text('${_values['job_name'] ?? ''}'.trim().isEmpty ? tr('ยังไม่ได้ตั้งชื่องาน') : '${_values['job_name']}',
-              maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+          Text(name.isEmpty ? tr('ยังไม่ได้ตั้งชื่องาน') : name,
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: name.isEmpty ? cs.onSurfaceVariant : null)),
           Text(
             [
-              '${_values['customer_name'] ?? ''}'.trim().isEmpty ? tr('ยังไม่มีลูกค้า') : '${_values['customer_name']}',
+              _str('customer_name').isEmpty ? tr('ยังไม่มีลูกค้า') : _str('customer_name'),
               when.isEmpty ? tr('ยังไม่กำหนดเวลา') : when,
               if (_label('smownerid').isNotEmpty) _label('smownerid'),
             ].join(' · '),
@@ -1270,33 +1961,38 @@ class JobStepFormState extends State<JobStepForm> {
         ]),
       ),
     ]);
+    final saveLabel = switch (_mode) {
+      DocFormMode.edit => 'บันทึกการแก้ไข',
+      DocFormMode.duplicate => 'สร้างจากสำเนา',
+      _ => 'สร้างใบสั่งงาน',
+    };
     return DocBottomBar(summary: summary, actions: [
       if (_step > 0)
-        SizedBox(
-          height: 50,
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 50),
           child: OutlinedButton(
             key: const ValueKey('docform-back'),
             style: OutlinedButton.styleFrom(shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(horizontal: 16)),
             onPressed: busy ? null : () => setState(() => _go(_step - 1)),
-            child: const Icon(NxI.arrowLeft, size: 18),
+            child: Icon(NxI.arrowLeft, size: 18, semanticLabel: tr('ย้อนกลับ')),
           ),
         ),
-      SizedBox(
-        height: 50,
+      ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 50),
         child: last
             ? FilledButton.icon(
                 key: const ValueKey('docform-save'),
-                style: FilledButton.styleFrom(shape: const StadiumBorder()),
+                style: FilledButton.styleFrom(shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(horizontal: 12)),
                 onPressed: busy || _locked ? null : _finish,
-                icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.check, size: 18),
-                label: Text(tr(_mode == DocFormMode.edit ? 'บันทึก' : 'สร้างใบสั่งงาน')),
+                icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.checkCircle, size: 18),
+                label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr(saveLabel), maxLines: 1)),
               )
             : FilledButton.icon(
                 key: const ValueKey('docform-next'),
                 style: FilledButton.styleFrom(shape: const StadiumBorder()),
                 onPressed: busy ? null : _next,
                 icon: const Icon(NxI.arrowRight, size: 18),
-                label: Text(tr('ถัดไป · ${_steps[_step + 1].title}')),
+                label: Text(tr('ถัดไป · ${_steps[_step + 1].title}'), maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
       ),
     ]);

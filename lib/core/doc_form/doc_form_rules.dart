@@ -60,7 +60,7 @@ const List<({String key, String title})> kJobSteps = [
   (key: 'what', title: 'งานอะไร'),
   (key: 'customer', title: 'ลูกค้าและสถานที่'),
   (key: 'when', title: 'เมื่อไร / ใคร'),
-  (key: 'details', title: 'รายละเอียดและตรวจสร้าง'),
+  (key: 'details', title: 'รายละเอียดและตรวจ'),
 ];
 
 /// Fields the step screens draw themselves (not through the generic field list).
@@ -74,12 +74,14 @@ const Map<String, Map<String, int>> kCoreFieldStep = {
     'template_key': 2, 'template_id': 2, 'terms_conditions': 2, 'quote_termcondition': 2,
   },
   'job': {
-    'job_type': 0, 'job_name': 0, 'job_priority': 0, 'related_case_id': 0, 'related_contract_id': 0, 'related_quotation_id': 0,
+    'job_type': 0, 'job_name': 0, 'job_priority': 0, 'job_category': 0, 'job_category_other': 0, 'job_code': 0,
+    'related_case_id': 0, 'related_contract_id': 0, 'related_quotation_id': 0,
     'related_account_id': 1, 'related_contact_id': 1, 'customer_name': 1, 'customer_contact_name': 1, 'customer_mobile': 1,
-    'customer_email': 1, 'customer_department': 1, 'related_location_id': 1, 'location_name_snapshot': 1, 'site_address_snapshot': 1,
-    'related_asset_id': 1,
+    'customer_email': 1, 'customer_department': 1, 'contract_po_no': 1, 'related_location_id': 1, 'location_name_snapshot': 1,
+    'site_address_snapshot': 1, 'related_asset_id': 1, 'in_warranty': 1,
     'plan_start': 2, 'plan_end': 2, 'due_datetime': 2, 'smownerid': 2, 'engineer_user_id': 2, 'engineer_name': 2, 'engineer_phone': 2,
-    'description': 3, 'template_key': 3, 'job_template_id': 3,
+    'assign_group': 2, 'salesperson_user_id': 2, 'salesperson_name': 2, 'salesperson_phone': 2,
+    'description': 3, 'template_key': 3, 'job_template_id': 3, 'deliverable_template': 3,
   },
 };
 
@@ -98,6 +100,8 @@ const Map<String, Set<String>> kNotAskedFields = {
     'related_activity_id', 'business_id', 'deleted', 'crmid', 'acknowledgement_flags', 'job_process',
     // Template-2 tick lists (JSON) are ticked on the service report itself, not typed here.
     'work_types', 'work_type_other', 'system_types', 'system_other', 'service_results', 'system_status',
+    // Counted by the asset / contract plan, and the customer's sign-off at close.
+    'warranty_cycle_index', 'contract_cycle_index', 'acknowledgement_other', 'acknowledgement_note',
   },
 };
 
@@ -165,9 +169,15 @@ String? fieldSectionLabel(Map<String, dynamic> f) {
 /// known web sections first, then the business section / block name, then
 /// the field name; anything else lands in "ข้อมูลเพิ่มเติม" of the default
 /// step (quotation: เงื่อนไข · job: รายละเอียด) — never dropped.
+/// Job service-report fields written on site (problem found, work done …):
+/// one group of the details step, folded while the job is being created.
+const Set<String> kJobReportFields = {'problem_found', 'work_performed', 'customer_suggestion', 'additional_remark', 'job_process_other'};
+const String kJobReportGroup = 'ผลการปฏิบัติงาน (กรอกหน้างาน)';
+
 ({int step, String group}) placeExtraField(String module, Map<String, dynamic> f) {
   final name = fieldName(f);
   final sec = fieldSectionLabel(f);
+  if (module == 'job' && sec == null && kJobReportFields.contains(name)) return (step: 3, group: kJobReportGroup);
   final group = sec ?? 'ข้อมูลเพิ่มเติม';
   final web = _webSectionOf[module]?[name];
   if (web != null) {
@@ -872,17 +882,20 @@ const _jobCopyDrop = {
   'deleted', 'business_id', 'customer_signature', 'customer_signed_at', 'customer_signed_by_name', 'technician_signature',
   'technician_signed_at', 'technician_signed_by_name', 'evidence_photos', 'accepted_at', 'cancelled_at', 'cancel_reason', 'close_note',
   'actual_start', 'actual_end', 'accept_alert_at', 'public_token', 'public_token_at', 'customer_ack_status', '_shared_permission',
-  // ทำซ้ำ: dates and technicians start empty.
-  'plan_start', 'plan_end', 'due_datetime', 'smownerid', 'engineer_user_id', 'engineer_name', 'engineer_phone', 'related_activity_id',
+  // ทำซ้ำ: a new plan (the source's dates are past), and not the source's appointment.
+  'plan_start', 'plan_end', 'due_datetime', 'related_activity_id',
+  'warranty_cycle_index', 'contract_cycle_index', 'acknowledgement_flags', 'acknowledgement_other', 'acknowledgement_note',
 };
 
-/// ทำซ้ำ a job: customer, place and details copied; dates, technicians,
-/// status cleared; "(Copy)" name; template re-checked.
-Map<String, dynamic> jobDuplicateValues(Map<String, dynamic> src, {Map<String, dynamic> ctx = const {}}) {
+/// ทำซ้ำ a job (web `?from=`): customer, place, people and details copied;
+/// owner = me (web); dates, status, signatures cleared; "(Copy)" name;
+/// template re-checked.
+Map<String, dynamic> jobDuplicateValues(Map<String, dynamic> src, {Map<String, dynamic> ctx = const {}, String? userId}) {
   final v = <String, dynamic>{
     for (final e in src.entries)
       if (!_jobCopyDrop.contains(e.key) && !e.key.startsWith('_') && !e.key.endsWith('_name_display')) e.key: e.value,
   };
+  if (userId != null && userId.isNotEmpty) v['smownerid'] = int.tryParse(userId) ?? userId;
   final name = _s(v['job_name']);
   if (name.isNotEmpty) v['job_name'] = '$name (Copy)';
   final r = resolveDocTemplate(
