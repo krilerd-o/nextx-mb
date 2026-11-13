@@ -207,7 +207,12 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
     final chrome = NxChrome.of(context);
     // The toolbar row folds away while reading; the blur follows its height.
     final folded = bottom != null && (chrome?.collapsed ?? false);
-    return Stack(
+    // Never shorter than the status bar: the Scaffold hands the body this height as its
+    // top inset, so an empty header (Home draws its own) would otherwise put the page's
+    // content under the status bar.
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: top),
+      child: Stack(
       clipBehavior: Clip.none,
       children: [
         // The blur reaches below the header so content dissolves into it.
@@ -243,6 +248,7 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
           ),
         ),
       ],
+    ),
     );
   }
 }
