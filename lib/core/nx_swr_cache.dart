@@ -166,9 +166,16 @@ class NxSwrCache {
         final raw = p.getString('$_diskPrefix$k');
         if (raw == null) continue;
         if (_scope != scope) return;
-        _mem[k] = _Entry(jsonDecode(raw), DateTime.fromMillisecondsSinceEpoch(0), true);
+        _mem[k] = _Entry(_typed(jsonDecode(raw)), DateTime.fromMillisecondsSinceEpoch(0), true);
       }
     } catch (_) {}
+  }
+
+  /// JSON back into the shapes screens keep (lists of string-keyed maps).
+  static Object? _typed(Object? v) {
+    if (v is List && v.every((e) => e is Map)) return [for (final e in v) Map<String, dynamic>.from(e as Map)];
+    if (v is Map) return Map<String, dynamic>.from(v);
+    return v;
   }
 
   Future<void> _writeDisk(String k, Object? value) async {

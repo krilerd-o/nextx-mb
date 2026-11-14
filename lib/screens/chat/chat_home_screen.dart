@@ -21,6 +21,7 @@ import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_refresh.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../core/nx_swr_cache.dart';
 import '../../widgets/nx_split_view.dart';
 import 'chat_room_screen.dart';
 import 'chat_search_screen.dart';
@@ -199,6 +200,22 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
     }
   }
 
+  Widget _toolbar(int totalUnread) => NxListToolbar(
+        query: _lq.copyWith(q: _query),
+        liveSearch: true,
+        padding: const EdgeInsets.only(bottom: 6),
+        searchHint: 'ค้นหาแชท',
+        quickGroup: 'kind',
+        groups: [
+          const NxFilterGroup(key: 'kind', label: 'ประเภท', multi: false, options: [NxFilterOption('dm', 'ส่วนตัว'), NxFilterOption('group', 'กลุ่ม')]),
+          NxFilterGroup(key: 'state', label: 'สถานะ', multi: false, options: [NxFilterOption('unread', totalUnread > 0 ? 'ยังไม่อ่าน ($totalUnread)' : 'ยังไม่อ่าน')]),
+        ],
+        onChanged: (q) => setState(() {
+          _query = q.q;
+          _lq = q.copyWith(q: '');
+        }),
+      );
+
   @override
   Widget build(BuildContext context) {
     final me = context.read<AppConfig>().session.userId;
@@ -212,7 +229,28 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
       body: NxCachedFuture<List<Map<String, dynamic>>>(
         revision: _revision,
         load: () => _api.getChatRooms(),
-        skeleton: const NxSkeletonList(),
+        // Last list (also kept on disk): the chat tab opens on it and refreshes.
+        cacheKey: NxSwrCache.key('/api/chat/rooms'),
+        persist: true,
+        // The real toolbar stays; only the rooms are bones (50 px avatar, name /
+        // preview, time and unread badge), in the list's own padding.
+        skeleton: NxSkeleton(
+          key: const ValueKey('chat-home-skeleton'),
+          child: NxSkeletonListView(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
+            children: [
+              Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: IgnorePointer(child: _toolbar(0))),
+              for (var i = 0; i < 9; i++)
+                NxSkeletonRow(
+                  style: NxSkelRowStyle.flat,
+                  leadingSize: 50,
+                  trailing: NxSkelTrailing.timeBadge,
+                  wide: i.isEven,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                ),
+            ],
+          ),
+        ),
         isEmpty: (list) => list.isEmpty,
         empty: Center(child: Text(tr('ยังไม่มีห้องแชท'))),
         builder: (context, loaded) {
@@ -236,21 +274,7 @@ class _ChatHomeScreenState extends State<ChatHomeScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: NxListToolbar(
-                    query: _lq.copyWith(q: _query),
-                    liveSearch: true,
-                    padding: const EdgeInsets.only(bottom: 6),
-                    searchHint: 'ค้นหาแชท',
-                    quickGroup: 'kind',
-                    groups: [
-                      const NxFilterGroup(key: 'kind', label: 'ประเภท', multi: false, options: [NxFilterOption('dm', 'ส่วนตัว'), NxFilterOption('group', 'กลุ่ม')]),
-                      NxFilterGroup(key: 'state', label: 'สถานะ', multi: false, options: [NxFilterOption('unread', totalUnread > 0 ? 'ยังไม่อ่าน ($totalUnread)' : 'ยังไม่อ่าน')]),
-                    ],
-                    onChanged: (q) => setState(() {
-                      _query = q.q;
-                      _lq = q.copyWith(q: '');
-                    }),
-                  ),
+                  child: _toolbar(totalUnread),
                 ),
                 if (rooms.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text(tr('ไม่พบห้อง')))),
                 for (final r in rooms)

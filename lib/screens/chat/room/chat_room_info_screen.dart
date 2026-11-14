@@ -6,6 +6,7 @@ import '../../../core/chat_format.dart';
 import '../../../core/entity_display.dart';
 import '../../../core/i18n.dart';
 import '../../../services/api_client.dart';
+import '../../../widgets/nx_skeleton.dart';
 import '../../../widgets/nx_app_header.dart';
 import '../../../widgets/nx_attachments.dart' show openNxImageViewer;
 import '../../../widgets/nx_avatar.dart';
@@ -141,7 +142,9 @@ class _ChatRoomInfoScreenState extends State<ChatRoomInfoScreen> {
             FutureBuilder<List<Map<String, dynamic>>>(
               future: _members,
               builder: (context, snap) {
-                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                if (!snap.hasData) {
+                  return const NxSkeletonRows(key: ValueKey('room-members-skeleton'), count: 6, style: NxSkelRowStyle.flat, leadingSize: 40, trailing: NxSkelTrailing.none);
+                }
                 final list = snap.data!;
                 return ListView(children: [
                   if (!dm && _room['is_general'] != true)
@@ -162,7 +165,13 @@ class _ChatRoomInfoScreenState extends State<ChatRoomInfoScreen> {
             FutureBuilder<List<Map<String, dynamic>>>(
               future: _files,
               builder: (context, snap) {
-                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                if (!snap.hasData) {
+                  return const SingleChildScrollView(
+                    physics: NeverScrollableScrollPhysics(),
+                    padding: EdgeInsets.all(4),
+                    child: NxSkeletonGrid(key: ValueKey('room-media-skeleton'), cols: 3, count: 12, square: true, gap: 4, radius: 4),
+                  );
+                }
                 final media = snap.data!.where((f) {
                   final k = chatAttachmentKind(f['mime_type']?.toString(), f['file_name']?.toString());
                   return k == 'image' || k == 'video';
@@ -191,7 +200,9 @@ class _ChatRoomInfoScreenState extends State<ChatRoomInfoScreen> {
             FutureBuilder<List<Map<String, dynamic>>>(
               future: _files,
               builder: (context, snap) {
-                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                if (!snap.hasData) {
+                  return const NxSkeletonRows(key: ValueKey('room-files-skeleton'), count: 6, style: NxSkelRowStyle.flat, leading: NxSkelLeading.icon, leadingSize: 40, trailing: NxSkelTrailing.none);
+                }
                 final docs = snap.data!.where((f) {
                   final k = chatAttachmentKind(f['mime_type']?.toString(), f['file_name']?.toString());
                   return k == 'file' || k == 'audio';

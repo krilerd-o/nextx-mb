@@ -17,6 +17,8 @@ import '../../widgets/nx_surface_card.dart';
 import '../../services/api_exceptions.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_refresh_bar.dart';
+import '../../core/nx_swr_cache.dart';
 import '../../widgets/nx_split_view.dart';
 import '../../core/html_display.dart';
 import '../../widgets/nx_html_view.dart';
@@ -78,6 +80,9 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
   final List<Map<String, dynamic>> _items = [];
   String? _cursor;
   bool _loading = true;
+
+  /// Showing the last copy of this box while it reloads.
+  bool _refreshing = false;
   bool _loadingMore = false;
   bool _syncing = false;
   Object? _error;
@@ -126,9 +131,18 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
     }
   }
 
+  /// [NxSwrCache] key of the list on screen (box · account · search).
+  String get _listKey => NxSwrCache.key('/api/mail', query: {'box': _box, 'acc': _account?.id, 'q': _query});
+
   Future<void> _reload({bool keepSelection = false}) async {
     final gen = ++_gen;
+    // Seen this box before: show that copy at once, refresh underneath.
+    if (_items.isEmpty) {
+      final hit = NxSwrCache.instance.peek<List<Map<String, dynamic>>>(_listKey);
+      if (hit != null) _items.addAll(hit);
+    }
     setState(() {
+      _refreshing = _items.isNotEmpty;
       _loading = _items.isEmpty;
       _error = null;
       if (!keepSelection) _selected = null;
@@ -172,11 +186,17 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
           _cursor = page.nextCursor;
           _syncing = page.syncing;
         });
+        NxSwrCache.instance.put(_listKey, List<Map<String, dynamic>>.of(rows));
       }
     } catch (e) {
       if (mounted && gen == _gen) setState(() => _error = e);
     } finally {
-      if (mounted && gen == _gen) setState(() => _loading = false);
+      if (mounted && gen == _gen) {
+        setState(() {
+          _loading = false;
+          _refreshing = false;
+        });
+      }
     }
   }
 
@@ -537,7 +557,26 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
 
   Widget _listBody(ThemeData theme, ColorScheme cs, bool twoPane) {
     final shown = _shown;
-    if (_loading && _items.isEmpty) return const NxSkeletonList();
+    if (_loading && _items.isEmpty) {
+      // Mail rows: 40 px avatar, sender + time, subject, snippet.
+      return NxSkeleton(
+        key: const ValueKey('mail-list-skeleton'),
+        child: NxSkeletonListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+          children: [
+            for (var i = 0; i < 9; i++)
+              NxSkeletonRow(
+                style: NxSkelRowStyle.flat,
+                leadingSize: 40,
+                lines: 3,
+                trailing: NxSkelTrailing.text,
+                wide: i.isEven,
+                padding: const EdgeInsets.fromLTRB(12, 16, 6, 16),
+              ),
+          ],
+        ),
+      );
+    }
     if (_error != null && _items.isEmpty) {
       return Center(
         child: Column(
@@ -569,18 +608,18 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
       );
     }
     final acc = _account;
-    final list = NxRefresh(
+    final list = NxRefreshOverlay(
+      refreshing: _refreshing,
+      child: NxRefresh(
       onRefresh: _reload,
       child: ListView.builder(
         controller: _scroll,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
         itemCount: shown.length + (_loadingMore ? 1 : 0),
         itemBuilder: (context, i) {
-          if (i >= shown.length)
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            );
+          if (i >= shown.length) {
+            return const NxSkeletonRow(style: NxSkelRowStyle.flat, leadingSize: 40, lines: 3, trailing: NxSkelTrailing.text, padding: EdgeInsets.fromLTRB(12, 16, 6, 16));
+          }
           final m = shown[i];
           final id = m['id']?.toString() ?? '';
           final unread = isMailUnread(m, _box);
@@ -663,6 +702,7 @@ class _MailHomeScreenState extends State<MailHomeScreen> {
           );
         },
       ),
+    ),
     );
     return NxSplitView(
       onClose: () => setState(() => _selected = null),
@@ -1311,6 +1351,10 @@ class _MailDetailScreenState extends State<MailDetailScreen> {
                 ),
               ),
             const SizedBox(height: 12),
+            // The body arrives with the full message: an article skeleton until then.
+            if (_item == null && _error == null)
+              const NxSkeletonArticle(key: ValueKey('mail-body-skeleton'), title: false, padded: false, paragraphs: 2)
+            else
             NxHtmlView(
               html:
                   data['body_html']?.toString() ??
@@ -1410,7 +1454,7 @@ class _MailThreadScreenState extends State<MailThreadScreen> {
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) return const NxSkeletonList();
+          if (snap.connectionState != ConnectionState.done) return const NxSkeletonMessageCards(key: ValueKey('mail-thread-skeleton'));
           if (snap.hasError) return Center(child: Text(tr(formatApiError(snap.error!))));
           final list = snap.data ?? const [];
           if (list.isEmpty) return Center(child: Text(tr('ไม่มีข้อความในเธรดนี้')));
