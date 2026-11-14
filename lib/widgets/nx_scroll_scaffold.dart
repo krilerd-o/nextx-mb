@@ -304,7 +304,7 @@ class NxEdgeBlur extends StatelessWidget {
     final alphas = full
         ? const [0.42, 0.34, 0.24, 0.15, 0.08, 0.03, 0.0]
         : lite
-            ? const [0.82, 0.74, 0.62, 0.46, 0.28, 0.12, 0.0]
+            ? const [0.9, 0.82, 0.68, 0.5, 0.3, 0.12, 0.0]
             : const [0.94, 0.86, 0.72, 0.52, 0.3, 0.12, 0.0];
     final ws = full ? null : washSolid?.clamp(0.0, 0.95);
     final tint = DecoratedBox(
@@ -320,7 +320,7 @@ class NxEdgeBlur extends StatelessWidget {
                 begin: edge,
                 end: away,
                 colors: [
-                  for (final a in lite ? const [0.92, 0.9, 0.86, 0.62, 0.32, 0.1, 0.0] : const [0.97, 0.95, 0.92, 0.66, 0.34, 0.1, 0.0])
+                  for (final a in lite ? const [1.0, 0.99, 0.97, 0.68, 0.34, 0.1, 0.0] : const [0.97, 0.95, 0.92, 0.66, 0.34, 0.1, 0.0])
                     bg.withValues(alpha: a),
                 ],
                 stops: [0, ws * 0.5, ws, ws + (1 - ws) * 0.3, ws + (1 - ws) * 0.6, ws + (1 - ws) * 0.85, 1],

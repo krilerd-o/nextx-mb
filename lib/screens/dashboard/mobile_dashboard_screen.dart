@@ -1134,6 +1134,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
                               controller: _scroll,
                               physics: const AlwaysScrollableScrollPhysics(),
                               cacheExtent: MediaQuery.sizeOf(context).height,
+                              // Like the old ListView: later widgets paint over the hero's scene,
+                              // which runs on under the first widget (a viewport paints the
+                              // first sliver on top by default).
+                              paintOrder: SliverPaintOrder.lastIsTop,
                               slivers: [
                                 SliverToBoxAdapter(child: hero),
                                 if (top.isNotEmpty) limitSliver(SliverList.list(children: top)),

@@ -208,6 +208,8 @@ void main() {
     await _settle(tester);
     expect(find.byKey(const ValueKey('home-scroll')), findsOneWidget);
     expect(find.byType(SliverList), findsWidgets);
+    // Widgets paint over the hero's scene (it runs on under the first one), as in the old ListView.
+    expect(tester.widget<CustomScrollView>(find.byKey(const ValueKey('home-scroll'))).paintOrder, SliverPaintOrder.lastIsTop);
     // The last widgets of the default order are not built until scrolled near.
     expect(find.byKey(const ValueKey('home-birthdays')), findsNothing);
     expect(fake.calls.where((c) => c.path == '/api/calendar/birthdays/upcoming'), isEmpty, reason: 'its data loads when it nears the screen');
