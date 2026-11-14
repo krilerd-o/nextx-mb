@@ -69,12 +69,22 @@ const double kHomeWidgetGap = 16;
 
 /// Soft, wide shadow of the Home cards (dark mode: a deeper, tighter one). Always painted outside
 /// any clip (see [HomeCardShadow]) so it is never cut into a flat band.
-List<BoxShadow> homeCardShadows(bool dark) => dark
-    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.34), offset: const Offset(0, 8), blurRadius: 22, spreadRadius: -4)]
-    : const [
-        BoxShadow(color: Color(0x0A0F172A), offset: Offset(0, 1), blurRadius: 2),
-        BoxShadow(color: Color(0x120F172A), offset: Offset(0, 12), blurRadius: 30, spreadRadius: -8),
-      ];
+///
+/// [lite] (effects "เบา" / off): one small shadow — a 30px blur under every card is a large
+/// blur pass per card per frame while Home scrolls on a low-end GPU.
+List<BoxShadow> homeCardShadows(bool dark, {bool lite = false}) {
+  if (lite) {
+    return dark
+        ? [BoxShadow(color: Colors.black.withValues(alpha: 0.30), offset: const Offset(0, 4), blurRadius: 8, spreadRadius: -2)]
+        : const [BoxShadow(color: Color(0x140F172A), offset: Offset(0, 4), blurRadius: 8, spreadRadius: -2)];
+  }
+  return dark
+      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.34), offset: const Offset(0, 8), blurRadius: 22, spreadRadius: -4)]
+      : const [
+          BoxShadow(color: Color(0x0A0F172A), offset: Offset(0, 1), blurRadius: 2),
+          BoxShadow(color: Color(0x120F172A), offset: Offset(0, 12), blurRadius: 30, spreadRadius: -8),
+        ];
+}
 
 /// The one Home card look — frosted glass: a milky, slightly translucent fill that is brighter at
 /// the top, a light rim catching the light, 24 radius and the soft shadow.
@@ -91,7 +101,7 @@ BoxDecoration homeCardDecoration(BuildContext context, {double radius = kHomeCar
           : [Colors.white.withValues(alpha: 0.94), Colors.white.withValues(alpha: 0.72)],
     ),
     borderRadius: BorderRadius.circular(radius),
-    boxShadow: homeCardShadows(dark),
+    boxShadow: homeCardShadows(dark, lite: !Effects.blur(context)),
     border: Border.all(color: Colors.white.withValues(alpha: dark ? 0.09 : 0.85), width: dark ? 1 : 1.2),
   );
 }
@@ -112,16 +122,17 @@ class HomeCardShadow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var body = child;
-    if (frost && Effects.of(context) != EffectsLevel.off) {
+    // Live blur only on "full": lite phones get the milky fill alone (no per-frame backdrop read).
+    if (frost && Effects.blur(context)) {
       body = ClipRRect(
         borderRadius: BorderRadius.circular(radius),
-        child: BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18), child: body),
+        child: BackdropFilter.grouped(filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18), child: body),
       );
     }
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        boxShadow: homeCardShadows(Theme.of(context).brightness == Brightness.dark),
+        boxShadow: homeCardShadows(Theme.of(context).brightness == Brightness.dark, lite: !Effects.blur(context)),
       ),
       child: body,
     );

@@ -168,13 +168,30 @@ void main() {
       return tester.state<HomeHeroSceneState>(_key('scene'));
     }
 
-    testWidgets('moves while shown (lite and full)', (tester) async {
-      for (final pref in [EffectsPreference.lite, EffectsPreference.full]) {
-        final s = await pumpScene(tester, pref: pref);
-        expect(s.animating, isTrue, reason: '$pref');
-        await tester.pump(const Duration(milliseconds: 200));
-        await tester.pumpWidget(const SizedBox());
-      }
+    testWidgets('moves while shown on full effects', (tester) async {
+      final s = await pumpScene(tester, pref: EffectsPreference.full);
+      expect(s.animating, isTrue);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('lite: a still, cached frame — no motion timer, no parallax; redrawn each minute', (tester) async {
+      final s = await pumpScene(tester, pref: EffectsPreference.lite);
+      expect(s.animating, isFalse, reason: 'no Timer.periodic repainting the clouds on low-end phones');
+      expect(s.followingClock, isTrue, reason: 'still follows the time of day');
+      expect(find.descendant(of: _key('scene'), matching: find.byType(RepaintBoundary)), findsWidgets);
+      expect(
+        find.descendant(of: _key('scene'), matching: find.byType(ValueListenableBuilder<double>)),
+        findsNothing,
+        reason: 'no per-layer parallax: the whole scene scrolls as one cached layer',
+      );
+      // Many frames later nothing has been scheduled except the next-minute redraw.
+      await tester.pump(const Duration(seconds: 5));
+      expect(s.animating, isFalse);
+      expect(tester.binding.hasScheduledFrame, isFalse, reason: 'nothing repaints between minutes');
+      await tester.pump(const Duration(seconds: 61));
+      expect(s.followingClock, isTrue, reason: 're-armed for the next minute');
+      await tester.pumpWidget(const SizedBox());
     });
 
     testWidgets('reduce motion / effects off / hidden: still frame, no motion timer', (tester) async {
@@ -187,6 +204,8 @@ void main() {
     });
 
     testWidgets('pauses when its tab is hidden and resumes when shown', (tester) async {
+      Effects.preference.value = EffectsPreference.full;
+      addTearDown(() => Effects.preference.value = EffectsPreference.lite);
       Widget tabs(int index) => MediaQuery(
             data: const MediaQueryData(),
             child: Directionality(
@@ -208,6 +227,8 @@ void main() {
     });
 
     testWidgets('pauses once scrolled out of view', (tester) async {
+      Effects.preference.value = EffectsPreference.full;
+      addTearDown(() => Effects.preference.value = EffectsPreference.lite);
       final scroll = ScrollController();
       addTearDown(scroll.dispose);
       await tester.pumpWidget(MediaQuery(

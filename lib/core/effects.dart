@@ -13,6 +13,16 @@ enum EffectsLevel { full, lite, off }
 /// User choice in settings; `auto` picks from the device.
 enum EffectsPreference { auto, full, lite, off }
 
+/// Device facts [Effects.detect] looks at (0 / false = unknown).
+@immutable
+class DeviceSpecs {
+  const DeviceSpecs({this.cores = 0, this.ramMb = 0, this.androidSdk = 0, this.lowRam = false});
+  final int cores;
+  final int ramMb;
+  final int androidSdk;
+  final bool lowRam;
+}
+
 class Effects {
   Effects._();
 
@@ -21,11 +31,19 @@ class Effects {
   /// Default is "เบา" (lite) until the user picks something else.
   static final ValueNotifier<EffectsPreference> preference = ValueNotifier(EffectsPreference.lite);
 
-  /// Set once at startup from the device (CPU cores / platform).
+  /// Set once at startup from the device (see [detect]).
   static EffectsLevel deviceDefault = EffectsLevel.full;
 
-  static Future<void> init() async {
-    deviceDefault = _detect();
+  /// [specs]: what main read from device_info_plus (null on web / tests → cores only).
+  static Future<void> init({DeviceSpecs? specs}) async {
+    deviceDefault = detect(
+      web: kIsWeb,
+      platform: defaultTargetPlatform,
+      cores: specs?.cores ?? _cores(),
+      ramMb: specs?.ramMb ?? 0,
+      androidSdk: specs?.androidSdk ?? 0,
+      lowRamFlag: specs?.lowRam ?? false,
+    );
     try {
       final p = await SharedPreferences.getInstance();
       final raw = p.getString(_prefKey);
@@ -41,19 +59,48 @@ class Effects {
     } catch (_) {}
   }
 
-  static EffectsLevel _detect() {
-    if (kIsWeb) return EffectsLevel.lite;
-    // Low-end Android phones usually have ≤4 cores; live blur costs them frames.
-    try {
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        final cores = _cores();
-        if (cores > 0 && cores <= 4) return EffectsLevel.lite;
-      }
-    } catch (_) {}
+  /// Android phones under this much RAM get "lite" in auto mode.
+  static const androidFullRamMb = 6 * 1024;
+
+  /// iPhones / iPads under this much RAM (2 GB models: 6s, 7, SE 1) get "lite".
+  static const iosFullRamMb = 3 * 1024;
+
+  /// Android 12 (API 31) and newer; older releases also tend to be older, slower GPUs.
+  static const androidFullSdk = 31;
+
+  /// What "อัตโนมัติ" resolves to on this device. New installs still start on
+  /// "เบา" ([preference] defaults to lite); this only matters once the user picks auto.
+  ///
+  /// Android → lite when any of: ≤ 4 CPU cores, < 6 GB RAM, Android < 12 (SDK 31) or the
+  /// system's own low-RAM flag; iOS → lite under 3 GB RAM; web → lite. Unknown values
+  /// (0) never count against the device.
+  static EffectsLevel detect({
+    required bool web,
+    required TargetPlatform platform,
+    int cores = 0,
+    int ramMb = 0,
+    int androidSdk = 0,
+    bool lowRamFlag = false,
+  }) {
+    if (web) return EffectsLevel.lite;
+    if (platform == TargetPlatform.android) {
+      if (lowRamFlag) return EffectsLevel.lite;
+      if (cores > 0 && cores <= 4) return EffectsLevel.lite;
+      if (ramMb > 0 && ramMb < androidFullRamMb) return EffectsLevel.lite;
+      if (androidSdk > 0 && androidSdk < androidFullSdk) return EffectsLevel.lite;
+    } else if (platform == TargetPlatform.iOS) {
+      if (ramMb > 0 && ramMb < iosFullRamMb) return EffectsLevel.lite;
+    }
     return EffectsLevel.full;
   }
 
-  static int _cores() => _coreCounter?.call() ?? 0;
+  static int _cores() {
+    try {
+      return _coreCounter?.call() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
 
   /// Injected from main (dart:io is not available on web).
   static int Function()? _coreCounter;

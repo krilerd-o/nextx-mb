@@ -75,20 +75,23 @@ void main() {
     await tester.pump(const Duration(minutes: 2));
   });
 
-  testWidgets('lite blur steps down in graded bands (no single hard edge)', (tester) async {
+  testWidgets('lite edge blur draws no BackdropFilter (wash only); full keeps the blur ramp', (tester) async {
     final before = Effects.preference.value;
     addTearDown(() => Effects.preference.value = before);
     Effects.preference.value = EffectsPreference.lite;
     await tester.pumpWidget(const MaterialApp(
       home: SizedBox(height: 120, child: NxEdgeBlur(fromTop: true, solidFraction: 0.5)),
     ));
-    final filters = tester.widgetList<BackdropFilter>(find.byType(BackdropFilter)).toList();
-    expect(filters.length, NxEdgeBlur.liteBands);
-    final heights = tester.widgetList<FractionallySizedBox>(find.byType(FractionallySizedBox)).map((f) => f.heightFactor!).toList();
-    for (var i = 1; i < heights.length; i++) {
-      expect(heights[i], lessThan(heights[i - 1]), reason: 'each stronger band is shorter');
-    }
-    expect(heights.last, closeTo(0.5, 1e-9), reason: 'the strongest covers the solid part');
-    expect(heights.first, greaterThan(0.5));
+    expect(find.byType(BackdropFilter), findsNothing, reason: 'live blur costs low-end phones frames');
+    final wash = tester.widget<DecoratedBox>(find.descendant(of: find.byType(NxEdgeBlur), matching: find.byType(DecoratedBox)));
+    final g = (wash.decoration as BoxDecoration).gradient! as LinearGradient;
+    expect(g.colors.first.a, greaterThan(0.8), reason: 'the wash keeps text behind the header from ghosting');
+    expect(g.colors.last.a, 0, reason: 'and fades out with no hard edge');
+
+    Effects.preference.value = EffectsPreference.full;
+    await tester.pumpWidget(const MaterialApp(
+      home: SizedBox(height: 120, child: NxEdgeBlur(fromTop: true, solidFraction: 0.5)),
+    ));
+    expect(find.byType(BackdropFilter), findsNWidgets(12));
   });
 }

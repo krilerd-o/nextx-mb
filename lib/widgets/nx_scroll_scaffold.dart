@@ -259,8 +259,8 @@ class _FloatingHeader extends StatelessWidget implements PreferredSizeWidget {
 ///
 /// Full: many fine steps, each a hair stronger than the one below it and
 /// blurred evenly in both directions, so the eye sees one smooth ramp instead
-/// of stacked bands. Lite: one light blur under the header (cheap) plus the
-/// wash, so text behind the header is still softened. Off: wash only.
+/// of stacked bands. Lite and off: the wash gradient only (no live blur —
+/// cheap on low-end phones); lite's wash is a little lighter than off's.
 class NxEdgeBlur extends StatelessWidget {
   const NxEdgeBlur({super.key, required this.fromTop, this.maxSigma = 14, this.steps = 12, this.solidFraction = 0.45, this.washSolid});
 
@@ -291,11 +291,6 @@ class NxEdgeBlur extends StatelessWidget {
   /// solid — the header itself — so tall headers (title + search + chips) read
   /// as clearly as Home's; only the tail below fades.
   final double? washSolid;
-
-  static const liteSigma = 6.0;
-
-  /// Lite: bands from light (tallest) up to [liteSigma] (the header itself).
-  static const liteBands = 4;
 
   @override
   Widget build(BuildContext context) {
@@ -333,34 +328,11 @@ class NxEdgeBlur extends StatelessWidget {
       ),
       child: const SizedBox.expand(),
     );
-    if (!full && !lite) return IgnorePointer(child: tint);
-    if (lite) {
-      // A few graded bands instead of one: each lower band is lighter, so the
-      // blur steps down softly instead of ending at a hard line.
-      final reach = solidFraction + (1 - solidFraction) * 0.6;
-      return IgnorePointer(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            for (var i = 0; i < liteBands; i++)
-              Align(
-                alignment: edge,
-                child: FractionallySizedBox(
-                  widthFactor: 1,
-                  heightFactor: reach - (reach - solidFraction) * i / (liteBands - 1),
-                  child: ClipRect(
-                    child: BackdropFilter.grouped(
-                      filter: ui.ImageFilter.blur(sigmaX: liteSigma * (i + 1) / liteBands, sigmaY: liteSigma * (i + 1) / liteBands),
-                      child: const SizedBox.expand(),
-                    ),
-                  ),
-                ),
-              ),
-            tint,
-          ],
-        ),
-      );
-    }
+    // Lite / off: the wash only — no BackdropFilter. Each live blur re-reads and
+    // filters the screen under it every frame, which is what made scrolling stutter
+    // on low-end phones; the lite wash alphas are strong enough to keep text behind
+    // the header from ghosting through.
+    if (!full) return IgnorePointer(child: tint);
     return IgnorePointer(
       child: Stack(
         fit: StackFit.expand,

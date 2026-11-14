@@ -49,9 +49,21 @@ String heroDeltaLabel(double pct) {
 
 const _textShadow = [Shadow(color: Color(0x59000000), blurRadius: 10, offset: Offset(0, 1))];
 
-TextStyle? _onPhoto(TextStyle? s, {double alpha = 1, FontWeight? weight}) => s?.copyWith(
+/// Lite / off: a crisp 1px drop instead of the blurred glow (a blurred text shadow is a
+/// mask-filter pass per glyph run on every repaint of the header).
+const _textShadowFlat = [Shadow(color: Color(0x47000000), offset: Offset(0, 1))];
+
+/// Shadows for white text / icons on the scene, faded by [fade] (0 = none).
+List<Shadow>? _photoShadows(BuildContext context, [double fade = 1]) {
+  if (fade <= 0) return null;
+  final base = Effects.blur(context) ? _textShadow : _textShadowFlat;
+  if (fade >= 1) return base;
+  return [for (final s in base) Shadow(color: s.color.withValues(alpha: s.color.a * fade), blurRadius: s.blurRadius, offset: s.offset)];
+}
+
+TextStyle? _onPhoto(BuildContext context, TextStyle? s, {double alpha = 1, FontWeight? weight}) => s?.copyWith(
   color: Colors.white.withValues(alpha: alpha),
-  shadows: _textShadow,
+  shadows: _photoShadows(context),
   fontWeight: weight,
 );
 
@@ -107,22 +119,17 @@ class HomeHero extends StatelessWidget {
     );
 
     // No rounded edge: the scene melts into the page (behind [overlap] when there is one).
-    // The bottom fades out with an alpha mask (the scene itself turns transparent), so it melts
-    // into whatever the page colour is, with no seam.
-    final scene = ShaderMask(
-      blendMode: BlendMode.dstIn,
-      shaderCallback: (r) => const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Colors.white, Colors.white, Color(0x73FFFFFF), Color(0x14FFFFFF), Color(0x00FFFFFF)],
-        stops: [0, 0.64, 0.80, 0.90, 0.97],
-      ).createShader(r),
+    // The bottom fades into the page colour with a plain gradient overlay. The page is one
+    // solid colour, so this looks exactly like the old alpha mask (ShaderMask) but needs no
+    // offscreen layer — the scene stays one cached picture while Home scrolls.
+    final page = NxAtmosphereTokens.of(context).top;
+    final scene = RepaintBoundary(
       child: Stack(
         fit: StackFit.expand,
         clipBehavior: Clip.none,
         children: [
-          // Runs 12px past the bottom (cut by the outer clip): the layer's own last pixel
-          // row can escape the fade mask on some renderers and show as a hairline.
+          // Runs 12px past the bottom (cut by the outer clip) so its last pixel row never
+          // shows as a hairline above the fade.
           Positioned(
             left: 0,
             right: 0,
@@ -140,6 +147,18 @@ class HomeHero extends StatelessWidget {
                 end: Alignment.bottomCenter,
                 colors: [Colors.black.withValues(alpha: 0.26), Colors.black.withValues(alpha: 0.05), Colors.black.withValues(alpha: 0)],
                 stops: const [0, 0.30, 0.55],
+              ),
+            ),
+          ),
+          // Fade into the page: 1 − the old mask's alpha (1, 1, 0.45, 0.08, 0) at the same stops.
+          DecoratedBox(
+            key: const ValueKey('home-hero-fade'),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [page.withValues(alpha: 0), page.withValues(alpha: 0), page.withValues(alpha: 0.549), page.withValues(alpha: 0.922), page],
+                stops: const [0, 0.64, 0.80, 0.90, 0.97],
               ),
             ),
           ),
@@ -225,9 +244,7 @@ class HomeGreetingBar extends StatelessWidget implements PreferredSizeWidget {
       builder: (context, p, _) {
         final ink = Color.lerp(Colors.white, theme.colorScheme.onSurface, p)!;
         final soft = Color.lerp(Colors.white.withValues(alpha: 0.92), theme.colorScheme.onSurfaceVariant, p)!;
-        final shadows = p >= 1
-            ? const <Shadow>[]
-            : [for (final s in _textShadow) Shadow(color: s.color.withValues(alpha: s.color.a * (1 - p)), blurRadius: s.blurRadius, offset: s.offset)];
+        final shadows = _photoShadows(context, 1 - p) ?? const <Shadow>[];
         return AnnotatedRegion<SystemUiOverlayStyle>(
           // Light icons on the scene; the theme's own once the page is under them.
           value: (p < 0.5 || dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(statusBarColor: Colors.transparent),
@@ -309,8 +326,8 @@ class HeroGlassButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final level = Effects.of(context);
-    final blur = level != EffectsLevel.off;
+    // Live blur on "full" only; lite gets a slightly stronger milky fill instead.
+    final blur = Effects.blur(context);
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
     final p = solid.clamp(0.0, 1.0);
@@ -327,14 +344,15 @@ class HeroGlassButton extends StatelessWidget {
             icon,
             size: 21,
             color: Color.lerp(Colors.white, theme.colorScheme.onSurface, p),
-            shadows: p >= 1 ? null : [for (final s in _textShadow) Shadow(color: s.color.withValues(alpha: s.color.a * (1 - p)), blurRadius: s.blurRadius, offset: s.offset)],
+            shadows: _photoShadows(context, 1 - p),
           ),
         ),
       ),
     );
     if (blur && p < 1) {
       face = ClipOval(
-        child: BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14), child: face),
+        // Grouped: shares one backdrop capture with the other header blurs.
+        child: BackdropFilter.grouped(filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14), child: face),
       );
     }
     if (p > 0) {
@@ -432,7 +450,7 @@ class _Headline extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(tr(label), style: _onPhoto(theme.textTheme.titleSmall, alpha: 0.9, weight: FontWeight.w600)),
+        Text(tr(label), style: _onPhoto(context, theme.textTheme.titleSmall, alpha: 0.9, weight: FontWeight.w600)),
         const SizedBox(height: 2),
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -447,7 +465,7 @@ class _Headline extends StatelessWidget {
                     value,
                     key: ValueKey('home-headline-value-$value'),
                     maxLines: 1,
-                    style: _onPhoto(theme.textTheme.displaySmall, weight: FontWeight.w800)?.copyWith(letterSpacing: -0.8, height: 1.1),
+                    style: _onPhoto(context, theme.textTheme.displaySmall, weight: FontWeight.w800)?.copyWith(letterSpacing: -0.8, height: 1.1),
                   ),
                 ),
               ),
@@ -550,7 +568,7 @@ class HeroSalesHeadline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final small = _onPhoto(theme.textTheme.bodySmall, alpha: 0.88, weight: FontWeight.w500);
+    final small = _onPhoto(context, theme.textTheme.bodySmall, alpha: 0.88, weight: FontWeight.w500);
     if (!deals) {
       final q = quotes;
       return _Headline(
@@ -609,7 +627,7 @@ class HeroServiceHeadline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final small = _onPhoto(theme.textTheme.bodySmall, alpha: 0.88, weight: FontWeight.w500);
+    final small = _onPhoto(context, theme.textTheme.bodySmall, alpha: 0.88, weight: FontWeight.w500);
     final loading = (showJobs && jobs == null) || (showCases && cases == null);
     final total = (showJobs ? jobs ?? 0 : 0) + (showCases ? cases ?? 0 : 0);
     final label = showJobs && showCases

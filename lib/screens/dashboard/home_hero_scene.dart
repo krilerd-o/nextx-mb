@@ -419,10 +419,11 @@ const _front = _Hill(0.72, [(14, 650, 1.0), (6, 1700, 0.4), (5, 240, 3.3)]);
 /// clouds and rolling hills, all following the time of day.
 ///
 /// Cheap by design: three layers in their own [RepaintBoundary]s (sky, moving
-/// clouds / stars, hills); only the middle one repaints on a throttled timer
-/// (24 fps full, 12 fps lite) and only while Home is on screen and the app is in
-/// the foreground. Effects off or "reduce motion" → one still frame that still
-/// follows the clock (re-checked every 30 s).
+/// clouds / stars, hills). Full: only the middle one repaints on a throttled
+/// 24 fps timer, and only while Home is on screen and the app is in the
+/// foreground. Lite, effects off or "reduce motion": one still frame (no motion
+/// timer, no parallax — the cached layers just scroll with the page) that is
+/// redrawn once per minute so it still follows the time of day.
 class HomeHeroScene extends StatefulWidget {
   const HomeHeroScene({super.key, this.time, this.parallax = true});
 
@@ -461,6 +462,14 @@ class HomeHeroSceneState extends State<HomeHeroScene> {
   /// The motion timer is running (clouds / stars moving).
   @visibleForTesting
   bool get animating => _frames != null;
+
+  /// The once-a-minute time-of-day refresh is armed (still scene on screen).
+  @visibleForTesting
+  bool get followingClock => _clock != null;
+
+  /// Clouds drift and the layers move at different speeds while scrolling: full effects only.
+  /// Lite phones get a still frame — continuous repaints were what made them stutter.
+  bool get _moving => _level == EffectsLevel.full;
 
   /// Jumps the cloud / star / bird motion to [seconds] (previews, tests).
   @visibleForTesting
@@ -525,7 +534,7 @@ class HomeHeroSceneState extends State<HomeHeroScene> {
     final px = pos.pixels;
     final height = context.size?.height ?? 420;
     final onScreen = px < height;
-    if (_level != EffectsLevel.off) _scroll.value = px.clamp(0.0, height);
+    if (_moving) _scroll.value = px.clamp(0.0, height);
     if (onScreen != _onScreen) {
       _onScreen = onScreen;
       if (onScreen) _updateSpec();
@@ -547,26 +556,39 @@ class HomeHeroSceneState extends State<HomeHeroScene> {
   /// Starts / stops the timers for what the scene may do right now.
   void _sync() {
     final active = _tickerOn && _shown && _resumed && _onScreen;
-    final move = active && _level != EffectsLevel.off;
+    final move = active && _moving;
+    if (!_moving && _scroll.value != 0) _scroll.value = 0;
     if (move && _frames == null) {
       _clock?.cancel();
       _clock = null;
-      final fps = _level == EffectsLevel.full ? 24 : 12;
       _frameWatch
         ..reset()
         ..start();
-      _frames = Timer.periodic(Duration(microseconds: 1000000 ~/ fps), (_) => _tick());
+      _frames = Timer.periodic(const Duration(microseconds: 1000000 ~/ 24), (_) => _tick());
     } else if (!move && _frames != null) {
       _frames!.cancel();
       _frames = null;
       _frameWatch.stop();
     }
     if (!move && active) {
-      _clock ??= Timer.periodic(const Duration(seconds: 30), (_) => _updateSpec());
-    } else if (!active) {
+      if (_clock == null) _armClock();
+    } else {
       _clock?.cancel();
       _clock = null;
     }
+  }
+
+  /// Still scene: one redraw at the next minute boundary (then re-armed), so the
+  /// sky follows the time of day without a running timer between minutes.
+  void _armClock() {
+    final t = now;
+    final wait = Duration(seconds: 60 - t.second, milliseconds: -t.millisecond).inMilliseconds.clamp(200, 60000);
+    _clock = Timer(Duration(milliseconds: wait), () {
+      _clock = null;
+      if (!mounted) return;
+      _updateSpec();
+      _sync();
+    });
   }
 
   void _tick() {
@@ -575,7 +597,7 @@ class HomeHeroSceneState extends State<HomeHeroScene> {
     _frameWatch
       ..reset()
       ..start();
-    _motion.value += dt * (_level == EffectsLevel.full ? 1.0 : 0.6);
+    _motion.value += dt;
     if (now.minute != _spec.minuteKey % 60) _updateSpec();
   }
 
@@ -596,7 +618,7 @@ class HomeHeroSceneState extends State<HomeHeroScene> {
     final spec = _spec;
     Widget layer(CustomPainter painter, double depth) {
       final paint = RepaintBoundary(child: CustomPaint(painter: painter, size: Size.infinite));
-      if (!widget.parallax || depth == 0) return paint;
+      if (!widget.parallax || depth == 0 || !_moving) return paint;
       return ValueListenableBuilder<double>(
         valueListenable: _scroll,
         child: paint,
@@ -604,19 +626,19 @@ class HomeHeroSceneState extends State<HomeHeroScene> {
       );
     }
 
-    return ExcludeSemantics(
-      child: Stack(
-        fit: StackFit.expand,
-        alignment: Alignment.topLeft,
-        textDirection: TextDirection.ltr,
-        children: [
-          // The sky drifts down as the page scrolls up (seems further away).
-          layer(_SkyPainter(spec), 0.35),
-          layer(_DriftPainter(spec, _motion), 0.25),
-          layer(_LandPainter(spec), 0.10),
-        ],
-      ),
+    final scene = Stack(
+      fit: StackFit.expand,
+      alignment: Alignment.topLeft,
+      textDirection: TextDirection.ltr,
+      children: [
+        // The sky drifts down as the page scrolls up (seems further away).
+        layer(_SkyPainter(spec), 0.35),
+        layer(_DriftPainter(spec, _motion), 0.25),
+        layer(_LandPainter(spec), 0.10),
+      ],
     );
+    // Still scene: one cached layer that only moves with the page (no repaint while scrolling).
+    return ExcludeSemantics(child: _moving ? scene : RepaintBoundary(child: scene));
   }
 }
 
