@@ -348,45 +348,57 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       return;
     }
     final api = context.read<AppConfig>().apiClient;
+    // All five requests start together (they were awaited one after another); the
+    // record shows as soon as it arrives, the rest fills in when it is all in.
+    Future<T?> soft<T>(Future<T> f, {bool report = false}) => f.then<T?>((v) => v, onError: (Object e, StackTrace s) {
+          if (report) ErrorReporting.report(e, s);
+          return null;
+        });
+    final commentsF = soft(api.getEntityComments(widget.module, _id));
+    final tagsF = soft(api.getEntityTags(widget.module, _id));
+    final catalogF = soft(api.getTags(module: widget.module), report: true);
+    final schemaF = soft(api.getFieldSchema(widget.module), report: true);
+    final Map<String, dynamic> record;
     try {
-      final record = await api.getEntity(widget.module, _id);
-      final comments = await api.getEntityComments(widget.module, _id);
-      final tags = await api.getEntityTags(widget.module, _id);
-      var catalog = <Map<String, dynamic>>[];
-      var fields = <Map<String, dynamic>>[];
-      var picklists = <String, List<Map<String, dynamic>>>{};
-      try {
-        catalog = await api.getTags(module: widget.module);
-      } catch (e, s) {
-        ErrorReporting.report(e, s);
-      }
-      try {
-        final schema = await api.getFieldSchema(widget.module);
-        fields = schema.fields;
-        picklists = schema.picklists;
-      } catch (e, s) {
-        ErrorReporting.report(e, s);
-      }
-      if (!mounted) return;
-      _jc?.load();
-      setState(() {
-        if (record.isNotEmpty) _row = {..._row, ...record};
-        _comments = comments;
-        _tags = tags;
-        _catalog = catalog;
-        _fields = fields;
-        _picklists = picklists;
-        _loading = false;
-      });
-      _rememberRecent();
+      record = await api.getEntity(widget.module, _id);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e;
         _loading = false;
       });
+      return;
     }
+    if (!mounted) return;
+    // The journey loads itself when it is first probed; later reloads (after an action) refresh it.
+    if (_reloadedOnce) _jc?.load();
+    _reloadedOnce = true;
+    final schemaReady = _fields.isNotEmpty;
+    setState(() {
+      if (record.isNotEmpty) _row = {..._row, ...record};
+      // Fields already known (reload / cached schema): no need to wait for the rest.
+      if (schemaReady) _loading = false;
+    });
+    _rememberRecent();
+    final comments = await commentsF;
+    final tags = await tagsF;
+    final catalog = await catalogF;
+    final schema = await schemaF;
+    if (!mounted) return;
+    setState(() {
+      if (comments != null) _comments = comments;
+      if (tags != null) _tags = tags;
+      if (catalog != null) _catalog = catalog;
+      if (schema != null) {
+        _fields = schema.fields;
+        _picklists = schema.picklists;
+      }
+      _loading = false;
+    });
   }
+
+  /// The first [_reload] has run (the journey controller loads itself on its first probe).
+  bool _reloadedOnce = false;
 
   Future<void> _loadTimeline({bool force = false}) async {
     if ((_timelineLoaded && !force) || _timelineLoading) return;
@@ -455,15 +467,24 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       }
     }
     if (todo.isEmpty) return;
-    await Future.wait(todo.entries.take(30).map((t) async {
-      try {
-        final row = await api.getEntity(t.value.module, t.value.id);
-        final title = entityTitle(row, module: t.value.module);
-        if (title.isNotEmpty && title != 'รายการ' && title != 'ID ${t.value.id}') _refNames[t.key] = title;
-      } catch (_) {
-        // Deleted / no access: keep the id.
+    // Deduplicated above (one lookup per module:id); at most 4 at a time so a long history
+    // does not queue 30 record reads in front of everything else. (The server has no
+    // `?ids=` batch read on the entity list.)
+    final queue = todo.entries.take(30).toList();
+    Future<void> worker() async {
+      while (queue.isNotEmpty) {
+        final t = queue.removeLast();
+        try {
+          final row = await api.getEntity(t.value.module, t.value.id);
+          final title = entityTitle(row, module: t.value.module);
+          if (title.isNotEmpty && title != 'รายการ' && title != 'ID ${t.value.id}') _refNames[t.key] = title;
+        } catch (_) {
+          // Deleted / no access: keep the id.
+        }
       }
-    }));
+    }
+
+    await Future.wait([for (var i = 0; i < 4; i++) worker()]);
   }
 
   List<({String value, String label})> _statusOptions(String? key) {

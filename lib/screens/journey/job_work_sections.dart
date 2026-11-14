@@ -9,6 +9,7 @@ import '../../core/journey_rules.dart';
 import '../../core/status_labels.dart';
 import '../../core/thai_time.dart';
 import '../../core/entity_display.dart' show userDisplayName;
+import '../../services/api_client.dart' show EntityListPage;
 import '../../widgets/nx_icons.dart';
 import 'journey_widgets.dart';
 
@@ -108,17 +109,19 @@ class _JobWorkInfoCardState extends State<JobWorkInfoCard> {
     final api = config.apiClient;
     final id = _s(widget.row['id']);
     if (id.isEmpty) return;
-    try {
-      final sla = await api.getJobSla(id);
-      if (mounted) setState(() => _sla = sla);
-    } catch (_) {}
     final asset = _s(widget.row['related_asset_id']);
-    if (asset.isNotEmpty) {
-      try {
-        final a = await api.getEntity('asset', asset);
-        if (mounted) setState(() => _asset = a);
-      } catch (_) {}
-    }
+    // SLA and the linked asset side by side (they were asked one after the other).
+    final results = await Future.wait<Map<String, dynamic>?>([
+      api.getJobSla(id).then<Map<String, dynamic>?>((v) => v, onError: (Object _) => null),
+      asset.isEmpty
+          ? Future<Map<String, dynamic>?>.value()
+          : api.getEntity('asset', asset).then<Map<String, dynamic>?>((v) => v, onError: (Object _) => null),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      if (results[0] != null) _sla = results[0]!;
+      if (results[1] != null) _asset = results[1]!;
+    });
   }
 
   @override
@@ -424,22 +427,30 @@ class _JobActivitiesListState extends State<JobActivitiesList> {
     final config = context.read<AppConfig>();
     if (!config.isLoggedIn) return;
     final api = config.apiClient;
-    for (final extra in [
-      {'filter[related_job_id]': widget.jobId},
-      {'filter[related_module]': 'job', 'filter[related_id]': widget.jobId},
-    ]) {
-      try {
-        final page = await api.getEntityList('activity', limit: 100, extra: {...extra, 'sort': 'date_start', 'order': 'desc'});
-        if (!mounted) return;
-        setState(() {
-          for (final a in page.items) {
-            final id = _s(a['id']);
-            if (id.isNotEmpty) _details[id] = a;
-          }
-        });
-      } catch (_) {}
-    }
+    // Both link styles side by side, only the columns the tiles show; one setState.
+    final pages = await Future.wait([
+      for (final extra in [
+        {'filter[related_job_id]': widget.jobId},
+        {'filter[related_module]': 'job', 'filter[related_id]': widget.jobId},
+      ])
+        api
+            .getEntityList('activity', limit: 100, extra: {...extra, 'sort': 'date_start', 'order': 'desc', 'cols': _activityCols})
+            .then<EntityListPage?>((p) => p, onError: (Object _) => null),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      for (final page in pages) {
+        for (final a in page?.items ?? const <Map<String, dynamic>>[]) {
+          final id = _s(a['id']);
+          if (id.isNotEmpty) _details[id] = a;
+        }
+      }
+    });
   }
+
+  /// What [JobActivityTile] and the owner line read (the server ignores unknown names).
+  static const _activityCols =
+      'id,subject,title,activitytype,status,date_start,date_end,all_day,checkindate,checkoutdate,photos,smownerid,owner_name,smownerid_name,assigned_user_name';
 
   List<Map<String, dynamic>> get _rows {
     final seen = <String>{};

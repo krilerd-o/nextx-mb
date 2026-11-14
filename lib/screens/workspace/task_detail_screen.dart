@@ -220,15 +220,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool fresh = false}) async {
     final api = _api;
+    // Watchers / links alongside the item (they used to wait for it).
+    final side = _loadSide();
+    final meta = TaskBoardMetaCache.instance;
     final r = await Future.wait<Object?>([
       api.getWorkspaceItem(_boardId, _kind, _id).catchError((_) => null),
-      api.getBoardStatuses(_boardId).catchError((_) => <Map<String, dynamic>>[]),
-      api.getBoardEpics(_boardId).catchError((_) => <Map<String, dynamic>>[]),
+      meta.get(api, _boardId, 'statuses', () => api.getBoardStatuses(_boardId), fresh: fresh).catchError((_) => <Map<String, dynamic>>[]),
+      meta.get(api, _boardId, 'epics', () => api.getBoardEpics(_boardId), fresh: fresh).catchError((_) => <Map<String, dynamic>>[]),
       api.getBoardTasks(_boardId).catchError((_) => <Map<String, dynamic>>[]),
       api.getUsersCached().catchError((_) => <Map<String, dynamic>>[]),
-      if ((_code ?? '').isEmpty) api.getBoard(_boardId).then<Object?>((b) => b).catchError((_) => null),
+      if ((_code ?? '').isEmpty) meta.get<Object?>(api, _boardId, 'board', () => api.getBoard(_boardId), fresh: fresh).catchError((_) => null),
     ]);
     if (!mounted) return;
     setState(() {
@@ -248,18 +251,20 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         wsRememberBoard(Map<String, dynamic>.from(b));
       }
     });
-    _loadSide();
+    await side;
   }
 
+  /// Watchers and links side by side, one setState.
   Future<void> _loadSide() async {
-    try {
-      final w = await _api.getItemWatchers(_boardId, _kind, _id);
-      if (mounted) setState(() => _watchers = w);
-    } catch (_) {}
-    try {
-      final l = await _api.getItemLinks(_boardId, _kind, _id);
-      if (mounted) setState(() => _links = l);
-    } catch (_) {}
+    final r = await Future.wait<Object?>([
+      _api.getItemWatchers(_boardId, _kind, _id).then<Object?>((v) => v, onError: (Object _) => null),
+      _api.getItemLinks(_boardId, _kind, _id).then<Object?>((v) => v, onError: (Object _) => null),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      if (r[0] != null) _watchers = r[0]! as List<Map<String, dynamic>>;
+      if (r[1] != null) _links = r[1]! as List<Map<String, dynamic>>;
+    });
   }
 
   Future<void> _reloadItem() async {
@@ -868,7 +873,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       ),
       body: NxRefresh(
         onRefresh: () async {
-          await _load();
+          // Pull-to-refresh skips the 60 s board cache.
+          await _load(fresh: true);
           await _activity.currentState?.reload();
         },
         child: ListView(
@@ -1537,5 +1543,45 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Board statuses / epics / board row for task pages: the same board opened again within
+/// [ttl] (task → task, back and forth) reuses them instead of asking again. Per server +
+/// business + board; concurrent asks share one request.
+class TaskBoardMetaCache {
+  TaskBoardMetaCache._();
+  static final TaskBoardMetaCache instance = TaskBoardMetaCache._();
+  static Duration ttl = const Duration(seconds: 60);
+
+  final Map<String, ({DateTime at, Object? value})> _hits = {};
+  final Map<String, Future<Object?>> _inflight = {};
+
+  Future<T> get<T>(ApiClient api, String boardId, String what, Future<T> Function() load, {bool fresh = false}) {
+    final key = '${api.baseUrl}|${api.businessId}|$boardId|$what';
+    final hit = _hits[key];
+    if (!fresh && hit != null && DateTime.now().difference(hit.at) < ttl) return Future.value(hit.value as T);
+    final running = _inflight[key];
+    if (!fresh && running != null) return running.then((v) => v as T);
+    final f = load().then<Object?>((v) {
+      _hits[key] = (at: DateTime.now(), value: v);
+      return v;
+    });
+    _inflight[key] = f;
+    void done() {
+      if (identical(_inflight[key], f)) _inflight.remove(key);
+    }
+
+    f.then((_) => done(), onError: (Object _) => done());
+    return f.then((v) => v as T);
+  }
+
+  /// Drop one board (after its statuses / epics changed here) or everything.
+  void invalidate([String? boardId]) {
+    if (boardId == null) {
+      _hits.clear();
+    } else {
+      _hits.removeWhere((k, _) => k.split('|')[2] == boardId);
+    }
   }
 }

@@ -330,6 +330,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
         _nameCol = _nameCandidates.where(names.contains).firstOrNull;
         _amountCol = _amountCandidates.where(names.contains).firstOrNull;
       });
+      _saveCols();
       // Owners / periods need the CV meta (users, date fields, presets) — not
       // needed for the first page, so it loads behind the list.
       _loadMeta(schema);
@@ -395,7 +396,9 @@ class _EntityListScreenState extends State<EntityListScreen> {
     }
   }
 
-  Future<void> _loadViews() async {
+  /// [reloadList] false: the first load waits for this instead (so the list is not
+  /// fetched once without the default view and again with it).
+  Future<void> _loadViews({bool reloadList = true}) async {
     try {
       final data = await context.read<AppConfig>().apiClient.getCustomViews(widget.module);
       if (!mounted) return;
@@ -405,7 +408,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
         if (_cvId == null || !_cvs!.views.any((v) => v.id == _cvId)) _cvId = _cvs!.defaultId;
       });
       // A default view with its own conditions changes what the list shows.
-      if (before != _cvId) _load(reset: true);
+      if (before != _cvId && reloadList) _load(reset: true);
     } catch (e, s) {
       ErrorReporting.report(e, s);
     }
@@ -602,11 +605,49 @@ class _EntityListScreenState extends State<EntityListScreen> {
       _load(reset: true);
       return;
     }
-    // Schema first (cached) so even page 1 asks for slim rows; views in parallel.
-    _loadViews();
     _loadMenuName();
-    await _loadSchema(beforeList: true);
-    if (mounted) _load(reset: true);
+    // Views and schema side by side. Page 1 waits for the default view (else it is fetched
+    // twice) and, when this list was opened before, goes out with the columns saved then —
+    // in parallel with the schema instead of after it.
+    final views = _loadViews(reloadList: false);
+    final schema = _loadSchema(beforeList: true);
+    final hint = await _savedCols();
+    if (hint != null) {
+      _colsHint = hint;
+      await views;
+      if (mounted) _load(reset: true);
+      await schema;
+      // The layout changed elsewhere and needs a column the first page did not ask for.
+      final now = _currentCols();
+      if (mounted && now != null && !hint.split(',').toSet().containsAll(now.split(','))) _load(reset: true);
+    } else {
+      await Future.wait([views, schema]);
+      if (mounted) _load(reset: true);
+    }
+  }
+
+  /// Columns of page 1 before the schema has loaded (saved from the last visit).
+  String? _colsHint;
+  String get _colsPrefKey => 'nx_list_cols_${widget.module}_${context.read<AppConfig>().businessScope}';
+
+  Future<String?> _savedCols() async {
+    try {
+      final v = (await SharedPreferences.getInstance()).getString(_colsPrefKey);
+      return v == null || v.isEmpty ? null : v;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _saveCols() {
+    final cols = _currentCols();
+    if (cols == null) return;
+    final key = _colsPrefKey;
+    () async {
+      try {
+        await (await SharedPreferences.getInstance()).setString(key, cols);
+      } catch (_) {}
+    }();
   }
 
   @override
@@ -672,8 +713,15 @@ class _EntityListScreenState extends State<EntityListScreen> {
       // Only the first page needs a total (COUNT is the slow part on big tables).
       if (!firstPage) 'with_total': '0',
     };
+    final cols = _currentCols() ?? _colsHint;
+    if (cols != null) out['cols'] = cols;
+    return out;
+  }
+
+  /// The `cols=` this list draws with its current layout; null before the schema.
+  String? _currentCols() {
     final ctx = _cardCtx;
-    if (ctx == null) return out;
+    if (ctx == null) return null;
     final cols = <String>{
       'id', 'smownerid', 'createdtime', 'modifiedtime',
       ?_statusKey,
@@ -683,8 +731,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
       'mobile_1st', 'mobile', 'phone', 'contact_mobile', 'email_1st', 'email', 'image_url',
       if (widget.module == 'activity') ...['date_start', 'date_end', 'status', 'activitytype', 'location', 'checkindate'],
     }..removeWhere((c) => c.isEmpty || (!ctx.fields.containsKey(c) && !CardFieldContext.metaLabels.containsKey(c) && c != 'id'));
-    out['cols'] = cols.join(',');
-    return out;
+    return cols.join(',');
   }
 
   Future<void> _load({bool reset = false}) async {

@@ -55,7 +55,9 @@ class _CrmHomeScreenState extends State<CrmHomeScreen> {
     // One round-trip per module, all in parallel instead of one after another.
     final results = await Future.wait(allowed.map((m) async {
       try {
-        final page = await api.getEntityList(m, limit: 1);
+        // with_total: without it the server sends no total and every tile read "1" (the
+        // one row asked for); cols=id keeps that row tiny.
+        final page = await api.getEntityList(m, limit: 1, extra: const {'with_total': '1', 'cols': 'id'});
         return MapEntry(m, page.total ?? page.items.length);
       } catch (e) {
         debugPrint('[counts] $m: $e');
