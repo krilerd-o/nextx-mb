@@ -541,8 +541,25 @@ class ApiClient {
       }));
 
   /// `POST /api/notifications/test`: the server sends a test notification to me.
+  /// New servers answer `{transport, job_id, no_devices, devices:[{platform,
+  /// device_name, token_hint, result:'sent'|'invalid'|'failed', detail}]}`.
   Future<Map<String, dynamic>> sendTestNotification() async =>
       _dataMap(await _send('POST', '/api/notifications/test', data: const <String, dynamic>{}));
+
+  /// `GET /api/notifications/devices` → `{items:[{id, platform, device_name, last_seen_at, current?}]}`:
+  /// the phones / browsers that get this account's push. 404 on older servers.
+  Future<List<Map<String, dynamic>>> getNotificationDevices() async =>
+      extractMapList((await _send('GET', '/api/notifications/devices'))['data']);
+
+  /// `GET /api/announcements/:id` → `{id, kind, title, body, created_at, sender_name?, store_android?, store_ios?}`.
+  Future<Map<String, dynamic>> getAnnouncement(String id) async =>
+      _dataMap(await _send('GET', '/api/announcements/${Uri.encodeComponent(id)}'));
+
+  /// `PUT /api/me/language {lang}`: the language the server writes my
+  /// notifications in (`th` | `en`). 404 on older servers.
+  Future<void> setMyLanguage(String lang) async {
+    await _send('PUT', '/api/me/language', data: {'lang': lang == 'en' ? 'en' : 'th'});
+  }
 
   Future<void> revokeDeviceSession(String sid) async {
     await _send('DELETE', '/api/me/sessions/${Uri.encodeComponent(sid)}');

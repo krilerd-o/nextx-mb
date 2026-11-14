@@ -32,18 +32,36 @@ PushTap pushTapFromData(Map<String, dynamic> data, {bool? ios}) {
     return (v == null || v.isEmpty) ? null : v;
   }
 
-  final isIos = ios ?? (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS);
-  String? store;
-  if (s('event') == 'app_update') {
-    store = isIos ? (s('store_ios') ?? s('store_android')) : (s('store_android') ?? s('store_ios'));
-    final u = store == null ? null : Uri.tryParse(store);
-    if (u == null || !u.hasScheme) store = null;
-  }
-  return PushTap(location: notificationDeepLinkFromData(data), businessId: s('business_id'), storeUrl: store);
+  return PushTap(
+    location: notificationDeepLinkFromData(data),
+    businessId: s('business_id'),
+    storeUrl: s('event') == 'app_update' ? appStoreLinkOf(data, ios: ios) : null,
+  );
 }
 
-/// Opens the store ([storeUrl]) — replaced in tests.
-@visibleForTesting
+/// Store link of an app update for this platform (`store_ios` /
+/// `store_android`, the other one as a fallback, then an `http(s)` `url` —
+/// round-1 system broadcasts put the store there). Null when none is usable.
+String? appStoreLinkOf(Map<String, dynamic> data, {bool? ios}) {
+  String? s(String k) {
+    final v = data[k]?.toString().trim();
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  bool usable(String? v) {
+    final u = v == null ? null : Uri.tryParse(v);
+    return u != null && (u.scheme == 'https' || u.scheme == 'http' || u.scheme == 'market' || u.scheme == 'itms-apps') && (u.host.isNotEmpty || u.scheme == 'market');
+  }
+
+  final isIos = ios ?? (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS);
+  final order = isIos ? ['store_ios', 'store_android'] : ['store_android', 'store_ios'];
+  for (final k in [...order, 'url']) {
+    if (usable(s(k))) return s(k);
+  }
+  return null;
+}
+
+/// Opens the store (an app update) outside the app — replaced in tests.
 Future<bool> Function(Uri uri) pushStoreLauncher = (uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
 
 /// Acts on a tapped push: the store for an app update, otherwise its screen

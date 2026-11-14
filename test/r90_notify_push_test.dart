@@ -259,7 +259,8 @@ void main() {
   });
 
   group('push tap → screen (every event of the plan)', () {
-    // event → (push data, app route). URLs are the link_path each server event uses.
+    // event → (push data, app route). URLs are the link_path each server event uses;
+    // `id` = the record (link_id), `notification_id` = the bell row (servers since round 2).
     final cases = <String, (Map<String, dynamic>, String)>{
       'work_assigned': ({'url': '/workspace/NSMO-250', 'id': '250'}, '/workspace/NSMO-250'),
       'work_watching': ({'url': '/workspace/NSMO-250'}, '/workspace/NSMO-250'),
@@ -297,8 +298,8 @@ void main() {
       'mention_record': ({'url': '/modules/deal/view/3?section=comments&comment=9'}, '/crm/deal/3?tab=comments&comment=9'),
       'work_comment': ({'url': '/workspace/NSMO-250'}, '/workspace/NSMO-250'),
       'case_comment': ({'url': '/modules/case/view/31?section=comments'}, '/crm/case/31?tab=comments'),
-      'chat_message': ({'url': '/camp?room=5&mid=9', 'id': '5'}, '/chat/5'),
-      'chat_mention': ({'url': '/community-chat?room=6&mid=1'}, '/chat/6'),
+      'chat_message': ({'url': '/camp?room=5&mid=9', 'id': '5', 'notification_id': '880'}, '/chat/5'),
+      'chat_mention': ({'url': '/community-chat?room=6&mid=1', 'id': '6', 'notification_id': '881'}, '/chat/6'),
       'chat_invite': ({'url': '/camp?room=7', 'id': '7'}, '/chat/7'),
       'call_missed': ({'url': '/camp?room=5', 'id': '5'}, '/chat/5'),
       'ai_job': ({'url': '/ai?c=abc'}, '/ai?c=abc'),
@@ -308,14 +309,32 @@ void main() {
       'mail_connection': ({'url': '/mailbox'}, AppRoutes.mail),
       'report_failed': ({'url': '/analytics-reports/report/3', 'id': '3', 'notification_id': '880'}, '/notifications?id=880'),
       'system_notice': ({'url': '/', 'notification_id': '900'}, '/notifications?id=900'),
-      'announcement': ({'notification_id': '901'}, '/notifications?id=901'),
-      'app_update': ({'notification_id': '902', 'store_android': 'https://play.google.com/store/apps/details?id=x'}, '/notifications?id=902'),
+      'announcement': ({'url': '/announcements/77', 'id': '77', 'notification_id': '901'}, '/announcements/77?n=901'),
+      'app_update': (
+        {'url': '/announcements/78', 'id': '78', 'notification_id': '902', 'store_android': 'https://play.google.com/store/apps/details?id=x'},
+        '/announcements/78?n=902',
+      ),
     };
 
     for (final e in cases.entries) {
       test(e.key, () {
-        final data = {...e.value.$1, 'event': e.key, 'type': 'notification', 'business_id': '1', 'badge': '3'};
+        final data = {'notification_id': '999', ...e.value.$1, 'event': e.key, 'type': 'notification', 'business_id': '1', 'badge': '3'};
         expect(notificationDeepLinkFromData(data), e.value.$2);
+      });
+    }
+
+    // Round-1 servers: `id` = the bell row (same as notification_id) — never taken for a record.
+    for (final e in cases.entries) {
+      test('${e.key} (round-1 payload: id = notification id)', () {
+        final data = {...e.value.$1, 'event': e.key, 'id': '4242', 'notification_id': '4242'};
+        final route = notificationDeepLinkFromData(data)!;
+        // The bell row may only appear as itself (`/notifications?id=`, announcement `?n=`).
+        final u = Uri.parse(route);
+        final q = {...u.queryParameters}..remove('n');
+        if (u.path == AppRoutes.notifications) q.remove('id');
+        expect('${u.path} $q', isNot(contains('4242')), reason: '${e.key} → $route took the bell row id as a record id');
+        // A url that names its record still opens it.
+        if ('${e.value.$1['url'] ?? ''}'.contains('room=')) expect(route, e.value.$2);
       });
     }
 
@@ -341,6 +360,7 @@ void main() {
       expect(notificationItemRoute({'id': 6, 'link_path': '/hr/leave', 'link_id': 12}), '/hr/leave?tab=mine&id=12');
       expect(notificationItemRoute({'id': 7, 'link_path': '/modules/deal/view/3'}), '/crm/deal/3');
       expect(notificationItemRoute({'id': 8, 'link_path': '', 'meta': {'event': 'leave_request'}, 'link_id': 2}), '/hr/leave?tab=approve&id=2');
+      expect(notificationItemRoute({'id': 9, 'type': 'announcement', 'link_path': '/announcements/77', 'link_id': 77}), '/announcements/77?n=9');
     });
 
     test('leave tab names', () {

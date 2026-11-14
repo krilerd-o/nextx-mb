@@ -41,6 +41,14 @@ class AppRoutes {
   /// Notification center, optionally opening one notification ([id]).
   static String notificationsOf(String? id) =>
       (id == null || id.isEmpty) ? notifications : Uri(path: notifications, queryParameters: {'id': id}).toString();
+
+  /// One announcement (`GET /api/announcements/:id`); [notificationId] = the
+  /// bell row it came from (marked read when the screen opens).
+  static const String announcementPattern = '/announcements/:id';
+  static String announcement(String id, {String? notificationId}) => Uri(
+        path: '/announcements/$id',
+        queryParameters: (notificationId == null || notificationId.isEmpty) ? null : {'n': notificationId},
+      ).toString();
   static const String attendanceReport = '/hr/attendance-report';
 
   static const String moduleHub = '/module-hub';

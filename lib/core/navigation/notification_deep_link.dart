@@ -200,6 +200,12 @@ String _notificationDeepLink(String path, {String? linkId, String? extra}) {
     return AppRoutes.attendance;
   }
 
+  // Announcements (company / system broadcasts): the reader screen.
+  if (segs.isNotEmpty && segs.first == 'announcements') {
+    if (segs.length >= 2) return AppRoutes.announcement(segs[1]);
+    return AppRoutes.notifications;
+  }
+
   // Web pages without a screen of their own in the app.
   if (segs.isNotEmpty) {
     switch (segs.first) {
@@ -227,8 +233,9 @@ String _notificationDeepLink(String path, {String? linkId, String? extra}) {
     return AppRoutes.notifications;
   }
 
+  // Chat: the `room` of the url first (it is always the room), then the record id.
   final room = uri?.queryParameters['room'];
-  final chatId = (linkId != null && linkId.isNotEmpty) ? linkId : room;
+  final chatId = (room != null && room.isNotEmpty) ? room : linkId;
   if ((path.contains('chat') || path.contains('camp') || path.contains('community-chat')) &&
       chatId != null &&
       chatId.isNotEmpty) {
@@ -250,18 +257,33 @@ String _notificationDeepLink(String path, {String? linkId, String? extra}) {
   return AppRoutes.notifications;
 }
 
+/// `/announcements/<id>` → that announcement's id, else null.
+String? announcementIdOf(String? url) {
+  final uri = _asUri(url ?? '');
+  if (uri == null || (uri.hasScheme && uri.host != 'local.nx')) return null;
+  final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+  if (segs.length >= 2 && segs.first == 'announcements') return segs[1];
+  return null;
+}
+
+/// Events whose notification is a message to read (no record page).
+const _readerEvents = {'announcement', 'app_update', 'system_notice'};
+
 /// Where an event that has no record page of its own opens (push `event`).
-/// Null → follow the notification's `url`.
-String? notificationEventRoute(String? event, {String? id, String? notificationId}) {
-  switch ((event ?? '').trim()) {
+/// Null → follow the notification's `url`. Announcements open their reader
+/// (`url` = `/announcements/<id>`), otherwise the notification itself.
+String? notificationEventRoute(String? event, {String? id, String? notificationId, String? url}) {
+  final e = (event ?? '').trim();
+  switch (e) {
     case 'leave_request':
       return AppRoutes.leave(tab: 'approve', id: id);
     case 'leave_result':
       return AppRoutes.leave(tab: 'mine', id: id);
-    case 'announcement':
-    case 'app_update':
-    case 'system_notice':
-      return AppRoutes.notificationsOf(notificationId);
+  }
+  if (_readerEvents.contains(e)) {
+    final ann = announcementIdOf(url);
+    if (ann != null) return AppRoutes.announcement(ann, notificationId: notificationId);
+    return AppRoutes.notificationsOf(notificationId);
   }
   return null;
 }
@@ -276,6 +298,8 @@ String notificationItemRoute(Map<String, dynamic> item) {
   final path = item['link_path']?.toString() ?? '';
   final linkId = item['link_id']?.toString();
   final id = item['id']?.toString();
+  final ann = announcementIdOf(path);
+  if (ann != null) return AppRoutes.announcement(ann, notificationId: id);
   if (path.trim().isEmpty || path.trim() == '/') {
     final byEvent = notificationEventRoute(event, id: linkId, notificationId: id);
     if (byEvent != null) return byEvent;
@@ -285,6 +309,33 @@ String notificationItemRoute(Map<String, dynamic> item) {
   return route == AppRoutes.notifications ? AppRoutes.notificationsOf(id) : route;
 }
 
+/// Record id of a push (`data`, all strings): `link_id`, else `id`.
+/// Servers since round 2 send `id` = the record (link_id) and
+/// `notification_id` = the bell row; round-1 servers sent the bell row id in
+/// both, which is no record id — then there is none (null).
+String? pushRecordId(Map<String, dynamic> data) {
+  String? s(String k) {
+    final v = data[k]?.toString().trim();
+    return (v == null || v.isEmpty || v == 'null') ? null : v;
+  }
+
+  final link = s('link_id');
+  if (link != null) return link;
+  final id = s('id');
+  if (id != null && id == s('notification_id')) return null;
+  return id;
+}
+
+/// Chat room a push is about (`?room=` of its url, else its record id), or null.
+String? pushChatRoom(Map<String, dynamic> data) {
+  final url = '${data['url'] ?? data['link_path'] ?? ''}';
+  final room = _asUri(url)?.queryParameters['room']?.trim();
+  if (room != null && room.isNotEmpty) return room;
+  final event = '${data['event'] ?? ''}';
+  if (event.startsWith('chat_') || url.contains('chat') || url.contains('camp')) return pushRecordId(data);
+  return null;
+}
+
 String? notificationDeepLinkFromData(Map<String, dynamic> data) {
   String? s(String k) {
     final v = data[k]?.toString().trim();
@@ -292,11 +343,13 @@ String? notificationDeepLinkFromData(Map<String, dynamic> data) {
   }
 
   final url = s('url') ?? s('link_path') ?? '';
-  final id = s('link_id') ?? s('id');
+  final id = pushRecordId(data);
   final event = s('event');
-  final byEvent = notificationEventRoute(event, id: id, notificationId: s('notification_id'));
+  final byEvent = notificationEventRoute(event, id: id, notificationId: s('notification_id'), url: url);
   // Leave events carry the leave id; the web's /hr/leave* url maps the same way.
-  if (byEvent != null && (url.isEmpty || event == 'announcement' || event == 'app_update' || event == 'system_notice' || url == '/')) return byEvent;
+  if (byEvent != null && (url.isEmpty || _readerEvents.contains(event) || url == '/')) return byEvent;
+  final ann = announcementIdOf(url);
+  if (ann != null) return AppRoutes.announcement(ann, notificationId: s('notification_id'));
   if (url.isEmpty && id == null) return byEvent ?? AppRoutes.notificationsOf(s('notification_id'));
   final route = notificationDeepLink(url, linkId: id, extra: s('extra') ?? s('link_extra'));
   // No screen for it in the app (e.g. a report on the web): open the notification itself.

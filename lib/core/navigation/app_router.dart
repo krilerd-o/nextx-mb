@@ -31,6 +31,7 @@ import '../../screens/comm_ai/call_summary_screen.dart';
 import '../../screens/comm_ai/comm_ai_history_screen.dart';
 import '../../screens/comm_ai/comm_ai_insights_screen.dart';
 import '../../screens/comm_ai/comm_ai_settings_screen.dart';
+import '../../screens/notifications/announcement_screen.dart';
 import '../../screens/notifications/notification_center_screen.dart';
 import '../../screens/whats_new/whats_new_screen.dart';
 import '../../screens/settings/devices_screen.dart';
@@ -213,6 +214,14 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.notifications,
         builder: (_, state) => NotificationCenterScreen(focusId: state.uri.queryParameters['id']),
+      ),
+      // A tapped announcement push / bell row (like the notification center: no menu gate).
+      GoRoute(
+        path: AppRoutes.announcementPattern,
+        builder: (_, state) => AnnouncementScreen(
+          id: state.pathParameters['id'] ?? '',
+          notificationId: state.uri.queryParameters['n'],
+        ),
       ),
       GoRoute(
         path: AppRoutes.devices,
