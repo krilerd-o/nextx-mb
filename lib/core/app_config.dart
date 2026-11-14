@@ -1,4 +1,6 @@
 import 'nx_swr_cache.dart';
+import 'isaac_menu.dart';
+import 'menu_hub_prefs.dart';
 import '../services/calls/call_setup.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -549,6 +551,9 @@ class AppConfig extends ChangeNotifier {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    // Screens that must read a saved choice before their first frame.
+    MenuHubPrefs.attach(prefs);
+    IsaacAccessCache.attach(prefs);
     final savedUrl = prefs.getString(_keyApiBaseUrl);
     // Old builds stored a local dev URL by default; a server the user picked
     // (confirmed) is kept as it is, local or not.

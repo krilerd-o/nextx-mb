@@ -68,6 +68,10 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
   @override
   void initState() {
     super.initState();
+    // Last known ISAAC access (memory, else the copy saved on the device) on the
+    // first frame, so its group does not pop in after the rest.
+    final config = context.read<AppConfig>();
+    if (config.isLoggedIn) _isaac = IsaacAccessCache.peek(config.session.businessId ?? '');
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadIsaac());
   }
 
@@ -88,7 +92,7 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
     final os = config.businessScope;
     if (vs != _viewScope) {
       _viewScope = vs;
-      final cached = _viewCache[vs];
+      final cached = _viewCache[vs] ?? MenuHubPrefs.peekView(vs);
       if (cached != null) _view = cached;
       MenuHubPrefs.loadView(vs).then((v) {
         _viewCache[vs] = v;
@@ -97,6 +101,8 @@ class _ModuleHubScreenState extends State<ModuleHubScreen> {
     }
     if (os != _orderScope) {
       _orderScope = os;
+      final saved = MenuHubPrefs.peekOrder(os);
+      if (saved != null) _order = saved;
       MenuHubPrefs.loadOrder(os).then((o) {
         if (mounted && _orderScope == os) setState(() => _order = o);
       });

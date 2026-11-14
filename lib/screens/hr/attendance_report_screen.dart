@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_refresh_bar.dart';
+import '../../core/nx_swr_cache.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -43,9 +45,24 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     _load();
   }
 
+  /// Report of [_day] in [NxSwrCache]: a day seen before shows at once.
+  String get _cacheKey => NxSwrCache.key('/api/hr/attendance-report', query: {'date': _ymd(_day)});
+
+  /// The first answer is in: later day / filter changes keep the list and
+  /// show a thin progress line instead of the skeleton.
+  bool _loadedOnce = false;
+  bool _refreshing = false;
+
   Future<void> _load() async {
+    final hit = NxSwrCache.instance.peek<({List<Map<String, dynamic>> rows, Map<String, dynamic> dash})>(_cacheKey);
     setState(() {
-      _loading = true;
+      if (hit != null) {
+        _rows = hit.rows;
+        _dash = hit.dash;
+        _loadedOnce = true;
+      }
+      _loading = !_loadedOnce;
+      _refreshing = _loadedOnce;
       _error = null;
     });
     final api = context.read<AppConfig>().apiClient;
@@ -62,12 +79,16 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
         _rows = rows;
         _dash = dash;
         _loading = false;
+        _refreshing = false;
+        _loadedOnce = true;
       });
+      NxSwrCache.instance.put(_cacheKey, (rows: rows, dash: dash));
     } catch (e) {
       if (mounted) {
         setState(() {
           _error = e;
           _loading = false;
+          _refreshing = false;
         });
       }
     }
@@ -196,8 +217,10 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
               ),
               onChanged: (v) => setState(() => _query = v),
             ),
-            const SizedBox(height: 12),
-            if (_loading) const NxSkeletonList(rows: 5),
+            const SizedBox(height: 10),
+            NxRefreshBar(visible: _refreshing),
+            const SizedBox(height: 2),
+            if (_loading) const NxSkeletonRows(key: ValueKey('att-report-skeleton'), count: 6, padded: false, top: 0, leadingSize: 40, trailing: NxSkelTrailing.text),
             if (_error != null) Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error)),
             if (!_loading && _error == null && rows.isEmpty)
               Padding(padding: EdgeInsets.all(40), child: Center(child: Text(tr('ยังไม่มีใครลงเวลาในวันนี้')))),

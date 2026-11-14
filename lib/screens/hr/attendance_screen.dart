@@ -158,7 +158,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return NxScrollScaffold(
       header: const NxAppHeader(title: 'ลงเวลา'),
       body: _loading
-          ? const NxSkeletonForm(fields: 4)
+          ? const _AttendanceSkeleton()
           : NxRefresh(
               color: cs.primary,
               onRefresh: _reload,
@@ -337,4 +337,61 @@ String _hm(dynamic raw) {
   final d = raw is DateTime ? raw : parseThai(raw);
   if (d == null) return '$raw';
   return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+}
+
+/// Attendance while loading: the gradient today card (date, state pill,
+/// headline, the 54 px clock button) and this month's history rows.
+class _AttendanceSkeleton extends StatelessWidget {
+  const _AttendanceSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return NxSkeleton(
+      key: const ValueKey('att-skeleton'),
+      child: NxSkeletonListView(
+        padding: NxBreakpoint.of(context).scrollPadding(context),
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(26),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color.alphaBlend(cs.primary.withValues(alpha: 0.08), cs.surfaceContainerHighest), cs.surfaceContainerHighest],
+              ),
+            ),
+            child: const Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [NxBone(width: 120, height: 13), Spacer(), NxBone(width: 104, height: 24, radius: 12)]),
+              SizedBox(height: 14),
+              NxBoneLine(0.62, height: 24, radius: 10),
+              SizedBox(height: 18),
+              NxBone(height: 54, radius: 27),
+            ]),
+          ),
+          const SizedBox(height: 18),
+          const NxBone(width: 110, height: 15),
+          const SizedBox(height: 10),
+          NxSkeletonCard(
+            margin: EdgeInsets.zero,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            child: Column(children: [
+              for (var i = 0; i < 5; i++) ...[
+                if (i > 0) Divider(height: 0.5, thickness: 0.5, color: cs.outlineVariant.withValues(alpha: 0.5)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(children: [
+                    const NxBone(width: 64, height: 12),
+                    const Spacer(),
+                    NxBone(width: i.isEven ? 92 : 76, height: 12),
+                  ]),
+                ),
+              ],
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
 }

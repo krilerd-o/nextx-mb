@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../services/api_client.dart';
 import 'session_state.dart';
 
@@ -112,7 +116,28 @@ class IsaacAccessCache {
   IsaacAccessCache._();
   static final Map<String, ({DateTime at, IsaacAccess access})> _cache = {};
 
-  static IsaacAccess? peek(String businessId) => _cache[businessId]?.access;
+  /// Device copy of the last answers per business (startup preferences), so the
+  /// menu knows on its first frame whether the ISAAC group shows.
+  static SharedPreferences? _prefs;
+  static void attach(SharedPreferences prefs) => _prefs = prefs;
+  static String _diskKey(String businessId) => 'nx_isaac_access_$businessId';
+
+  static IsaacAccess? peek(String businessId) {
+    final hit = _cache[businessId]?.access;
+    if (hit != null) return hit;
+    final raw = _prefs?.getString(_diskKey(businessId));
+    if (raw == null) return null;
+    try {
+      final j = jsonDecode(raw);
+      if (j is! Map) return null;
+      return IsaacAccess.fromResponses(
+        aiSettings: j['s'] is Map ? Map<String, dynamic>.from(j['s'] as Map) : null,
+        pluginEffective: j['p'] is Map ? Map<String, dynamic>.from(j['p'] as Map) : null,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 
   static Future<IsaacAccess> load(ApiClient api, String businessId, {bool fresh = false}) async {
     final hit = _cache[businessId];
@@ -125,6 +150,9 @@ class IsaacAccessCache {
     ]);
     final access = IsaacAccess.fromResponses(aiSettings: settings, pluginEffective: plugin);
     _cache[businessId] = (at: DateTime.now(), access: access);
+    try {
+      _prefs?.setString(_diskKey(businessId), jsonEncode({'s': settings, 'p': plugin}));
+    } catch (_) {}
     return access;
   }
 

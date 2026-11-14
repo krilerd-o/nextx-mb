@@ -291,9 +291,21 @@ class _CommAiHistoryScreenState extends State<CommAiHistoryScreen> {
     if (_error != null) {
       rows.add(CommAiIsaacState(mood: 'error', title: 'โหลดประวัติไม่ได้', message: _error, action: OutlinedButton(onPressed: _load, child: Text(tr('ลองใหม่')))));
     } else if (_loading && _items.isEmpty) {
-      rows.add(const NxSkeletonList(rows: 5));
+      // History rows: leading icon tile, title + summary lines, time; under day headings.
+      rows.add(const NxSkeletonRows(
+        key: ValueKey('comm-ai-history-skeleton'),
+        count: 6,
+        leading: NxSkelLeading.icon,
+        leadingSize: 40,
+        lines: 3,
+        trailing: NxSkelTrailing.text,
+        dayHeaders: 3,
+        padded: false,
+        top: 0,
+      ));
     } else if (_loading) {
-      rows.add(const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())));
+      // Next page / reload under rows already shown: one more row, never a spinner.
+      if (_items.isNotEmpty) rows.add(const NxSkeletonRow(leading: NxSkelLeading.icon, leadingSize: 40, lines: 3, trailing: NxSkelTrailing.text));
     } else if (_loaded && _items.isEmpty) {
       final filtered = _query.q.isNotEmpty || _range != null || _query.activeFilterCount > 0;
       rows.add(CommAiIsaacState(

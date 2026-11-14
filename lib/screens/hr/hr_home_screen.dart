@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/nx_swr_cache.dart';
+import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -142,7 +144,47 @@ class _HrTodayCard extends StatelessWidget {
         ]);
         return {'att': r[0], 'balance': r[1], 'pending': r[2]};
       },
-      skeleton: const SizedBox(height: 8),
+      // The last copy shows at once on the next visit (refreshes underneath).
+      cacheKey: NxSwrCache.key('/api/hr/today', query: {'a': showAttendance ? 1 : 0, 'l': showLeave ? 1 : 0, 'p': showApprovals ? 1 : 0}),
+      // The today card itself: caption, stat columns, leave chips.
+      skeleton: NxSkeleton(
+        key: const ValueKey('hr-today-skeleton'),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: NxSkeletonCard(
+            margin: EdgeInsets.zero,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const NxBone(width: 44, height: 13),
+              const SizedBox(height: 12),
+              Row(children: [
+                for (var i = 0; i < ((showAttendance ? 1 : 0) + (showApprovals ? 1 : 0)).clamp(1, 2); i++)
+                  const Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      NxBone(width: 18, height: 18, radius: 5),
+                      SizedBox(height: 8),
+                      NxBone(width: 56, height: 18),
+                      SizedBox(height: 6),
+                      NxBone(width: 84, height: 10),
+                    ]),
+                  ),
+              ]),
+              if (showLeave) ...[
+                const SizedBox(height: 14),
+                const NxBone(width: 90, height: 11),
+                const SizedBox(height: 10),
+                const Row(children: [
+                  NxBone(width: 96, height: 32, radius: 10),
+                  SizedBox(width: 6),
+                  NxBone(width: 84, height: 32, radius: 10),
+                  SizedBox(width: 6),
+                  NxBone(width: 72, height: 32, radius: 10),
+                ]),
+              ],
+            ]),
+          ),
+        ),
+      ),
       builder: (context, d) {
         final theme = Theme.of(context);
         final cs = theme.colorScheme;

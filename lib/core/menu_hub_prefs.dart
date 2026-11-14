@@ -23,6 +23,32 @@ class MenuHubPrefs {
   static String viewKey(String scope) => 'nx_menu_view_$scope';
   static String orderKey(String businessScope) => 'nx_menu_order_v1_$businessScope';
 
+  /// Preferences opened at startup ([attach]): the page reads its view and
+  /// order before its first frame (no list → grid / order flash on cold start).
+  static SharedPreferences? _prefs;
+  static void attach(SharedPreferences prefs) => _prefs = prefs;
+
+  /// The saved view, without waiting; null until [attach] ran.
+  static MenuHubView? peekView(String scope) {
+    final p = _prefs;
+    if (p == null) return null;
+    return p.getString(viewKey(scope)) == 'groups' ? MenuHubView.groups : MenuHubView.list;
+  }
+
+  /// The saved group order, without waiting; null until [attach] ran.
+  static List<String>? peekOrder(String businessScope) {
+    final p = _prefs;
+    if (p == null) return null;
+    try {
+      final raw = p.getString(orderKey(businessScope));
+      if (raw == null) return defaultMenuOrder;
+      final j = jsonDecode(raw);
+      return normalizeMenuOrder([for (final e in (j is List ? j : const [])) '$e']);
+    } catch (_) {
+      return defaultMenuOrder;
+    }
+  }
+
   static Future<MenuHubView> loadView(String scope) async {
     try {
       final v = (await SharedPreferences.getInstance()).getString(viewKey(scope));

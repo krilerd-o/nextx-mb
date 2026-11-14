@@ -777,12 +777,10 @@ class NxSkeletonGrid extends StatelessWidget {
                         radius: radius,
                         padding: const EdgeInsets.all(14),
                         child: ring != null
-                            ? Column(children: [
+                            ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                const Row(children: [NxBone(width: 16, height: 16, radius: 5), SizedBox(width: 6), Expanded(child: NxBoneLine(0.6, height: 13))]),
                                 Expanded(child: Center(child: _Ring(size: ring!))),
-                                const SizedBox(height: 10),
-                                const NxBone(width: 70, height: 12),
-                                const SizedBox(height: 6),
-                                const NxBone(width: 48, height: 10),
+                                const Center(child: NxBone(width: 96, height: 11)),
                               ])
                             : const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                 NxBone.circle(32),

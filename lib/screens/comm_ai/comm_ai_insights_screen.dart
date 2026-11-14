@@ -268,7 +268,18 @@ class _CommAiInsightsScreenState extends State<CommAiInsightsScreen> {
     if (_error != null) {
       rows.add(CommAiIsaacState(mood: 'error', title: 'โหลดแดชบอร์ดไม่ได้', message: _error, action: OutlinedButton(onPressed: _load, child: Text(tr('ลองใหม่')))));
     } else if (d == null) {
-      rows.add(const NxSkeletonList(rows: 4));
+      // KPI tiles, then chart cards (bars, sentiment, topics).
+      rows.add(LayoutBuilder(
+        key: const ValueKey('comm-ai-insights-skeleton'),
+        builder: (context, c) => NxSkeleton(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            NxSkeletonGrid(cols: c.maxWidth >= 900 ? 6 : c.maxWidth >= 560 ? 3 : 2, count: 6, tileHeight: 92, gap: 10),
+            const SizedBox(height: 16),
+            const NxSkeletonChartCard(kind: NxChartKind.columns),
+            const NxSkeletonChartCard(kind: NxChartKind.bars, height: 180),
+          ]),
+        ),
+      ));
     } else {
       final totals = d['totals'] is Map ? Map<String, dynamic>.from(d['totals'] as Map) : <String, dynamic>{};
       final open = [for (final a in _maps(d['open_actions'])) if (!_ticked.contains('${a['summary_id']}:${a['index']}')) a];

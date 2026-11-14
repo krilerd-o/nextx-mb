@@ -90,7 +90,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
                       Text(tr(formatApiError(_error!)), textAlign: TextAlign.center, style: TextStyle(color: cs.error)),
                       TextButton(onPressed: _load, child: Text(tr('ลองใหม่'))),
                     ] else if (list == null)
-                      const NxSkeletonList(rows: 3)
+                      const NxSkeletonRows(count: 3, padded: false, leading: NxSkelLeading.icon, leadingSize: 44)
                     else if (list.isEmpty)
                       Padding(
                         padding: const EdgeInsets.all(24),

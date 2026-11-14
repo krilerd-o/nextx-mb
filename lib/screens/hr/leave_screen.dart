@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../core/nx_swr_cache.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
@@ -86,12 +87,14 @@ class _LeaveScreenState extends State<LeaveScreen> {
               ],
             ),
             Expanded(
+              // Tabs stay alive while swiping (no re-fetch); their data also lives in
+              // NxSwrCache, so reopening the page shows it at once.
               child: TabBarView(
                 children: [
-                  const _LeaveBalanceTab(),
-                  _LeaveRequestTab(onSubmitted: () => setState(() => _mineRevision++)),
-                  _LeaveMineTab(revision: _mineRevision, focusId: widget.focusId),
-                  if (canApprove) _LeaveApprovalTab(focusId: widget.focusId),
+                  const _KeepAlive(child: _LeaveBalanceTab()),
+                  _KeepAlive(child: _LeaveRequestTab(onSubmitted: () => setState(() => _mineRevision++))),
+                  _KeepAlive(child: _LeaveMineTab(revision: _mineRevision, focusId: widget.focusId)),
+                  if (canApprove) _KeepAlive(child: _LeaveApprovalTab(focusId: widget.focusId)),
                 ],
               ),
             ),
@@ -102,14 +105,58 @@ class _LeaveScreenState extends State<LeaveScreen> {
   }
 }
 
+/// Keeps a tab's state (and its loaded data) while the user swipes to others.
+class _KeepAlive extends StatefulWidget {
+  const _KeepAlive({required this.child});
+  final Widget child;
+
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
+/// Request cards while loading: date tile, two lines, status chip.
+class _LeaveCardsSkeleton extends StatelessWidget {
+  const _LeaveCardsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = NxBreakpoint.of(context).scrollPadding(context);
+    return Padding(
+      padding: EdgeInsets.only(left: p.left, right: p.right),
+      child: const NxSkeletonRows(key: ValueKey('leave-cards-skeleton'), count: 5, leading: NxSkelLeading.icon, leadingSize: 48, lines: 3, trailing: NxSkelTrailing.badge, padded: false),
+    );
+  }
+}
+
 class _LeaveBalanceTab extends StatelessWidget {
   const _LeaveBalanceTab();
 
   @override
   Widget build(BuildContext context) {
+    final p = NxBreakpoint.of(context).scrollPadding(context);
     return NxCachedFuture<List<Map<String, dynamic>>>(
       load: () => context.read<AppConfig>().apiClient.getLeaveBalance(),
-      skeleton: const NxSkeletonList(rows: 4),
+      cacheKey: NxSwrCache.key('/api/hr/leave-balance'),
+      // Balance cards with the 84 px ring, 2–3 columns like the real grid.
+      skeleton: LayoutBuilder(
+        key: const ValueKey('leave-balance-skeleton'),
+        builder: (context, c) => SingleChildScrollView(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: p,
+          child: NxSkeletonGrid(cols: c.maxWidth - p.horizontal >= 640 ? 3 : 2, count: 4, ring: 84, tileHeight: 172, gap: 10),
+        ),
+      ),
       isEmpty: (list) => list.isEmpty,
       empty: Center(child: Text(tr('ไม่มีข้อมูลสิทธิ์ลา'))),
       builder: (context, list) {
@@ -296,7 +343,7 @@ class _LeaveRequestTabState extends State<_LeaveRequestTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const NxSkeletonForm(fields: 5);
+    if (_loading) return const _LeaveFormSkeleton();
     if (_error != null && _types.isEmpty) {
       return NxErrorRetry(error: _error!, onRetry: _loadTypes);
     }
@@ -659,7 +706,8 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
     return NxCachedFuture<List<Map<String, dynamic>>>(
       revision: widget.revision + _local,
       load: () => context.read<AppConfig>().apiClient.getLeaveRequests(),
-      skeleton: const NxSkeletonList(rows: 4),
+      cacheKey: NxSwrCache.key('/api/hr/leave-requests'),
+      skeleton: const _LeaveCardsSkeleton(),
       isEmpty: (list) => list.isEmpty,
       empty: Center(child: Text(tr('ยังไม่มีคำขอลา'))),
       builder: (context, all) {
@@ -932,7 +980,8 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
     return NxCachedFuture<List<Map<String, dynamic>>>(
       revision: _revision,
       load: () => context.read<AppConfig>().apiClient.getLeaveRequests(all: true, status: 'Pending'),
-      skeleton: const NxSkeletonList(rows: 4),
+      cacheKey: NxSwrCache.key('/api/hr/leave-requests', query: const {'all': 1, 'status': 'Pending'}),
+      skeleton: const _LeaveCardsSkeleton(),
       isEmpty: (list) => list.isEmpty,
       empty: Center(child: Text(tr('ไม่มีคำขอรออนุมัติ'))),
       builder: (context, pending) {
@@ -1051,6 +1100,56 @@ class _LeaveAttachmentsState extends State<LeaveAttachments> {
                       if (picked.isNotEmpty) await _run(() => api.uploadLeaveAttachments(_id, picked));
                     },
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The request form while leave types load: type cards, date blocks and
+/// presets, the summary line, reason box and the submit button.
+class _LeaveFormSkeleton extends StatelessWidget {
+  const _LeaveFormSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget title() => const Padding(padding: EdgeInsets.only(top: 18, bottom: 10), child: NxBone(width: 110, height: 14));
+    return NxSkeleton(
+      key: const ValueKey('leave-form-skeleton'),
+      child: NxSkeletonListView(
+        padding: NxBreakpoint.of(context).scrollPadding(context),
+        children: [
+          title(),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final w in const [128.0, 112.0, 136.0, 104.0]) NxBone(width: w, height: 58, radius: 16),
+          ]),
+          title(),
+          const Row(children: [
+            Expanded(child: NxBone(height: 68, radius: 16)),
+            SizedBox(width: 10),
+            Expanded(child: NxBone(height: 68, radius: 16)),
+          ]),
+          const SizedBox(height: 10),
+          const Row(children: [
+            NxBone(width: 72, height: 32, radius: 16),
+            SizedBox(width: 8),
+            NxBone(width: 84, height: 32, radius: 16),
+            SizedBox(width: 8),
+            NxBone(width: 96, height: 32, radius: 16),
+          ]),
+          const SizedBox(height: 16),
+          const NxSkeletonCard(
+            margin: EdgeInsets.zero,
+            child: Row(children: [
+              NxBone(width: 40, height: 40, radius: 12),
+              SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [NxBoneLine(0.6, height: 14), SizedBox(height: 8), NxBoneLine(0.8, height: 11)])),
+            ]),
+          ),
+          title(),
+          const NxSkeletonFieldBox(height: 96),
+          const SizedBox(height: 20),
+          const NxBone(height: 52, radius: 16),
         ],
       ),
     );
