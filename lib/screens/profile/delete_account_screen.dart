@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../services/api_client.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_logout.dart';
 import '../../widgets/nx_skeleton.dart';
@@ -234,7 +235,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
                             key: const ValueKey('del-type'),
                             controller: _typed,
                             enabled: !_busy && _allVerified,
-                            decoration: profileInput(context, L10n.isEn ? 'DELETE' : 'ลบบัญชี', icon: NxI.textT),
+                            decoration: NxFieldStyle.input(context, label: L10n.isEn ? 'DELETE' : 'ลบบัญชี', icon: NxI.textT),
                           ),
                           const SizedBox(height: 16),
                           FilledButton.icon(
@@ -425,7 +426,7 @@ class _LegacyDeleteAccountState extends State<_LegacyDeleteAccount> {
                       key: const ValueKey('del-type'),
                       controller: _typed,
                       enabled: !_busy,
-                      decoration: profileInput(context, L10n.isEn ? 'DELETE' : 'ลบบัญชี', icon: NxI.textT),
+                      decoration: NxFieldStyle.input(context, label: L10n.isEn ? 'DELETE' : 'ลบบัญชี', icon: NxI.textT),
                     ),
                     const SizedBox(height: 16),
                     FilledButton.icon(

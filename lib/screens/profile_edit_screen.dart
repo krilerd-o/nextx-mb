@@ -8,6 +8,7 @@ import '../core/app_config.dart';
 import '../core/i18n.dart';
 import '../core/nx_page_route.dart';
 import '../services/api_client.dart';
+import '../widgets/fields/nx_field_chrome.dart';
 import '../widgets/nx_icons.dart';
 import '../widgets/nx_shake.dart';
 import '../widgets/nx_skeleton.dart';
@@ -225,12 +226,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           minLines: f.lines,
           maxLines: f.lines > 1 ? f.lines + 3 : 1,
           inputFormatters: [LengthLimitingTextInputFormatter(f.max)],
-          decoration: profileInput(
+          decoration: NxFieldStyle.input(
             context,
-            f.label,
+            label: f.label,
             icon: f.icon,
             hint: f.hint,
-            labelWidget: f.key == 'first_name_th' ? nxRequiredLabel(context, tr(f.label)) : null,
+            required: f.key == 'first_name_th',
+            multiline: f.lines > 1,
           ),
           validator: (v) => trn(profileFieldProblem(f.key, v ?? '', otherFirstName: _c['first_name']!.text)),
         ),
@@ -274,26 +276,29 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             if (s.$1 == 'ติดต่อ')
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Material(
-                  color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(16),
-                  child: ListTile(
-                    key: const ValueKey('pe-mobile'),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    leading: const Icon(NxI.deviceMobile, size: 20),
-                    title: Text(tr('มือถือ')),
-                    subtitle: Text(mobile.isEmpty ? tr('ยังไม่มีเบอร์มือถือ') : formatPhone(mobile)),
-                    trailing: Text(tr('เปลี่ยน'), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
-                    onTap: _saving
-                        ? null
-                        : () async {
-                            final api = context.read<AppConfig>().apiClient;
-                            final changed = await nxPush<bool>(context, PhoneChangeScreen(currentPhone: mobile.isEmpty ? null : mobile));
-                            if (changed == true && mounted) {
-                              final p = await api.getMyProfile().catchError((_) => _original);
-                              if (mounted) setState(() => _original = {..._original, 'phone_mobile': p['phone_mobile']});
-                            }
-                          },
+                // Read-only value in the standard box; tap → change-phone flow.
+                child: NxOutlinedTapField(
+                  key: const ValueKey('pe-mobile'),
+                  label: 'มือถือ',
+                  isEmpty: false,
+                  enabled: !_saving,
+                  prefixIcon: const Icon(NxI.deviceMobile),
+                  suffixIcon: const NxFieldTextAction('เปลี่ยน'),
+                  onTap: _saving
+                      ? null
+                      : () async {
+                          final api = context.read<AppConfig>().apiClient;
+                          final changed = await nxPush<bool>(context, PhoneChangeScreen(currentPhone: mobile.isEmpty ? null : mobile));
+                          if (changed == true && mounted) {
+                            final p = await api.getMyProfile().catchError((_) => _original);
+                            if (mounted) setState(() => _original = {..._original, 'phone_mobile': p['phone_mobile']});
+                          }
+                        },
+                  child: Text(
+                    mobile.isEmpty ? tr('ยังไม่มีเบอร์มือถือ') : formatPhone(mobile),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: mobile.isEmpty ? NxFieldStyle.restingStyle(cs) : theme.textTheme.bodyLarge,
                   ),
                 ),
               ),

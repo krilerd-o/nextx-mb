@@ -142,29 +142,6 @@ class ProfileSteps extends StatelessWidget {
   }
 }
 
-/// Filled input look shared by the profile forms.
-InputDecoration profileInput(BuildContext context, String label, {IconData? icon, Widget? suffix, String? hint, String? helper, Widget? labelWidget}) {
-  final cs = Theme.of(context).colorScheme;
-  return InputDecoration(
-    labelText: labelWidget == null ? tr(label) : null,
-    label: labelWidget,
-    hintText: trn(hint),
-    helperText: trn(helper),
-    helperMaxLines: 2,
-    prefixIcon: icon == null ? null : Icon(icon, size: 20),
-    suffixIcon: suffix,
-    filled: true,
-    fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-    // Filled + underline shape keeps the floating label inside the field.
-    border: UnderlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-    enabledBorder: UnderlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-    disabledBorder: UnderlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-    focusedBorder: UnderlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: cs.primary, width: 2)),
-    errorBorder: UnderlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: cs.error, width: 1.5)),
-    focusedErrorBorder: UnderlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: cs.error, width: 2)),
-  );
-}
-
 /// Inline red error line.
 class ProfileErrorText extends StatelessWidget {
   const ProfileErrorText(this.text, {super.key});

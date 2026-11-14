@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../services/api_client.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import 'profile_ui.dart';
 import 'step_up.dart' show resendSeconds;
@@ -242,12 +243,12 @@ class _PhoneChangeScreenState extends State<PhoneChangeScreen> {
           autofillHints: const [AutofillHints.telephoneNumber],
           inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d+\- ]')), LengthLimitingTextInputFormatter(16)],
           onSubmitted: (_) => sent || _busy ? null : _request(),
-          decoration: profileInput(
+          decoration: NxFieldStyle.input(
             context,
-            'เบอร์มือถือใหม่',
+            label: 'เบอร์มือถือใหม่',
             icon: NxI.deviceMobile,
             hint: '08x-xxx-xxxx',
-            suffix: sent ? IconButton(key: const ValueKey('phone-edit'), tooltip: tr('แก้เบอร์'), icon: const Icon(NxI.pencilSimple, size: 18), onPressed: _busy ? null : _edit) : null,
+            suffix: sent ? NxFieldAction(key: const ValueKey('phone-edit'), tooltip: 'แก้เบอร์', icon: NxI.pencilSimple, onPressed: _busy ? null : _edit) : null,
           ),
         ),
         if (!sent) ...[
@@ -287,7 +288,7 @@ class _PhoneChangeScreenState extends State<PhoneChangeScreen> {
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onSubmitted: (_) => _busy ? null : _verify(),
                     style: theme.textTheme.titleLarge?.copyWith(letterSpacing: 6, fontWeight: FontWeight.w800),
-                    decoration: profileInput(context, 'รหัส OTP', icon: NxI.shieldCheck).copyWith(counterText: ''),
+                    decoration: NxFieldStyle.input(context, label: 'รหัส OTP', icon: NxI.shieldCheck, counter: false),
                   ),
                   const SizedBox(height: 12),
                   Row(children: [

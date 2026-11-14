@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../services/api_client.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/settings_tiles.dart';
@@ -223,15 +224,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             controller: _pw,
             obscureText: !_show,
             autofillHints: const [AutofillHints.newPassword],
-            decoration: profileInput(
+            decoration: NxFieldStyle.input(
               context,
-              'รหัสผ่านใหม่',
+              label: 'รหัสผ่านใหม่',
               icon: NxI.password,
-              suffix: IconButton(
+              suffix: NxPasswordToggle(
                 key: const ValueKey('pw-show'),
-                tooltip: tr(_show ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'),
-                icon: Icon(_show ? NxI.eyeSlash : NxI.eye, size: 20),
-                onPressed: () => setState(() => _show = !_show),
+                obscured: !_show,
+                onToggle: () => setState(() => _show = !_show),
               ),
             ),
           ),
@@ -264,9 +264,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             obscureText: !_show,
             autofillHints: const [AutofillHints.newPassword],
             onSubmitted: (_) => _busy ? null : _save(),
-            decoration: profileInput(
+            decoration: NxFieldStyle.input(
               context,
-              'ยืนยันรหัสผ่านใหม่',
+              label: 'ยืนยันรหัสผ่านใหม่',
               icon: NxI.password,
               suffix: match ? const Icon(NxI.checkCircle, color: Color(0xFF16A34A), size: 20) : null,
             ),
@@ -424,14 +424,11 @@ class _LegacyOtpPasswordState extends State<_LegacyOtpPassword> {
                     key: const ValueKey('pw-new'),
                     controller: _pw,
                     obscureText: !_show,
-                    decoration: profileInput(
+                    decoration: NxFieldStyle.input(
                       context,
-                      'รหัสผ่านใหม่',
+                      label: 'รหัสผ่านใหม่',
                       icon: NxI.password,
-                      suffix: IconButton(
-                        icon: Icon(_show ? NxI.eyeSlash : NxI.eye, size: 20),
-                        onPressed: () => setState(() => _show = !_show),
-                      ),
+                      suffix: NxPasswordToggle(obscured: !_show, onToggle: () => setState(() => _show = !_show)),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -439,7 +436,7 @@ class _LegacyOtpPasswordState extends State<_LegacyOtpPassword> {
                     key: const ValueKey('pw-confirm'),
                     controller: _pw2,
                     obscureText: !_show,
-                    decoration: profileInput(context, 'ยืนยันรหัสผ่านใหม่', icon: NxI.password),
+                    decoration: NxFieldStyle.input(context, label: 'ยืนยันรหัสผ่านใหม่', icon: NxI.password),
                   ),
                   const SizedBox(height: 16),
                   FilledButton(

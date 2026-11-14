@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../services/api_client.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 
 /// "Prove it is me" with a one-time code to the account's own email or mobile.
@@ -237,14 +238,7 @@ class OtpProofSectionState extends State<OtpProofSection> {
                   maxLength: 8,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   style: theme.textTheme.titleLarge?.copyWith(letterSpacing: 6, fontWeight: FontWeight.w800),
-                  decoration: InputDecoration(
-                    labelText: tr('รหัส OTP'),
-                    prefixIcon: const Icon(NxI.shieldCheck, size: 20),
-                    counterText: '',
-                    filled: true,
-                    fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                  ),
+                  decoration: NxFieldStyle.input(context, label: 'รหัส OTP', icon: NxI.shieldCheck, counter: false),
                 ),
               ]),
       ),

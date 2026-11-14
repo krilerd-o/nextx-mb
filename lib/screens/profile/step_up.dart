@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../services/api_exceptions.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import 'profile_ui.dart';
 
@@ -289,15 +290,11 @@ class StepUpVerifierState extends State<StepUpVerifier> {
           obscureText: !_showPw,
           autofillHints: const [AutofillHints.password],
           onSubmitted: (_) => _password.text.isEmpty || !enabled ? null : _confirm(),
-          decoration: profileInput(
+          decoration: NxFieldStyle.input(
             context,
-            'รหัสผ่านปัจจุบัน',
+            label: 'รหัสผ่านปัจจุบัน',
             icon: NxI.keyRound,
-            suffix: IconButton(
-              tooltip: tr(_showPw ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'),
-              icon: Icon(_showPw ? NxI.eyeSlash : NxI.eye, size: 20),
-              onPressed: () => setState(() => _showPw = !_showPw),
-            ),
+            suffix: NxPasswordToggle(obscured: !_showPw, onToggle: () => setState(() => _showPw = !_showPw)),
           ),
         ),
         const SizedBox(height: 10),
@@ -336,7 +333,7 @@ class StepUpVerifierState extends State<StepUpVerifier> {
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             onSubmitted: (_) => codeOk && enabled ? _confirm() : null,
             style: theme.textTheme.titleLarge?.copyWith(letterSpacing: 6, fontWeight: FontWeight.w800),
-            decoration: profileInput(context, 'รหัส OTP', icon: NxI.shieldCheck).copyWith(counterText: ''),
+            decoration: NxFieldStyle.input(context, label: 'รหัส OTP', icon: NxI.shieldCheck, counter: false),
           ),
           const SizedBox(height: 10),
           Row(children: [

@@ -46,6 +46,115 @@ class NxFieldStyle {
     return h;
   }
 
+  /// Resting outline colour of every input box.
+  static Color idleColor(ColorScheme scheme) => scheme.outline.withValues(alpha: 0.55);
+  static Color disabledColor(ColorScheme scheme) => scheme.outline.withValues(alpha: 0.4);
+
+  /// Icon slots are one text line tall, so a field with an icon is exactly
+  /// as tall as one without.
+  static const BoxConstraints iconSlotConstraints = BoxConstraints(minWidth: 36, minHeight: 22, maxHeight: 22);
+
+  static EdgeInsets padding({bool multiline = false}) => EdgeInsets.fromLTRB(16, multiline ? 16 : 15, 12, multiline ? 16 : 15);
+
+  static TextStyle floatingStyle(ColorScheme scheme) => TextStyle(
+        color: scheme.primary,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      );
+
+  /// App-wide default ([ThemeData.inputDecorationTheme]): a plain
+  /// `TextField(decoration: InputDecoration(labelText: ...))` anywhere in the
+  /// app gets the same outlined box as the Lead / entity forms — radius 14,
+  /// hairline outline, primary-colour border on focus, label floating on the
+  /// border. Search bars / chat composers that want another look set their
+  /// own borders explicitly.
+  static InputDecorationTheme theme(ColorScheme scheme, {String? fontFamily, List<String>? fontFamilyFallback}) {
+    TextStyle font(TextStyle s) => s.copyWith(fontFamily: fontFamily, fontFamilyFallback: fontFamilyFallback);
+    return InputDecorationTheme(
+      filled: false,
+      isDense: true,
+      contentPadding: padding(),
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
+      border: border(idleColor(scheme)),
+      enabledBorder: border(idleColor(scheme)),
+      focusedBorder: border(scheme.primary, width: 1.5),
+      errorBorder: border(scheme.error),
+      focusedErrorBorder: border(scheme.error, width: 1.4),
+      disabledBorder: border(disabledColor(scheme)),
+      hintStyle: font(restingStyle(scheme)),
+      labelStyle: font(restingStyle(scheme)),
+      floatingLabelStyle: font(floatingStyle(scheme)),
+      helperMaxLines: 3,
+      errorMaxLines: 3,
+    );
+  }
+
+  /// THE input decoration for any form field outside the entity forms
+  /// (profile, password, OTP, sheets, dialogs …) — same box, label, icon
+  /// slots and height as the Lead form. Use with a plain
+  /// `TextField` / `TextFormField`; validators, controllers and keys stay
+  /// on the field.
+  ///
+  /// * [label] floats onto the border on focus / value; [required] adds a
+  ///   red " *" and makes the resting label bold (like the entity form).
+  /// * [icon] / [prefixIcon] — leading icon inside the box.
+  /// * [suffix] — trailing action ([NxFieldAction], a short [Text] such as
+  ///   "เปลี่ยน", a password eye toggle …) kept one line tall.
+  /// * [multiline] — label stays at the top of a tall box.
+  /// * [counter] false hides the maxLength counter (OTP / code inputs).
+  static InputDecoration input(
+    BuildContext context, {
+    String? label,
+    bool required = false,
+    IconData? icon,
+    Widget? prefixIcon,
+    Widget? suffix,
+    String? hint,
+    String? helper,
+    String? prefixText,
+    String? suffixText,
+    String? errorText,
+    bool multiline = false,
+    bool counter = true,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasLabel = label != null && label.isNotEmpty;
+    final lead = prefixIcon ?? (icon == null ? null : Icon(icon));
+    return InputDecoration(
+      label: hasLabel
+          ? Text.rich(TextSpan(text: tr(label), children: [if (required) requiredMark(scheme)]))
+          : null,
+      labelStyle: required
+          ? restingStyle(scheme).copyWith(fontWeight: FontWeight.w700, color: scheme.onSurface)
+          : restingStyle(scheme),
+      floatingLabelStyle: floatingStyle(scheme),
+      floatingLabelBehavior: FloatingLabelBehavior.auto,
+      alignLabelWithHint: multiline,
+      filled: false,
+      hintText: trn(hint),
+      hintStyle: restingStyle(scheme),
+      helperText: trn(helper),
+      helperMaxLines: 3,
+      errorText: trn(errorText),
+      errorMaxLines: 3,
+      prefixText: prefixText,
+      suffixText: suffixText,
+      counterText: counter ? null : '',
+      prefixIcon: _iconSlot(lead),
+      suffixIcon: _iconSlot(suffix),
+      isDense: true,
+      suffixIconConstraints: iconSlotConstraints,
+      prefixIconConstraints: iconSlotConstraints,
+      contentPadding: padding(multiline: multiline),
+      border: border(idleColor(scheme)),
+      enabledBorder: border(idleColor(scheme)),
+      focusedBorder: border(scheme.primary, width: 1.5),
+      errorBorder: border(scheme.error),
+      focusedErrorBorder: border(scheme.error, width: 1.4),
+      disabledBorder: border(disabledColor(scheme)),
+    );
+  }
+
   static TextStyle restingStyle(ColorScheme scheme) => TextStyle(
         color: scheme.onSurfaceVariant,
         fontSize: 15,
@@ -81,11 +190,7 @@ class NxFieldStyle {
       label: floatingLabel,
       floatingLabelBehavior: FloatingLabelBehavior.auto,
       floatingLabelAlignment: FloatingLabelAlignment.start,
-      floatingLabelStyle: TextStyle(
-        color: scheme.primary,
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-      ),
+      floatingLabelStyle: floatingStyle(scheme),
       alignLabelWithHint: tall,
       filled: false,
       // Resting label: bold with a red * while a required field is still empty.
@@ -96,15 +201,15 @@ class NxFieldStyle {
       suffixIcon: _iconSlot(suffixIcon),
       prefixIcon: _iconSlot(prefixIcon),
       isDense: true,
-      suffixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 22, maxHeight: 22),
-      prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 22, maxHeight: 22),
-      contentPadding: EdgeInsets.fromLTRB(16, tall ? 16 : 15, 12, tall ? 16 : 15),
-      border: border(scheme.outline.withValues(alpha: 0.55)),
-      enabledBorder: border(scheme.outline.withValues(alpha: 0.55)),
+      suffixIconConstraints: iconSlotConstraints,
+      prefixIconConstraints: iconSlotConstraints,
+      contentPadding: padding(multiline: tall),
+      border: border(idleColor(scheme)),
+      enabledBorder: border(idleColor(scheme)),
       focusedBorder: border(scheme.primary, width: 1.5),
       errorBorder: border(scheme.error),
       focusedErrorBorder: border(scheme.error, width: 1.4),
-      disabledBorder: border(scheme.outline.withValues(alpha: 0.4)),
+      disabledBorder: border(disabledColor(scheme)),
     );
   }
 
@@ -264,6 +369,65 @@ class NxFieldClearButton extends StatelessWidget {
           child: Icon(NxI.x, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       ),
+    );
+  }
+}
+
+/// Small icon action for a field's icon slot (edit, show/hide password …):
+/// keeps the field one line tall, unlike a full [IconButton].
+class NxFieldAction extends StatelessWidget {
+  const NxFieldAction({super.key, required this.icon, required this.tooltip, this.onPressed});
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tr(tooltip),
+      child: Semantics(
+        button: true,
+        enabled: onPressed != null,
+        label: tr(tooltip),
+        child: InkResponse(
+          onTap: onPressed,
+          radius: 20,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Icon(icon, size: 20, color: onPressed == null ? cs.onSurfaceVariant.withValues(alpha: 0.5) : cs.onSurfaceVariant),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Show / hide toggle for a password field's suffix.
+class NxPasswordToggle extends StatelessWidget {
+  const NxPasswordToggle({super.key, required this.obscured, required this.onToggle});
+  final bool obscured;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) => NxFieldAction(
+        icon: obscured ? NxI.eye : NxI.eyeSlash,
+        tooltip: obscured ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน',
+        onPressed: onToggle,
+      );
+}
+
+/// Short text action in a field's trailing slot, e.g. "เปลี่ยน".
+class NxFieldTextAction extends StatelessWidget {
+  const NxFieldTextAction(this.text, {super.key});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 4),
+      child: Text(tr(text), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 14)),
     );
   }
 }

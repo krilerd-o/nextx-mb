@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/fields/nx_field_chrome.dart';
 import '../widgets/nx_icons.dart';
 import 'ui_font.dart';
 
@@ -216,43 +217,8 @@ class AppTheme {
           );
         }),
       ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: false,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outline.withValues(alpha: isDark ? 1 : 0.7)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outline.withValues(alpha: isDark ? 1 : 0.7)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.primary, width: 1.4),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        hintStyle: TextStyle(
-          fontFamily: family,
-          fontFamilyFallback: fallback,
-          color: scheme.onSurfaceVariant,
-          fontSize: 15,
-          fontWeight: FontWeight.w400,
-        ),
-        labelStyle: TextStyle(
-          fontFamily: family,
-          fontFamilyFallback: fallback,
-          color: scheme.onSurfaceVariant,
-          fontSize: 15,
-          fontWeight: FontWeight.w400,
-        ),
-        floatingLabelStyle: TextStyle(
-          fontFamily: family,
-          fontFamilyFallback: fallback,
-          color: scheme.primary,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      // One input look app-wide — the Lead / entity form box (see NxFieldStyle).
+      inputDecorationTheme: NxFieldStyle.theme(scheme, fontFamily: family, fontFamilyFallback: fallback),
       textTheme: text,
       // Thin, soft lines + light-stroke icons in a muted colour (not pure black).
       dividerTheme: DividerThemeData(thickness: 0.6, space: 1, color: scheme.outlineVariant),
