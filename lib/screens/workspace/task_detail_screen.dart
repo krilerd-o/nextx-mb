@@ -27,6 +27,7 @@ import '../../widgets/nx_html_view.dart';
 import '../../widgets/nx_attachments.dart';
 import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../crm/entity_detail_parts.dart' show PendingEntityDeletes;
@@ -88,6 +89,18 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   List<Map<String, dynamic>> _epics = const [];
   List<Map<String, dynamic>> _tasks = const [];
   Map<String, String> _users = const {};
+
+  /// The first [_load] is in (statuses, users, sub-items).
+  bool _loaded = false;
+
+  /// A person's name, or a bone while the names are still loading (never "#12").
+  ({String text, Widget? widget}) _person(Object? id, {Object? fallback}) {
+    if (id == null) return (text: '', widget: null);
+    final name = _users['$id'] ?? (fallback == null || '$fallback'.isEmpty ? null : '$fallback');
+    if (name != null) return (text: name, widget: null);
+    if (!_loaded) return (text: '', widget: const Align(alignment: AlignmentDirectional.centerStart, child: NxBone(width: 96, height: 12)));
+    return (text: '#$id', widget: null);
+  }
   List<Map<String, dynamic>> _watchers = const [];
   List<Map<String, dynamic>> _links = const [];
   bool _saving = false;
@@ -121,6 +134,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   void initState() {
     super.initState();
     if (!_online) return;
+    // Statuses and names seen before: the stepper and people show at once (no "#12" flash).
+    final api = _api;
+    final st = TaskBoardMetaCache.instance.peek<List<Map<String, dynamic>>>(api, _boardId, 'statuses');
+    if (st != null) _statuses = WsStatus.list(st);
+    final users = api.peekUsersCached();
+    if (users != null) _users = {for (final u in users) '${u['id']}': userDisplayName(u)};
     _load();
     _loadChildSort();
     _businessId = context.read<AppConfig>().session.businessId;
@@ -235,6 +254,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     ]);
     if (!mounted) return;
     setState(() {
+      _loaded = true;
       final full = r[0] as Map<String, dynamic>?;
       if (full != null) _item = {..._item, ...full};
       _statuses = WsStatus.list(r[1] as List<Map<String, dynamic>>);
@@ -979,11 +999,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   key: _bleed,
                   padding: const EdgeInsets.only(bottom: 14),
                   child: WsStatusStepper(statuses: _statuses, current: '${_item['status_id'] ?? ''}', busy: _saving, onPick: _online ? _setStatus : null),
-                ),
+                )
+              else if (_online && !_loaded)
+                // The board's statuses are on their way: hold the stepper's place.
+                const Padding(padding: EdgeInsets.only(bottom: 14), child: NxSkeletonChevronBar(key: ValueKey('task-status-reserve'))),
               if (_online) Padding(padding: const EdgeInsets.only(bottom: 12), child: _isEpic ? _epicTime(children) : _timeCard()),
               _descriptionSection(context, desc),
               _fieldsSection(context, epic, parent),
-              if (_online && (_isEpic || !_isChild)) _childrenSection(context, children),
+              if (_online && (_isEpic || !_isChild))
+                if (!_loaded && children.isEmpty) const _ChildrenSkeleton() else _childrenSection(context, children),
               if (_online && !_isEpic) SmartChecklistSection(boardId: _boardId, taskId: _id),
               if (_online) ...[
                 const SizedBox(height: 12),
@@ -1107,7 +1131,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         WsFieldRow(
           icon: NxI.user,
           label: 'ผู้รับผิดชอบ',
-          value: _item['assignee_id'] == null ? '' : _users['${_item['assignee_id']}'] ?? '${_item['assignee_name'] ?? '#${_item['assignee_id']}'}',
+          value: _person(_item['assignee_id'], fallback: _item['assignee_name']).text,
+          valueWidget: _person(_item['assignee_id'], fallback: _item['assignee_name']).widget,
           onTap: _online ? () => _pickUser('assignee_id') : null,
         ),
       ),
@@ -1116,7 +1141,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         WsFieldRow(
           icon: NxI.user,
           label: 'ผู้รายงาน',
-          value: _item['reporter_id'] == null ? '' : _users['${_item['reporter_id']}'] ?? '#${_item['reporter_id']}',
+          value: _person(_item['reporter_id']).text,
+          valueWidget: _person(_item['reporter_id']).widget,
           onTap: _online ? () => _pickUser('reporter_id') : null,
         ),
       ),
@@ -1576,6 +1602,12 @@ class TaskBoardMetaCache {
     return f.then((v) => v as T);
   }
 
+  /// The last answer for [what] of [boardId] (any age; for showing at once), or null.
+  T? peek<T>(ApiClient api, String boardId, String what) {
+    final v = _hits['${api.baseUrl}|${api.businessId}|$boardId|$what']?.value;
+    return v is T ? v : null;
+  }
+
   /// Drop one board (after its statuses / epics changed here) or everything.
   void invalidate([String? boardId]) {
     if (boardId == null) {
@@ -1583,5 +1615,26 @@ class TaskBoardMetaCache {
     } else {
       _hits.removeWhere((k, _) => k.split('|')[2] == boardId);
     }
+  }
+}
+
+/// Sub-items section while the board's tasks load: heading, two rows.
+class _ChildrenSkeleton extends StatelessWidget {
+  const _ChildrenSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const NxSkeleton(
+      key: ValueKey('task-children-skeleton'),
+      child: Padding(
+        padding: EdgeInsets.only(top: 12, bottom: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [NxBone(width: 110, height: 15), Spacer(), NxBone(width: 64, height: 28, radius: 14)]),
+          SizedBox(height: 12),
+          NxSkeletonRow(leading: NxSkelLeading.icon, leadingSize: 22, lines: 1, trailing: NxSkelTrailing.pill),
+          NxSkeletonRow(leading: NxSkelLeading.icon, leadingSize: 22, lines: 1, trailing: NxSkelTrailing.pill, wide: false),
+        ]),
+      ),
+    );
   }
 }

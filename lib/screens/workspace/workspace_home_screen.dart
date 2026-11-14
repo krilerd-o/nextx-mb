@@ -14,6 +14,8 @@ import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_overlay_panel.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_refresh_bar.dart';
+import '../../core/nx_swr_cache.dart';
 import 'task_detail_screen.dart';
 import 'workspace_board_screen.dart';
 import 'workspace_trash_screen.dart';
@@ -48,15 +50,17 @@ class WorkspaceHomeScreen extends StatefulWidget {
   State<WorkspaceHomeScreen> createState() => _WorkspaceHomeScreenState();
 }
 
-/// Last load per server + business, so coming back shows it at once and
-/// refreshes underneath (never another business's boards).
-final Map<String, List<Map<String, dynamic>>> _boardsCache = {};
-final Map<String, List<Map<String, dynamic>>> _mineCache = {};
+/// Last load ([NxSwrCache], per server + user + Space), so coming back shows
+/// it at once and refreshes underneath (never another Space's boards).
+final _boardsKey = NxSwrCache.key('/api/boards');
+final _mineKey = NxSwrCache.key('/api/workspace/items', query: const {'mine': 1});
 
 class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
-  late final String _cacheKey = context.read<AppConfig>().businessScope;
-  late List<Map<String, dynamic>>? _boards = _boardsCache[_cacheKey];
-  late List<Map<String, dynamic>>? _mine = _mineCache[_cacheKey];
+  List<Map<String, dynamic>>? _boards = NxSwrCache.instance.peek<List<Map<String, dynamic>>>(_boardsKey);
+  List<Map<String, dynamic>>? _mine = NxSwrCache.instance.peek<List<Map<String, dynamic>>>(_mineKey);
+
+  /// Showing the last copy while it reloads.
+  bool _refreshing = false;
   String? _error;
   WsMyScope _scope = WsMyScope.today;
   bool _expanded = false;
@@ -97,6 +101,7 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
 
   Future<void> _load() async {
     final me = context.read<AppConfig>().session.userId;
+    if (_boards != null) setState(() => _refreshing = true);
     try {
       final r = await Future.wait([
         _api.getBoards(),
@@ -105,15 +110,23 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
       ]);
       if (!mounted) return;
       setState(() {
-        _boards = _boardsCache[_cacheKey] = r[0];
+        _boards = r[0];
         for (final b in r[0]) {
           wsRememberBoard(b);
         }
-        _mine = _mineCache[_cacheKey] = r.length > 1 ? r[1] : const [];
+        _mine = r.length > 1 ? r[1] : const [];
         _error = null;
+        _refreshing = false;
       });
+      NxSwrCache.instance.put(_boardsKey, _boards);
+      NxSwrCache.instance.put(_mineKey, _mine);
     } catch (e) {
-      if (mounted) setState(() => _error = formatApiError(e));
+      if (mounted) {
+        setState(() {
+          _error = formatApiError(e);
+          _refreshing = false;
+        });
+      }
     }
   }
 
@@ -226,11 +239,12 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
           searchHint: 'ค้นหาบอร์ด',
           onChanged: (q) => setState(() => _query = q),
         ),
+        NxRefreshBar(visible: _refreshing),
         Expanded(
           child: NxRefresh(
         onRefresh: _load,
         child: boards == null && _error == null
-            ? const NxSkeletonList()
+            ? const _WsHomeSkeleton()
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
                 children: [
@@ -478,6 +492,68 @@ class _WorkspaceHomeScreenState extends State<WorkspaceHomeScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Workspace home while loading: the folded "งานของฉัน" gradient card, the
+/// boards heading, and board cards (icon tile, name, counts, progress bar).
+class _WsHomeSkeleton extends StatelessWidget {
+  const _WsHomeSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return NxSkeleton(
+      key: const ValueKey('ws-home-skeleton'),
+      child: NxSkeletonListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [cs.primary.withValues(alpha: 0.12), cs.tertiary.withValues(alpha: 0.06)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: const Row(children: [NxBone(width: 18, height: 18, radius: 5), SizedBox(width: 8), NxBone(width: 90, height: 15), Spacer(), NxBone(width: 96, height: 11)]),
+          ),
+          const SizedBox(height: 18),
+          const Row(children: [NxBone(width: 56, height: 16), Spacer(), NxBone(width: 20, height: 12)]),
+          const SizedBox(height: 12),
+          for (var i = 0; i < 5; i++)
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Row(children: [
+                  const NxBone(width: 40, height: 40, radius: 12),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      NxBoneLine(i.isEven ? 0.6 : 0.42, height: 14),
+                      const SizedBox(height: 7),
+                      const NxBoneLine(0.36, height: 10),
+                    ]),
+                  ),
+                  const NxBone(width: 20, height: 6, radius: 3),
+                ]),
+                if (i % 3 != 2) ...[
+                  const SizedBox(height: 12),
+                  const Row(children: [Expanded(child: NxBone(height: 6, radius: 3)), SizedBox(width: 8), NxBone(width: 56, height: 10)]),
+                ],
+              ]),
+            ),
+        ],
       ),
     );
   }

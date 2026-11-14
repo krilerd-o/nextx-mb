@@ -10,6 +10,8 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_refresh_bar.dart';
+import '../../core/nx_swr_cache.dart';
 import '../../widgets/nx_refresh.dart';
 
 /// Workspace trash (`/api/workspace/trash`): restore, or delete for good
@@ -33,15 +35,31 @@ class _WorkspaceTrashScreenState extends State<WorkspaceTrashScreen> {
 
   ApiClient get _api => context.read<AppConfig>().apiClient;
 
+  static final _cacheKey = NxSwrCache.key('/api/workspace/trash');
+
+  /// Showing rows (cached or current) while the first page reloads.
+  bool _refreshing = false;
+
   @override
   void initState() {
     super.initState();
+    final hit = NxSwrCache.instance.peek<({List<Map<String, dynamic>> rows, int total, bool canPurge})>(_cacheKey);
+    if (hit != null) {
+      _rows.addAll(hit.rows);
+      _total = hit.total;
+      _canPurge = hit.canPurge;
+      _loading = false;
+    }
     _load();
   }
 
   Future<void> _load({bool append = false}) async {
     setState(() {
-      if (!append) _loading = true;
+      // A reload keeps the rows on screen (thin progress line), never a skeleton again.
+      if (!append) {
+        _loading = _rows.isEmpty;
+        _refreshing = _rows.isNotEmpty;
+      }
       _more = append;
       _error = null;
     });
@@ -55,13 +73,16 @@ class _WorkspaceTrashScreenState extends State<WorkspaceTrashScreen> {
         _total = wsInt(r['total']) ?? _rows.length;
         _canPurge = r['can_purge'] == true;
         _loading = false;
+        _refreshing = false;
         _more = false;
       });
+      if (!append) NxSwrCache.instance.put(_cacheKey, (rows: List.of(list), total: _total, canPurge: _canPurge));
     } catch (e) {
       if (mounted) {
         setState(() {
           _error = formatApiError(e);
           _loading = false;
+          _refreshing = false;
           _more = false;
         });
       }
@@ -134,11 +155,13 @@ class _WorkspaceTrashScreenState extends State<WorkspaceTrashScreen> {
     final cs = theme.colorScheme;
     return NxScrollScaffold(
       header: NxAppHeader(title: 'ถังขยะ Workspace', subtitle: _loading ? null : tr('$_total รายการ')),
-      body: NxRefresh(
+      body: NxRefreshOverlay(
+        refreshing: _refreshing,
+        child: NxRefresh(
         onRefresh: _load,
         child: _loading
-            ? const NxSkeletonList()
-            : _error != null
+            ? const NxSkeletonRows(key: ValueKey('ws-trash-skeleton'), count: 8, leading: NxSkelLeading.icon, leadingSize: 34, trailing: NxSkelTrailing.badge)
+            : _error != null && _rows.isEmpty
                 ? ListView(children: [
                     Padding(
                       padding: const EdgeInsets.all(24),
@@ -158,7 +181,7 @@ class _WorkspaceTrashScreenState extends State<WorkspaceTrashScreen> {
                         itemBuilder: (context, i) {
                           if (i == _rows.length) {
                             if (!_more) WidgetsBinding.instance.addPostFrameCallback((_) => _load(append: true));
-                            return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
+                            return const NxSkeletonRow(leading: NxSkelLeading.icon, leadingSize: 34, trailing: NxSkelTrailing.badge);
                           }
                           final r = _rows[i];
                           final k = _kindStyle('${r['kind']}');
@@ -214,6 +237,7 @@ class _WorkspaceTrashScreenState extends State<WorkspaceTrashScreen> {
                           );
                         },
                       ),
+        ),
       ),
     );
   }

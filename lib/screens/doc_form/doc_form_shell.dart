@@ -78,7 +78,24 @@ class DocStepShell extends StatelessWidget {
             : null,
       ),
       body: loading
-          ? const NxSkeletonForm()
+          // The real step strip (inert), section cards of inputs, the bottom
+          // bar, and the summary pane on wide screens — the page's own shape.
+          ? Column(
+              key: const ValueKey('docform-skeleton'),
+              children: [
+                if (steps.isNotEmpty)
+                  IgnorePointer(
+                    child: _StepChips(steps: steps, current: current, missing: const [], complete: complete, canOpen: (_) => false, onStep: (_) {}),
+                  ),
+                Expanded(
+                  child: NxSkeletonStepForm(
+                    steps: steps.isEmpty ? 4 : steps.length,
+                    chips: steps.isEmpty,
+                    sidePane: bp.twoPane && MediaQuery.sizeOf(context).width >= 900,
+                  ),
+                ),
+              ],
+            )
           : Column(
               children: [
                 _StepChips(steps: steps, current: current, missing: missing, complete: complete, canOpen: canOpen, onStep: onStep),

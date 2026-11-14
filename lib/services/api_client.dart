@@ -955,6 +955,12 @@ class ApiClient {
 
   ({DateTime at, String biz, List<Map<String, dynamic>> users})? _usersCache;
 
+  /// The users [getUsersCached] holds for this business (any age), without asking.
+  List<Map<String, dynamic>>? peekUsersCached() {
+    final c = _usersCache;
+    return c != null && c.biz == (_businessId ?? '') ? c.users : null;
+  }
+
   /// Business users for id → name labels; cached 10 minutes per business.
   Future<List<Map<String, dynamic>>> getUsersCached() async {
     final c = _usersCache;

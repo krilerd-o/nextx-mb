@@ -929,8 +929,12 @@ class NxSkeletonChartCard extends StatelessWidget {
 /// Quotation / job step form: step chips, section cards of fields, bottom
 /// action bar; a summary pane at the side on wide screens.
 class NxSkeletonStepForm extends StatelessWidget {
-  const NxSkeletonStepForm({super.key, this.steps = 4, this.sections = const [3, 2], this.sidePane});
+  const NxSkeletonStepForm({super.key, this.steps = 4, this.sections = const [3, 2], this.sidePane, this.chips = true, this.sideWidth = 360});
   final int steps;
+
+  /// Draw the step strip (false when the page shows its real one above).
+  final bool chips;
+  final double sideWidth;
   final List<int> sections;
 
   /// Null: from the width (≥ 900 px).
@@ -973,8 +977,7 @@ class NxSkeletonStepForm extends StatelessWidget {
         final main = NxSkeletonListView(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
           children: [
-            chips,
-            const SizedBox(height: 14),
+            if (this.chips) ...[chips, const SizedBox(height: 14)],
             for (var s = 0; s < sections.length; s++) section(sections[s], s),
           ],
         );
@@ -987,10 +990,11 @@ class NxSkeletonStepForm extends StatelessWidget {
             Expanded(child: NxBone(height: 46, radius: 14)),
           ]),
         );
-        final side = SizedBox(
-          width: 320,
+        final side = Container(
+          width: sideWidth,
+          decoration: BoxDecoration(border: Border(left: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)))),
           child: NxSkeletonListView(
-            padding: const EdgeInsets.fromLTRB(0, 10, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
             children: [
               NxSkeletonCard(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
