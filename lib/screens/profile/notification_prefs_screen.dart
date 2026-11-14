@@ -40,7 +40,16 @@ class NotifEvent {
   String get key => '${raw['key']}';
   String get label => trPair(raw['label_th'], raw['label_en']);
   String get description => trPair(raw['description_th'], raw['description_en']);
+
+  /// How often it fires ("ทันที", "วันละครั้ง 09:00"); empty on older servers.
+  String get frequency => trPair(raw['frequency_th'], raw['frequency_en']);
   bool get locked => raw['locked'] == true;
+
+  /// The company's default for this event, when it set one (locked events use it).
+  Map<String, bool>? get companyDefault {
+    final c = raw['company_default'];
+    return c is Map ? {for (final e in c.entries) '${e.key}': e.value == true} : null;
+  }
 
   /// Channels this event can use (`available_channels`); null = all.
   List<String>? get availableChannels {
@@ -69,11 +78,32 @@ Map<String, Map<String, bool>> notifEventChanges(Map<String, Map<String, bool>> 
   return out;
 }
 
-/// "จัดการการแจ้งเตือน": per event, in-app (web & app) and push switches,
-/// grouped as the server sends them, with per-group all on / off, a global
-/// "pause push on mobile" and locked events shown disabled. Changes save on
-/// their own (debounced `PUT` of only the changed events), optimistic with
-/// rollback on error. The top card shows the phone's own permission.
+/// Look of one delivery channel: mobile push, the bell (in the app and on the
+/// web) and browser (Web Push).
+({IconData icon, Color color, String label, String hint}) notifChannelStyle(String key) => switch (key) {
+  'push' => (icon: NxI.deviceMobile, color: const Color(0xFF6366F1), label: 'มือถือ', hint: 'แจ้งเตือนขึ้นบนเครื่อง'),
+  'web_push' => (icon: NxI.globe, color: const Color(0xFF0EA5E9), label: 'เบราว์เซอร์', hint: 'แจ้งเตือนบนคอมพิวเตอร์'),
+  _ => (icon: NxI.bell, color: const Color(0xFFF43F5E), label: 'กระดิ่ง', hint: 'รายการในแอปและบนเว็บ'),
+};
+
+/// "Test sent" message from `POST /api/notifications/test`'s answer.
+String notifTestResultText(Map<String, dynamic> r) {
+  int? n(Object? v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}');
+  final devices = n(r['devices']) ?? n(r['device_count']) ?? n(r['tokens']);
+  final sent = n(r['sent']) ?? n(r['delivered']);
+  if (devices == 0 || (devices == null && sent == 0)) {
+    return 'ส่งแล้ว แต่ยังไม่มีเครื่องที่ลงทะเบียนรับแจ้งเตือน — ลองปิดแล้วเปิดแอปใหม่';
+  }
+  return 'ส่งการแจ้งเตือนทดสอบแล้ว — ควรขึ้นบนเครื่องนี้ภายในไม่กี่วินาที';
+}
+
+/// "จัดการการแจ้งเตือน": what the server sends (only the events the company
+/// has on), grouped, each with its description, how often it fires and a
+/// switch per channel it offers — มือถือ (push), กระดิ่ง (in-app, web + app),
+/// เบราว์เซอร์ (Web Push). Locked events show a lock and cannot change.
+/// Per-group all on / off, a global "pause push", the phone's own permission
+/// and a "send a test to this phone" button. Changes save on their own
+/// (debounced `PUT` of only the changed events), optimistic with rollback.
 class NotificationPrefsScreen extends StatefulWidget {
   const NotificationPrefsScreen({super.key, this.permission, this.openSettings, this.debounce = const Duration(milliseconds: 700)});
 
@@ -100,6 +130,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
   Timer? _debounce;
   bool _saving = false;
   bool _again = false;
+  bool _testing = false;
 
   late final ApiClient _api;
 
@@ -173,6 +204,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
     }
   }
 
+  /// Channel keys in the server's order (มือถือ, กระดิ่ง, เบราว์เซอร์).
   List<String> get _channelKeys {
     final c = _data?['channels'];
     final keys = [
@@ -180,7 +212,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
         for (final x in c)
           if (x is Map && x['key'] != null) '${x['key']}',
     ];
-    return keys.isEmpty ? const ['in_app', 'push'] : keys;
+    return keys.isEmpty ? const ['push', 'in_app'] : keys;
   }
 
   String _channelLabel(String key) {
@@ -193,7 +225,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
         }
       }
     }
-    return tr(key == 'push' ? 'พุช' : 'ในแอป');
+    return tr(notifChannelStyle(key).label);
   }
 
   void _set(String event, String channel, bool v) {
@@ -253,7 +285,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
     }
   }
 
-  /// All unlocked events of a group on (or off) in every channel.
+  /// All unlocked events of a group on (or off) in every channel they offer.
   void _setGroup(List<NotifEvent> events, bool on) {
     HapticFeedback.mediumImpact();
     setState(() {
@@ -265,6 +297,22 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
       }
     });
     _schedule();
+  }
+
+  Future<void> _sendTest() async {
+    if (_testing) return;
+    HapticFeedback.selectionClick();
+    setState(() => _testing = true);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    String text;
+    try {
+      text = tr(notifTestResultText(await _api.sendTestNotification()));
+    } catch (e) {
+      text = isMissingEndpoint(e) ? tr('ระบบของพื้นที่ทำงานนี้ยังส่งทดสอบไม่ได้ — ต้องอัปเดตก่อน') : tr('ส่งทดสอบไม่สำเร็จ · ${formatApiError(e)}');
+    }
+    if (!mounted) return;
+    setState(() => _testing = false);
+    messenger?.showSnackBar(SnackBar(key: const ValueKey('np-test-result'), content: Text(text)));
   }
 
   @override
@@ -302,6 +350,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
     } else if (_data == null) {
       children.add(const Padding(padding: EdgeInsets.only(top: 16), child: NxSkeletonList(rows: 4)));
     } else {
+      final channels = _channelKeys;
       children.add(
         SettingsAppear(
           index: i++,
@@ -316,17 +365,18 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
                 subtitle: _paused ? 'หยุดพุชทุกเรื่องอยู่ · ยังเห็นในแอปและบนเว็บตามปกติ' : 'ปิดพุชทุกเรื่องไว้ก่อน โดยไม่เปลี่ยนตัวเลือกด้านล่าง',
                 trailing: Switch(key: const ValueKey('np-pause'), value: _paused, onChanged: _setPaused),
               ),
+              _ChannelLegend(channels: [for (final c in channels) (key: c, label: _channelLabel(c))]),
             ],
           ),
         ),
       );
-      final channels = _channelKeys;
       for (final g in (_data!['groups'] as List? ?? const [])) {
         if (g is! Map) continue;
         final events = [
           for (final e in (g['events'] as List? ?? const []))
             if (e is Map) NotifEvent(Map<String, dynamic>.from(e)),
         ];
+        // The company turned every event of this group off: no header either.
         if (events.isEmpty) continue;
         final open = events.where((e) => !e.locked).toList();
         final allOn = open.isNotEmpty && open.every((e) => channels.where(e.offers).every((c) => _values[e.key]?[c] == true));
@@ -335,6 +385,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
           SettingsAppear(
             index: i++,
             child: SettingsGroup(
+              key: ValueKey('np-group-$gk'),
               title: trPair(g['label_th'], g['label_en']),
               action: open.isEmpty
                   ? null
@@ -345,8 +396,17 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
                       child: Text(tr(allOn ? 'ปิดทั้งหมด' : 'เปิดทั้งหมด')),
                     ),
               children: [
-                _ChannelHeader(labels: [for (final c in channels) _channelLabel(c)]),
-                for (final e in events) _EventRow(event: e, channels: channels, values: _values[e.key] ?? const {}, pushPaused: _paused, onChanged: (c, v) => _set(e.key, c, v)),
+                for (final e in events)
+                  _EventRow(
+                    event: e,
+                    channels: [
+                      for (final c in channels)
+                        if (e.offers(c)) (key: c, label: _channelLabel(c)),
+                    ],
+                    values: _values[e.key] ?? const {},
+                    pushPaused: _paused,
+                    onChanged: (c, v) => _set(e.key, c, v),
+                  ),
               ],
             ),
           ),
@@ -390,6 +450,12 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
     final color = allowed == false ? const Color(0xFFF97316) : (allowed == true ? const Color(0xFF16A34A) : cs.onSurfaceVariant);
     final status = allowed == null ? 'ตรวจสอบสิทธิ์การแจ้งเตือนของเครื่องไม่ได้' : (allowed ? 'เครื่องนี้อนุญาตการแจ้งเตือนแล้ว' : 'เครื่องนี้ปิดการแจ้งเตือนของแอปอยู่');
     final sub = allowed == false ? 'เปิดในการตั้งค่าเครื่องเพื่อรับพุช' : (_paused ? 'พักพุชไว้ชั่วคราว' : 'รับพุชตามตัวเลือกด้านล่าง');
+    final compact = OutlinedButton.styleFrom(
+      visualDensity: VisualDensity.compact,
+      foregroundColor: color,
+      side: BorderSide(color: color.withValues(alpha: 0.5)),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+    );
     return Container(
       key: const ValueKey('np-device'),
       padding: const EdgeInsets.all(14),
@@ -399,6 +465,7 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 42,
@@ -417,20 +484,31 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 Text(tr(sub), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                if (allowed != true)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: OutlinedButton.icon(
-                      key: const ValueKey('np-open-settings'),
-                      style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: color, side: BorderSide(color: color.withValues(alpha: 0.5))),
-                      onPressed: () async {
-                        await (widget.openSettings ?? _defaultOpenSettings)();
-                        await _checkPermission();
-                      },
-                      icon: const Icon(NxI.gear, size: 16),
-                      label: Text(tr('เปิดในการตั้งค่าเครื่อง')),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    if (allowed != true)
+                      OutlinedButton.icon(
+                        key: const ValueKey('np-open-settings'),
+                        style: compact,
+                        onPressed: () async {
+                          await (widget.openSettings ?? _defaultOpenSettings)();
+                          await _checkPermission();
+                        },
+                        icon: const Icon(NxI.gear, size: 16),
+                        label: Text(tr('เปิดในการตั้งค่าเครื่อง')),
+                      ),
+                    FilledButton.tonalIcon(
+                      key: const ValueKey('np-test'),
+                      style: FilledButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 12)),
+                      onPressed: _testing ? null : _sendTest,
+                      icon: _testing ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.paperPlaneTilt, size: 16),
+                      label: Text(tr('ส่งทดสอบมาที่เครื่องนี้')),
                     ),
-                  ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -440,30 +518,56 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
   }
 }
 
-class _ChannelHeader extends StatelessWidget {
-  const _ChannelHeader({required this.labels});
-  final List<String> labels;
+typedef _Channel = ({String key, String label});
+
+/// What each channel means, once, above the groups.
+class _ChannelLegend extends StatelessWidget {
+  const _ChannelLegend({required this.channels});
+  final List<_Channel> channels;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 8, 2),
-      child: Row(
-        children: [
-          const Spacer(),
-          for (final l in labels)
-            SizedBox(
-              width: 64,
-              child: Text(
-                l,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
-              ),
-            ),
-        ],
+      key: const ValueKey('np-legend'),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      // One chip per channel; a chip wraps its own text rather than overflow.
+      child: LayoutBuilder(
+        builder: (context, box) => SizedBox(
+          width: box.maxWidth,
+          child: Wrap(
+            spacing: 14,
+            runSpacing: 6,
+            children: [
+              for (final c in channels)
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: box.maxWidth),
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.middle,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 5),
+                            child: Icon(notifChannelStyle(c.key).icon, size: 15, color: notifChannelStyle(c.key).color),
+                          ),
+                        ),
+                        TextSpan(
+                          text: c.label,
+                          style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        TextSpan(
+                          text: ' ${tr(notifChannelStyle(c.key).hint)}',
+                          style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -472,7 +576,9 @@ class _ChannelHeader extends StatelessWidget {
 class _EventRow extends StatelessWidget {
   const _EventRow({required this.event, required this.channels, required this.values, required this.pushPaused, required this.onChanged});
   final NotifEvent event;
-  final List<String> channels;
+
+  /// Only the channels this event offers.
+  final List<_Channel> channels;
   final Map<String, bool> values;
   final bool pushPaused;
   final void Function(String channel, bool value) onChanged;
@@ -482,56 +588,173 @@ class _EventRow extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final desc = event.description;
+    final freq = event.frequency;
+    final locked = event.locked;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-      child: Row(
+      key: ValueKey('np-event-${event.key}'),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  event.label,
+                  style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600, color: locked ? cs.onSurfaceVariant : null),
+                ),
+              ),
+              if (locked) _LockBadge(key: ValueKey('np-locked-${event.key}'), byCompany: event.companyDefault != null),
+            ],
+          ),
+          if (desc.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                desc,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.35),
+              ),
+            ),
+          if (freq.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Row(
+                key: ValueKey('np-freq-${event.key}'),
+                children: [
+                  Icon(NxI.clock, size: 13, color: cs.primary.withValues(alpha: 0.85)),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      freq,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (channels.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                for (var i = 0; i < channels.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: _ChannelSwitch(
+                      eventKey: event.key,
+                      channel: channels[i],
+                      value: values[channels[i].key] ?? false,
+                      dimmed: channels[i].key == 'push' && pushPaused && !locked,
+                      onChanged: locked ? null : (v) => onChanged(channels[i].key, v),
+                    ),
+                  ),
+                ],
+                // Keep cells the same width when an event offers fewer channels.
+                for (var i = channels.length; i < 3; i++) ...[const SizedBox(width: 8), const Expanded(child: SizedBox())],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LockBadge extends StatelessWidget {
+  const _LockBadge({super.key, required this.byCompany});
+  final bool byCompany;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Tooltip(
+      message: tr(byCompany ? 'บริษัทกำหนดไว้ เปลี่ยนไม่ได้' : 'ตั้งโดยระบบ เปลี่ยนไม่ได้'),
+      child: Container(
+        margin: const EdgeInsets.only(left: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(color: cs.onSurfaceVariant.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(999)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(NxI.lock, size: 12, color: cs.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Text(
+              tr(byCompany ? 'บริษัทกำหนด' : 'ระบบกำหนด'),
+              style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One channel of one event: icon + name over its switch, the whole cell
+/// tappable, tinted in the channel's colour while on.
+class _ChannelSwitch extends StatelessWidget {
+  const _ChannelSwitch({required this.eventKey, required this.channel, required this.value, required this.dimmed, required this.onChanged});
+  final String eventKey;
+  final _Channel channel;
+  final bool value;
+  final bool dimmed;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final style = notifChannelStyle(channel.key);
+    final on = value && onChanged != null;
+    final dark = theme.brightness == Brightness.dark;
+    final fill = on ? style.color.withValues(alpha: dark ? 0.2 : 0.1) : cs.surface.withValues(alpha: dark ? 0.35 : 0.7);
+    return Opacity(
+      opacity: dimmed ? 0.55 : (onChanged == null ? 0.7 : 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onChanged == null ? null : () => onChanged!(!value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.fromLTRB(6, 8, 6, 2),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: on ? style.color.withValues(alpha: 0.45) : cs.outlineVariant.withValues(alpha: 0.6)),
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    Icon(style.icon, size: 14, color: on ? style.color : cs.onSurfaceVariant),
+                    const SizedBox(width: 4),
                     Flexible(
                       child: Text(
-                        event.label,
-                        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500, color: event.locked ? cs.onSurfaceVariant : null),
+                        channel.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700, color: on ? cs.onSurface : cs.onSurfaceVariant),
                       ),
                     ),
-                    if (event.locked) ...[const SizedBox(width: 6), Icon(NxI.lock, size: 14, color: cs.onSurfaceVariant, key: ValueKey('np-locked-${event.key}'))],
                   ],
                 ),
-                if (desc.isNotEmpty)
-                  Text(
-                    desc,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                SizedBox(
+                  height: 36,
+                  child: FittedBox(
+                    child: Switch(key: ValueKey('np-$eventKey-${channel.key}'), value: value, activeTrackColor: style.color, onChanged: onChanged),
                   ),
-                if (event.locked) Text(tr('ตั้งโดยระบบ เปลี่ยนไม่ได้'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                ),
               ],
             ),
           ),
-          for (final c in channels)
-            if (!event.offers(c))
-              SizedBox(
-                width: 64,
-                child: Text(
-                  '—',
-                  key: ValueKey('np-${event.key}-$c-na'),
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(color: cs.outline),
-                ),
-              )
-            else
-              SizedBox(
-                width: 64,
-                child: Opacity(
-                  opacity: c == 'push' && pushPaused && !event.locked ? 0.5 : 1,
-                  child: Switch(key: ValueKey('np-${event.key}-$c'), value: values[c] ?? false, onChanged: event.locked ? null : (v) => onChanged(c, v)),
-                ),
-              ),
-        ],
+        ),
       ),
     );
   }

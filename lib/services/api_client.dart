@@ -533,12 +533,16 @@ class ApiClient {
   Future<Map<String, dynamic>> getNotificationPreferences() async =>
       _dataMap(await _send('GET', '/api/me/notification-preferences'));
 
-  /// `PUT /api/me/notification-preferences {events?:{key:{in_app?, push?}}, push_paused?}` → same shape as GET.
+  /// `PUT /api/me/notification-preferences {events?:{key:{in_app?, push?, web_push?}}, push_paused?}` → same shape as GET.
   Future<Map<String, dynamic>> updateNotificationPreferences({Map<String, Map<String, bool>>? events, bool? pushPaused}) async =>
       _dataMap(await _send('PUT', '/api/me/notification-preferences', data: {
         if (events != null && events.isNotEmpty) 'events': events,
         'push_paused': ?pushPaused,
       }));
+
+  /// `POST /api/notifications/test`: the server sends a test notification to me.
+  Future<Map<String, dynamic>> sendTestNotification() async =>
+      _dataMap(await _send('POST', '/api/notifications/test', data: const <String, dynamic>{}));
 
   Future<void> revokeDeviceSession(String sid) async {
     await _send('DELETE', '/api/me/sessions/${Uri.encodeComponent(sid)}');

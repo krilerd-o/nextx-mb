@@ -3922,6 +3922,18 @@ const Map<String, String> enStrings = {
   'ไม่มีรายชื่อผู้อนุมัติสำหรับระดับนี้': 'No approvers set for this level',
   'ไม่พบชื่อที่ค้นหา': 'No matching names',
   'ไม่พบผู้ใช้นี้ในรายชื่อ': 'Not found in the user list',
+  'แจ้งเตือนขึ้นบนเครื่อง': 'Shows on your phone',
+  'เบราว์เซอร์': 'Browser',
+  'แจ้งเตือนบนคอมพิวเตอร์': 'On your computer',
+  'กระดิ่ง': 'Bell',
+  'รายการในแอปและบนเว็บ': 'List in the app and on the web',
+  'ส่งแล้ว แต่ยังไม่มีเครื่องที่ลงทะเบียนรับแจ้งเตือน — ลองปิดแล้วเปิดแอปใหม่': 'Sent, but no device is registered for notifications yet — try closing and reopening the app',
+  'ส่งการแจ้งเตือนทดสอบแล้ว — ควรขึ้นบนเครื่องนี้ภายในไม่กี่วินาที': 'Test notification sent — it should show on this phone within a few seconds',
+  'ระบบของพื้นที่ทำงานนี้ยังส่งทดสอบไม่ได้ — ต้องอัปเดตก่อน': 'This Space\'s server can\'t send a test yet — it needs an update first',
+  'ส่งทดสอบมาที่เครื่องนี้': 'Send a test to this phone',
+  'บริษัทกำหนดไว้ เปลี่ยนไม่ได้': 'Set by your company, can\'t be changed',
+  'บริษัทกำหนด': 'Set by company',
+  'ระบบกำหนด': 'Set by system',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -4521,4 +4533,5 @@ const Map<String, String> enHistory = {
   'ล้างลายเซ็น{}?': 'Clear the {} signature?',
   'SLA เกินกำหนดแก้ไข{}': 'SLA resolve time passed{}',
   'SLA เกินเวลาตอบรับ{}': 'SLA response time passed{}',
+  'ส่งทดสอบไม่สำเร็จ · {}': 'Couldn\'t send the test · {}',
 };

@@ -54,7 +54,7 @@ void main() {
     expect(tester.widget<Switch>(find.byKey(const ValueKey('np-system_notice-in_app'))).onChanged, isNull, reason: 'locked');
     expect(find.byKey(const ValueKey('np-locked-system_notice')), findsOneWidget);
     expect(find.byKey(const ValueKey('np-call_incoming-in_app')), findsNothing);
-    expect(find.byKey(const ValueKey('np-call_incoming-in_app-na')), findsOneWidget);
+    expect(find.byKey(const ValueKey('np-call_incoming-push')), findsOneWidget, reason: 'only the channels it offers are shown');
     // Device permission (off here) with a shortcut to the phone's settings.
     expect(find.text('เครื่องนี้ปิดการแจ้งเตือนของแอปอยู่'), findsOneWidget);
     expect(find.byKey(const ValueKey('np-open-settings')), findsOneWidget);
