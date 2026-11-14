@@ -12,6 +12,18 @@ ApiClient _api(FakeNextxAdapter fake) {
 }
 
 void main() {
+  test('getEntitiesByIds: one ?ids= list call with cols; rows matched by id', () async {
+    final fake = FakeNextxAdapter({
+      'GET /api/entity/account': {'list': [{'id': 2, 'account_name': 'B'}, {'id': 9, 'account_name': 'other'}], 'total': 2},
+    });
+    final api = _api(fake);
+    final rows = await api.getEntitiesByIds('account', ['1', '2'], cols: 'id,account_name');
+    final q = fake.calls.single.queryParameters;
+    expect(q['ids'], '1,2');
+    expect(q['cols'], 'id,account_name');
+    expect(rows.map((r) => r['id']), [2], reason: 'an old server ignoring ids sends other rows: dropped');
+  });
+
   group('request de-dup', () {
     test('simultaneous getFieldSchema / getUsersCached / getModuleLabels share one request each', () async {
       final fake = FakeNextxAdapter({

@@ -467,17 +467,35 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       }
     }
     if (todo.isEmpty) return;
-    // Deduplicated above (one lookup per module:id); at most 4 at a time so a long history
-    // does not queue 30 record reads in front of everything else. (The server has no
-    // `?ids=` batch read on the entity list.)
-    final queue = todo.entries.take(30).toList();
+    void remember(String key, String id, String module, Map<String, dynamic> row) {
+      final title = entityTitle(row, module: module);
+      if (title.isNotEmpty && title != 'รายการ' && title != 'ID $id') _refNames[key] = title;
+    }
+
+    // One `?ids=` list call per module (deduplicated above, name columns only) instead of a
+    // record read per id.
+    final byModule = <String, List<String>>{};
+    for (final t in todo.values) {
+      byModule.putIfAbsent(t.module, () => []).add(t.id);
+    }
+    final found = <String>{};
+    await Future.wait(byModule.entries.map((m) async {
+      try {
+        final rows = await api.getEntitiesByIds(m.key, m.value, cols: _refNameCols);
+        for (final r in rows) {
+          final id = '${r['id']}';
+          found.add('${m.key}:$id');
+          remember('${m.key}:$id', id, m.key, r);
+        }
+      } catch (_) {}
+    }));
+    // Older servers (no `ids`): the rest one by one, at most 4 at a time and 30 in all.
+    final queue = todo.entries.where((t) => !found.contains(t.key)).take(30).toList();
     Future<void> worker() async {
       while (queue.isNotEmpty) {
         final t = queue.removeLast();
         try {
-          final row = await api.getEntity(t.value.module, t.value.id);
-          final title = entityTitle(row, module: t.value.module);
-          if (title.isNotEmpty && title != 'รายการ' && title != 'ID ${t.value.id}') _refNames[t.key] = title;
+          remember(t.key, t.value.id, t.value.module, await api.getEntity(t.value.module, t.value.id));
         } catch (_) {
           // Deleted / no access: keep the id.
         }
@@ -486,6 +504,12 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
 
     await Future.wait([for (var i = 0; i < 4; i++) worker()]);
   }
+
+  /// Columns [entityTitle] reads (unknown names are ignored by the server).
+  static const _refNameCols =
+      'id,name,subject,account_name,accountname,account_no,contact_firstname,contact_lastname,customer_name,'
+      'deal_name,dealname,deal_no,first_name,firstname,last_name,lastname,lead_firstname,lead_lastname,lead_name,'
+      'quotation_no,title_th,title_en';
 
   List<({String value, String label})> _statusOptions(String? key) {
     if (key == null) return const [];

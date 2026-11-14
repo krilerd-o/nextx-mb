@@ -514,7 +514,8 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
     });
   }
 
-  Future<void> _load() async {
+  /// [refresh]: pull-to-refresh / after an action — the server skips its short caches.
+  Future<void> _load({bool refresh = false}) async {
     _revision++;
     final had = _summary != null || _attendance != null || _work != null;
     setState(() {
@@ -543,7 +544,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
       MenuAccess.allow(session, MenuAccess.attendance)
           ? guard(api.getAttendanceSummary())
           : Future<Object?>.value(),
-      guard(api.getHomeSummary(fields: const ['stats', 'upcoming'])),
+      guard(api.getHomeSummary(fields: const ['stats', 'upcoming'], limit: 4, nocache: refresh)),
       workspace
           ? guard(api.getHomeWork(bucket: 'overdue', limit: 30))
           : Future<Object?>.value(),
@@ -578,7 +579,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
       _refreshing = false;
     });
     _saveCache();
-    _loadStats();
+    _loadStats(refresh: refresh);
   }
 
   /// New records per day for the last 7 days (Thai days), per stat module.
@@ -595,7 +596,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
 
   /// "ภาพรวม" figures: one `home-stats` call on newer servers; otherwise the old per-module
   /// counts (7 totals + 7 × 7 daily counts). One setState per step, not one per request.
-  Future<void> _loadStats() async {
+  Future<void> _loadStats({bool refresh = false}) async {
     final config = context.read<AppConfig>();
     final session = config.session;
     final api = config.apiClient;
@@ -606,7 +607,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
     if (modules.isEmpty) return;
     Map<String, dynamic>? stats;
     try {
-      stats = await api.getHomeStats(days: 7);
+      stats = await api.getHomeStats(days: 7, nocache: refresh);
     } catch (_) {}
     if (!mounted) return;
     final byModule = stats?['modules'];
@@ -791,7 +792,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
       clockIn: clockIn == null,
       clockedInAt: parseThai(clockIn),
     );
-    if (r != null && mounted) _load();
+    if (r != null && mounted) _load(refresh: true);
   }
 
   @override
@@ -1122,7 +1123,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
                       : NxRefresh(
                           edgeOffset: NxScrollScaffold.topInset(context),
                           color: cs.primary,
-                          onRefresh: _load,
+                          onRefresh: () => _load(refresh: true),
                           child: GestureDetector(
                             // Tap on empty space while arranging = leave edit mode.
                             behavior: HitTestBehavior.translucent,

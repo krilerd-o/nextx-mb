@@ -115,8 +115,18 @@ void main() {
     expect(find.byKey(const ValueKey('home-stat-lead')), findsOneWidget);
     expect(find.descendant(of: find.byKey(const ValueKey('home-stat-lead')), matching: find.text('12')), findsOneWidget);
     // home-summary asks only for stats + upcoming; /api/home/work once.
-    expect(fake.calls.singleWhere((c) => c.path == '/api/dashboard/home-summary').queryParameters['fields'], 'stats,upcoming');
+    final summary = fake.calls.singleWhere((c) => c.path == '/api/dashboard/home-summary').queryParameters;
+    expect(summary['fields'], 'stats,upcoming');
+    expect(summary['limit'], '4');
+    expect(summary['nocache'], isNull, reason: 'opening Home may use the server\'s short cache');
+    expect(fake.calls.where((c) => c.path == '/api/dashboard/home-stats').single.queryParameters['nocache'], isNull);
     expect(fake.calls.where((c) => c.path == '/api/home/work' && c.queryParameters['scope'] == null).map((c) => c.queryParameters).toList(), hasLength(1));
+
+    // Pull-to-refresh skips the server caches (home-summary 30 s, home-stats 60 s).
+    await tester.fling(find.byKey(const ValueKey('home-scroll')), const Offset(0, 600), 1500);
+    await _settle(tester, frames: 30);
+    expect(fake.calls.where((c) => c.path == '/api/dashboard/home-stats').last.queryParameters['nocache'], '1');
+    expect(fake.calls.where((c) => c.path == '/api/dashboard/home-summary').last.queryParameters['nocache'], '1');
     await _done(tester);
   });
 

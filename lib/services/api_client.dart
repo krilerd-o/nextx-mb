@@ -1683,11 +1683,14 @@ class ApiClient {
   /// (`GET /api/dashboard/home-summary`, already scoped to the user's menus).
   ///
   /// [fields] (newer servers): only those parts, e.g. `['stats', 'upcoming']` →
-  /// `{stats, upcoming}` where `upcoming` = the next activities from now (max 4). Older
-  /// servers ignore it and send everything (`activities` = their first 150 rows).
-  Future<Map<String, dynamic>> getHomeSummary({List<String>? fields}) async {
+  /// `{stats, upcoming}` where `upcoming` = the next [limit] activities from now. Older
+  /// servers ignore both and send everything (`activities` = their first 150 rows).
+  /// The server caches the answer 30 s; [nocache] (pull-to-refresh) skips that.
+  Future<Map<String, dynamic>> getHomeSummary({List<String>? fields, int? limit, bool nocache = false}) async {
     return _dataMap(await _send('GET', '/api/dashboard/home-summary', query: {
       if (fields != null && fields.isNotEmpty) 'fields': fields.join(','),
+      if (limit != null) 'limit': '$limit',
+      if (nocache) 'nocache': '1',
     }));
   }
 
@@ -1715,10 +1718,25 @@ class ApiClient {
   }
 
   /// `GET /api/dashboard/home-stats?days=` — Home "ภาพรวม" in one call:
-  /// `{modules: {<module>: {mine, total, spark: [days, oldest → newest]}}}`.
-  /// Null on servers without the route (callers fall back to per-module counts).
-  Future<Map<String, dynamic>?> getHomeStats({int days = 7}) =>
-      _optionalGet('/api/dashboard/home-stats', query: {'days': '$days'});
+  /// `{modules: {<module>: {mine, total, spark: [days, oldest → newest]}}, days, from, to}`
+  /// (only modules on the caller's menu). Cached 60 s on the server; [nocache]
+  /// (pull-to-refresh) skips that. Null on servers without the route (callers fall back
+  /// to per-module counts).
+  Future<Map<String, dynamic>?> getHomeStats({int days = 7, bool nocache = false}) =>
+      _optionalGet('/api/dashboard/home-stats', query: {'days': '$days', if (nocache) 'nocache': '1'});
+
+  /// `GET /api/entity/:module?ids=1,2,3&cols=` — several records in one list call (newer
+  /// servers; at most 100 ids). Older servers ignore `ids` and send an ordinary first page,
+  /// so callers must match rows by id and look up the missing ones another way.
+  Future<List<Map<String, dynamic>>> getEntitiesByIds(String module, List<String> ids, {String? cols}) async {
+    if (ids.isEmpty) return const [];
+    final page = await getEntityList(module, limit: ids.length.clamp(1, 100), extra: {
+      'ids': ids.take(100).join(','),
+      if (cols != null && cols.isNotEmpty) 'cols': cols,
+    });
+    final want = ids.toSet();
+    return [for (final r in page.items) if (want.contains('${r['id']}')) r];
+  }
 
   /// `GET /api/calendar/birthdays/upcoming?days=` — birthdays in the next [days]:
   /// `{items: [{module, id, name, birthdate, next_date, days_until, avatar_url?}]}`.
