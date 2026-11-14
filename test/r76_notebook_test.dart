@@ -188,7 +188,7 @@ void main() {
       expect(find.byKey(const ValueKey('notebook-more-4')), findsOneWidget);
     });
 
-    testWidgets('create sends title / description / visibility', (tester) async {
+    testWidgets('create sends title / description / visibility / appearance', (tester) async {
       final (adapter, config) = await pump(tester, const NotebookHomeScreen(), {
         ..._replies(),
         'POST /api/ai/notebooks': {'item': nbRow(9, title: 'สมุดใหม่ของฉัน', sources: 0)},
@@ -197,7 +197,7 @@ void main() {
       await tester.runAsync(c.load);
       final nb = await tester.runAsync(() => c.create(title: 'สมุดใหม่ของฉัน', description: 'ทดสอบ', visibility: 'business'));
       final body = _body(_last(adapter, 'POST /api/ai/notebooks'));
-      expect(body, {'title': 'สมุดใหม่ของฉัน', 'description': 'ทดสอบ', 'visibility': 'business'});
+      expect(body, {'title': 'สมุดใหม่ของฉัน', 'description': 'ทดสอบ', 'visibility': 'business', 'appearance': NotebookAppearance.forTitle('สมุดใหม่ของฉัน').toJson()});
       expect(nb!.id, '9');
       expect(c.items.first.id, '9');
       // The sheet itself.

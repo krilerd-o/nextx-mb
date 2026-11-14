@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
+import '../../core/notebook/notebook_models.dart';
 import '../../core/notebook/notebook_recording.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../services/api_client.dart';
@@ -125,12 +126,23 @@ class _NotebookScreenState extends State<NotebookScreen> {
   Future<void> _edit() async {
     final nb = _c.notebook;
     if (nb == null) return;
+    final scope = context.read<AppConfig>().businessScope;
+    // A pick kept on the device (older server) shows in the sheet.
+    nb.localAppearance ??= (await NotebookAppearanceStore.load(scope))[nb.id];
+    if (!mounted) return;
     final out = await showNotebookEditSheet(context, initial: nb);
     if (out == null) return;
     try {
       await _c.rename(out.title, description: out.description);
       if (out.visibility != nb.visibility) await _c.api.updateNotebook(nb.id, {'visibility': out.visibility});
-      nb.visibility = out.visibility;
+      final fresh = _c.notebook ?? nb;
+      fresh.visibility = out.visibility;
+      if (out.appearance != nb.look) {
+        final m = await _c.api.updateNotebook(nb.id, {'appearance': out.appearance.toJson()});
+        fresh.appearance = NotebookAppearance.tryParse(m['appearance']);
+        fresh.localAppearance ??= nb.localAppearance;
+        await keepNotebookAppearance(fresh, out.appearance, scope);
+      }
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(notebookError(e).text))));
