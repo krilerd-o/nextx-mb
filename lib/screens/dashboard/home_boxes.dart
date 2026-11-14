@@ -406,7 +406,7 @@ class _MyWorkBoxState extends State<MyWorkBox> {
                       ),
                       const SizedBox(height: 4),
                       if (items == null)
-                        const Padding(padding: EdgeInsets.fromLTRB(14, 6, 14, 0), child: NxSkeletonBox())
+                        const Padding(padding: EdgeInsets.fromLTRB(14, 6, 14, 0), child: NxSkeletonBox(pill: true))
                       else if (items.isEmpty)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -756,7 +756,7 @@ class _PeriodBoxState extends State<_PeriodBox> {
             duration: const Duration(milliseconds: 200),
             alignment: Alignment.topCenter,
             child: figs == null
-                ? const Padding(padding: EdgeInsets.fromLTRB(12, 4, 12, 0), child: NxSkeletonBox(rows: 2))
+                ? const Padding(padding: EdgeInsets.fromLTRB(12, 4, 12, 0), child: NxSkeletonFigures())
                 : figs.isEmpty
                     ? Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),

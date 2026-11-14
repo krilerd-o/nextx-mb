@@ -12,6 +12,7 @@ import '../../core/i18n.dart';
 import '../../core/nx_number.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
+import 'home_skeleton.dart';
 import 'home_boxes.dart' show HomeCardShadow, homeCardFill, kHomeCardRadius;
 import 'home_chart_data.dart';
 import 'home_widgets.dart';
@@ -140,7 +141,8 @@ class _HomeChartCardState extends State<HomeChartCard> {
     final body = _error != null && _data == null
         ? _ErrorState(onRetry: () => _load(force: true))
         : _data == null
-        ? const Padding(padding: EdgeInsets.only(top: 6), child: NxSkeletonBox(rows: 2))
+        // Shaped like the chart it stands for (bars / donut / ring …), in the card's fixed height.
+        ? NxSkeletonChart(key: const ValueKey('home-chart-skeleton'), kind: HomeChartSkeleton.kindOf(widget.entry.id))
         : ChartBody(id: widget.entry.id, data: _data!, half: half);
     return HomeCardShadow(
       child: Material(

@@ -19,13 +19,13 @@ import '../../core/navigation/app_routes.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../services/api_client.dart';
 import '../../services/unread_service.dart';
-import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../core/thai_time.dart';
 import '../../core/workspace_models.dart';
 import '../../core/i18n.dart';
 import '../../core/nx_page_route.dart';
+import 'home_skeleton.dart';
 import 'home_layout_editor.dart';
 import '../../core/home_layout.dart';
 import '../../core/recent_records.dart';
@@ -1112,12 +1112,27 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
               children: [
                 Positioned.fill(
                   child: _loading
+                      // The user's own widgets, in their order and sizes, as frames.
                       ? ListView(
+                          key: const ValueKey('home-skeleton'),
                           padding: EdgeInsets.only(bottom: pad.bottom),
                           children: [
                             hero,
-                            const SizedBox(height: 12),
-                            limit(const NxSkeletonKpiGrid()),
+                            limit(HomeSkeleton(entries: [
+                              for (final e in HomeLayout.instance.entries)
+                                if (homeWidgetAllowed(session, e.id) &&
+                                    switch (e.id) {
+                                      'today' => todayHasRows,
+                                      'ai' => aiAllowed,
+                                      'quick' => quick.isNotEmpty,
+                                      'work' => MenuAccess.allow(session, MenuAccess.workspace),
+                                      'sales' => MenuAccess.any(session, const ['deal', 'quotation']),
+                                      'cases' => MenuAccess.allow(session, 'case'),
+                                      'stats' => _statModules.keys.any((m) => MenuAccess.allow(session, EntityModules.menuKeyOf(m))),
+                                      _ => HomeLayout.isChart(e.id),
+                                    })
+                                  e,
+                            ])),
                           ],
                         )
                       : NxRefresh(
