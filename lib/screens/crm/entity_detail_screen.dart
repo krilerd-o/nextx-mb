@@ -55,6 +55,24 @@ import '../calendar/activity_detail_screen.dart';
 import '../calendar/activity_form_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../widgets/nx_refresh.dart';
+import '../../widgets/nx_refresh_bar.dart';
+import '../../core/nx_swr_cache.dart';
+
+/// [NxSwrCache] key of a record (`GET /api/entity/:module/:id`); deep links and
+/// the detail page share it.
+String entityRecordCacheKey(String module, String id) => NxSwrCache.key('/api/entity/$module/$id');
+
+/// Everything the record page showed last time (record, comments, tags, schema).
+typedef _DetailSnapshot = ({
+  Map<String, dynamic> row,
+  List<Map<String, dynamic>> comments,
+  List<Map<String, dynamic>> tags,
+  List<Map<String, dynamic>> catalog,
+  List<Map<String, dynamic>> fields,
+  Map<String, List<Map<String, dynamic>>> picklists,
+});
+
+String _snapshotKey(String module, String id) => NxSwrCache.key('/api/entity/$module/$id', query: const {'view': 'detail'});
 
 class EntityDetailScreen extends StatefulWidget {
   const EntityDetailScreen({super.key, required this.module, required this.row, this.embedded = false, this.onDeleted, this.initialTab, this.focusCommentId});
@@ -112,10 +130,24 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     }
   }
 
+  /// Showing the last visit's data while the fresh record loads.
+  bool _refreshing = false;
+
   @override
   void initState() {
     super.initState();
     _row = Map<String, dynamic>.from(widget.row);
+    // Visited before: show that page at once and refresh it in the background.
+    final snap = NxSwrCache.instance.peek<_DetailSnapshot>(_snapshotKey(widget.module, _id));
+    if (snap != null) {
+      _row = {...snap.row, ..._row, ...snap.row};
+      _comments = snap.comments;
+      _tags = snap.tags;
+      _catalog = snap.catalog;
+      _fields = snap.fields;
+      _picklists = snap.picklists;
+      _loading = false;
+    }
     _commentsCtl = entityCommentsController(context, module: widget.module, id: _id, onChanged: _reloadComments);
     _reload();
     // Opened straight on the history tab (deep link / "ดูประวัติ"): load it now,
@@ -338,9 +370,23 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     );
   }
 
+  void _remember() {
+    final cache = NxSwrCache.instance;
+    cache.put<Map<String, dynamic>>(entityRecordCacheKey(widget.module, _id), _row);
+    cache.put<_DetailSnapshot>(_snapshotKey(widget.module, _id), (
+      row: _row,
+      comments: _comments,
+      tags: _tags,
+      catalog: _catalog,
+      fields: _fields,
+      picklists: _picklists,
+    ));
+  }
+
   Future<void> _reload() async {
     setState(() {
       _loading = _comments.isEmpty && _fields.isEmpty;
+      _refreshing = !_loading;
       _error = null;
     });
     if (!context.read<AppConfig>().isLoggedIn) {
@@ -366,6 +412,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       setState(() {
         _error = e;
         _loading = false;
+        _refreshing = false;
       });
       return;
     }
@@ -394,7 +441,9 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         _picklists = schema.picklists;
       }
       _loading = false;
+      _refreshing = false;
     });
+    _remember();
   }
 
   /// The first [_reload] has run (the journey controller loads itself on its first probe).
@@ -766,6 +815,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
     final canConvert = widget.module == 'lead' && perms.canEdit && !EntityRowPerms.leadLocked(_row) && !_loading;
     final statusKey = entityStatusKey(_row, widget.module);
     final statusOptions = _statusOptions(statusKey);
+    final reserveBar = _loading && statusOptions.isEmpty && (statusKey != null || ServiceJourney.handles(widget.module));
+    final reserveCta = _loading && widget.module == 'lead' && perms.canEdit && !EntityRowPerms.leadLocked(_row);
     // Record parts: 'all' (phone), or the left / right pane on wide screens.
     List<Widget> detailParts({String pane = 'all'}) {
       final head = pane != 'right';
@@ -815,6 +866,11 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                 if (status != null && statusOptions.isEmpty && !_journey) ...[const SizedBox(height: 10), Chip(label: Text(statusValueLabel(status, module: widget.module)), visualDensity: VisualDensity.compact)],
                 const SizedBox(height: 12),
                 EntityQuickActions(row: _row, onDuplicate: canEdit ? _duplicate : null),
+                // The convert button appears once the record is in: keep its room meanwhile.
+                if (reserveCta) ...[
+                  const SizedBox(height: 12),
+                  const SizedBox(key: ValueKey('lead-convert-reserve'), height: 48, child: NxSkeleton(child: NxBone(height: 48, radius: 16))),
+                ],
                 if (canConvert) ...[
                   const SizedBox(height: 12),
                   SizedBox(
@@ -838,6 +894,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
           ] else if (widget.module == 'case') ...[
             const SizedBox(height: 12),
             _caseStrip(),
+          ] else if (reserveBar) ...[
+            // Statuses arrive with the field schema: hold the bar's place so the tabs don't jump.
+            const SizedBox(height: 12),
+            const NxSkeletonChevronBar(key: ValueKey('detail-status-reserve')),
           ] else if (statusOptions.isNotEmpty) ...[
             const SizedBox(height: 12),
             EntityStatusStepper(
@@ -876,7 +936,6 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
         if (tabs) ...[
           const SizedBox(height: 14),
           KeyedSubtree(key: _tabsAnchor, child: _tabBar()),
-          if (_loading) ...[const SizedBox(height: 16), const NxSkeletonDetail()],
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: 12, bottom: 12),
@@ -889,6 +948,8 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
             ),
         ],
         const SizedBox(height: 14),
+        // Tab content only: the head, status bar and tabs above are real (or held).
+        if (_loading) const NxSkeletonDetailBody(),
         if (!_loading)
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 220),
@@ -1058,9 +1119,10 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       ),
       body: LayoutBuilder(
         builder: (context, box) {
-          final wide = box.maxWidth >= 820 && !_loading;
+          final wide = box.maxWidth >= 820;
           if (wide != _wide) _wide = wide;
-          if (wide) return _wideBody(context, box.maxWidth, detailParts);
+          final bar = Positioned(left: 0, right: 0, top: NxScrollScaffold.topInset(context), child: IgnorePointer(child: NxRefreshBar(visible: _refreshing)));
+          if (wide) return Stack(children: [Positioned.fill(child: _wideBody(context, box.maxWidth, detailParts)), bar]);
           return Stack(
             children: [
               NxRefresh(
@@ -1081,6 +1143,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
               ),
               // Tabs stay under the header while reading down the page.
               NxStickyTabs(controller: _heroScroll, anchorKey: _tabsAnchor, top: NxScrollScaffold.topInset(context), child: _tabBar()),
+              bar,
             ],
           );
         },

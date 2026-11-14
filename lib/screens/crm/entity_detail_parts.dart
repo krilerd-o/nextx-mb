@@ -304,7 +304,7 @@ class EntityHistoryPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    if (loading) return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+    if (loading) return const NxSkeletonTimeline(key: ValueKey('history-skeleton'));
     if (events.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
@@ -465,7 +465,7 @@ class _EntityActivitiesPanelState extends State<EntityActivitiesPanel> {
         if (_error != null)
           Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error))
         else if (rows == null)
-          const NxSkeletonList(rows: 2)
+          const NxSkeletonRows(count: 2, padded: false, top: 0, leading: NxSkelLeading.icon, leadingSize: 40)
         else if (rows.isEmpty)
           Padding(
             padding: const EdgeInsets.all(24),

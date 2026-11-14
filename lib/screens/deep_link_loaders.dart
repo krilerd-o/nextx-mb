@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_config.dart';
 import '../core/entity_modules.dart';
+import '../core/nx_swr_cache.dart';
 import '../core/navigation/notification_deep_link.dart';
 import '../services/api_client.dart';
 import '../widgets/nx_app_header.dart';
@@ -44,21 +45,34 @@ class EntityByIdLoader extends StatefulWidget {
 }
 
 class _EntityByIdLoaderState extends State<EntityByIdLoader> {
-  late Future<Map<String, dynamic>> _future;
+  Future<Map<String, dynamic>>? _future;
+
+  /// The record from an earlier visit ([NxSwrCache]): the page opens on it at once.
+  Map<String, dynamic>? _cached;
 
   @override
   void initState() {
     super.initState();
-    _future = context.read<AppConfig>().apiClient.getEntity(widget.module, widget.id);
+    _cached = NxSwrCache.instance.peek<Map<String, dynamic>>(entityRecordCacheKey(EntityModules.normalize(widget.module), widget.id));
+    if (_cached == null) _future = context.read<AppConfig>().apiClient.getEntity(widget.module, widget.id);
   }
 
   @override
   Widget build(BuildContext context) {
+    final cached = _cached;
+    if (cached != null) {
+      return EntityDetailScreen(
+        module: EntityModules.normalize(widget.module),
+        row: {...cached, 'id': widget.id},
+        initialTab: widget.tab,
+        focusCommentId: widget.comment,
+      );
+    }
     return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const _LoaderPage(child: NxSkeletonDetail());
+          return _LoaderPage(child: NxSkeletonEntityDetail(cta: EntityModules.normalize(widget.module) == 'lead'));
         }
         if (snap.hasError) {
           return _LoaderPage(child: Center(child: Text(tr(formatApiError(snap.error!)))));
@@ -100,7 +114,7 @@ class _ActivityByIdLoaderState extends State<ActivityByIdLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const _LoaderPage(child: NxSkeletonDetail());
+          return const _LoaderPage(child: NxSkeletonEntityDetail(statusBar: false, tabs: 3));
         }
         final row = {...?snap.data, 'id': widget.id};
         return ActivityDetailScreen(row: row, initialTab: widget.tab, focusCommentId: widget.comment);
@@ -161,7 +175,7 @@ class _BoardByCodeLoaderState extends State<BoardByCodeLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const _LoaderPage(child: NxSkeletonDetail());
+          return const _LoaderPage(child: NxSkeletonBoard());
         }
         if (snap.hasError) {
           return _LoaderPage(child: NxErrorRetry(error: snap.error!, onRetry: () => setState(() => _future = _resolve())));
@@ -238,7 +252,7 @@ class _WorkspaceItemBySlugLoaderState extends State<WorkspaceItemBySlugLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const _LoaderPage(child: NxSkeletonDetail());
+          return const _LoaderPage(child: NxSkeletonTaskDetail());
         }
         if (snap.hasError) {
           return _LoaderPage(
@@ -325,7 +339,7 @@ class _TaskRecordLoaderState extends State<_TaskRecordLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const _LoaderPage(child: NxSkeletonDetail());
+          return const _LoaderPage(child: NxSkeletonTaskDetail());
         }
         return TaskDetailScreen(
           task: snap.data ?? {'id': widget.taskId, 'board_id': widget.boardId},
@@ -371,7 +385,7 @@ class _ChatByIdLoaderState extends State<ChatByIdLoader> {
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
-          return const _LoaderPage(child: NxSkeletonDetail());
+          return const _LoaderPage(child: NxSkeletonChat());
         }
         return ChatRoomScreen(room: snap.data ?? {'id': widget.roomId, 'name': 'แชท'});
       },

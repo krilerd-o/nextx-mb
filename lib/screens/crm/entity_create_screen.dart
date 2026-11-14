@@ -348,7 +348,8 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
             : null,
       ),
       body: _loading
-          ? const NxSkeletonForm()
+          // Section headings and inputs at the real field height, in the form's width.
+          ? NxContentWidth(child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: const NxSkeletonFields(sections: [4, 3, 2], padded: false)))
           : Column(
               children: [
                 if (_fields.isNotEmpty && _requiredCount > 0)

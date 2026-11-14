@@ -761,7 +761,7 @@ class _CommentsSheetState extends State<_CommentsSheet> {
             _load();
           })
         else if (_comments == null)
-          const NxSkeletonList(rows: 3)
+          const NxSkeletonComments(rows: 3)
         else
           EntityCommentsPanel(module: widget.module, id: _id, comments: _comments!, onChanged: _load),
       ],

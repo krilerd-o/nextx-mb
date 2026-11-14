@@ -303,7 +303,7 @@ class WsActivityPanelState extends State<WsActivityPanel> {
 
   Widget _commentsList(BuildContext context) {
     final list = _comments;
-    if (list == null) return const NxSkeletonList(rows: 2);
+    if (list == null) return const NxSkeletonComments(rows: 2);
     // Composer first (the web's workspace thread), then the threads.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -324,7 +324,7 @@ class WsActivityPanelState extends State<WsActivityPanel> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final logs = _logs;
-    if (logs == null) return const NxSkeletonList(rows: 2);
+    if (logs == null) return const NxSkeletonTimeline(rows: 3);
     if (logs.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),
@@ -421,7 +421,7 @@ class WsActivityPanelState extends State<WsActivityPanel> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final h = _history;
-    if (h == null) return const NxSkeletonList(rows: 3);
+    if (h == null) return const NxSkeletonTimeline(rows: 3);
     if (h.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 20),

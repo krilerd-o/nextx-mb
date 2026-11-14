@@ -120,7 +120,18 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
         ],
       ),
       body: _loading
-          ? const NxSkeletonForm(fields: 4)
+          ? const NxSkeleton(child: NxSkeletonListView(
+              padding: EdgeInsets.all(16),
+              children: [
+                NxSkeletonKeyValueCard(rows: 6, total: false),
+                SizedBox(height: 4),
+                NxBone(width: 130, height: 14),
+                SizedBox(height: 10),
+                NxSkeletonRow(leading: NxSkelLeading.icon, leadingSize: 24, trailing: NxSkelTrailing.text),
+                NxSkeletonRow(leading: NxSkelLeading.icon, leadingSize: 24, trailing: NxSkelTrailing.text, wide: false),
+                NxSkeletonRow(leading: NxSkelLeading.icon, leadingSize: 24, trailing: NxSkelTrailing.text),
+              ],
+            ))
           : NxRefresh(
           onRefresh: _load,
           child: ListView(

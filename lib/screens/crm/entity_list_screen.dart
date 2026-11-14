@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/nx_swr_cache.dart';
 import '../../services/api_client.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../core/nx_page_route.dart';
@@ -53,7 +54,8 @@ class EntityListScreen extends StatefulWidget {
 
 /// Last first page per module + query (this app session): reopening a list
 /// shows it instantly, then refreshes in the background.
-final Map<String, ({List<Map<String, dynamic>> items, int? total})> _firstPageCache = {};
+/// First page of a list (app-wide [NxSwrCache]; dropped on Space switch / writes).
+typedef _FirstPage = ({List<Map<String, dynamic>> items, int? total});
 
 class _EntityListScreenState extends State<EntityListScreen> {
   final _searchController = TextEditingController();
@@ -699,7 +701,12 @@ class _EntityListScreenState extends State<EntityListScreen> {
 
   String get _cacheKey {
     final c = context.read<AppConfig>();
-    return '${c.businessScope}|p${c.session.packageCode ?? ''}|${widget.module}|$_cvId|${_query.q}|${_query.toJson()}';
+    return NxSwrCache.key('/api/entity/${widget.module}', query: {
+      'p': c.session.packageCode,
+      'cv': _cvId,
+      'q': _query.q,
+      'f': _query.toJson(),
+    });
   }
 
   /// Bumped on every reset load; older responses are ignored.
@@ -738,7 +745,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
     if (reset) _loadGen++;
     final gen = _loadGen;
     if (reset && _items.isEmpty) {
-      final hit = _firstPageCache[_cacheKey];
+      final hit = NxSwrCache.instance.peek<_FirstPage>(_cacheKey);
       if (hit != null) {
         _items.addAll(hit.items);
         _total = hit.total;
@@ -788,7 +795,7 @@ class _EntityListScreenState extends State<EntityListScreen> {
         }
         _hasMore = page.hasMore && page.items.isNotEmpty;
         _total = page.total;
-        if (reset) _firstPageCache[_cacheKey] = (items: List.of(page.items), total: page.total);
+        if (reset) NxSwrCache.instance.put<_FirstPage>(_cacheKey, (items: List.of(page.items), total: page.total));
         _page += 1;
         _loading = false;
         _refreshing = false;
@@ -1046,11 +1053,16 @@ class _EntityListScreenState extends State<EntityListScreen> {
     required NxBreakpoint bp,
   }) {
     final top = _top(twoPane);
-    if (_loading && _items.isEmpty)
+    if (_loading && _items.isEmpty) {
+      // Same gutters and tile as the list it stands for: cards when the module
+      // has a card layout, else 68 px rows (avatar left).
+      final p = bp.scrollPadding(context, hasFab: !twoPane);
       return Padding(
-        padding: EdgeInsets.only(top: top),
-        child: const NxSkeletonList(),
+        key: const ValueKey('entity-list-skeleton'),
+        padding: EdgeInsets.only(top: top, left: p.left, right: p.right),
+        child: _layout != null ? const NxSkeletonEntityCards(padded: false) : const NxSkeletonRows(count: 8, padded: false),
       );
+    }
     if (_error != null && _items.isEmpty) {
       return Padding(
         padding: EdgeInsets.only(top: top),
@@ -1121,9 +1133,10 @@ class _EntityListScreenState extends State<EntityListScreen> {
             i -= 1;
           }
           if (i >= items.length) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: NxBone(height: 52, radius: 14),
+            // Next page: one more tile of the same kind.
+            return KeyedSubtree(
+              key: const ValueKey('entity-list-more'),
+              child: _layout != null ? const NxSkeletonEntityCard() : const NxSkeletonRow(),
             );
           }
           final row = items[i];
