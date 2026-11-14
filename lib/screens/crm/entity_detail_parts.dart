@@ -51,7 +51,13 @@ const kStepDoneGreen = kNxStepPassedGreen;
 Color kStepDoneGreenFg(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
 
-/// Status pills the user can tap to move the record (like the web stepper).
+/// A stop status (ยกเลิก / cancelled): shown apart as the red capsule.
+bool isCancelStatus(String value, String label) {
+  final v = '$value $label'.toLowerCase();
+  return v.contains('ยกเลิก') || RegExp(r'\bcancel(l?ed)?\b').hasMatch(v);
+}
+
+/// Status bar the user can tap to move the record (like the web status strip).
 class EntityStatusStepper extends StatelessWidget {
   const EntityStatusStepper({
     super.key,
@@ -69,7 +75,7 @@ class EntityStatusStepper extends StatelessWidget {
   Widget build(BuildContext context) {
     // Same stepper as Workspace: ordered, joined by lines, shadow not cut.
     return NxStatusStepper(
-      steps: [for (final o in options) NxStep(id: o.value, label: o.label)],
+      steps: [for (final o in options) NxStep(id: o.value, label: o.label, isCancel: isCancelStatus(o.value, o.label))],
       current: options.indexWhere((o) => o.value == current || o.label == current),
       stepKeyPrefix: 'step-',
       doneKeyPrefix: 'step-done-',

@@ -116,12 +116,17 @@ void main() {
 
   testWidgets('stepper: "ยกเลิกงาน" is the last stage of the row (no chip line below)', (tester) async {
     final a = await _pump(tester, {'GET /api/entity/job/9': _job, 'GET /api/field-service/jobs/9/overview': _overview});
-    final ids = ['Open', 'Waiting', 'In Progress', 'Completed', 'Cancelled'];
+    final ids = ['Open', 'Waiting', 'In Progress', 'Completed'];
     final rects = [for (final id in ids) tester.getRect(find.byKey(ValueKey('jstep-$id')))];
     for (var i = 1; i < rects.length; i++) {
       expect(rects[i].left, greaterThan(rects[i - 1].left), reason: '${ids[i]} after ${ids[i - 1]}');
       expect(rects[i].center.dy, closeTo(rects[0].center.dy, 1), reason: 'same row');
     }
+    // "ยกเลิกงาน" is the red capsule pinned at the end of the same row.
+    final stop = tester.getRect(find.byKey(const ValueKey('jstep-Cancelled')));
+    final bar = tester.getRect(find.descendant(of: find.byKey(const ValueKey('journey-stages')), matching: find.byType(SingleChildScrollView)));
+    expect(stop.left, greaterThan(bar.right));
+    expect(stop.center.dy, closeTo(rects[0].center.dy, 1));
     expect(find.byKey(const ValueKey('journey-chip-cancel')), findsNothing);
     expect(find.descendant(of: find.byKey(const ValueKey('jstep-Cancelled')), matching: find.text('ยกเลิกงาน')), findsOneWidget);
     // Tapping it opens the cancel window.
@@ -402,6 +407,11 @@ void main() {
     expect(find.byKey(const ValueKey('next-report_signatures')), findsOneWidget);
     expect(find.text('ต้องมีลายเซ็น 2 รายการ (ผู้ให้บริการ + ลูกค้า) ก่อนปิดงาน'), findsOneWidget);
     expect(find.text('เก็บลายเซ็นก่อนปิดงาน (1/2)'), findsOneWidget);
+    {
+      final bar = tester.state<ScrollableState>(find.descendant(of: find.byKey(const ValueKey('journey-stages')), matching: find.byType(Scrollable))).position;
+      bar.jumpTo(bar.maxScrollExtent); // the last step may be scrolled off on a narrow screen
+    }
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('jstep-Completed')));
     await _frames(tester);
     expect(find.byKey(const ValueKey('job-close-needs-signatures')), findsOneWidget);
@@ -421,6 +431,11 @@ void main() {
       'GET /api/field-service/jobs/9/close-preview': {'can_close': true, 'open_activities': 0},
     });
     expect(find.byKey(const ValueKey('next-ready_to_close')), findsOneWidget);
+    {
+      final bar = tester.state<ScrollableState>(find.descendant(of: find.byKey(const ValueKey('journey-stages')), matching: find.byType(Scrollable))).position;
+      bar.jumpTo(bar.maxScrollExtent); // the last step may be scrolled off on a narrow screen
+    }
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('jstep-Completed')));
     await _frames(tester);
     expect(find.byKey(const ValueKey('job-close-needs-signatures')), findsNothing);

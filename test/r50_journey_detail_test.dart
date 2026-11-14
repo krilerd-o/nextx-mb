@@ -135,6 +135,11 @@ void main() {
       'GET /api/field-service/jobs/9/close-preview': {'can_close': true, 'open_activities': 1},
       'POST /api/field-service/jobs/9/close': {'job_id': 9, 'job_status': 'Completed'},
     });
+    {
+      final bar = tester.state<ScrollableState>(find.descendant(of: find.byKey(const ValueKey('journey-stages')), matching: find.byType(Scrollable))).position;
+      bar.jumpTo(bar.maxScrollExtent); // the last step may be scrolled off on a narrow screen
+    }
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('jstep-Completed')));
     await _frames(tester);
     expect(find.text('ลายเซ็นที่ยังขาด'), findsOneWidget);

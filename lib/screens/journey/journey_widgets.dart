@@ -92,14 +92,22 @@ class JourneyStageStrip extends StatelessWidget {
                 color: side != null && sideDanger && steps.indexOf(s) == current ? danger : s.color,
                 isDone: s.isDone,
               ),
+            // The terminal stage ("ยกเลิกงาน") is the red capsule after the bar.
+            if (terminal != null) NxStep(id: terminal!.$1, label: terminal!.$2, isCancel: true),
           ],
-          current: current,
-          onPick: onPick,
+          current: terminal?.$3 == true ? steps.length : current,
+          onPick: onPick == null && terminal?.$4 == null
+              ? null
+              : (i) {
+                  if (i == steps.length && terminal != null) {
+                    terminal!.$4?.call();
+                  } else {
+                    onPick?.call(i);
+                  }
+                },
           stepKeyPrefix: 'jstep-',
           doneKeyPrefix: 'jstep-done-',
           padding: EdgeInsets.zero,
-          trailing: terminal == null ? const [] : [_TerminalStage(id: terminal!.$1, label: terminal!.$2, active: terminal!.$3, onTap: terminal!.$4)],
-          revealTrailing: terminal?.$3 == true,
         ),
         if (terminal == null && (sideLabel != null || sideChips.isNotEmpty))
           Padding(
@@ -126,65 +134,6 @@ class JourneyStageStrip extends StatelessWidget {
               ],
             ),
           ),
-      ],
-    );
-  }
-}
-
-/// Last pill of the stage row: a stop / destructive stage ("ยกเลิกงาน"), set
-/// apart by a dotted gap; outlined red, filled red when the record is in it.
-class _TerminalStage extends StatelessWidget {
-  const _TerminalStage({required this.id, required this.label, required this.active, this.onTap});
-  final String id;
-  final String label;
-  final bool active;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    const danger = Color(0xFFE11D48);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < 3; i++)
-          Container(width: 3, height: 3, margin: const EdgeInsets.symmetric(horizontal: 2), decoration: BoxDecoration(color: danger.withValues(alpha: 0.5), shape: BoxShape.circle)),
-        const SizedBox(width: 2),
-        Semantics(
-          button: onTap != null,
-          selected: active,
-          label: label,
-          child: Material(
-            color: active ? danger : danger.withValues(alpha: 0.07),
-            shape: StadiumBorder(side: BorderSide(color: danger.withValues(alpha: active ? 1 : 0.55), width: 1.2)),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              key: ValueKey('jstep-$id'),
-              onTap: active || onTap == null
-                  ? null
-                  : () {
-                      HapticFeedback.selectionClick();
-                      onTap!();
-                    },
-              child: Container(
-                height: NxStatusStepper.pillHeight,
-                padding: const EdgeInsets.symmetric(horizontal: 11),
-                alignment: Alignment.center,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(active ? NxI.prohibit : NxI.x, size: 13, color: active ? Colors.white : danger),
-                    const SizedBox(width: 4),
-                    Text(
-                      label,
-                      style: theme.textTheme.labelMedium?.copyWith(color: active ? Colors.white : danger, fontWeight: active ? FontWeight.w800 : FontWeight.w700),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }

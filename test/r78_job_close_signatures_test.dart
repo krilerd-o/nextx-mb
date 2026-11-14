@@ -191,6 +191,11 @@ void main() {
       'GET /api/entity/job/9': {..._job, 'customer_signature': 'signatures/c.png'},
     });
     expect(find.byKey(const ValueKey('next-report_signatures')), findsOneWidget);
+    {
+      final bar = tester.state<ScrollableState>(find.descendant(of: find.byKey(const ValueKey('journey-stages')), matching: find.byType(Scrollable))).position;
+      bar.jumpTo(bar.maxScrollExtent); // the last step may be scrolled off on a narrow screen
+    }
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('jstep-Completed')));
     await _frames(tester);
     expect(find.byKey(const ValueKey('job-close-needs-signatures')), findsOneWidget);
@@ -219,6 +224,11 @@ void main() {
     });
     expect(find.byKey(const ValueKey('next-ready_to_close')), findsOneWidget);
     expect(tester.widget<Text>(find.byKey(const ValueKey('job-signatures-badge'))).data, '2/2');
+    {
+      final bar = tester.state<ScrollableState>(find.descendant(of: find.byKey(const ValueKey('journey-stages')), matching: find.byType(Scrollable))).position;
+      bar.jumpTo(bar.maxScrollExtent); // the last step may be scrolled off on a narrow screen
+    }
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('jstep-Completed')));
     await _frames(tester);
     expect(find.byKey(const ValueKey('job-close-needs-signatures')), findsNothing);
@@ -238,6 +248,11 @@ void main() {
     });
     expect(find.byKey(const ValueKey('next-ready_to_close')), findsOneWidget);
     expect(find.text('ต้องมีลายเซ็น 2 รายการ'), findsNothing, reason: 'no "required" hint when the business turned it off');
+    {
+      final bar = tester.state<ScrollableState>(find.descendant(of: find.byKey(const ValueKey('journey-stages')), matching: find.byType(Scrollable))).position;
+      bar.jumpTo(bar.maxScrollExtent); // the last step may be scrolled off on a narrow screen
+    }
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('jstep-Completed')));
     await _frames(tester);
     expect(find.byKey(const ValueKey('job-close-needs-signatures')), findsNothing);
@@ -256,6 +271,11 @@ void main() {
         'signatures': {'require_both_signatures': true, 'missing': ['technician_signature', 'customer_signature'], 'missing_slots': []},
       },
     });
+    {
+      final bar = tester.state<ScrollableState>(find.descendant(of: find.byKey(const ValueKey('journey-stages')), matching: find.byType(Scrollable))).position;
+      bar.jumpTo(bar.maxScrollExtent); // the last step may be scrolled off on a narrow screen
+    }
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('jstep-Completed')));
     await _frames(tester);
     expect(find.byKey(const ValueKey('job-close-needs-signatures')), findsOneWidget);
@@ -272,6 +292,11 @@ void main() {
       errorsFor: {'POST /api/field-service/jobs/9/close': _err409},
       statusFor: {'POST /api/field-service/jobs/9/close': 409},
     );
+    {
+      final bar = tester.state<ScrollableState>(find.descendant(of: find.byKey(const ValueKey('journey-stages')), matching: find.byType(Scrollable))).position;
+      bar.jumpTo(bar.maxScrollExtent); // the last step may be scrolled off on a narrow screen
+    }
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('jstep-Completed')));
     await _frames(tester);
     await tester.tap(find.byKey(const ValueKey('journey-confirm')));

@@ -54,7 +54,8 @@ class WsStatusStepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return NxStatusStepper(
-      steps: [for (final s in statuses) NxStep(id: s.id, label: s.label, color: s.color, isDone: s.isDone)],
+      // Blue current / green done like the web; ยกเลิก apart as the red capsule.
+      steps: [for (final s in statuses) NxStep(id: s.id, label: s.label, isDone: s.isDone, isCancel: s.isCancelled)],
       current: statuses.indexWhere((s) => s.id == current),
       busy: busy,
       stepKeyPrefix: 'ws-step-',

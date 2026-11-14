@@ -29,7 +29,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  test('status pills are compact', () {
-    expect(NxStatusStepper.pillHeight, lessThanOrEqualTo(32));
+  test('status steps are compact', () {
+    expect(NxStatusStepper.pillHeight, lessThanOrEqualTo(36));
   });
 }

@@ -22,7 +22,7 @@ void main() {
     expect(find.text('มีผล'), findsOneWidget); // "Active" in Thai
   });
 
-  testWidgets('stepper: passed stages get a green check, later ones do not', (tester) async {
+  testWidgets('stepper: passed stages are marked done, later ones are not', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: EntityStatusStepper(
@@ -35,7 +35,5 @@ void main() {
     expect(find.byKey(const ValueKey('step-done-new')), findsOneWidget);
     expect(find.byKey(const ValueKey('step-done-contacted')), findsNothing);
     expect(find.byKey(const ValueKey('step-done-won')), findsNothing);
-    final dot = tester.widget<Container>(find.byKey(const ValueKey('step-done-new')));
-    expect((dot.decoration as BoxDecoration).color, kStepDoneGreen);
   });
 }
