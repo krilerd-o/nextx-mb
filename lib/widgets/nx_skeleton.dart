@@ -9,8 +9,9 @@ import '../core/nx_breakpoint.dart';
 /// - Shown only when loading is slow: invisible for [delay] (250ms), then
 ///   fades in, so fast loads never flash a skeleton.
 /// - One shimmer controller per skeleton; bones read it (no ShaderMask over
-///   the whole tree), repaint inside a [RepaintBoundary], and the shimmer stops
-///   when effects are off, motion is reduced or the page is off screen.
+///   the whole tree), repaint inside a [RepaintBoundary], and the shimmer runs
+///   only on full effects (lite / off / reduced motion: still bones) and pauses
+///   while the page is off screen.
 class NxSkeleton extends StatefulWidget {
   const NxSkeleton({super.key, required this.child, this.delay = const Duration(milliseconds: 250)});
 
@@ -33,7 +34,9 @@ class _NxSkeletonState extends State<NxSkeleton> with TickerProviderStateMixin {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final still = MediaQuery.maybeDisableAnimationsOf(context) == true || Effects.of(context) == EffectsLevel.off;
+    // Lite ("เบา") too: a moving gradient on every bone repaints the whole skeleton each frame,
+    // which low-end phones feel while the page behind it is still loading.
+    final still = MediaQuery.maybeDisableAnimationsOf(context) == true || Effects.of(context) != EffectsLevel.full;
     if (still) {
       _shimmer?.dispose();
       _shimmer = null;

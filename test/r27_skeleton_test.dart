@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nextx_mobile/core/app_theme.dart';
+import 'package:nextx_mobile/core/effects.dart';
 import 'package:nextx_mobile/widgets/nx_skeleton.dart';
 
 double _opacity(WidgetTester tester) =>
@@ -40,6 +41,21 @@ void main() {
     await tester.pumpWidget(_app(const NxSkeletonBoard(), reduce: true));
     await tester.pump(const Duration(milliseconds: 500));
     expect(tester.binding.hasScheduledFrame, isFalse);
+  });
+
+  testWidgets('lite effects: still bones (no shimmer frames); full shimmers', (tester) async {
+    final before = Effects.preference.value;
+    addTearDown(() => Effects.preference.value = before);
+    Effects.preference.value = EffectsPreference.lite;
+    await tester.pumpWidget(_app(const NxSkeletonBoard()));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(tester.binding.hasScheduledFrame, isFalse, reason: 'low-end phones: no per-frame repaint');
+    await tester.pumpWidget(const SizedBox());
+    Effects.preference.value = EffectsPreference.full;
+    await tester.pumpWidget(_app(const NxSkeletonBoard()));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(tester.binding.hasScheduledFrame, isTrue);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('board / detail / calendar / chat / box skeletons lay out', (tester) async {

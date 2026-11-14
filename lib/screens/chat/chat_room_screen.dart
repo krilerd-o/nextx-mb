@@ -170,26 +170,28 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   // ---- loading ------------------------------------------------------------
 
+  // The message list is a reversed ListView.builder: offset 0 is the newest message at the
+  // bottom, and older pages are added at the far (top) end without moving what is on screen.
+
   bool _isNearBottom() {
     if (!_scroll.hasClients) return true;
-    return _scroll.position.maxScrollExtent - _scroll.offset < 160;
+    return _scroll.offset < 160;
   }
 
   void _scrollToBottom({bool jump = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
-      final target = _scroll.position.maxScrollExtent;
       if (jump) {
-        _scroll.jumpTo(target);
+        _scroll.jumpTo(0);
       } else {
-        _scroll.animateTo(target, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+        _scroll.animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
       }
     });
   }
 
   void _onScroll() {
     if (_isThread) return;
-    if (_scroll.hasClients && _scroll.offset < 80 && !_loadingOlder && _hasOlder && !_loading) _loadOlder();
+    if (_scroll.hasClients && _scroll.position.maxScrollExtent - _scroll.offset < 80 && !_loadingOlder && _hasOlder && !_loading) _loadOlder();
   }
 
   void _markRead(String messageId) {
@@ -263,7 +265,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     if (_messages.isEmpty) return;
     setState(() => _loadingOlder = true);
     final before = _messages.first['created_at']?.toString();
-    final oldExtent = _scroll.hasClients ? _scroll.position.maxScrollExtent : 0.0;
     try {
       final list = await _api.getChatMessages(_id, limit: 50, before: before);
       if (!mounted) return;
@@ -271,13 +272,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       for (final m in list) {
         merged = upsertChatMessage(merged, m);
       }
+      // Reversed list: the older page lands above, the visible messages stay put.
       setState(() {
         _messages = merged;
         _hasOlder = list.length >= 50;
         _loadingOlder = false;
-      });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scroll.hasClients) _scroll.jumpTo(_scroll.offset + (_scroll.position.maxScrollExtent - oldExtent));
       });
     } catch (e) {
       if (mounted) setState(() => _loadingOlder = false);
@@ -292,12 +291,25 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   Future<void> _jumpTo(String id) async {
-    final key = _keys[id];
-    if (key?.currentContext == null) {
+    // The list only builds what is near the screen: bring a far message's row into the
+    // built range first (estimate from its position, a few passes), then reveal it.
+    final index = _messages.indexWhere((m) => '${m['id']}' == id);
+    for (var pass = 0; pass < 6 && index >= 0 && _keys[id]?.currentContext == null && _scroll.hasClients; pass++) {
+      final pos = _scroll.position;
+      final fromBottom = (_messages.length - 1 - index) / (_messages.length <= 1 ? 1 : _messages.length - 1);
+      final target = (pos.maxScrollExtent * fromBottom).clamp(0.0, pos.maxScrollExtent);
+      if ((target - pos.pixels).abs() < 1 && pass > 0) break;
+      _scroll.jumpTo(target);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+    }
+    final ctx = _keys[id]?.currentContext;
+    if (ctx == null) {
       _snack('ข้อความนี้อยู่ก่อนหน้า — เลื่อนขึ้นเพื่อดู');
       return;
     }
-    await Scrollable.ensureVisible(key!.currentContext!, alignment: 0.4, duration: const Duration(milliseconds: 300));
+    await Scrollable.ensureVisible(ctx, alignment: 0.4, duration: const Duration(milliseconds: 300));
+    if (!mounted) return;
     setState(() => _highlight = id);
     Future.delayed(const Duration(milliseconds: 1800), () {
       if (mounted && _highlight == id) setState(() => _highlight = null);
@@ -538,87 +550,112 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
-    final items = <Widget>[];
+    // Rows top → bottom as plain data; widgets are built lazily by the reversed builder.
+    final rows = <_ChatRow>[];
     String? prevDay;
     String? prevUser;
     final byId = {for (final m in _messages) '${m['id']}': m};
     for (var i = 0; i < _messages.length; i++) {
       final m = _messages[i];
-      final id = '${m['id']}';
-      final key = _keys.putIfAbsent(id, GlobalKey.new);
       final day = _day(m['created_at']);
       if (day.isNotEmpty && day != prevDay) {
-        items.add(Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(12)),
-              child: Text(tr(day), style: theme.textTheme.labelSmall),
-            ),
-          ),
-        ));
+        rows.add(_ChatRow.day(day));
         prevUser = null;
       }
       prevDay = day;
       if (m['kind']?.toString() == 'call_summary' && m['call'] is Map) {
-        items.add(KeyedSubtree(key: key, child: CallSummaryBubble(message: m)));
+        rows.add(_ChatRow.message(m, _ChatRowKind.callSummary));
         prevUser = null;
         continue;
       }
       if (m['kind']?.toString() == 'call' && m['call'] is Map) {
-        items.add(KeyedSubtree(
-          key: key,
-          child: ChatCallLogPill(message: m, me: _me, onCallBack: ChatCallHooks.available ? (video) => _call(video) : null),
-        ));
+        rows.add(_ChatRow.message(m, _ChatRowKind.callLog));
         prevUser = null;
         continue;
       }
       final uid = m['user_id']?.toString();
       final next = i + 1 < _messages.length ? _messages[i + 1] : null;
       final lastOfRun = next == null || next['user_id']?.toString() != uid || _day(next['created_at']) != day || next['kind'] == 'call';
-      final replyId = m['reply_to_id']?.toString();
-      items.add(KeyedSubtree(
-        key: key,
-        child: ChatMessageBubble(
-          message: m,
-          me: _me,
-          showName: uid != prevUser,
-          showAvatar: lastOfRun,
-          highlighted: _highlight == id,
-          inThread: _isThread,
-          replyFallback: replyId == null ? null : byId[replyId],
-          onLongPress: () => _onLongPress(m),
-          onReply: () => setState(() {
-            _replyTo = m;
-            _editing = null;
-          }),
-          onJumpTo: _jumpTo,
-          onReact: (e) => _react(m, e),
-          onOpenThread: () async {
-            await nxPush<void>(context, ChatRoomScreen(room: _room, threadRoot: m));
-            _refreshLatest();
-          },
-        ),
-      ));
+      rows.add(_ChatRow.message(m, _ChatRowKind.bubble, showName: uid != prevUser, showAvatar: lastOfRun));
       prevUser = uid;
     }
-    if (!_isThread) {
-      final seen = readCountForLastOwn(_messages, _readers, _me);
-      if (_messages.isNotEmpty && isOwnChatMessage(_messages.last, _me)) {
-        items.add(Padding(
-          padding: const EdgeInsets.only(top: 2, right: 4),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(seen == 0 ? NxI.check : NxI.checks, size: 14, color: seen == 0 ? cs.onSurfaceVariant : cs.primary),
-              const SizedBox(width: 3),
-              Text(tr(seen == 0 ? 'ส่งแล้ว' : 'อ่านแล้ว${seen > 1 ? ' $seen' : ''}'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-            ]),
-          ),
-        ));
+    if (!_isThread && _messages.isNotEmpty && isOwnChatMessage(_messages.last, _me)) {
+      rows.add(_ChatRow.receipt(readCountForLastOwn(_messages, _readers, _me)));
+    }
+
+    Widget buildRow(_ChatRow row) {
+      switch (row.kind) {
+        case _ChatRowKind.loader:
+          return const Padding(
+            padding: EdgeInsets.all(8),
+            child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+          );
+        case _ChatRowKind.day:
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(12)),
+                child: Text(tr(row.day!), style: theme.textTheme.labelSmall),
+              ),
+            ),
+          );
+        case _ChatRowKind.receipt:
+          final seen = row.seen;
+          return Padding(
+            padding: const EdgeInsets.only(top: 2, right: 4),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(seen == 0 ? NxI.check : NxI.checks, size: 14, color: seen == 0 ? cs.onSurfaceVariant : cs.primary),
+                const SizedBox(width: 3),
+                Text(tr(seen == 0 ? 'ส่งแล้ว' : 'อ่านแล้ว${seen > 1 ? ' $seen' : ''}'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+              ]),
+            ),
+          );
+        case _ChatRowKind.callSummary:
+        case _ChatRowKind.callLog:
+        case _ChatRowKind.bubble:
+          final m = row.message!;
+          final id = '${m['id']}';
+          final key = _keys.putIfAbsent(id, GlobalKey.new);
+          if (row.kind == _ChatRowKind.callSummary) return KeyedSubtree(key: key, child: CallSummaryBubble(message: m));
+          if (row.kind == _ChatRowKind.callLog) {
+            return KeyedSubtree(
+              key: key,
+              child: ChatCallLogPill(message: m, me: _me, onCallBack: ChatCallHooks.available ? (video) => _call(video) : null),
+            );
+          }
+          final replyId = m['reply_to_id']?.toString();
+          return KeyedSubtree(
+            key: key,
+            child: ChatMessageBubble(
+              message: m,
+              me: _me,
+              showName: row.showName,
+              showAvatar: row.showAvatar,
+              highlighted: _highlight == id,
+              inThread: _isThread,
+              replyFallback: replyId == null ? null : byId[replyId],
+              onLongPress: () => _onLongPress(m),
+              onReply: () => setState(() {
+                _replyTo = m;
+                _editing = null;
+              }),
+              onJumpTo: _jumpTo,
+              onReact: (e) => _react(m, e),
+              onOpenThread: () async {
+                await nxPush<void>(context, ChatRoomScreen(room: _room, threadRoot: m));
+                _refreshLatest();
+              },
+            ),
+          );
       }
     }
+
+    final all = [if (_loadingOlder) const _ChatRow.loader(), ...rows];
+    final rowIndex = {for (var i = 0; i < all.length; i++) all[i].id: i};
 
     return Scaffold(
       appBar: _header(),
@@ -657,17 +694,23 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                         Text(tr('เริ่มบทสนทนาได้เลย'), style: theme.textTheme.bodyLarge),
                       ]),
                     )
-                  : ListView(
+                  // Reversed + lazy: opens at the newest message without laying out the
+                  // whole history, and only the rows near the screen are built.
+                  : ListView.builder(
+                      key: const ValueKey('chat-messages'),
                       controller: _scroll,
+                      reverse: true,
                       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                      children: [
-                        if (_loadingOlder)
-                          const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-                          ),
-                        ...items,
-                      ],
+                      itemCount: all.length,
+                      findChildIndexCallback: (key) {
+                        if (key is! ValueKey<String>) return null;
+                        final i = rowIndex[key.value];
+                        return i == null ? null : all.length - 1 - i;
+                      },
+                      itemBuilder: (context, i) {
+                        final row = all[all.length - 1 - i];
+                        return KeyedSubtree(key: ValueKey<String>(row.id), child: buildRow(row));
+                      },
                     ),
         ),
         ChatComposer(
@@ -689,4 +732,47 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       ]),
     );
   }
+}
+
+enum _ChatRowKind { loader, day, bubble, callSummary, callLog, receipt }
+
+/// One row of the message list (built lazily).
+class _ChatRow {
+  const _ChatRow.loader()
+      : kind = _ChatRowKind.loader,
+        message = null,
+        day = null,
+        seen = 0,
+        showName = false,
+        showAvatar = false;
+  const _ChatRow.day(String this.day)
+      : kind = _ChatRowKind.day,
+        message = null,
+        seen = 0,
+        showName = false,
+        showAvatar = false;
+  const _ChatRow.receipt(this.seen)
+      : kind = _ChatRowKind.receipt,
+        message = null,
+        day = null,
+        showName = false,
+        showAvatar = false;
+  const _ChatRow.message(Map<String, dynamic> this.message, this.kind, {this.showName = false, this.showAvatar = false})
+      : day = null,
+        seen = 0;
+
+  final _ChatRowKind kind;
+  final Map<String, dynamic>? message;
+  final String? day;
+  final int seen;
+  final bool showName;
+  final bool showAvatar;
+
+  /// Stable per row, so rows keep their state when older pages arrive.
+  String get id => switch (kind) {
+        _ChatRowKind.loader => 'loader',
+        _ChatRowKind.day => 'day:$day',
+        _ChatRowKind.receipt => 'receipt',
+        _ => 'm:${message!['id']}',
+      };
 }

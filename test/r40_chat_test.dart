@@ -189,7 +189,9 @@ void main() {
     expect(find.byKey(const ValueKey('chat-call-log-5')), findsOneWidget);
     expect(find.text('ข้อความนี้ถูกลบแล้ว'), findsOneWidget);
 
-    await tester.longPress(find.textContaining('ข้อความแรก', findRichText: true).first);
+    // The message itself ("**สำคัญ**" only appears there, not in the reply quote under it —
+    // the reversed list builds the newer quote first, so 'ข้อความแรก'.first found the quote).
+    await tester.longPress(find.textContaining('สำคัญ', findRichText: true).first);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('chat-act-forward')), findsOneWidget);
     expect(find.byKey(const ValueKey('chat-react-👍')), findsOneWidget);
@@ -223,7 +225,7 @@ void main() {
   testWidgets('room: forward to another room; delete asks first', (tester) async {
     final api = _roomApi();
     await _pump(tester, const ChatRoomScreen(room: {'id': 1, 'room_type': 'dm', 'display_name': '[QA] Second'}), api);
-    await tester.longPress(find.textContaining('ข้อความแรก', findRichText: true).first);
+    await tester.longPress(find.textContaining('สำคัญ', findRichText: true).first);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('chat-act-forward')));
     await tester.pumpAndSettle();
@@ -243,6 +245,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.callKeys, contains('DELETE /api/chat/rooms/1/messages/2'));
     expect(find.text('ข้อความนี้ถูกลบแล้ว'), findsNWidgets(2));
+  });
+
+  testWidgets('room list is a lazy reversed builder that keeps the order: day chip, oldest → newest, receipt last', (tester) async {
+    await _pump(tester, const ChatRoomScreen(room: {'id': 1, 'room_type': 'dm', 'display_name': '[QA] Second'}), _roomApi());
+    final list = tester.widget<ListView>(find.byKey(const ValueKey('chat-messages')));
+    expect(list.reverse, isTrue);
+    expect(list.childrenDelegate, isA<SliverChildBuilderDelegate>());
+    double y(Finder f) => tester.getTopLeft(f).dy;
+    final day = find.text('วันนี้');
+    final first = find.textContaining('สำคัญ', findRichText: true).first;
+    final forwarded = find.byKey(const ValueKey('chat-forwarded'));
+    final call = find.byKey(const ValueKey('chat-call-log-5'));
+    final deleted = find.text('ข้อความนี้ถูกลบแล้ว');
+    expect(y(day), lessThan(y(first)));
+    expect(y(first), lessThan(y(forwarded)));
+    expect(y(forwarded), lessThan(y(call)));
+    expect(y(call), lessThan(y(deleted)));
+    final pos = tester.state<ScrollableState>(find.descendant(of: find.byKey(const ValueKey('chat-messages')), matching: find.byType(Scrollable))).position;
+    expect(pos.pixels, 0, reason: 'opens at the newest message (offset 0 of the reversed list)');
+  });
+
+  testWidgets('long history: only rows near the screen are built; older page loads at the top', (tester) async {
+    final many = [for (var i = 1; i <= 50; i++) _msg(i, i.isEven ? 2 : 3, '[QA] ข้อความ $i')];
+    final older = [for (var i = -9; i <= 0; i++) _msg(i, 2, '[QA] เก่า $i')];
+    final api = _roomApi()..replies['GET /api/chat/rooms/1/messages'] = {'list': many, 'read_receipts': {}};
+    api.onRequest = (o) {
+      if (o.path == '/api/chat/rooms/1/messages' && o.queryParameters['before'] != null) {
+        api.replies['GET /api/chat/rooms/1/messages'] = {'list': older, 'read_receipts': {}};
+      }
+    };
+    await _pump(tester, const ChatRoomScreen(room: {'id': 1, 'room_type': 'dm', 'display_name': '[QA] Second'}), api);
+    expect(find.textContaining('ข้อความ 50', findRichText: true), findsOneWidget);
+    expect(find.textContaining(RegExp(r'ข้อความ 1$'), findRichText: true), findsNothing, reason: 'not laid out until scrolled to');
+    final pos = tester.state<ScrollableState>(find.descendant(of: find.byKey(const ValueKey('chat-messages')), matching: find.byType(Scrollable))).position;
+    final visibleBefore = tester.getTopLeft(find.textContaining('ข้อความ 50', findRichText: true)).dy;
+    pos.jumpTo(pos.maxScrollExtent);
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(api.calls.where((c) => c.queryParameters['before'] != null), hasLength(1), reason: 'older page on reaching the top');
+    expect(find.textContaining(RegExp(r'ข้อความ 1$'), findRichText: true), findsOneWidget);
+    pos.jumpTo(0);
+    await tester.pump();
+    expect(tester.getTopLeft(find.textContaining('ข้อความ 50', findRichText: true)).dy, visibleBefore, reason: 'newest still at the bottom');
   });
 
   testWidgets('call buttons appear only when calls are available', (tester) async {
