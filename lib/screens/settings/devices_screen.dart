@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_config.dart';
 import '../../core/app_version.dart';
@@ -12,6 +13,7 @@ import '../../core/nx_page_route.dart';
 import '../../core/shell_tabs.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
+import '../../services/device_push_service.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_logout.dart';
 import '../../widgets/nx_skeleton.dart';
@@ -151,9 +153,20 @@ class _DevicesScreenState extends State<DevicesScreen> {
     });
   }
 
+  /// This phone's push token (kept by the server when other devices are signed out).
+  Future<String?> _myPushToken() async {
+    final t = DevicePushService.instance.lastToken;
+    if (t != null && t.isNotEmpty) return t;
+    try {
+      return (await SharedPreferences.getInstance()).getString(DevicePushService.storageKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _loadPush() async {
     try {
-      final items = await context.read<AppConfig>().apiClient.getNotificationDevices();
+      final items = await context.read<AppConfig>().apiClient.getNotificationDevices(token: await _myPushToken());
       if (!mounted) return;
       setState(() {
         _push = items;
@@ -250,7 +263,8 @@ class _DevicesScreenState extends State<DevicesScreen> {
     if (!await _confirm('ออกจากระบบอุปกรณ์อื่นทั้งหมด?', 'อุปกรณ์อื่น $n เครื่องจะต้องเข้าสู่ระบบใหม่ เครื่องนี้ใช้งานต่อได้', 'ออกจากระบบ')) return;
     if (!mounted) return;
     final api = context.read<AppConfig>().apiClient;
-    await _run(api.revokeOtherDeviceSessions, 'ออกจากระบบอุปกรณ์อื่นแล้ว');
+    final token = await _myPushToken();
+    await _run(() => api.revokeOtherDeviceSessions(deviceToken: token), 'ออกจากระบบอุปกรณ์อื่นแล้ว');
   }
 
   Future<void> _logoutHere() async {

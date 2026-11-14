@@ -110,7 +110,9 @@ List<Map<String, dynamic>> notifTestDevices(Map<String, dynamic> r) {
 /// Look of one device result: sent / invalid (token expired, removed) / failed.
 ({String label, IconData icon, Color color}) notifTestResultStyle(String? result) => switch ((result ?? '').trim()) {
       'sent' => (label: 'ส่งแล้ว', icon: NxI.checkCircle, color: const Color(0xFF16A34A)),
-      'invalid' => (label: 'เครื่องนี้ใช้ไม่ได้แล้ว', icon: NxI.prohibit, color: const Color(0xFFF59E0B)),
+      'queued' => (label: 'เข้าคิวรอส่งใหม่', icon: NxI.clock, color: const Color(0xFF2563EB)),
+      'invalid' || 'invalid_removed' => (label: 'เครื่องนี้ใช้ไม่ได้แล้ว', icon: NxI.prohibit, color: const Color(0xFFF59E0B)),
+      'skipped' => (label: 'ข้าม (ส่งทางอื่น)', icon: NxI.minus, color: const Color(0xFF64748B)),
       _ => (label: 'ส่งไม่สำเร็จ', icon: NxI.xCircle, color: const Color(0xFFDC2626)),
     };
 
@@ -127,6 +129,7 @@ String notifPlatformLabel(String? p) => switch ((p ?? '').trim().toLowerCase()) 
 String notifTransportLabel(String? t) => switch ((t ?? '').trim()) {
       'notify' => 'ส่งผ่าน Notify',
       'fcm' || 'fcm_direct' => 'ส่งผ่าน Firebase โดยตรง',
+      'notify+fcm_fallback' => 'Notify ไม่ตอบ — ส่งผ่าน Firebase โดยตรงแทน',
       'hms' => 'ส่งผ่าน Huawei Push',
       'queued' || 'queue' => 'เข้าคิวรอส่งใหม่',
       'none' || '' => '',
@@ -196,15 +199,21 @@ Future<void> showNotifTestResultSheet(BuildContext context, Map<String, dynamic>
                   ]),
                 ),
                 const SizedBox(width: 8),
-                Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(st.icon, size: 16, color: st.color),
-                  const SizedBox(width: 4),
-                  Text(tr(st.label), style: theme.textTheme.labelMedium?.copyWith(color: st.color, fontWeight: FontWeight.w800)),
-                ]),
+                // Status at most ~40% of the row: long labels wrap instead of overflowing.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 140),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(st.icon, size: 16, color: st.color),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(tr(st.label), maxLines: 2, textAlign: TextAlign.end, style: theme.textTheme.labelMedium?.copyWith(color: st.color, fontWeight: FontWeight.w800)),
+                    ),
+                  ]),
+                ),
               ]),
             );
           }),
-        if (devices.any((d) => d['result'] == 'invalid'))
+        if (devices.any((d) => d['result'] == 'invalid' || d['result'] == 'invalid_removed'))
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(

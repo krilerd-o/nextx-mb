@@ -168,6 +168,9 @@ class DevicePushService {
   DevicePushService._();
   static final DevicePushService instance = DevicePushService._();
 
+  /// SharedPreferences key of the last registered push token.
+  static const storageKey = _tokenKey;
+
   String? lastToken;
   bool get isReady => lastToken != null && lastToken!.isNotEmpty;
 

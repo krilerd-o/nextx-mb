@@ -542,14 +542,15 @@ class ApiClient {
 
   /// `POST /api/notifications/test`: the server sends a test notification to me.
   /// New servers answer `{transport, job_id, no_devices, devices:[{platform,
-  /// device_name, token_hint, result:'sent'|'invalid'|'failed', detail}]}`.
+  /// device_name, token_hint, result:'sent'|'queued'|'invalid_removed'|'failed'|'skipped', detail}]}`.
   Future<Map<String, dynamic>> sendTestNotification() async =>
       _dataMap(await _send('POST', '/api/notifications/test', data: const <String, dynamic>{}));
 
-  /// `GET /api/notifications/devices` → `{items:[{id, platform, device_name, last_seen_at, current?}]}`:
-  /// the phones / browsers that get this account's push. 404 on older servers.
-  Future<List<Map<String, dynamic>>> getNotificationDevices() async =>
-      extractMapList((await _send('GET', '/api/notifications/devices'))['data']);
+  /// `GET /api/notifications/devices?token=` → `{list:[{id, platform, device_name, token_hint,
+  /// last_seen_at, current}], stale_days}`: the phones / browsers that get this account's push
+  /// (`current` = the row of [token], this phone). 404 on older servers.
+  Future<List<Map<String, dynamic>>> getNotificationDevices({String? token}) async => extractMapList(
+      (await _send('GET', '/api/notifications/devices', query: {if (token != null && token.isNotEmpty) 'token': token}))['data']);
 
   /// `GET /api/announcements/:id` → `{id, kind, title, body, created_at, sender_name?, store_android?, store_ios?}`.
   Future<Map<String, dynamic>> getAnnouncement(String id) async =>
@@ -565,9 +566,10 @@ class ApiClient {
     await _send('DELETE', '/api/me/sessions/${Uri.encodeComponent(sid)}');
   }
 
-  /// Signs out every other device (this one stays signed in).
-  Future<void> revokeOtherDeviceSessions() async {
-    await _send('POST', '/api/me/sessions/revoke-others');
+  /// Signs out every other device (this one stays signed in). [deviceToken] = this phone's
+  /// push token, so the server keeps it while it removes the other devices' tokens.
+  Future<void> revokeOtherDeviceSessions({String? deviceToken}) async {
+    await _send('POST', '/api/me/sessions/revoke-others', data: {if (deviceToken != null && deviceToken.isNotEmpty) 'device_token': deviceToken});
   }
 
   /// Signs out every device including this one.

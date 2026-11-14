@@ -408,7 +408,7 @@ void main() {
           'no_devices': false,
           'devices': [
             {'platform': 'android', 'device_name': 'Galaxy S24', 'token_hint': '…a1b2c3', 'result': 'sent', 'detail': ''},
-            {'platform': 'ios', 'device_name': 'iPhone', 'token_hint': '…d4e5f6', 'result': 'invalid', 'detail': 'UNREGISTERED'},
+            {'platform': 'ios', 'device_name': 'iPhone', 'token_hint': '…d4e5f6', 'result': 'invalid_removed', 'detail': 'UNREGISTERED'},
             {'platform': 'android', 'token_hint': '…zzz', 'result': 'failed', 'detail': 'timeout'},
           ],
         },
