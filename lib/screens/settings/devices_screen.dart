@@ -335,7 +335,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
               action: TextButton.icon(onPressed: _load, icon: const Icon(NxI.arrowClockwise, size: 16), label: Text(tr('ลองใหม่'))),
             ),
           ),
-        if (_loading) const Padding(padding: EdgeInsets.only(top: 16), child: NxSkeletonList(rows: 2)),
+        if (_loading) const NxSkeletonSettings(key: ValueKey('devices-skeleton'), groups: [1, 2], trailing: NxSkelTrailing.none, padded: false),
         if (sessionsWork)
           SettingsAppear(
             index: i++,

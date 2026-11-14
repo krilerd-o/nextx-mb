@@ -104,7 +104,7 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
         ),
       ));
     } else if (items == null) {
-      rows.add(const NxSkeletonList());
+      rows.add(const NxSkeletonList(padded: false));
     } else if (items.isEmpty) {
       rows.add(Padding(
         padding: const EdgeInsets.only(top: 32),

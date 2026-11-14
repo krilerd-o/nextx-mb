@@ -80,7 +80,7 @@ class _ProfileManageScreenState extends State<ProfileManageScreen> {
 
     if (p == null) {
       children.add(_error == null
-          ? const NxSkeletonList(rows: 4)
+          ? const NxSkeletonSettings(key: ValueKey('profile-manage-skeleton'), groups: [2, 3], trailing: NxSkelTrailing.chevron, padded: false)
           : NxSoftNote(
               icon: NxI.warningCircle,
               color: cs.error,

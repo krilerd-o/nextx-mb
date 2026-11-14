@@ -256,7 +256,14 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
     final List<Widget> children;
     if (_loading) {
-      children = [const NxSkeletonList()];
+      // Section captions over input boxes at the standard field height.
+      children = [
+        NxSkeletonFields(
+          key: const ValueKey('profile-edit-skeleton'),
+          sections: [for (final s in profileFieldSections) s.$2.length.clamp(1, 4)],
+          padded: false,
+        ),
+      ];
     } else if (_error != null) {
       children = [
         NxSoftNote(

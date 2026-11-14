@@ -285,7 +285,7 @@ class _MySignaturesScreenState extends State<MySignaturesScreen> {
     if (_data == null) {
       children = [
         if (_error == null)
-          const NxSkeletonList(rows: 3)
+          const NxSkeletonSettings(key: ValueKey('signatures-skeleton'), groups: [2], trailing: NxSkelTrailing.chevron, padded: false)
         else
           NxSoftNote(
             icon: NxI.warningCircle,

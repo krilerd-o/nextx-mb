@@ -111,7 +111,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
     final a = _a;
     final children = <Widget>[];
     if (_loading) {
-      children.add(const NxSkeletonList(rows: 3));
+      children.add(const NxSkeletonArticle(key: ValueKey('ann-skeleton'), padded: false, paragraphs: 2));
     } else if (a == null) {
       final missing = _error != null && isMissingEndpoint(_error!);
       children.add(NxSoftNote(

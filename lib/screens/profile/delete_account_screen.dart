@@ -172,7 +172,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
                   const SizedBox(height: 8),
                   if (m == null)
                     (_loadError == null
-                        ? const NxSkeletonList(rows: 2)
+                        ? const NxSkeletonSettings(key: ValueKey('delete-account-skeleton'), groups: [2], trailing: NxSkelTrailing.chevron, padded: false)
                         : NxSoftNote(
                             icon: NxI.warningCircle,
                             color: cs.error,

@@ -134,7 +134,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     final children = <Widget>[];
     if (m == null) {
       children.add(_loadError == null
-          ? const NxSkeletonList(rows: 3)
+          ? const NxSkeletonSettings(key: ValueKey('change-password-skeleton'), groups: [3], trailing: NxSkelTrailing.chevron, padded: false)
           : NxSoftNote(
               icon: NxI.warningCircle,
               color: cs.error,

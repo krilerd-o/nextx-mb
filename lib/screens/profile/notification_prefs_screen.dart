@@ -484,7 +484,8 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
         ),
       );
     } else if (_data == null) {
-      children.add(const Padding(padding: EdgeInsets.only(top: 16), child: NxSkeletonList(rows: 4)));
+      // Settings groups: caption, tiles with a tinted icon square, two lines and a switch.
+      children.add(const NxSkeletonSettings(key: ValueKey('notif-prefs-skeleton'), groups: [2, 4, 3], padded: false));
     } else {
       final channels = _channelKeys;
       children.add(

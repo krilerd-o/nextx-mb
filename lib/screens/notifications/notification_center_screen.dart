@@ -14,6 +14,8 @@ import '../../services/realtime_service.dart';
 import '../../services/unread_service.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_refresh_bar.dart';
+import '../../core/nx_swr_cache.dart';
 import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_notification_view.dart';
@@ -110,9 +112,20 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
 
   ApiClient get _api => context.read<AppConfig>().apiClient;
 
+  /// [NxSwrCache] key of the first page for this category / unread filter (also on disk).
+  String get _listKey => NxSwrCache.key('/api/notifications', query: {'cat': _category, 'unread': _unreadOnly ? 1 : null});
+
+  /// Showing the last copy while the fresh page loads.
+  bool _refreshing = false;
+
   Future<void> _reload() async {
+    if (_items.isEmpty) {
+      final hit = NxSwrCache.instance.peek<List<Map<String, dynamic>>>(_listKey);
+      if (hit != null) _items = hit;
+    }
     setState(() {
       _loading = _items.isEmpty;
+      _refreshing = _items.isNotEmpty;
       _error = null;
     });
     try {
@@ -122,7 +135,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         _items = page.items;
         _cursor = page.nextCursor;
         _loading = false;
+        _refreshing = false;
       });
+      NxSwrCache.instance.put(_listKey, page.items, persist: true);
       UnreadNotifications.instance.refresh(_api);
       _openFocusOnce();
     } catch (e) {
@@ -130,6 +145,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         setState(() {
           _error = e;
           _loading = false;
+          _refreshing = false;
         });
       }
     }
@@ -276,7 +292,17 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     final shown = _shown;
     Widget body;
     if (_loading) {
-      body = const NxSkeletonList();
+      // Flat rows with hairlines under day headings, like the list (≈72 px rows).
+      body = const NxSkeletonRows(
+        key: ValueKey('notif-skeleton'),
+        count: 9,
+        style: NxSkelRowStyle.divided,
+        leadingSize: 40,
+        trailing: NxSkelTrailing.none,
+        dayHeaders: 4,
+        minHeight: 72,
+        top: 0,
+      );
     } else if (_error != null && _items.isEmpty) {
       body = ListView(children: [
         const SizedBox(height: 80),
@@ -298,10 +324,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, i) {
           if (i >= shown.length) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))),
-            );
+            return const NxSkeletonRow(style: NxSkelRowStyle.flat, leadingSize: 40, trailing: NxSkelTrailing.none, minHeight: 72);
           }
           final day = notifDayBucket(shown[i]['created_at']);
           final first = i == 0 || notifDayBucket(shown[i - 1]['created_at']) != day;
@@ -371,6 +394,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
               if (reload) _reload();
             },
           ),
+          NxRefreshBar(visible: _refreshing),
           Expanded(child: NxRefresh(onRefresh: _reload, child: body)),
         ],
       ),
