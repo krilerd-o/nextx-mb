@@ -5,7 +5,7 @@ class AppVersion {
   AppVersion._();
 
   static const _override = String.fromEnvironment('APP_VERSION');
-  static String _value = _override.isNotEmpty ? _override : '0.6.0+6';
+  static String _value = _override.isNotEmpty ? _override : '0.7.0+7';
 
   static String get value => _value;
 
