@@ -29,10 +29,14 @@ bool _isNotFound(Object e) =>
 // ------------------------------------------------------------------ library
 
 class NotebookLibraryController extends ChangeNotifier {
-  NotebookLibraryController(this.api, {this.meId});
+  NotebookLibraryController(this.api, {this.meId, this.prefsScope});
 
   final ApiClient api;
   final String? meId;
+
+  /// `AppConfig.businessScope` (server + user + business): where picks are kept on the
+  /// device for servers without `appearance`. Null = no device copy (tests).
+  final String? prefsScope;
 
   List<Notebook> items = [];
   bool loading = false;
@@ -44,6 +48,7 @@ class NotebookLibraryController extends ChangeNotifier {
   bool grid = true;
   bool _disposed = false;
 
+  /// Scope + search, pinned first.
   List<Notebook> get visible => filterNotebooks(items, scope: scope, query: query, meId: meId);
 
   int countFor(NotebookScope s) => s == NotebookScope.all ? items.length : items.where((n) => notebookScopeOf(n, meId) == s).length;
@@ -63,7 +68,15 @@ class NotebookLibraryController extends ChangeNotifier {
     _notify();
     try {
       final rows = await api.getNotebooks();
-      items = [for (final r in rows) Notebook.fromJson(r)];
+      final next = [for (final r in rows) Notebook.fromJson(r)];
+      final scopeKey = prefsScope;
+      if (scopeKey != null) {
+        final local = await NotebookAppearanceStore.load(scopeKey);
+        for (final n in next) {
+          n.localAppearance = local[n.id];
+        }
+      }
+      items = next;
       error = null;
       disabled = false;
     } catch (e) {
@@ -92,26 +105,50 @@ class NotebookLibraryController extends ChangeNotifier {
     _notify();
   }
 
-  Future<Notebook> create({required String title, String description = '', String visibility = 'private'}) async {
-    final m = await api.createNotebook(title: title.trim().isEmpty ? 'สมุดโน้ตใหม่' : title.trim(), description: description.trim(), visibility: visibility);
+  /// [appearance] defaults to the title's colour / icon so every new book looks different.
+  Future<Notebook> create({required String title, String description = '', String visibility = 'private', NotebookAppearance? appearance}) async {
+    final t = title.trim().isEmpty ? 'สมุดโน้ตใหม่' : title.trim();
+    final look = appearance ?? NotebookAppearance.forTitle(t);
+    final m = await api.createNotebook(title: t, description: description.trim(), visibility: visibility, appearance: look.toJson());
     final nb = Notebook.fromJson({'user_id': meId, 'source_count': 0, ...m});
+    await keepNotebookAppearance(nb, look, prefsScope);
     items = [nb, ...items.where((x) => x.id != nb.id)];
     _notify();
     return nb;
   }
 
-  Future<void> update(Notebook n, {String? title, String? description, String? visibility}) async {
-    final m = await api.updateNotebook(n.id, {'title': ?title, 'description': ?description, 'visibility': ?visibility});
-    final fresh = Notebook.fromJson({'user_id': n.userId, 'source_count': n.sourceCount, 'enabled_source_count': n.enabledSourceCount, ...m});
+  Future<void> update(Notebook n, {String? title, String? description, String? visibility, NotebookAppearance? appearance}) async {
+    final m = await api.updateNotebook(n.id, {'title': ?title, 'description': ?description, 'visibility': ?visibility, 'appearance': ?appearance?.toJson()});
+    final fresh = n.merge(Notebook.fromJson({'user_id': n.userId, 'source_count': n.sourceCount, 'enabled_source_count': n.enabledSourceCount, ...m}));
+    if (appearance != null) await keepNotebookAppearance(fresh, appearance, prefsScope);
     items = [for (final x in items) x.id == n.id ? fresh : x];
     _notify();
   }
 
+  /// Colour / icon / cover / pin only.
+  Future<void> setAppearance(Notebook n, NotebookAppearance look) => update(n, appearance: look);
+
+  Future<void> togglePin(Notebook n) => setAppearance(n, n.look.copyWith(pinned: !n.pinned));
+
   Future<void> delete(Notebook n) async {
     await api.deleteNotebook(n.id);
     items = items.where((x) => x.id != n.id).toList();
+    if (prefsScope != null) await NotebookAppearanceStore.save(prefsScope!, n.id, null);
     _notify();
   }
+}
+
+/// After a create / PATCH that sent [look]: a v6 server stored it (drop the device copy);
+/// an older server ignored it, so keep it on the device for [scope] and show it.
+Future<void> keepNotebookAppearance(Notebook nb, NotebookAppearance look, String? scope) async {
+  if (nb.serverHasAppearance && nb.appearance != null) {
+    nb.localAppearance = null;
+    if (scope != null) await NotebookAppearanceStore.save(scope, nb.id, null);
+    return;
+  }
+  nb.appearance = null;
+  nb.localAppearance = look;
+  if (scope != null) await NotebookAppearanceStore.save(scope, nb.id, look);
 }
 
 // ----------------------------------------------------------------- notebook

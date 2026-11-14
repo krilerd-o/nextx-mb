@@ -5,6 +5,9 @@ import 'package:lucide_icons_flutter/lucide_icons_300.dart';
 
 import '../i18n.dart';
 import '../thai_time.dart';
+import 'notebook_appearance.dart';
+
+export 'notebook_appearance.dart';
 
 /// ISAAC Notebook (NEXTX `/api/ai/notebooks*`) — models and pure helpers for
 /// the native notebook (library, sources, chat with citations, studio).
@@ -41,6 +44,8 @@ class Notebook {
     this.sources,
     this.notes,
     this.chatSettings,
+    this.appearance,
+    this.serverHasAppearance = false,
   });
 
   final String id;
@@ -64,6 +69,20 @@ class Notebook {
   /// `chat_settings` (NEXTX notebook v5); null on older servers.
   ChatSettings? chatSettings;
 
+  /// `appearance` (NEXTX notebook v6): null when never chosen or on an older server.
+  NotebookAppearance? appearance;
+
+  /// The server sent an `appearance` key (v6+), so it stores what we PATCH.
+  final bool serverHasAppearance;
+
+  /// The user's pick kept on the device ([NotebookAppearanceStore]), used when the server has none.
+  NotebookAppearance? localAppearance;
+
+  /// What the card shows: server → device → colour / icon from the title.
+  NotebookAppearance get look => appearance ?? localAppearance ?? NotebookAppearance.forTitle(title);
+
+  bool get pinned => look.pinned;
+
   bool get isBusiness => visibility == 'business';
 
   /// Sources shown on the card: the list when loaded, else the server count.
@@ -84,6 +103,8 @@ class Notebook {
         sources: m['sources'] is List ? [for (final s in _maps(m['sources'])) NotebookSource.fromJson(s)] : null,
         notes: m['notes'] is List ? [for (final n in _maps(m['notes'])) NotebookNote.fromJson(n)] : null,
         chatSettings: m['chat_settings'] is Map ? ChatSettings.fromJson(_map(m['chat_settings'])) : null,
+        appearance: NotebookAppearance.tryParse(m['appearance']),
+        serverHasAppearance: m.containsKey('appearance'),
       );
 
   /// Keeps loaded sources / notes when a PATCH returns only the notebook row.
@@ -91,6 +112,8 @@ class Notebook {
     fresh.sources ??= sources;
     fresh.notes ??= notes;
     fresh.chatSettings ??= chatSettings;
+    fresh.localAppearance ??= localAppearance;
+    if (!fresh.serverHasAppearance) fresh.appearance ??= appearance;
     return fresh;
   }
 }
@@ -164,15 +187,20 @@ NotebookScope notebookScopeOf(Notebook n, String? meId) {
   return NotebookScope.shared;
 }
 
+/// Filtered by scope + search, pinned books first (server order kept inside each group).
 List<Notebook> filterNotebooks(List<Notebook> all, {NotebookScope scope = NotebookScope.all, String query = '', String? meId}) {
   final q = query.trim().toLowerCase();
-  return [
+  final hits = [
     for (final n in all)
       if ((scope == NotebookScope.all || notebookScopeOf(n, meId) == scope) &&
           (q.isEmpty || n.title.toLowerCase().contains(q) || n.description.toLowerCase().contains(q)))
         n,
   ];
+  return pinnedFirst(hits);
 }
+
+/// Stable: pinned notebooks first, otherwise the given order.
+List<Notebook> pinnedFirst(List<Notebook> list) => [...list.where((n) => n.pinned), ...list.where((n) => !n.pinned)];
 
 /// Cover colours + emoji from the notebook id (stable per notebook).
 ({List<Color> colors, String emoji}) notebookCover(String id) {

@@ -18,12 +18,14 @@ extension NotebookApi on ApiClient {
 
   Future<List<Map<String, dynamic>>> getNotebooks() async => _items(await _send('GET', '/api/ai/notebooks'));
 
-  Future<Map<String, dynamic>> createNotebook({required String title, String description = '', String visibility = 'private', String? conversationId}) async =>
+  /// [appearance] `{color, icon, cover, pinned}` (notebook v6; older servers ignore it).
+  Future<Map<String, dynamic>> createNotebook({required String title, String description = '', String visibility = 'private', String? conversationId, Map<String, dynamic>? appearance}) async =>
       _item(await _send('POST', '/api/ai/notebooks', data: {
         'title': title,
         'description': description,
         'visibility': visibility,
         if (conversationId != null) 'conversation_id': _id(conversationId),
+        'appearance': ?appearance,
       }));
 
   /// Notebook with `sources[]` and `notes[]`.
