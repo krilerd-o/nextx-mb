@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../core/nx_swr_cache.dart';
 import '../services/api_client.dart';
+import 'nx_refresh_bar.dart';
 import 'nx_skeleton.dart';
 import '../core/i18n.dart';
 import 'nx_refresh.dart';
 
 /// Stale-while-revalidate loader — keeps last data while refreshing.
+///
+/// With [cacheKey] the last answer is also kept in [NxSwrCache]: opening the
+/// screen again shows it at once (no skeleton) and refreshes in the
+/// background with a thin progress line.
 class NxCachedFuture<T> extends StatefulWidget {
   const NxCachedFuture({
     super.key,
@@ -17,6 +23,8 @@ class NxCachedFuture<T> extends StatefulWidget {
     this.revision = 0,
     this.onRetry,
     this.refresh = true,
+    this.cacheKey,
+    this.persist = false,
   });
 
   final Future<T> Function() load;
@@ -28,6 +36,12 @@ class NxCachedFuture<T> extends StatefulWidget {
   final VoidCallback? onRetry;
   final bool refresh;
 
+  /// [NxSwrCache] key of this answer (see [NxSwrCache.key]); null = no app-wide cache.
+  final String? cacheKey;
+
+  /// Also keep the answer on disk (JSON values; a few hot lists only).
+  final bool persist;
+
   @override
   State<NxCachedFuture<T>> createState() => NxCachedFutureState<T>();
 }
@@ -37,16 +51,36 @@ class NxCachedFutureState<T> extends State<NxCachedFuture<T>> {
   Object? _error;
   bool _loading = true;
 
+  /// Showing cached data while the fresh answer loads.
+  bool _refreshing = false;
+
+  /// The data on screen came from the app-wide cache (tests).
+  @visibleForTesting
+  bool debugFromCache = false;
+
   @override
   void initState() {
     super.initState();
+    final key = widget.cacheKey;
+    if (key != null) {
+      final hit = NxSwrCache.instance.peek<T>(key);
+      if (hit != null) {
+        _data = hit;
+        _loading = false;
+        debugFromCache = true;
+      }
+    }
     _fetch();
   }
 
   @override
   void didUpdateWidget(covariant NxCachedFuture<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.revision != widget.revision) {
+    if (oldWidget.cacheKey != widget.cacheKey && widget.cacheKey != null) {
+      final hit = NxSwrCache.instance.peek<T>(widget.cacheKey!);
+      if (hit != null) _data = hit;
+      _fetch();
+    } else if (oldWidget.revision != widget.revision) {
       _fetch();
     }
   }
@@ -55,27 +89,35 @@ class NxCachedFutureState<T> extends State<NxCachedFuture<T>> {
 
   Future<void> _fetch() async {
     final had = _data != null;
-    if (!had) {
-      setState(() {
+    final key = widget.cacheKey;
+    void apply() {
+      if (!had) {
         _loading = true;
         _error = null;
-      });
-    } else {
-      setState(() => _error = null);
+      } else {
+        _error = null;
+        _refreshing = true;
+      }
     }
+
+    setState(apply);
     try {
       final next = await widget.load();
       if (!mounted) return;
+      if (key != null) NxSwrCache.instance.put<T>(key, next, persist: widget.persist);
       setState(() {
         _data = next;
         _loading = false;
+        _refreshing = false;
         _error = null;
+        debugFromCache = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e;
         _loading = false;
+        _refreshing = false;
       });
     }
   }
@@ -111,7 +153,8 @@ class NxCachedFutureState<T> extends State<NxCachedFuture<T>> {
                 : child,
           )
         : child;
-    if (_error == null) return refreshable;
+    final body = widget.cacheKey == null ? refreshable : NxRefreshOverlay(refreshing: _refreshing, child: refreshable);
+    if (_error == null) return body;
     return Column(
       children: [
         Padding(
@@ -121,7 +164,7 @@ class NxCachedFutureState<T> extends State<NxCachedFuture<T>> {
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ),
-        Expanded(child: refreshable),
+        Expanded(child: body),
       ],
     );
   }

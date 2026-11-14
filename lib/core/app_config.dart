@@ -1,3 +1,4 @@
+import 'nx_swr_cache.dart';
 import '../services/calls/call_setup.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -92,6 +93,8 @@ const int _maxAvatarBytes = 400000;
 
 class AppConfig extends ChangeNotifier {
   AppConfig() {
+    // A new app state starts with no screen data from an earlier one.
+    NxSwrCache.instance.reset();
     _api.setOnUnauthorized(_handleUnauthorized);
     _api.setOnSessionToken(_adoptSessionToken);
     _load();
@@ -1459,6 +1462,8 @@ class AppConfig extends ChangeNotifier {
   void notifyListeners() {
     // Saved photos belong to the Space they were taken in.
     PhotoUploadCenter.instance.scope = _session.isLoggedIn ? '${apiClient.baseUrl}|$businessScope' : '';
+    // Cached screen data belongs to this server + user + Space: a switch or sign-out drops it.
+    NxSwrCache.instance.scope = _session.isLoggedIn ? '${apiClient.baseUrl}|$businessScope' : '';
     super.notifyListeners();
   }
 

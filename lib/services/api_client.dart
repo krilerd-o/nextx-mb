@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import '../core/nx_swr_cache.dart';
 import '../core/ai_assistant.dart';
 import 'package:flutter/foundation.dart';
 
@@ -303,7 +304,10 @@ class ApiClient {
           contentType: isForm ? null : options?.contentType,
         ),
       );
-      return _decodeEnvelope(res);
+      final out = _decodeEnvelope(res);
+      // A write changed server data: cached screen answers of that API area are stale.
+      if (method.toUpperCase() != 'GET') NxSwrCache.instance.invalidateForWrite(path);
+      return out;
     } on DioException catch (e) {
       throw _fromDio(e);
     }
