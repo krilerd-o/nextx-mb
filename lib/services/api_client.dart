@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import '../core/app_alice.dart';
 import '../core/doc_form/doc_pick_rules.dart' show pickerQueryParams;
 import 'api_exceptions.dart';
+import 'http/tuned_adapter.dart';
 
 export 'api_exceptions.dart';
 
@@ -148,6 +149,10 @@ class ApiClient {
         );
     if (_dio.options.baseUrl.isEmpty) {
       _dio.options.baseUrl = resolveApiBaseUrl();
+    }
+    if (dio == null) {
+      final tuned = createTunedHttpAdapter();
+      if (tuned != null) _dio.httpClientAdapter = tuned;
     }
     _dio.interceptors.add(
       InterceptorsWrapper(
@@ -610,6 +615,28 @@ class ApiClient {
 
   ({DateTime at, String biz, Map<String, (String, String?)> labels})? _moduleLabels;
 
+  /// Requests in flight by key: callers asking for the same cached thing at the
+  /// same moment (a screen's header, body and tabs on open) share one request.
+  final Map<String, Future<Object?>> _inflight = {};
+
+  /// [run] once per [key] while it is in flight; concurrent callers get the same future.
+  Future<T> _shared<T>(String key, Future<T> Function() run) {
+    final pending = _inflight[key];
+    if (pending != null) return pending as Future<T>;
+    final f = run();
+    _inflight[key] = f;
+    void done() {
+      if (identical(_inflight[key], f)) _inflight.remove(key);
+    }
+
+    f.then((_) => done(), onError: (Object _) => done());
+    return f;
+  }
+
+  /// Requests shared right now (tests).
+  @visibleForTesting
+  int get debugInflightCount => _inflight.length;
+
   /// Menu names as set up in NEXTX (`aicrm_tab`): module → (tablabel, tablabel_en).
   /// Cached 10 minutes per business.
   Future<Map<String, (String, String?)>> getModuleLabels() async {
@@ -617,6 +644,11 @@ class ApiClient {
     if (c != null && c.biz == (_businessId ?? '') && DateTime.now().difference(c.at) < const Duration(minutes: 10)) {
       return c.labels;
     }
+    final biz = _businessId ?? '';
+    return _shared('labels|$biz', () => _fetchModuleLabels(biz));
+  }
+
+  Future<Map<String, (String, String?)>> _fetchModuleLabels(String biz) async {
     final out = <String, (String, String?)>{};
     for (final m in await getModules()) {
       if (m is! Map) continue;
@@ -626,7 +658,7 @@ class ApiClient {
       final en = '${m['tablabel_en'] ?? m['label_en'] ?? ''}'.trim();
       out[name.toLowerCase()] = (th, en.isEmpty ? null : en);
     }
-    _moduleLabels = (at: DateTime.now(), biz: _businessId ?? '', labels: out);
+    _moduleLabels = (at: DateTime.now(), biz: biz, labels: out);
     return out;
   }
 
@@ -721,9 +753,14 @@ class ApiClient {
     final key = '${_businessId ?? ''}|$module';
     final hit = _schemaCache[key];
     if (!fresh && hit != null && DateTime.now().difference(hit.at) < const Duration(minutes: 5)) return hit.schema;
-    final schema = await _fetchFieldSchema(module);
-    _schemaCache[key] = (at: DateTime.now(), schema: schema);
-    return schema;
+    Future<ModuleFieldSchema> load() async {
+      final schema = await _fetchFieldSchema(module);
+      _schemaCache[key] = (at: DateTime.now(), schema: schema);
+      return schema;
+    }
+
+    // A fresh read (after editing fields) must not reuse an older request still in flight.
+    return fresh ? load() : _shared('schema|$key', load);
   }
 
   Future<ModuleFieldSchema> _fetchFieldSchema(String module) async {
@@ -920,9 +957,12 @@ class ApiClient {
     if (c != null && c.biz == (_businessId ?? '') && DateTime.now().difference(c.at) < const Duration(minutes: 10)) {
       return c.users;
     }
-    final users = await getUsers(limit: 500);
-    _usersCache = (at: DateTime.now(), biz: _businessId ?? '', users: users);
-    return users;
+    final biz = _businessId ?? '';
+    return _shared('users|$biz', () async {
+      final users = await getUsers(limit: 500);
+      _usersCache = (at: DateTime.now(), biz: biz, users: users);
+      return users;
+    });
   }
 
   Future<List<Map<String, dynamic>>> getUsers({String? q, int limit = 80}) async {

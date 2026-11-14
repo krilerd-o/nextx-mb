@@ -134,7 +134,13 @@ Future<void> _showForegroundNotification(RemoteMessage message) async {
   );
 }
 
-Future<void> initFirebasePush() async {
+Future<void>? _firebaseInit;
+
+/// Starts Firebase push once (main calls it after the first frame); later callers
+/// — e.g. [DevicePushService.sync] — wait for that same start-up.
+Future<void> initFirebasePush() => _firebaseInit ??= _initFirebasePush();
+
+Future<void> _initFirebasePush() async {
   if (kIsWeb) return;
   try {
     if (Firebase.apps.isEmpty) {
@@ -183,6 +189,8 @@ class DevicePushService {
     // GBox / microG does not get every notification twice.
     if (HmsPush.enabled && await _syncHms(config)) return;
     try {
+      // Firebase starts after the first frame; a quick login / session restore can get here first.
+      await _firebaseInit;
       await _refreshFcmToken();
     } catch (e) {
       debugPrint('[push] token: $e');
