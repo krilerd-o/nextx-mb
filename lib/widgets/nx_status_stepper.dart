@@ -146,6 +146,9 @@ class NxStatusStepper extends StatefulWidget {
   /// Height of a step (and of the cancel capsule).
   static const pillHeight = 36.0;
 
+  /// Height of the whole framed bar (pill + 4 px padding + 1 px border, each side).
+  static const barHeight = pillHeight + 10;
+
   /// Depth of the arrow point / notch, and how far the steps overlap (the
   /// rest is the thin slanted gap between them).
   static const tip = 11.0;
@@ -287,7 +290,7 @@ class _NxStatusStepperState extends State<NxStatusStepper> {
             selected: on,
             label: tr(s.label),
             child: ClipPath(
-              clipper: _ChevronClipper(first: k == 0, last: k == n - 1),
+              clipper: NxChevronClipper(first: k == 0, last: k == n - 1),
               child: Material(
                 color: tone.bg,
                 child: InkWell(
@@ -369,8 +372,8 @@ class _NxStatusStepperState extends State<NxStatusStepper> {
 
 /// Arrow-shaped step: a point on the right (not the last), a notch on the
 /// left (not the first) — the web's `clip-path: polygon(...)`.
-class _ChevronClipper extends CustomClipper<Path> {
-  const _ChevronClipper({required this.first, required this.last});
+class NxChevronClipper extends CustomClipper<Path> {
+  const NxChevronClipper({required this.first, required this.last});
   final bool first;
   final bool last;
 
@@ -396,5 +399,5 @@ class _ChevronClipper extends CustomClipper<Path> {
   }
 
   @override
-  bool shouldReclip(_ChevronClipper old) => old.first != first || old.last != last;
+  bool shouldReclip(NxChevronClipper old) => old.first != first || old.last != last;
 }
