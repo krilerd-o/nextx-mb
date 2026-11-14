@@ -27,7 +27,13 @@ class HomeWidgetGrid extends StatefulWidget {
     required this.onResize,
     this.onDragUpdate,
     this.onDragEnd,
+    this.sliver = false,
   });
+
+  /// Lay the rows out as a lazy [SliverList] (Home's scroll view): each widget row is built
+  /// when it nears the screen and then kept alive (no reload when scrolled back). Edit mode
+  /// uses the plain column (dragging needs every cell present).
+  final bool sliver;
 
   final List<HomeEntry> entries;
 
@@ -56,7 +62,34 @@ class _HomeWidgetGridState extends State<HomeWidgetGrid> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.sliver) {
+      return SliverLayoutBuilder(builder: (context, c) {
+        final rows = _rows(c.crossAxisExtent);
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, i) => _KeepAliveRow(key: rows[i].key, child: rows[i]),
+            childCount: rows.length,
+            // Rows keep their element (and loaded data) when others move or hide.
+            findChildIndexCallback: (key) {
+              for (var i = 0; i < rows.length; i++) {
+                if (rows[i].key == key) return i;
+              }
+              return null;
+            },
+            addRepaintBoundaries: true,
+          ),
+        );
+      });
+    }
     return LayoutBuilder(builder: (context, c) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: _rows(c.maxWidth));
+    });
+  }
+
+  /// One widget per Home row (a full-width widget, or up to [homeGridColumns] half charts).
+  List<Widget> _rows(double maxWidth) {
+    {
+      final c = BoxConstraints(maxWidth: maxWidth);
       final cols = homeGridColumns(c.maxWidth);
       const gap = 12.0;
       final cellW = (c.maxWidth - gap * (cols - 1)) / cols;
@@ -72,6 +105,7 @@ class _HomeWidgetGridState extends State<HomeWidgetGrid> {
           children.add(row[i]);
         }
         rows.add(Padding(
+          key: ValueKey('home-row-${row.map((w) => w.key).join('+')}'),
           padding: const EdgeInsets.only(top: kHomeWidgetGap),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: children),
         ));
@@ -89,17 +123,17 @@ class _HomeWidgetGridState extends State<HomeWidgetGrid> {
         if (!chart && !widget.editing) {
           // Classic sections bring their own spacing.
           flush();
-          rows.add(KeyedSubtree(key: _key(e.id), child: _draggable(e, content!, c.maxWidth)));
+          rows.add(KeyedSubtree(key: ValueKey('home-row-${e.id}'), child: KeyedSubtree(key: _key(e.id), child: _draggable(e, content!, c.maxWidth))));
           continue;
         }
         if (used + span > cols) flush();
-        row.add(SizedBox(width: half ? cellW : c.maxWidth, child: cell));
+        row.add(SizedBox(key: ValueKey(e.id), width: half ? cellW : c.maxWidth, child: cell));
         used += span;
         if (used >= cols) flush();
       }
       flush();
-      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
-    });
+      return rows;
+    }
   }
 
   Widget _cell(HomeEntry e, Widget? content, {required double width}) {
@@ -161,6 +195,27 @@ class _HomeWidgetGridState extends State<HomeWidgetGrid> {
     final box = _keys[id]?.currentContext?.findRenderObject();
     if (box is RenderBox && box.hasSize) return math.max(64, math.min(box.size.height, 360));
     return 120;
+  }
+}
+
+/// Keeps a built Home row alive once it has been on screen: scrolling back does not rebuild
+/// it (or make its box load again).
+class _KeepAliveRow extends StatefulWidget {
+  const _KeepAliveRow({super.key, required this.child});
+  final Widget child;
+
+  @override
+  State<_KeepAliveRow> createState() => _KeepAliveRowState();
+}
+
+class _KeepAliveRowState extends State<_KeepAliveRow> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
 

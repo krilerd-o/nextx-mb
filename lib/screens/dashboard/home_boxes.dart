@@ -22,6 +22,7 @@ import '../../services/api_client.dart';
 import '../../widgets/nx_icons.dart';
 import '../notifications/notification_center_screen.dart' show relativeTime;
 import 'team_overview_card.dart' show compactBaht, salesFigures;
+import 'home_chart_data.dart' show HomeChartCache;
 
 // ─────────────────────────── shared helpers ───────────────────────────
 
@@ -674,7 +675,8 @@ class _PeriodBox extends StatefulWidget {
   final IconData icon;
   final Color color;
   final NxPeriod fallback;
-  final Future<List<_Figure>> Function(ApiClient api, String from, String to, String? me) load;
+  /// [force]: pull-to-refresh — skip any cached answer.
+  final Future<List<_Figure>> Function(ApiClient api, String from, String to, String? me, {bool force}) load;
   final VoidCallback? onOpen;
   final int revision;
 
@@ -701,16 +703,16 @@ class _PeriodBoxState extends State<_PeriodBox> {
   @override
   void didUpdateWidget(_PeriodBox old) {
     super.didUpdateWidget(old);
-    if (old.revision != widget.revision) _load();
+    if (old.revision != widget.revision) _load(force: true);
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool force = false}) async {
     final api = context.read<AppConfig>().apiClient;
     final seq = ++_seq;
     final (from, to) = periodRange(_period, thaiNow());
     try {
       final me = context.read<AppConfig>().session.userId;
-      final f = await widget.load(api, ymd(from), ymd(to), (me == null || me.isEmpty) ? null : me);
+      final f = await widget.load(api, ymd(from), ymd(to), (me == null || me.isEmpty) ? null : me, force: force);
       if (mounted && seq == _seq) setState(() => _figs = f);
     } catch (_) {
       if (mounted && seq == _seq) setState(() => _figs = const []);
@@ -777,8 +779,12 @@ class SalesPeriodBox extends StatelessWidget {
   final VoidCallback? onOpen;
 
   /// [me] = the signed-in user: the box shows *my* sales, not the whole team.
-  static Future<List<_Figure>> loadFigures(ApiClient api, String from, String to, {String? me}) async {
-    final data = await api.getSalesDashboard(dateFrom: from, dateTo: to, userId: me);
+  /// With [scope] the answer goes through [HomeChartCache] under the same key as the sales
+  /// charts (`scope|sales|from..to|owner`), so the box and a "ยอดขาย" chart of the same
+  /// period share one request, and coming back to Home within the TTL costs none.
+  static Future<List<_Figure>> loadFigures(ApiClient api, String from, String to, {String? me, String? scope, bool force = false}) async {
+    Future<Map<String, dynamic>> get() => api.getSalesDashboard(dateFrom: from, dateTo: to, userId: me);
+    final data = scope == null ? await get() : await HomeChartCache.instance.fetch('$scope|sales|$from..$to|$me', get, force: force);
     return [
       for (final f in salesFigures(data)) _Figure(f.label, f.value, hint: f.hint, color: const Color(0xFF10B981)),
     ];
@@ -792,7 +798,7 @@ class SalesPeriodBox extends StatelessWidget {
         icon: NxI.handshake,
         color: const Color(0xFF10B981),
         fallback: NxPeriod.month,
-        load: (api, f, t, me) => loadFigures(api, f, t, me: me),
+        load: (api, f, t, me, {force = false}) => loadFigures(api, f, t, me: me, scope: context.read<AppConfig>().businessScope, force: force),
         onOpen: onOpen,
         revision: revision,
       );
@@ -807,6 +813,8 @@ class CasePeriodBox extends StatelessWidget {
   /// [me] = the signed-in user: only cases this user owns.
   static Future<List<_Figure>> loadFigures(ApiClient api, String from, String to, {String? me}) async {
     try {
+      // Summary and performance side by side (they were awaited one after the other).
+      final perf = api.getCasePerformance(dateFrom: from, dateTo: to, owner: me).then<Map<String, dynamic>?>((p) => p, onError: (Object _) => null);
       final s = await api.getCaseSummary(dateFrom: from, dateTo: to, owner: me);
       final k = s['kpis'] is Map ? Map<String, dynamic>.from(s['kpis'] as Map) : const <String, dynamic>{};
       final byStatus = <String, num>{
@@ -814,11 +822,11 @@ class CasePeriodBox extends StatelessWidget {
       };
       final working = (byStatus['in_progress'] ?? 0) + (byStatus['accepted'] ?? 0) + (byStatus['forwarded'] ?? 0);
       String? sla;
-      try {
-        final p = await api.getCasePerformance(dateFrom: from, dateTo: to, owner: me);
+      final p = await perf;
+      if (p != null) {
         final pk = p['kpis'] is Map ? p['kpis'] as Map : p;
         if (pk['sla_pct'] != null) sla = '${_n(pk['sla_pct']).round()}%';
-      } catch (_) {}
+      }
       return [
         _Figure('เคสทั้งหมด', nxInt(k['opened']), color: const Color(0xFF6366F1)),
         _Figure('เคสที่เปิด', nxInt(k['open_now']), color: const Color(0xFF3B82F6)),
@@ -831,17 +839,24 @@ class CasePeriodBox extends StatelessWidget {
     } on ApiException catch (_) {
       // No service-dashboard menu: counts by status + light SLA summary.
     } on ApiEnvelopeException catch (_) {}
+    // The light SLA summary counts the whole team; skip it on a "mine" box. In parallel.
+    Future<Map<String, dynamic>?> slaSummary() async {
+      if (me != null) return null;
+      try {
+        final days = thaiNow().difference(DateTime.parse(from)).inDays + 1;
+        return await api.getCaseSlaSummary(days: days.clamp(1, 365));
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final slaF = slaSummary();
     final d = await api.getCaseDashboard(dateFrom: from, dateTo: to, userId: me);
     final rows = (d['byStatus'] as List? ?? const []).whereType<Map>().toList();
     final total = rows.fold<num>(0, (a, r) => a + _n(r['value']));
     String? sla;
-    // The light SLA summary counts the whole team; skip it on a "mine" box.
-    if (me == null) try {
-      final from0 = DateTime.parse(from);
-      final days = thaiNow().difference(from0).inDays + 1;
-      final h = await api.getCaseSlaSummary(days: days.clamp(1, 365));
-      if (h['compliance_pct'] != null) sla = '${_n(h['compliance_pct']).round()}%';
-    } catch (_) {}
+    final h = await slaF;
+    if (h != null && h['compliance_pct'] != null) sla = '${_n(h['compliance_pct']).round()}%';
     return [
       _Figure('เคสทั้งหมด', nxInt(total), color: const Color(0xFF6366F1)),
       for (final r in rows.take(4)) _Figure('${r['name'] ?? '—'}', nxInt(r['value'])),
@@ -857,7 +872,7 @@ class CasePeriodBox extends StatelessWidget {
         icon: NxI.headset,
         color: const Color(0xFFEF4444),
         fallback: NxPeriod.week,
-        load: (api, f, t, me) => loadFigures(api, f, t, me: me),
+        load: (api, f, t, me, {force = false}) => loadFigures(api, f, t, me: me),
         onOpen: onOpen,
         revision: revision,
       );

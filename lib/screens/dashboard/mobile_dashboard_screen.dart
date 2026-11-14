@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math' as math;
 
 import '../../core/nx_number.dart';
 import 'package:flutter/foundation.dart' show listEquals;
@@ -7,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons_500.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
@@ -122,10 +125,12 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
   /// Pinned header colours: 0 = on the scene (white), 1 = on the page.
   final ValueNotifier<double> _headerSolid = ValueNotifier(0);
   final GlobalKey _heroKey = GlobalKey(debugLabel: 'home-hero');
+  double _heroHeight = 300;
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
-    final heroBox = _heroKey.currentContext?.size?.height ?? 300;
+    // The hero row may be out of the lazy list's built range: keep its last known height.
+    final heroBox = _heroHeight = _heroKey.currentContext?.size?.height ?? _heroHeight;
     final barH = HomeGreetingBar.heightFor(MediaQuery.textScalerOf(context));
     // Where the first widget (it starts one gap below the hero) meets the header's bottom edge.
     final meet = heroBox + kHomeWidgetGap - MediaQuery.paddingOf(context).top - barH;
@@ -139,6 +144,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
+    _restoreCache();
     _load();
     RecentRecords.instance.load(context.read<AppConfig>().businessScope);
     HomeLayout.instance.addListener(_onLayout);
@@ -356,35 +362,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
   /// Overdue Workspace work (Task / Subtask / Bug / Story only — no Epic or Checklist).
   List<Map<String, dynamic>> _overdueWork = const [];
 
-  Future<void> _loadOverdueWork() async {
-    final config = context.read<AppConfig>();
-    if (!MenuAccess.allow(config.session, MenuAccess.workspace)) return;
+  /// Overdue activities (calendar / pending menus); null = not asked or failed.
+  Future<EntityListPage?> _fetchOverdueActivities(ApiClient api) async {
     try {
-      final r = await config.apiClient.getHomeWork(
-        bucket: 'overdue',
-        limit: 30,
-      );
-      final items = extractMapList(
-        r['items'] ?? r['work'],
-      ).where((e) => e['status_is_done'] != true && isWorkType(e)).toList();
-      if (mounted) setState(() => _overdueWork = items);
-    } catch (_) {}
-  }
-
-  Future<void> _loadOverdue() async {
-    _loadOverdueWork();
-    final config = context.read<AppConfig>();
-    if (!MenuAccess.any(config.session, const [
-      MenuAccess.calendar,
-      MenuAccess.pending,
-    ])) {
-      // Workspace-only users still get the (empty or task-only) box.
-      if (MenuAccess.allow(config.session, MenuAccess.workspace) && mounted)
-        setState(() => _pendingLoaded = true);
-      return;
-    }
-    try {
-      final page = await config.apiClient.getEntityList(
+      return await api.getEntityList(
         'activity',
         limit: 10,
         extra: const {
@@ -396,13 +377,9 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
           'with_total': '1',
         },
       );
-      if (!mounted) return;
-      setState(() {
-        _overdue = page.items;
-        _overdueTotal = page.total ?? page.items.length;
-        _pendingLoaded = true;
-      });
-    } catch (_) {}
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Pending work in one list: overdue activities + open Workspace tasks,
@@ -452,6 +429,91 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
   int _revision =
       0; // bumps on pull-to-refresh → boxes with their own data reload
 
+  /// A live answer arrived: the saved copy must not overwrite it any more.
+  bool _live = false;
+
+  /// Saved last Home per Space (stale-while-revalidate: shown at once on a cold start,
+  /// then refreshed).
+  static const _cacheVersion = 1;
+  String _cacheKey(AppConfig c) => 'nx_home_cache_v$_cacheVersion|${c.businessScope}';
+
+  Future<void> _restoreCache() async {
+    final config = context.read<AppConfig>();
+    final key = _cacheKey(config);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(key);
+      if (raw == null || raw.isEmpty || !mounted || _live) return;
+      final m = jsonDecode(raw);
+      if (m is! Map || key != _cacheKey(config)) return;
+      Map<String, dynamic>? map(Object? v) => v is Map ? Map<String, dynamic>.from(v) : null;
+      setState(() {
+        _attendance = map(m['attendance']);
+        _summary = map(m['summary']);
+        _work = map(m['work']);
+        _overdueWork = extractMapList(m['overdue_work']);
+        _overdue = extractMapList(m['overdue']);
+        _overdueTotal = (m['overdue_total'] as num?)?.toInt() ?? _overdue.length;
+        _pendingLoaded = m['pending_loaded'] == true;
+        _whatsNew = (m['whats_new'] as num?)?.toInt() ?? 0;
+        final mine = map(m['mine']) ?? const {};
+        _mine
+          ..clear()
+          ..addAll({for (final e in mine.entries) if (e.value is num) e.key: (e.value as num).toInt()});
+        final sparks = map(m['sparks']) ?? const {};
+        _sparks
+          ..clear()
+          ..addAll({
+            for (final e in sparks.entries)
+              if (e.value is List) e.key: [for (final v in e.value as List) (v as num?)?.toInt() ?? 0],
+          });
+        // Saved data on screen; the live load still runs (thin bar at the top).
+        _loading = false;
+        _refreshing = true;
+      });
+    } catch (_) {
+      // A bad or old copy: just wait for the live answer.
+    }
+  }
+
+  void _saveCache() {
+    final config = context.read<AppConfig>();
+    final key = _cacheKey(config);
+    final payload = jsonEncode({
+      'attendance': _attendance,
+      'summary': _summary,
+      'work': _work,
+      'overdue_work': _overdueWork,
+      'overdue': _overdue,
+      'overdue_total': _overdueTotal,
+      'pending_loaded': _pendingLoaded,
+      'whats_new': _whatsNew,
+      'mine': _mine,
+      'sparks': _sparks,
+    });
+    () async {
+      try {
+        await (await SharedPreferences.getInstance()).setString(key, payload);
+      } catch (_) {}
+    }();
+  }
+
+  /// Only what Home shows of the summary: stats + the next appointments (an older server
+  /// sends 150 activity rows; keeping them all would also bloat the saved copy).
+  Map<String, dynamic>? _trimSummary(Map<String, dynamic>? raw) {
+    if (raw == null) return null;
+    final up = raw['upcoming'] is List ? extractMapList(raw['upcoming']) : _futureActivities(extractMapList(raw['activities'])).take(8).toList();
+    return {'stats': raw['stats'] is Map ? raw['stats'] : const <String, dynamic>{}, 'upcoming': up};
+  }
+
+  static Iterable<Map<String, dynamic>> _futureActivities(Iterable<Map<String, dynamic>> all) {
+    final now = thaiNow().subtract(const Duration(hours: 1));
+    return all.where((a) {
+      final d = parseWall(a['date_start']);
+      return d == null || d.isAfter(now);
+    });
+  }
+
   Future<void> _load() async {
     _revision++;
     final had = _summary != null || _attendance != null || _work != null;
@@ -473,34 +535,50 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
       }
     }
 
+    final workspace = MenuAccess.allow(session, MenuAccess.workspace);
+    final activities = MenuAccess.any(session, const [MenuAccess.calendar, MenuAccess.pending]);
+    // Everything the top of Home needs, side by side; one setState when it is all in.
+    // /api/home/work once: its `counts` cover every bucket, its items are the overdue page.
     final results = await Future.wait<Object?>([
       MenuAccess.allow(session, MenuAccess.attendance)
           ? guard(api.getAttendanceSummary())
           : Future<Object?>.value(),
-      guard(api.getHomeSummary()),
-      MenuAccess.allow(session, MenuAccess.workspace)
-          ? guard(api.getHomeWork(limit: 8))
+      guard(api.getHomeSummary(fields: const ['stats', 'upcoming'])),
+      workspace
+          ? guard(api.getHomeWork(bucket: 'overdue', limit: 30))
           : Future<Object?>.value(),
       guard(UnreadNotifications.instance.refresh(api).then((_) => null)),
-      Future<Object?>.value(), // sales: own box with a period filter
-      Future<Object?>.value(), // cases: own box with a period filter
+      activities ? _fetchOverdueActivities(api) : Future<Object?>.value(),
       api.getWhatsNewUnread().then<Object?>((n) => n).catchError((_) => 0),
     ]);
     if (!mounted) return;
+    _live = true;
+    final work = results[2] as Map<String, dynamic>?;
+    final overdue = results[4] as EntityListPage?;
     setState(() {
       _attendance = results[0] as Map<String, dynamic>?;
-      _summary = results[1] as Map<String, dynamic>?;
-      _work = results[2] as Map<String, dynamic>?;
-      _whatsNew = (results[6] as int?) ?? 0;
+      _summary = _trimSummary(results[1] as Map<String, dynamic>?);
+      _work = work == null ? null : {'counts': work['counts']};
+      if (work != null) {
+        _overdueWork = extractMapList(work['items'] ?? work['work'])
+            .where((e) => e['status_is_done'] != true && isWorkType(e))
+            .toList();
+      }
+      if (overdue != null) {
+        _overdue = overdue.items;
+        _overdueTotal = overdue.total ?? overdue.items.length;
+      }
+      // Workspace-only users still get the (empty or task-only) box.
+      if (overdue != null || (!activities && workspace)) _pendingLoaded = true;
+      _whatsNew = (results[5] as int?) ?? 0;
       _error = (_summary == null && _attendance == null && _work == null)
           ? firstError
           : null;
       _loading = false;
       _refreshing = false;
     });
-    _loadOverdue();
-    _loadMine();
-    _loadSparks();
+    _saveCache();
+    _loadStats();
   }
 
   /// New records per day for the last 7 days (Thai days), per stat module.
@@ -515,69 +593,114 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
     return {if (uid != null && uid.isNotEmpty) 'filter[smownerid]': uid};
   }
 
-  Future<void> _loadMine() async {
+  /// "ภาพรวม" figures: one `home-stats` call on newer servers; otherwise the old per-module
+  /// counts (7 totals + 7 × 7 daily counts). One setState per step, not one per request.
+  Future<void> _loadStats() async {
     final config = context.read<AppConfig>();
     final session = config.session;
     final api = config.apiClient;
-    final mine = _mineFilter();
-    await Future.wait([
-      for (final module in _statModules.keys)
-        if (MenuAccess.allow(session, EntityModules.menuKeyOf(module)))
-          () async {
-            try {
-              final page = await api.getEntityList(
-                module,
-                limit: 1,
-                extra: {'with_total': '1', 'cols': 'id', ...mine},
-              );
-              if (mounted)
-                setState(() => _mine[module] = page.total ?? page.items.length);
-            } catch (_) {
-              // keep the tile out rather than show someone else's total
-            }
-          }(),
-    ]);
+    final modules = [
+      for (final m in _statModules.keys)
+        if (MenuAccess.allow(session, EntityModules.menuKeyOf(m))) m,
+    ];
+    if (modules.isEmpty) return;
+    Map<String, dynamic>? stats;
+    try {
+      stats = await api.getHomeStats(days: 7);
+    } catch (_) {}
+    if (!mounted) return;
+    final byModule = stats?['modules'];
+    if (byModule is Map) {
+      int? n(Object? v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}');
+      final mine = <String, int>{};
+      final sparks = <String, List<int>>{};
+      for (final m in modules) {
+        final r = byModule[m];
+        if (r is! Map) continue;
+        final v = n(r['mine']);
+        if (v != null) mine[m] = v;
+        if (r['spark'] is List) sparks[m] = [for (final d in r['spark'] as List) n(d) ?? 0];
+      }
+      setState(() {
+        _mine
+          ..clear()
+          ..addAll(mine);
+        _sparks
+          ..clear()
+          ..addAll(sparks);
+      });
+      _saveCache();
+      return;
+    }
+    final mine = await _fetchMineCounts(api, modules);
+    if (!mounted) return;
+    setState(() => _mine.addAll(mine));
+    final sparks = await _fetchSparks(api, modules);
+    if (!mounted) return;
+    setState(() => _sparks.addAll(sparks));
+    _saveCache();
   }
 
-  Future<void> _loadSparks() async {
-    final config = context.read<AppConfig>();
-    final session = config.session;
-    final api = config.apiClient;
+  /// Older servers: my total per module (limit 1 + with_total).
+  Future<Map<String, int>> _fetchMineCounts(ApiClient api, List<String> modules) async {
+    final mine = _mineFilter();
+    final out = <String, int>{};
+    await Future.wait([
+      for (final module in modules)
+        () async {
+          try {
+            final page = await api.getEntityList(
+              module,
+              limit: 1,
+              extra: {'with_total': '1', 'cols': 'id', ...mine},
+            );
+            out[module] = page.total ?? page.items.length;
+          } catch (_) {
+            // keep the tile out rather than show someone else's total
+          }
+        }(),
+    ]);
+    return out;
+  }
+
+  /// Older servers: one tiny COUNT per module per day (limit 1 + with_total).
+  Future<Map<String, List<int>>> _fetchSparks(ApiClient api, List<String> modules) async {
     final mine = _mineFilter();
     final today = thaiNow();
     final t0 = DateTime(today.year, today.month, today.day);
-    for (final module in _statModules.keys) {
-      if (!MenuAccess.allow(session, EntityModules.menuKeyOf(module))) continue;
-      try {
-        // One tiny COUNT per day (limit 1 + with_total) — cheap even on huge tables.
-        String ymd(DateTime d) =>
-            '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-        final days = await Future.wait([
-          for (var i = 6; i >= 0; i--)
-            () async {
-              final d = ymd(t0.subtract(Duration(days: i)));
-              final page = await api.getEntityList(
-                module,
-                limit: 1,
-                extra: {
-                  'period_field': 'createdtime',
-                  'period_preset': 'custom',
-                  'period_start': d,
-                  'period_end': d,
-                  'with_total': '1',
-                  'cols': 'id',
-                  ...mine,
-                },
-              );
-              return page.total ?? page.items.length;
-            }(),
-        ]);
-        if (!mounted) return;
-        setState(() => _sparks[module] = days);
-      } catch (_) {
-        // Sparklines are a nicety; the tile still shows its total.
-      }
-    }
+    String ymd(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final out = <String, List<int>>{};
+    await Future.wait([
+      for (final module in modules)
+        () async {
+          try {
+            out[module] = await Future.wait([
+              for (var i = 6; i >= 0; i--)
+                () async {
+                  final d = ymd(t0.subtract(Duration(days: i)));
+                  final page = await api.getEntityList(
+                    module,
+                    limit: 1,
+                    extra: {
+                      'period_field': 'createdtime',
+                      'period_preset': 'custom',
+                      'period_start': d,
+                      'period_end': d,
+                      'with_total': '1',
+                      'cols': 'id',
+                      ...mine,
+                    },
+                  );
+                  return page.total ?? page.items.length;
+                }(),
+            ]);
+          } catch (_) {
+            // Sparklines are a nicety; the tile still shows its total.
+          }
+        }(),
+    ]);
+    return out;
   }
 
   int _count(Map<String, dynamic>? m, String key) =>
@@ -588,15 +711,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
     if (!MenuAccess.anyCalendar(context.read<AppConfig>().session)) {
       return const [];
     }
-    final now = thaiNow().subtract(const Duration(hours: 1));
-    final all = extractMapList(_summary?['activities']);
-    return all
-        .where((a) {
-          final d = parseWall(a['date_start']);
-          return d == null || d.isAfter(now);
-        })
-        .take(4)
-        .toList();
+    // `upcoming`: the server's next appointments (newer servers) or the trimmed list;
+    // re-filtered so a saved copy never shows appointments that have passed.
+    final all = extractMapList(_summary?['upcoming'] ?? _summary?['activities']);
+    return _futureActivities(all).take(4).toList();
   }
 
   /// Short plain-language summary of the day (streamed word by word).
@@ -888,7 +1006,44 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
               ],
             ],
           };
-          final content = <Widget>[
+          final grid = HomeWidgetGrid(
+            // Lazy rows while browsing; edit mode needs every cell present to drag.
+            sliver: !_editing,
+            // Widgets this user may not see stay in the saved layout (they
+            // return with the permission) but are never shown.
+            entries: [
+              for (final e
+                  in _editing ? _draft : HomeLayout.instance.entries)
+                if (homeWidgetAllowed(session, e.id)) e,
+            ],
+            editing: _editing,
+            wiggle: _wiggle,
+            onStartEditing: _startEditing,
+            onMove: _move,
+            onHide: _hide,
+            onResize: _resize,
+            onDragUpdate: _onDragUpdate,
+            onDragEnd: _onDragEnd,
+            build: (e) {
+              if (!homeWidgetAllowed(session, e.id)) return null;
+              if (HomeLayout.isChart(e.id)) {
+                return HomeChartCard(
+                  key: ValueKey('chart-${e.id}'),
+                  entry: e,
+                  revision: _revision,
+                  editing: _editing,
+                  onEntryChanged: _entryChanged,
+                );
+              }
+              final w = sections[e.id];
+              if (w == null || w.isEmpty) return null;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: w,
+              );
+            },
+          );
+          final top = <Widget>[
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -907,42 +1062,8 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
                 },
               ),
             ],
-            // Widgets in the user's order; long-press one to arrange.
-            HomeWidgetGrid(
-              // Widgets this user may not see stay in the saved layout (they
-              // return with the permission) but are never shown.
-              entries: [
-                for (final e
-                    in _editing ? _draft : HomeLayout.instance.entries)
-                  if (homeWidgetAllowed(session, e.id)) e,
-              ],
-              editing: _editing,
-              wiggle: _wiggle,
-              onStartEditing: _startEditing,
-              onMove: _move,
-              onHide: _hide,
-              onResize: _resize,
-              onDragUpdate: _onDragUpdate,
-              onDragEnd: _onDragEnd,
-              build: (e) {
-                if (!homeWidgetAllowed(session, e.id)) return null;
-                if (HomeLayout.isChart(e.id)) {
-                  return HomeChartCard(
-                    key: ValueKey('chart-${e.id}'),
-                    entry: e,
-                    revision: _revision,
-                    editing: _editing,
-                    onEntryChanged: _entryChanged,
-                  );
-                }
-                final w = sections[e.id];
-                if (w == null || w.isEmpty) return null;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: w,
-                );
-              },
-            ),
+          ];
+          final footer = <Widget>[
             if (_editing) HomeAddWidgetCard(onTap: _addWidget),
             const SizedBox(height: 20),
             if (!_editing)
@@ -973,7 +1094,14 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
               ),
             if (_editing) const SizedBox(height: 72),
           ];
-          final listPad = EdgeInsets.only(bottom: pad.bottom);
+          // Same centring as [limit], for slivers: content at most 1100 wide, page gutters.
+          Widget limitSliver(Widget sliver) => SliverLayoutBuilder(
+                builder: (context, c) {
+                  final w = c.crossAxisExtent;
+                  final side = (w - math.min(w, maxContent)) / 2 + pad.left;
+                  return SliverPadding(padding: EdgeInsets.symmetric(horizontal: side), sliver: sliver);
+                },
+              );
           return PopScope(
             canPop: !_editing,
             onPopInvokedWithResult: (didPop, _) {
@@ -984,7 +1112,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
                 Positioned.fill(
                   child: _loading
                       ? ListView(
-                          padding: listPad,
+                          padding: EdgeInsets.only(bottom: pad.bottom),
                           children: [
                             hero,
                             const SizedBox(height: 12),
@@ -999,19 +1127,19 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
                             // Tap on empty space while arranging = leave edit mode.
                             behavior: HitTestBehavior.translucent,
                             onTap: _editing ? _confirmExit : null,
-                            child: ListView(
+                            // Each Home widget is its own lazy row: the first frame builds only
+                            // what is on screen (plus a screen below), not every card.
+                            child: CustomScrollView(
+                              key: const ValueKey('home-scroll'),
                               controller: _scroll,
                               physics: const AlwaysScrollableScrollPhysics(),
-                              padding: listPad,
-                              children: [
-                                hero,
-                                limit(
-                                  Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: content,
-                                  ),
-                                ),
+                              cacheExtent: MediaQuery.sizeOf(context).height,
+                              slivers: [
+                                SliverToBoxAdapter(child: hero),
+                                if (top.isNotEmpty) limitSliver(SliverList.list(children: top)),
+                                limitSliver(_editing ? SliverToBoxAdapter(child: grid) : grid),
+                                limitSliver(SliverList.list(children: footer)),
+                                SliverPadding(padding: EdgeInsets.only(bottom: pad.bottom)),
                               ],
                             ),
                           ),

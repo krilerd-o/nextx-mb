@@ -1681,8 +1681,51 @@ class ApiClient {
 
   /// Module counts, recent records and upcoming activities for the home screen
   /// (`GET /api/dashboard/home-summary`, already scoped to the user's menus).
-  Future<Map<String, dynamic>> getHomeSummary() async {
-    return _dataMap(await _send('GET', '/api/dashboard/home-summary'));
+  ///
+  /// [fields] (newer servers): only those parts, e.g. `['stats', 'upcoming']` →
+  /// `{stats, upcoming}` where `upcoming` = the next activities from now (max 4). Older
+  /// servers ignore it and send everything (`activities` = their first 150 rows).
+  Future<Map<String, dynamic>> getHomeSummary({List<String>? fields}) async {
+    return _dataMap(await _send('GET', '/api/dashboard/home-summary', query: {
+      if (fields != null && fields.isNotEmpty) 'fields': fields.join(','),
+    }));
+  }
+
+  /// Routes this server answered 404 (older NEXTX): not asked again for this session.
+  final Set<String> _missingRoutes = {};
+
+  /// A 404 from the server (route missing on an older NEXTX).
+  static bool isNotFound(Object e) =>
+      (e is ApiEnvelopeException && e.statusCode == 404) || (e is ApiException && e.statusCode == 404);
+
+  /// GET of a newer, optional route: null when this server does not have it (404, then
+  /// remembered so the next call goes straight to the caller's fallback).
+  Future<Map<String, dynamic>?> _optionalGet(String path, {Map<String, dynamic>? query}) async {
+    final key = '${_dio.options.baseUrl}|$path';
+    if (_missingRoutes.contains(key)) return null;
+    try {
+      return _dataMap(await _send('GET', path, query: query));
+    } catch (e) {
+      if (isNotFound(e)) {
+        _missingRoutes.add(key);
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  /// `GET /api/dashboard/home-stats?days=` — Home "ภาพรวม" in one call:
+  /// `{modules: {<module>: {mine, total, spark: [days, oldest → newest]}}}`.
+  /// Null on servers without the route (callers fall back to per-module counts).
+  Future<Map<String, dynamic>?> getHomeStats({int days = 7}) =>
+      _optionalGet('/api/dashboard/home-stats', query: {'days': '$days'});
+
+  /// `GET /api/calendar/birthdays/upcoming?days=` — birthdays in the next [days]:
+  /// `{items: [{module, id, name, birthdate, next_date, days_until, avatar_url?}]}`.
+  /// Null on servers without the route.
+  Future<List<Map<String, dynamic>>?> getUpcomingBirthdays({int days = 30}) async {
+    final data = await _optionalGet('/api/calendar/birthdays/upcoming', query: {'days': '$days'});
+    return data == null ? null : extractMapList(data['items']);
   }
 
   /// `GET /api/dashboard/sales` — deal + quotation pipeline (this year by default).

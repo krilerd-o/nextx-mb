@@ -87,6 +87,31 @@ class CalBirthday {
     );
   }
 
+  /// A row of `GET /api/calendar/birthdays/upcoming`
+  /// (`{module, id, name, birthdate, next_date, days_until, avatar_url?}`; phone / email /
+  /// org when the server adds them). [resolve] makes a stored path an absolute URL.
+  static CalBirthday? fromUpcoming(Map<String, dynamic> r, {String Function(String path)? resolve}) {
+    final module = _s(r['module'])?.toLowerCase();
+    final id = _s(r['id']);
+    final born = parseThaiDate(r['birthdate']) ?? parseThaiDate(r['next_date']);
+    if (module == null || !fields.containsKey(module) || id == null || born == null) return null;
+    final name = _s(r['name']);
+    final org = _s(r['org']) ?? _s(r['company_name']) ?? _s(r['account_name']);
+    var image = _s(r['avatar_url']) ?? _s(r['image_url']);
+    if (image != null && !image.startsWith('http') && resolve != null) image = resolve(image.startsWith('/') ? image : '/$image');
+    return CalBirthday(
+      module: module,
+      id: id,
+      name: name ?? tr('(ไม่มีชื่อ)'),
+      born: born,
+      org: org == name ? null : org,
+      phone: _s(r['phone']) ?? _s(r['mobile']) ?? _s(r['mobile_1st']),
+      email: _s(r['email']) ?? _s(r['email_1st']),
+      imageUrl: image,
+      row: r,
+    );
+  }
+
   /// Record type as the CRM names it.
   String get typeLabel => switch (module) {
         'lead' => 'Lead',
@@ -141,6 +166,9 @@ class CalBirthdays extends ChangeNotifier {
   /// Keyed by server + business: another business never sees these.
   static final Map<String, (DateTime, List<CalBirthday>)> _cache = {};
 
+  /// Home's short list (next [BirthdayReminders.days] days from the upcoming route).
+  static final Map<String, (DateTime, List<CalBirthday>)> _upcomingCache = {};
+
   String get _cacheKey => '${_api.baseUrl}|${_api.businessId}';
   static const cacheFor = Duration(minutes: 30);
 
@@ -154,6 +182,7 @@ class CalBirthdays extends ChangeNotifier {
   @visibleForTesting
   static void clearCache() {
     _cache.clear();
+    _upcomingCache.clear();
     _syncedKey = null;
   }
 
@@ -206,14 +235,52 @@ class CalBirthdays extends ChangeNotifier {
       _cache[_cacheKey] = (DateTime.now(), out);
       _syncReminders(out);
     }
+    _apply(out);
+    _loading = false;
+  }
+
+  void _apply(List<CalBirthday> out) {
     _all = out;
     _byMonthDay.clear();
     for (final b in out) {
       _byMonthDay.putIfAbsent('${b.born.month}-${b.born.day}', () => []).add(b);
     }
     loaded = true;
-    _loading = false;
     notifyListeners();
+  }
+
+  /// Home: only the birthdays of the next [BirthdayReminders.days] days, in one small
+  /// request (`/api/calendar/birthdays/upcoming`) instead of paging every Lead / Contact /
+  /// Account with a birthday (up to 10 × 500 rows). Phone reminders only look that far
+  /// ahead, so they are synced from it too. Servers without the route → [load].
+  Future<void> loadUpcoming({bool force = false}) async {
+    if (_loading || (loaded && !force)) return;
+    final full = _cache[_cacheKey];
+    if (!force && full != null && DateTime.now().difference(full.$1) < cacheFor) return load();
+    final hit = _upcomingCache[_cacheKey];
+    if (!force && hit != null && DateTime.now().difference(hit.$1) < cacheFor) {
+      if (_syncedKey != _cacheKey) _syncReminders(hit.$2);
+      _apply(hit.$2);
+      return;
+    }
+    _loading = true;
+    List<Map<String, dynamic>>? rows;
+    try {
+      rows = await _api.getUpcomingBirthdays(days: BirthdayReminders.days);
+    } catch (_) {
+      rows = null;
+    }
+    if (rows == null) {
+      _loading = false;
+      return load(force: force);
+    }
+    final out = [
+      for (final r in rows) ?CalBirthday.fromUpcoming(r, resolve: _api.absoluteUrl),
+    ]..sort((a, b) => a.name.compareTo(b.name));
+    _upcomingCache[_cacheKey] = (DateTime.now(), out);
+    _syncReminders(out);
+    _apply(out);
+    _loading = false;
   }
 
   Future<void> _loadModule(String module, List<CalBirthday> out) async {

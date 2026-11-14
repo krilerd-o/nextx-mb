@@ -38,13 +38,14 @@ class _HomeBirthdayBoxState extends State<HomeBirthdayBox> {
   void initState() {
     super.initState();
     _b.addListener(_changed);
-    _b.load();
+    // The next 30 days only (one request on newer servers).
+    _b.loadUpcoming();
   }
 
   @override
   void didUpdateWidget(covariant HomeBirthdayBox old) {
     super.didUpdateWidget(old);
-    if (old.revision != widget.revision) _b.load(force: true);
+    if (old.revision != widget.revision) _b.loadUpcoming(force: true);
   }
 
   void _changed() {
