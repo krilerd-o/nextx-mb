@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push (FCM via APNs), Release builds (App Store / TestFlight profile): production APNs.
+	     Debug and Profile use Runner.entitlements (development). Keep the other keys in sync. -->
+	<key>aps-environment</key>
+	<string>production</string>
+	<!-- Universal Links — needs /.well-known/apple-app-site-association on the web host. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:moainext.moai-crm.com</string>
+	</array>
+	<!-- Sign in with Apple (App Store rule when Google / LINE sign-in is offered). -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+</dict>
+</plist>

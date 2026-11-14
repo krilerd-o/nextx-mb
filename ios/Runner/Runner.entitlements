@@ -2,7 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Push (FCM via APNs). Xcode switches this to "production" when exporting for App Store. -->
+	<!-- Push (FCM via APNs), Debug + Profile: development APNs. Release uses RunnerRelease.entitlements
+	     (production) - keep the other keys of both files in sync. -->
 	<key>aps-environment</key>
 	<string>development</string>
 	<!-- Universal Links — needs /.well-known/apple-app-site-association on the web host. -->

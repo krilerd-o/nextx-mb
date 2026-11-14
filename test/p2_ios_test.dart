@@ -94,6 +94,24 @@ void main() {
 
     test('Sign in with Apple entitlement', () {
       expect(File('ios/Runner/Runner.entitlements').readAsStringSync(), contains('com.apple.developer.applesignin'));
+      expect(File('ios/Runner/RunnerRelease.entitlements').readAsStringSync(), contains('com.apple.developer.applesignin'));
+    });
+
+    test('push: GoogleService-Info.plist is bundled when CI wrote it; Release uses production APNs', () {
+      // Copied by a build phase (the file is git-ignored; a missing file must not break the build).
+      expect(pbx, contains('/* Bundle GoogleService-Info.plist */,'));
+      expect(pbx, contains(r'SRC=\"${PROJECT_DIR}/Runner/GoogleService-Info.plist\"'));
+      expect(pbx, contains(r'if [ -f \"$SRC\" ]'));
+      expect(pbx, isNot(contains('GoogleService-Info.plist in Resources')));
+      expect(File('.gitignore').readAsStringSync(), contains('ios/Runner/GoogleService-Info.plist'));
+      // Runner target: Debug + Profile → development, Release → production.
+      expect(RegExp(r'CODE_SIGN_ENTITLEMENTS = Runner/Runner\.entitlements;').allMatches(pbx).length, 2);
+      expect(RegExp(r'CODE_SIGN_ENTITLEMENTS = Runner/RunnerRelease\.entitlements;').allMatches(pbx).length, 1);
+      final release = pbx.substring(pbx.indexOf('97C147071CF9000F007C117D /* Release */ = {'));
+      expect(release.substring(0, release.indexOf('name = Release;')), contains('RunnerRelease.entitlements'));
+      String aps(String f) => RegExp(r'<key>aps-environment</key>\s*<string>(\w+)</string>').firstMatch(File(f).readAsStringSync())!.group(1)!;
+      expect(aps('ios/Runner/Runner.entitlements'), 'development');
+      expect(aps('ios/Runner/RunnerRelease.entitlements'), 'production');
     });
   });
 }

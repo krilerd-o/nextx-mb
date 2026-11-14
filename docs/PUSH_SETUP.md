@@ -58,6 +58,11 @@
 2. ส่วน **Apple app configuration** → แอป iOS `com.moai.nextt.mobile` → **APNs Authentication Key** → **Upload**
 3. เลือกไฟล์ `.p8`, ใส่ **Key ID** และ **Team ID** → Upload
 
+> **สำคัญ — ส่งผ่าน Notify (`notify.moai-crm.com`)**: เมื่อเปิดใช้ Notify ในหน้าเว็บ NEXTX (ตั้งค่า → การแจ้งเตือนมือถือ)
+> แจ้งเตือนทั่วไปจะส่งจาก Notify แทนเซิร์ฟเวอร์ NEXTX — **APNs Key ต้องอัปโหลดใน Firebase project เดียวกับที่บัญชี Notify (`moai-nextt`) ใช้ส่ง**
+> และต้องเป็น project เดียวกับไฟล์ `GoogleService-Info.plist` / `google-services.json` ของแอป (token ของ FCM ผูกกับ project — ต่าง project กันจะส่งไม่ถึง)
+> ถ้าไม่แน่ใจ: ดู `project_id` ในไฟล์ทั้งสองของแอป แล้วเทียบกับ project ที่ตั้งไว้ในบัญชี Notify (ทีม Notify ช่วยยืนยันได้)
+
 ## ขั้นที่ 4 — Service Account ให้เซิร์ฟเวอร์ NEXTX ส่งแจ้งเตือน
 
 1. Firebase Console → ⚙ **Project settings** → แท็บ **Service accounts** → **Generate new private key** → Generate key → ได้ไฟล์ `.json`
@@ -127,9 +132,33 @@
 | สายไม่ได้รับ | โทรแล้วไม่รับจนหมดเวลาเรียก (ค่าเริ่มต้น 45 วิ) | ได้แจ้งเตือน "สายที่ไม่ได้รับ" |
 | ต่างเครือข่าย | เครื่องหนึ่ง 4G อีกเครื่อง Wi‑Fi | รับสายแล้วได้ยินเสียงทั้งสองฝั่ง |
 
+## iPhone: แอปได้ token อย่างไร (สำหรับนักพัฒนา)
+
+- **`GoogleService-Info.plist` ต้องอยู่ใน app bundle** — Firebase อ่านไฟล์นี้ตอนเปิดแอป ถ้าไม่มี แอปจะไม่ได้ FCM token เลย (ไม่ขึ้น error ให้เห็น แค่ log `[push] Firebase init skipped`)
+  - CI เขียนไฟล์ลง `ios/Runner/GoogleService-Info.plist` จาก secret `GOOGLE_SERVICE_INFO_PLIST_BASE64` (ไฟล์อยู่ใน `.gitignore` ห้าม commit)
+  - Xcode project มี build phase **"Bundle GoogleService-Info.plist"** (ต่อจาก Copy Bundle Resources) คัดลอกไฟล์เข้า `Runner.app` **เมื่อมีไฟล์** — ไม่ได้ใส่เป็น Resources ตรง ๆ เพราะจะทำให้ build ที่ไม่มี secret (PR, เครื่องนักพัฒนา) พังทันที
+  - build ที่ไม่มีไฟล์จะขึ้น `warning: Runner/GoogleService-Info.plist not found - push notifications are off in this build.` ใน log ของ Xcode
+  - build เองบนเครื่อง: วางไฟล์ที่ดาวน์โหลดจาก Firebase (ขั้นที่ 1) ไว้ที่ `ios/Runner/GoogleService-Info.plist` ก่อน build
+- **APNs environment**
+  - `ios/Runner/Runner.entitlements` (Debug + Profile) = `development` — ใช้กับ build ลงเครื่องจาก Xcode / `flutter run`
+  - `ios/Runner/RunnerRelease.entitlements` (Release) = `production` — ตรงกับ App Store profile ที่ CI ใช้ (TestFlight / App Store รับ push จาก APNs production)
+  - ถ้าแก้ entitlement อื่น (Associated Domains, Sign in with Apple) ต้องแก้ **ทั้งสองไฟล์**
+  - ถ้าจะ `flutter run --release` ลงเครื่องด้วย development profile แล้ว Xcode ฟ้องว่า aps-environment ไม่ตรงกับ profile: ชั่วคราวเปลี่ยน Release → Build Settings → Code Signing Entitlements กลับเป็น `Runner/Runner.entitlements` (อย่า commit)
+- Firebase console: APNs Authentication Key (.p8) ต้องอัปโหลดไว้ใน **Cloud Messaging → Apple app configuration** ของแอป iOS ใน project `moai-nextt` (ขั้นที่ 3) — ใช้ได้ทั้ง development และ production
+
+## กดแจ้งเตือนแล้วแอปทำอะไร
+
+- push ทุกอันมี `data` (ตัวอักษรทั้งหมด): `url`, `id`, `extra`, `notification_id`, `event`, `business_id`, `badge`, `type: "notification"` — แอปแปลงเป็นหน้าในแอป (`lib/core/navigation/notification_deep_link.dart`, `push_tap.dart`)
+- `business_id` ไม่ใช่ของพื้นที่ทำงานที่เปิดอยู่ แต่เครื่องนี้มีพื้นที่ทำงานนั้น → สลับพื้นที่ทำงานก่อนแล้วจึงเปิดเรื่อง
+- `event: app_update` + `store_android` / `store_ios` → เปิดร้านค้าแอปของเครื่องนั้น
+- `leave_request` → หน้าใบลา แท็บอนุมัติ, `leave_result` → หน้าใบลา แท็บของฉัน (ใบที่เกี่ยวข้องขึ้นก่อนและมีกรอบ)
+- `announcement` / `system_notice` / เรื่องที่ไม่มีหน้าในแอป → ศูนย์การแจ้งเตือน เปิดอ่านข้อความเต็ม
+- แอปเปิดอยู่ตอน push มาถึง: นับเลขแจ้งเตือนที่ยังไม่อ่านเพิ่ม (ใช้ `badge` ถ้ามี); iPhone ให้ระบบแสดงแถบเอง (ไม่ซ้ำ 2 อัน) ส่วน Android แอปแสดงเอง
+- ทดสอบได้จากแอป: โปรไฟล์ → จัดการการแจ้งเตือน → **ส่งทดสอบมาที่เครื่องนี้** (`POST /api/notifications/test`)
+
 ## ข้อควรรู้ / แก้ปัญหา
 
-- **iPhone ไม่ขึ้นแจ้งเตือน** → ตรวจขั้นที่ 3 (อัป .p8 ใน Firebase แล้ว) และ build มาจาก CI รอบหลังใส่ `GOOGLE_SERVICE_INFO_PLIST_BASE64`
+- **iPhone ไม่ขึ้นแจ้งเตือน** → ตรวจขั้นที่ 3 (อัป .p8 ใน Firebase project เดียวกับที่ Notify ใช้แล้ว) และ build มาจาก CI รอบหลังใส่ `GOOGLE_SERVICE_INFO_PLIST_BASE64` (log ของ Xcode ต้องมี `Bundled GoogleService-Info.plist`)
 - **สายเข้า iPhone ไม่ขึ้นตอนปิดแอป** → APNs ในหน้าตั้งค่าการโทรต้องเป็น **Production** และ Activate แล้ว (build จาก TestFlight ใช้ Production เสมอ)
 - **Android 14 ขึ้นไป** ถ้าสายเข้าขึ้นเป็นแค่แถบแจ้งเตือน (ไม่เต็มจอ): ตั้งค่าเครื่อง → แอป → NEXTX → การแจ้งเตือน → เปิด **"แจ้งเตือนแบบเต็มหน้าจอ"**
 - **Huawei / Xiaomi / OPPO / vivo** บางรุ่น: ตั้งค่า → แบตเตอรี่ → แอป NEXTX → **ไม่จำกัด / อนุญาตทำงานเบื้องหลัง** ไม่งั้นแจ้งเตือนอาจช้า
