@@ -18,6 +18,7 @@ import '../../widgets/fields/nx_pick_option.dart';
 import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_hero_cta.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_surface_card.dart';
@@ -485,7 +486,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
       builder: (ctx) => AlertDialog(
         title: Text(tr('บันทึกเป็นเทมเพลตกิจกรรม')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(key: const ValueKey('tpl-name'), controller: name, autofocus: true, decoration: InputDecoration(labelText: '${tr('ชื่อเทมเพลต')} *')),
+          TextField(key: const ValueKey('tpl-name'), controller: name, autofocus: true, decoration: NxFieldStyle.input(context, label: 'ชื่อเทมเพลต', required: true)),
           const SizedBox(height: 8),
           TextField(controller: category, decoration: InputDecoration(labelText: tr('หมวด (ไม่บังคับ)'))),
           const SizedBox(height: 8),

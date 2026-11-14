@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../core/i18n.dart';
 import 'app_bottom_sheet.dart';
+import 'fields/nx_field_chrome.dart';
 import 'nx_icons.dart';
 
 /// Shared confirm sheets: status changes (every module) and swipe actions
@@ -315,10 +316,10 @@ class _StatusConfirmBodyState extends State<_StatusConfirmBody> {
             minLines: 1,
             maxLines: 4,
             textInputAction: TextInputAction.newline,
-            decoration: InputDecoration(
-              labelText: widget.noteLabel != null
-                  ? tr(widget.noteLabel!) + (widget.requireReason ? ' *' : '')
-                  : (widget.requireReason ? '${tr('เหตุผล')} *' : tr('หมายเหตุ (ไม่บังคับ)')),
+            decoration: NxFieldStyle.input(
+              context,
+              label: widget.noteLabel ?? (widget.requireReason ? 'เหตุผล' : 'หมายเหตุ (ไม่บังคับ)'),
+              required: widget.requireReason,
             ),
             onChanged: (_) => setState(() {}),
           ),

@@ -11,6 +11,7 @@ import '../../services/api_client.dart';
 import '../../core/entity_display.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_confirm_sheet.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_status_stepper.dart';
 import 'status_followups.dart' show pickJourneyUser;
@@ -692,7 +693,7 @@ class CaseFlows {
               controller: note,
               minLines: 2,
               maxLines: 4,
-              decoration: InputDecoration(labelText: '${tr('เหตุผลที่ยกเลิก')} *'),
+              decoration: NxFieldStyle.input(context, label: 'เหตุผลที่ยกเลิก', required: true, multiline: true),
               onChanged: (_) => setS(() {}),
             ),
             const SizedBox(height: 18),

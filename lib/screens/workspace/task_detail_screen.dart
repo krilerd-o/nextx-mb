@@ -413,7 +413,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             keyboardType: keyboard,
             maxLines: keyboard == TextInputType.multiline ? 8 : 1,
             minLines: 1,
-            decoration: InputDecoration(hintText: hint, errorText: error, border: const OutlineInputBorder()),
+            decoration: InputDecoration(hintText: hint, errorText: error),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),

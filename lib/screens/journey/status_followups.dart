@@ -10,6 +10,7 @@ import '../../services/api_client.dart';
 import '../../core/entity_display.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_confirm_sheet.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import '../deep_link_loaders.dart';
 import 'job_report_signatures.dart' show handleJobCloseSignatureError, jobSignaturesRequiredText, showJobSignaturesRequired;
@@ -186,7 +187,7 @@ Future<_ActionForm?> _askForm(
               controller: ctrl,
               minLines: 2,
               maxLines: 5,
-              decoration: InputDecoration(labelText: tr(noteLabel) + (noteRequired ? ' *' : '')),
+              decoration: NxFieldStyle.input(context, label: noteLabel, required: noteRequired, multiline: true),
               onChanged: (_) => setS(() {}),
             ),
             if (noteChips.isNotEmpty) ...[
@@ -818,7 +819,7 @@ class QuotationFlows {
               key: const ValueKey('qt-mail-to'),
               controller: toCtrl,
               keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(labelText: '${tr('ถึง')} *', prefixIcon: const Icon(NxI.envelope)),
+              decoration: NxFieldStyle.input(context, label: 'ถึง', required: true, icon: NxI.envelope),
               onChanged: (_) => setS(() {}),
             ),
             const SizedBox(height: 12),

@@ -9,6 +9,7 @@ import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
 import '../../core/workspace_models.dart';
 import '../../widgets/app_bottom_sheet.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
@@ -364,24 +365,24 @@ class _LogTimeBodyState extends State<_LogTimeBody> {
               hintText: '1h 30m',
               errorText: _error,
               prefixIcon: const Icon(NxI.timer),
-              border: const OutlineInputBorder(),
             ),
             onChanged: (_) => setState(() => _error = null),
           ),
           const SizedBox(height: 10),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(NxI.calendarBlank),
-            title: Text(tr('วันเวลาที่ทำ')),
-            subtitle: Text('${_when.day}/${_when.month}/${uiYear(_when.year)} ${two(_when.hour)}:${two(_when.minute)}'),
-            trailing: const Icon(NxI.caretRight),
+          NxOutlinedTapField(
+            label: 'วันเวลาที่ทำ',
+            isEmpty: false,
+            prefixIcon: const Icon(NxI.calendarBlank),
+            suffixIcon: const Icon(NxI.caretDown),
             onTap: _pickWhen,
+            child: Text('${_when.day}/${_when.month}/${uiYear(_when.year)} ${two(_when.hour)}:${two(_when.minute)}'),
           ),
+          const SizedBox(height: 10),
           TextField(
             controller: _desc,
             minLines: 2,
             maxLines: 5,
-            decoration: InputDecoration(labelText: tr('รายละเอียดงาน'), border: const OutlineInputBorder()),
+            decoration: InputDecoration(labelText: tr('รายละเอียดงาน')),
           ),
           const SizedBox(height: 10),
           TextField(
@@ -389,7 +390,6 @@ class _LogTimeBodyState extends State<_LogTimeBody> {
             decoration: InputDecoration(
               labelText: tr('เวลาคงเหลือ (ไม่บังคับ)'),
               hintText: '2h',
-              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 14),

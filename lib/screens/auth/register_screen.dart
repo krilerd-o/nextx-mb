@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_config.dart';
 import '../../core/auth_errors.dart';
 import '../../widgets/nx_hero_cta.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import '../../core/i18n.dart';
 
@@ -81,12 +82,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  InputDecoration _dec(String label, IconData icon, {bool required = true}) => InputDecoration(
-        label: required ? nxRequiredLabel(context, tr(label)) : Text(tr(label)),
-        prefixIcon: Icon(icon),
-        filled: true,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-      );
+  InputDecoration _dec(String label, IconData icon, {bool required = true, Widget? suffix}) =>
+      NxFieldStyle.input(context, label: label, icon: icon, required: required, suffix: suffix);
 
   @override
   Widget build(BuildContext context) {
@@ -147,11 +144,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: TextFormField(
                   controller: _password,
                   obscureText: _obscure,
-                  decoration: _dec('รหัสผ่าน', NxI.password).copyWith(
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscure ? NxI.eye : NxI.eyeOff),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
+                  decoration: _dec(
+                    'รหัสผ่าน',
+                    NxI.password,
+                    suffix: NxPasswordToggle(obscured: _obscure, onToggle: () => setState(() => _obscure = !_obscure)),
                   ),
                   // Strength rules live on the server (authValidation.js) — its message is shown.
                   validator: (v) => (v == null || v.isEmpty) ? tr('กรุณากรอกรหัสผ่าน') : null,

@@ -306,7 +306,7 @@ class _MailComposeScreenState extends State<MailComposeScreen> {
             minLines: 8,
             maxLines: null,
             keyboardType: TextInputType.multiline,
-            decoration: InputDecoration(labelText: tr('ข้อความ'), alignLabelWithHint: true, border: OutlineInputBorder()),
+            decoration: InputDecoration(labelText: tr('ข้อความ'), alignLabelWithHint: true),
           ),
           if (_seed.quotedHtml != null) ...[
             const SizedBox(height: 16),

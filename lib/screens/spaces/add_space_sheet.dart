@@ -7,6 +7,7 @@ import '../../core/i18n.dart';
 import '../../core/server_profile.dart';
 import '../../core/spaces.dart';
 import '../../services/api_client.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import 'space_switcher.dart';
 import '../auth/qr_login_scan_screen.dart';
@@ -159,18 +160,7 @@ class _AddSpaceSheetState extends State<_AddSpaceSheet> {
       IconData icon, {
       Widget? suffix,
       String? hint,
-    }) => InputDecoration(
-      labelText: tr(label),
-      hintText: hint,
-      prefixIcon: Icon(icon, size: 20),
-      suffixIcon: suffix,
-      filled: true,
-      fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
-      ),
-    );
+    }) => NxFieldStyle.input(context, label: label, hint: hint, icon: icon, suffix: suffix);
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
@@ -443,10 +433,7 @@ class _AddSpaceSheetState extends State<_AddSpaceSheet> {
                     decoration: deco(
                       'รหัสผ่าน',
                       NxI.password,
-                      suffix: IconButton(
-                        icon: Icon(_show ? NxI.eyeSlash : NxI.eye, size: 20),
-                        onPressed: () => setState(() => _show = !_show),
-                      ),
+                      suffix: NxPasswordToggle(obscured: !_show, onToggle: () => setState(() => _show = !_show)),
                     ),
                   ),
                   AnimatedSize(

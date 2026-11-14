@@ -8,6 +8,7 @@ import '../../core/nx_page_route.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_app_header.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_shake.dart';
@@ -497,7 +498,7 @@ class _CustomViewEditorScreenState extends State<CustomViewEditorScreen> {
                   child: TextField(
                     controller: _name,
                     readOnly: widget.initial?['is_system'] == true,
-                    decoration: InputDecoration(label: nxRequiredLabel(context, tr('ชื่อมุมมอง'))),
+                    decoration: NxFieldStyle.input(context, label: 'ชื่อมุมมอง', required: true),
                   ),
                 ),
                 _section('ใครเห็นมุมมองนี้', [

@@ -738,7 +738,7 @@ class _JobActivityGenScreenState extends State<JobActivityGenScreen> {
               key: const ValueKey('gen-subject'),
               controller: _subject,
               onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(hintText: tr('เช่น เข้าหน้างาน ตรวจเช็คแอร์'), border: const OutlineInputBorder()),
+              decoration: InputDecoration(hintText: tr('เช่น เข้าหน้างาน ตรวจเช็คแอร์')),
             ),
           ),
           _section(
@@ -839,7 +839,7 @@ class _JobActivityGenScreenState extends State<JobActivityGenScreen> {
                 key: const ValueKey('gen-prefix'),
                 controller: _prefix,
                 onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(hintText: tr('เช่น [JOB-001]'), border: const OutlineInputBorder()),
+                decoration: InputDecoration(hintText: tr('เช่น [JOB-001]')),
               ),
               if ('${_job['job_no'] ?? ''}'.isNotEmpty) ...[
                 const SizedBox(height: 8),

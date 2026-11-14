@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/doc_form/job_form_rules.dart';
 import '../../core/i18n.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 
 /// Building blocks of the job step form: pick tiles / rows that open the
@@ -78,41 +79,23 @@ class JobFieldRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final bad = error != null;
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-      Material(
-        color: theme.brightness == Brightness.dark ? cs.surfaceContainerHighest.withValues(alpha: 0.45) : cs.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: bad ? cs.error : cs.outlineVariant.withValues(alpha: 0.6), width: bad ? 1.4 : 1),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-            child: Row(children: [
-              Icon(icon, size: 20, color: bad ? cs.error : cs.onSurfaceVariant),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('${tr(label)}${required ? ' *' : ''}', style: theme.textTheme.labelMedium?.copyWith(color: bad ? cs.error : cs.onSurfaceVariant)),
-                  Text(value, key: valueKey, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600, color: muted ? cs.onSurfaceVariant : null)),
-                  if (hint != null && hint!.isNotEmpty) Text(hint!, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                ]),
-              ),
-              ?trailing,
-              if (onTap != null) Icon(NxI.caretRight, size: 18, color: cs.onSurfaceVariant),
-            ]),
-          ),
-        ),
-      ),
-      if (bad)
-        Padding(
-          padding: const EdgeInsets.only(top: 6, left: 12),
-          child: Text(tr(error!), style: theme.textTheme.bodySmall?.copyWith(color: cs.error, fontWeight: FontWeight.w600)),
-        ),
-    ]);
+    // The standard field box (same as the Lead / entity form pickers):
+    // label on the border, icon inside, caret when it opens a picker.
+    final caret = onTap == null ? null : Icon(NxI.caretDown, size: 20, color: cs.onSurfaceVariant);
+    return NxOutlinedTapField(
+      label: label,
+      required: required,
+      isEmpty: false,
+      multiLine: true,
+      errorText: error,
+      onTap: onTap,
+      prefixIcon: Icon(icon),
+      suffixIcon: trailing == null ? caret : Row(mainAxisSize: MainAxisSize.min, children: [trailing!, ?caret]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Text(value, key: valueKey, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge?.copyWith(color: muted ? cs.onSurfaceVariant : null)),
+        if (hint != null && hint!.isNotEmpty) Text(hint!, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+      ]),
+    );
   }
 }
 

@@ -14,6 +14,7 @@ import '../../services/apple_auth.dart';
 import '../../services/google_auth.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_app_logo.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import '../crm/field_gallery_screen.dart';
 import 'line_login_screen.dart';
@@ -267,13 +268,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _code.clear();
   });
 
-  InputDecoration _dec(String label, IconData icon) => InputDecoration(
-    labelText: trn(label),
-    prefixIcon: Icon(icon),
-    filled: true,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-  );
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -289,8 +283,8 @@ class _LoginScreenState extends State<LoginScreen> {
     };
 
     final err = _error ?? config.authLinkError;
-    InputDecoration field(String label, IconData icon) =>
-        _dec(label, icon).copyWith(fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.6), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16));
+    InputDecoration field(String label, IconData icon, {Widget? suffix, bool counter = true}) =>
+        NxFieldStyle.input(context, label: label, icon: icon, suffix: suffix, counter: counter);
 
     return Scaffold(
       body: Stack(
@@ -373,14 +367,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                 _Mode.otpEmail => 'อีเมล',
                                 _Mode.otpSms => 'เบอร์มือถือ',
                                 _Mode.scan => '',
-                              }, sms ? NxI.phone : NxI.envelope).copyWith(
+                              }, sms ? NxI.phone : NxI.envelope,
                                 // Saved accounts live behind one small button instead of a row of chips.
-                                suffixIcon: config.recentAccounts.isEmpty || sms || (otp && _otpSent)
+                                suffix: config.recentAccounts.isEmpty || sms || (otp && _otpSent)
                                     ? null
-                                    : IconButton(
+                                    : NxFieldAction(
                                         key: const ValueKey('login-recent'),
-                                        tooltip: tr('บัญชีที่เคยใช้'),
-                                        icon: const Icon(NxI.users, size: 20),
+                                        tooltip: 'บัญชีที่เคยใช้',
+                                        icon: NxI.users,
                                         onPressed: _loading ? null : () => _pickRecent(config),
                                       ),
                               ),
@@ -397,12 +391,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   obscureText: _obscure,
                                   autofillHints: const [AutofillHints.password],
                                   onSubmitted: (_) => _loading ? null : _primary(),
-                                  decoration: field('รหัสผ่าน', NxI.password).copyWith(
-                                    suffixIcon: IconButton(
-                                      tooltip: trn(_obscure ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน'),
-                                      icon: Icon(_obscure ? NxI.eye : NxI.eyeOff, size: 20),
-                                      onPressed: () => setState(() => _obscure = !_obscure),
-                                    ),
+                                  decoration: field(
+                                    'รหัสผ่าน',
+                                    NxI.password,
+                                    suffix: NxPasswordToggle(obscured: _obscure, onToggle: () => setState(() => _obscure = !_obscure)),
                                   ),
                                 )
                               : _otpSent
@@ -416,7 +408,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 10, fontWeight: FontWeight.w700),
                                   autofillHints: const [AutofillHints.oneTimeCode],
                                   onSubmitted: (_) => _loading ? null : _primary(),
-                                  decoration: field('รหัส OTP 6 หลัก', NxI.shieldCheck).copyWith(counterText: ''),
+                                  decoration: field('รหัส OTP 6 หลัก', NxI.shieldCheck, counter: false),
                                 )
                               : const SizedBox(width: double.infinity),
                         ),

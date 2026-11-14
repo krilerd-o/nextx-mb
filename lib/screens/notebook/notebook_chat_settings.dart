@@ -7,6 +7,7 @@ import '../../core/notebook/notebook_models.dart';
 import '../../services/api_exceptions.dart';
 import '../../services/notebook/notebook_controller.dart';
 import '../../widgets/app_bottom_sheet.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_sliding_segmented.dart';
 import 'notebook_widgets.dart';
@@ -80,17 +81,10 @@ class _NotebookChatSettingsFormState extends State<NotebookChatSettingsForm> {
     }
   }
 
-  InputDecoration _field(BuildContext context, String hint) {
-    final cs = Theme.of(context).colorScheme;
-    return InputDecoration(
-      hintText: tr(hint),
-      isDense: true,
-      filled: true,
-      fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-      contentPadding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6))),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6))),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: kNotebookAccent, width: 1.5)),
+  /// The standard input box (the notebook accent marks focus).
+  InputDecoration _field(BuildContext context, String hint, {bool multiline = false}) {
+    return NxFieldStyle.input(context, hint: hint, multiline: multiline).copyWith(
+      focusedBorder: NxFieldStyle.border(kNotebookAccent, width: 1.5),
     );
   }
 
@@ -151,7 +145,7 @@ class _NotebookChatSettingsFormState extends State<NotebookChatSettingsForm> {
                   onChanged: (_) {
                     if (_error != null) setState(() => _error = null);
                   },
-                  decoration: _field(context, 'เช่น ตอบเหมือนที่ปรึกษาฝ่ายขาย เน้นตัวเลขและขั้นตอนที่ทำได้จริง'),
+                  decoration: _field(context, 'เช่น ตอบเหมือนที่ปรึกษาฝ่ายขาย เน้นตัวเลขและขั้นตอนที่ทำได้จริง', multiline: true),
                 ),
               ),
       ),

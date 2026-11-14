@@ -9,6 +9,7 @@ import '../../core/navigation/app_routes.dart';
 import '../../core/server_profile.dart';
 import '../../services/api_client.dart';
 import '../../widgets/nx_hero_cta.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_sliding_segmented.dart';
 import '../../widgets/nx_step_header.dart';
@@ -268,25 +269,24 @@ class _ServerScreenState extends State<ServerScreen> {
                     textInputAction: TextInputAction.go,
                     onChanged: (_) => setState(() => _error = null),
                     onSubmitted: (_) => _connect(),
-                    decoration: InputDecoration(
-                      labelText: tr(_scan ? 'ที่อยู่จาก QR' : 'ที่อยู่เซิร์ฟเวอร์'),
-                      hintText: tr('crm.yourcompany.com'),
-                      prefixIcon: const Icon(NxI.link),
-                      suffixIcon: _url.text.isEmpty || _busy
+                    decoration: NxFieldStyle.input(
+                      context,
+                      label: _scan ? 'ที่อยู่จาก QR' : 'ที่อยู่เซิร์ฟเวอร์',
+                      hint: 'crm.yourcompany.com',
+                      icon: NxI.link,
+                      suffix: _url.text.isEmpty || _busy
                           ? null
-                          : IconButton(
+                          : NxFieldAction(
                               key: const ValueKey('server-url-clear'),
-                              tooltip: tr('ล้างช่อง'),
-                              icon: const Icon(NxI.x),
+                              tooltip: 'ล้างช่อง',
+                              icon: NxI.x,
                               onPressed: () => setState(() {
                                 _url.clear();
                                 _error = null;
                                 _scanLocked = false;
                               }),
                             ),
-                      filled: true,
-                      errorText: trn(_error),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      errorText: _error,
                     ),
                   ),
                   const SizedBox(height: 8),

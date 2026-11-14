@@ -229,7 +229,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           decoration: NxFieldStyle.input(
             context,
             label: f.label,
-            icon: f.icon,
+            // Multi-line boxes carry no icon (like the entity forms).
+            icon: f.lines > 1 ? null : f.icon,
             hint: f.hint,
             required: f.key == 'first_name_th',
             multiline: f.lines > 1,

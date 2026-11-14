@@ -10,6 +10,7 @@ import '../../core/html_display.dart';
 import '../../core/i18n.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
+import '../../widgets/fields/nx_field_chrome.dart';
 import '../../widgets/fields/nx_lift_sheet.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_hero_cta.dart';
@@ -333,15 +334,16 @@ class _ActivityFormScreenState extends State<ActivityFormScreen> {
             controller: _subject,
             autofocus: !widget.isEdit && _subject.text.isEmpty,
             textCapitalization: TextCapitalization.sentences,
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             onChanged: (_) => _subjectError == null ? null : setState(() => _subjectError = null),
-            decoration: InputDecoration(
-              hintText: tr('เพิ่มชื่อกิจกรรม'),
-              errorText: _subjectError == null ? null : tr(_subjectError!),
-              border: InputBorder.none,
-              filled: false,
+            decoration: NxFieldStyle.input(
+              context,
+              label: 'ชื่อกิจกรรม',
+              required: true,
+              hint: 'เพิ่มชื่อกิจกรรม',
+              errorText: _subjectError,
             ),
           ),
+          const SizedBox(height: 12),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(children: [

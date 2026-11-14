@@ -157,10 +157,10 @@ class NxFormField extends StatelessWidget {
           onChanged: _on ? (v) => onChanged?.call(v) : null,
           hint: hint ?? 'name@email.com',
           keyboard: TextInputType.emailAddress,
-          prefix: IconButton(
-            tooltip: tr('ส่งอีเมล'),
+          prefix: NxFieldAction(
+            tooltip: 'ส่งอีเมล',
             onPressed: () => _launchAction(FieldUiType.email, value?.toString()),
-            icon: Icon(nxTypeIcon(IconDataSpec.email), size: 20, color: _muted(context)),
+            icon: nxTypeIcon(IconDataSpec.email),
           ),
           enabled: _on,
         );
@@ -170,10 +170,10 @@ class NxFormField extends StatelessWidget {
           onChanged: _on ? (v) => onChanged?.call(digitsOnly(v, 10)) : null,
           hint: hint ?? '0xx-xxx-xxxx',
           keyboard: TextInputType.phone,
-          prefix: IconButton(
-            tooltip: tr('โทร'),
+          prefix: NxFieldAction(
+            tooltip: 'โทร',
             onPressed: () => _launchAction(FieldUiType.phone, digitsOnly(value, 10)),
-            icon: Icon(nxTypeIcon(IconDataSpec.phone), size: 20, color: _muted(context)),
+            icon: nxTypeIcon(IconDataSpec.phone),
           ),
           inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
           enabled: _on,
@@ -184,10 +184,10 @@ class NxFormField extends StatelessWidget {
           onChanged: _on ? (v) => onChanged?.call(v) : null,
           hint: hint ?? 'https://',
           keyboard: TextInputType.url,
-          prefix: IconButton(
-            tooltip: tr('เปิดลิงก์'),
+          prefix: NxFieldAction(
+            tooltip: 'เปิดลิงก์',
             onPressed: () => _launchAction(FieldUiType.link, value?.toString()),
-            icon: Icon(nxTypeIcon(IconDataSpec.link), size: 20, color: _muted(context)),
+            icon: nxTypeIcon(IconDataSpec.link),
           ),
           enabled: _on,
         );
