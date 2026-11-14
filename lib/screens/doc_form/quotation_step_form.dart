@@ -605,9 +605,8 @@ class QuotationStepFormState extends State<QuotationStepForm> {
           ctrl.qtSettings = await api.getQuotationSettings();
         } catch (_) {}
         if (!mounted) return;
-        final levels = await showSubmitApprovalSheet(context, ctrl: ctrl, row: _savedRow);
+        final levels = await showSubmitApprovalSheet(context, ctrl: ctrl, row: _savedRow, onSubmit: (l) => api.submitQuotationApprovalLevels(id, l));
         if (levels != null) {
-          await api.submitQuotationApprovalLevels(id, levels);
           HapticFeedback.mediumImpact();
           _snack('บันทึกและส่งขออนุมัติแล้ว');
         }

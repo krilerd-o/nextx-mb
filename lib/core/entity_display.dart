@@ -302,6 +302,33 @@ String userDisplayName(Map<String, dynamic> u) {
   return id.isEmpty ? 'ผู้ใช้' : 'User #$id';
 }
 
+/// Full name of a NEXTX user row for people pickers: the Thai name
+/// (`first_name_th` + `last_name_th`, from `/api/users`) when [thai] and the
+/// row has one, otherwise [userDisplayName] (first + last, then e-mail).
+String userFullName(Map<String, dynamic> u, {bool thai = true}) {
+  if (thai) {
+    final th = [u['first_name_th'], u['last_name_th']]
+        .map((e) => e?.toString().trim() ?? '')
+        .where((e) => e.isNotEmpty && e != 'null')
+        .join(' ');
+    if (th.isNotEmpty) return th;
+  }
+  return userDisplayName(u);
+}
+
+/// Second line under a user's name: position · department, else the e-mail
+/// (null when the row has neither, or the e-mail is already the name).
+String? userSubtitle(Map<String, dynamic> u, {bool thai = true}) {
+  final parts = [u['title'], u['position'], u['department']]
+      .map((e) => e?.toString().trim() ?? '')
+      .where((e) => e.isNotEmpty && e != 'null')
+      .toSet()
+      .toList();
+  if (parts.isNotEmpty) return parts.join(' · ');
+  final mail = userEmail(u);
+  return mail == null || mail == userFullName(u, thai: thai) ? null : mail;
+}
+
 /// Email for a NEXTX user row, if any.
 String? userEmail(Map<String, dynamic> u) {
   final v = (u['email1'] ?? u['email'])?.toString().trim() ?? '';

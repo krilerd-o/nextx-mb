@@ -3909,6 +3909,19 @@ const Map<String, String> enStrings = {
   'โหลดรูปใหม่จากเซิร์ฟเวอร์ ไม่ลบข้อมูลของคุณ': 'Reloads pictures from the server; your data stays',
   'ล้างแคชรูปภาพแล้ว': 'Image cache cleared',
   'อยู่ในหน้าอื่น': 'On another page',
+  'เลือกผู้อนุมัติแต่ละระดับ — ข้ามระดับต้นได้ แต่ต้องเลือกระดับสุดท้าย อนุมัติเรียงตามระดับ': 'Choose approvers for each level — earlier levels can be skipped, the last one is required. Approval goes level by level',
+  'โหลดชื่อผู้อนุมัติไม่สำเร็จ': 'Could not load approver names',
+  'เลือกผู้อนุมัติระดับสุดท้ายก่อนส่ง': 'Choose a final-level approver before sending',
+  'ระดับสุดท้าย': 'Final level',
+  'ต้องเลือก': 'Required',
+  'ระดับ': 'Level',
+  'เลือกแล้ว': 'Selected',
+  'ครบทุกคน': 'Everyone',
+  'คนใดคนหนึ่ง': 'Any one',
+  'ข้ามได้': 'Optional',
+  'ไม่มีรายชื่อผู้อนุมัติสำหรับระดับนี้': 'No approvers set for this level',
+  'ไม่พบชื่อที่ค้นหา': 'No matching names',
+  'ไม่พบผู้ใช้นี้ในรายชื่อ': 'Not found in the user list',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.

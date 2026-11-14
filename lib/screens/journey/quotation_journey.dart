@@ -10,10 +10,12 @@ import '../../core/status_labels.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_client.dart';
 import '../../widgets/app_bottom_sheet.dart';
+import '../../widgets/nx_avatar.dart' show nxRememberUserPhotos, nxUserPhotos;
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_status_stepper.dart';
 import '../crm/entity_detail_parts.dart' show commentAttachments;
 import 'job_journey.dart' show showPublicLinkSheet;
+import 'approval_request_sheet.dart';
 import 'journey_controller.dart';
 import 'journey_photos.dart';
 import '../docs/doc_email_sheet.dart';
@@ -430,85 +432,37 @@ class QuotationApprovalTab extends StatelessWidget {
   }
 }
 
-/// Approver picker per level (settings `approval.levels`, candidates limit the list).
-Future<List<Map<String, dynamic>>?> showSubmitApprovalSheet(BuildContext context, {required JourneyController ctrl, Map<String, dynamic>? row}) async {
+/// "ส่งขออนุมัติ": approver picker per level (settings `approval.levels`,
+/// candidates limit the list — ids resolved to names). With [onSubmit] the
+/// sheet sends and stays open on an error; returns the levels sent.
+Future<List<Map<String, dynamic>>?> showSubmitApprovalSheet(
+  BuildContext context, {
+  required JourneyController ctrl,
+  Map<String, dynamic>? row,
+  Future<void> Function(List<Map<String, dynamic>> levels)? onSubmit,
+}) async {
   final api = context.read<AppConfig>().apiClient;
-  List<Map<String, dynamic>> users = const [];
-  try {
-    users = await api.getUsersCached();
-  } catch (_) {}
-  if (!context.mounted) return null;
-  var levels = ctrl.approvalLevels;
-  if (levels.isEmpty) {
-    levels = [
-      {'level': 1, 'label': tr('ผู้อนุมัติ'), 'mode': 'any'},
-    ];
-  }
-  final picked = <int, Set<String>>{for (final l in levels) (l['level'] as num?)?.toInt() ?? 1: <String>{}};
+  var levels = [for (final l in ctrl.approvalLevels) ApprovalLevel.fromMap(l)]..sort((a, b) => a.level.compareTo(b.level));
+  if (levels.isEmpty) levels = const [ApprovalLevel(level: 1)];
   // Pre-fill from the previous chain.
+  final pre = <int, Set<String>>{};
   for (final st in quotationApprovalSteps(row)) {
-    picked[st.level]?.addAll(st.users.map((u) => '$u'));
+    if (levels.any((l) => l.level == st.level)) pre.putIfAbsent(st.level, () => {}).addAll(st.users.map((u) => '$u'));
   }
-  String uid(Map<String, dynamic> u) => (u['user_id'] ?? u['id']).toString();
-  String uname(Map<String, dynamic> u) => (u['display_name'] ?? u['name'] ?? u['email'] ?? uid(u)).toString();
   return showAppBottomSheet<List<Map<String, dynamic>>>(
     context: context,
     title: tr('ส่งขออนุมัติ'),
-    child: StatefulBuilder(builder: (ctx, setS) {
-      final theme = Theme.of(ctx);
-      final lastLevel = (levels.last['level'] as num?)?.toInt() ?? 1;
-      final ok = picked[lastLevel]?.isNotEmpty == true;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final l in levels) ...[
-            Builder(builder: (_) {
-              final lv = (l['level'] as num?)?.toInt() ?? 1;
-              final cand = {for (final c in (l['candidates'] as List? ?? const [])) '$c'};
-              final pool = [for (final u in users) if (cand.isEmpty || cand.contains(uid(u))) u];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${l['label'] ?? '${tr('ระดับ')} $lv'} · ${tr(lv == lastLevel ? 'ต้องเลือก' : 'ข้ามได้')}',
-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final u in pool.take(40))
-                        FilterChip(
-                          key: ValueKey('approver-$lv-${uid(u)}'),
-                          label: Text(uname(u)),
-                          selected: picked[lv]!.contains(uid(u)),
-                          onSelected: (v) => setS(() => v ? picked[lv]!.add(uid(u)) : picked[lv]!.remove(uid(u))),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              );
-            }),
-          ],
-          SizedBox(
-            height: 50,
-            child: FilledButton(
-              key: const ValueKey('approval-submit'),
-              onPressed: ok
-                  ? () => Navigator.pop(ctx, [
-                        for (final e in picked.entries)
-                          if (e.value.isNotEmpty) {'level': e.key, 'user_ids': [for (final s in e.value) int.tryParse(s) ?? s]},
-                      ])
-                  : null,
-              child: Text(tr('ส่งขออนุมัติ')),
-            ),
-          ),
-        ],
-      );
-    }),
+    child: ApprovalRequestSheet(
+      levels: levels,
+      preselected: pre,
+      onSubmit: onSubmit,
+      loadUsers: () async {
+        final users = await api.getUsersCached();
+        nxRememberUserPhotos(users, api.absoluteUrl);
+        return users;
+      },
+      photoOf: (id) => nxUserPhotos[id],
+    ),
   );
 }
 
@@ -557,9 +511,8 @@ Future<bool> runQuotationAction(
         goTab('approval');
         return false;
       case 'submit_approval':
-        final levels = await showSubmitApprovalSheet(context, ctrl: ctrl, row: row);
+        final levels = await showSubmitApprovalSheet(context, ctrl: ctrl, row: row, onSubmit: (l) => api.submitQuotationApprovalLevels(id, l));
         if (levels == null) return false;
-        await api.submitQuotationApprovalLevels(id, levels);
         HapticFeedback.mediumImpact();
         snack('ส่งขออนุมัติแล้ว');
         return true;
