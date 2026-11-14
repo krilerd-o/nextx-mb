@@ -9,6 +9,7 @@ import '../core/app_config.dart';
 import '../core/entity_display.dart';
 import '../core/navigation/app_routes.dart';
 import 'nx_back_handler.dart' show NxShellTabScope;
+import 'nx_avatar.dart' show nxSizedImage;
 import 'nx_icons.dart';
 import '../screens/spaces/space_switcher.dart' show showSpaceSwitcher;
 import 'nx_notif_morph.dart';
@@ -401,7 +402,7 @@ class NxHubAvatar extends StatelessWidget {
         child: CircleAvatar(
           radius: size / 2,
           backgroundColor: ring ? Colors.white : Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
-          backgroundImage: image,
+          backgroundImage: image == null ? null : nxSizedImage(context, image, size),
           onBackgroundImageError: image == null ? null : (_, _) {},
           child: image == null
               ? Text(

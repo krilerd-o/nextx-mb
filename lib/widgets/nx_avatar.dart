@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../core/entity_display.dart';
@@ -40,6 +41,20 @@ void nxRememberUserPhotos(Iterable<Map<String, dynamic>> users, String Function(
   }
 }
 
+/// [image] decoded at the size it is shown ([size] logical px × device pixel ratio) instead
+/// of at the photo's full resolution — a 12-megapixel profile photo in a 46px circle was
+/// decoded and kept in memory at full size.
+ImageProvider nxSizedImage(BuildContext context, ImageProvider image, double size) {
+  if (image is ResizeImage) return image;
+  final px = (size * (MediaQuery.maybeDevicePixelRatioOf(context) ?? 2.0).clamp(1.0, 4.0)).round().clamp(16, 1024);
+  return ResizeImage(image, width: px);
+}
+
+/// Avatar photo at [url]: kept on disk between launches (cached_network_image) and decoded
+/// at its shown size (see [nxSizedImage]).
+ImageProvider nxAvatarImage(BuildContext context, String url, double size) =>
+    nxSizedImage(context, CachedNetworkImageProvider(url), size);
+
 class NxAvatar extends StatelessWidget {
   const NxAvatar({
     super.key,
@@ -61,7 +76,7 @@ class NxAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: size / 2,
       backgroundColor: bg.withValues(alpha: 0.18),
-      foregroundImage: url != null && url.startsWith('http') ? NetworkImage(url) : null,
+      foregroundImage: url != null && url.startsWith('http') ? nxAvatarImage(context, url, size) : null,
       onForegroundImageError: url != null && url.startsWith('http') ? (_, __) {} : null,
       child: Text(
         tr(entityInitials(label)),

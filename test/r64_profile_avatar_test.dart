@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,7 +30,9 @@ void main() {
 
     c.debugSetProfileImagename('avatars/a b.png');
     expect(c.profileAvatarUrl, endsWith('/uploads/avatars/a%20b.png'));
-    expect(c.profileAvatarImage, isA<NetworkImage>());
+    // Disk-cached network provider (was a plain NetworkImage), the same object on every read.
+    expect(c.profileAvatarImage, isA<CachedNetworkImageProvider>());
+    expect(identical(c.profileAvatarImage, c.profileAvatarImage), isTrue, reason: 'memoized: no new image key per rebuild');
 
     c.debugSetProfileImagename('/uploads/avatars/x.jpg');
     expect(c.profileAvatarUrl, endsWith('/uploads/avatars/x.jpg'));
@@ -51,8 +54,10 @@ void main() {
       child: const MaterialApp(home: Scaffold(body: Center(child: NxHubAvatar(size: 46, ring: true)))),
     ));
     final avatar = tester.widget<CircleAvatar>(find.byType(CircleAvatar));
-    expect(avatar.backgroundImage, isA<NetworkImage>());
-    expect((avatar.backgroundImage as NetworkImage).url, endsWith('/uploads/avatars/me.png'));
+    // Decoded at the shown size (46 × dpr), not the photo's full resolution.
+    final sized = avatar.backgroundImage! as ResizeImage;
+    expect(sized.width, (46 * tester.view.devicePixelRatio).round());
+    expect((sized.imageProvider as CachedNetworkImageProvider).url, endsWith('/uploads/avatars/me.png'));
     expect(avatar.child, isNull, reason: 'no initials when there is a picture');
 
     c.debugSetProfileImagename(null);

@@ -2,6 +2,7 @@ import '../services/calls/call_setup.dart';
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -195,17 +196,29 @@ class AppConfig extends ChangeNotifier {
     return apiClient.absoluteUrl('/uploads/$segs');
   }
 
+  ({String key, ImageProvider? image})? _avatarImage;
+
   /// Picture for avatars: the server one (same as the web) first, else the copy saved on this phone.
+  ///
+  /// Memoized: the header watches AppConfig, so this runs on every notify. A new MemoryImage
+  /// (its cache key is the byte buffer's identity) meant decoding the base64 and the picture
+  /// again on each rebuild; the server photo is kept on disk (cached_network_image).
   ImageProvider? get profileAvatarImage {
     final url = profileAvatarUrl;
-    if (url != null) return NetworkImage(url);
     final b64 = _profileAvatarBase64;
-    if (b64 == null || b64.isEmpty) return null;
-    try {
-      return MemoryImage(base64Decode(b64.contains(',') ? b64.split(',').last : b64));
-    } catch (_) {
-      return null;
+    final key = url != null ? 'u:$url' : 'b:${b64?.length ?? 0}:${b64?.hashCode ?? 0}';
+    final hit = _avatarImage;
+    if (hit != null && hit.key == key) return hit.image;
+    ImageProvider? image;
+    if (url != null) {
+      image = CachedNetworkImageProvider(url);
+    } else if (b64 != null && b64.isNotEmpty) {
+      try {
+        image = MemoryImage(base64Decode(b64.contains(',') ? b64.split(',').last : b64));
+      } catch (_) {}
     }
+    _avatarImage = (key: key, image: image);
+    return image;
   }
 
   /// The user picked/confirmed a NEXTX server (first-run step).

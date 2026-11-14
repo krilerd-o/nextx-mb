@@ -5,6 +5,7 @@ import '../../../core/i18n.dart';
 import '../../../core/thai_time.dart';
 import '../../../services/api_client.dart';
 import '../../../services/birthday_reminders.dart';
+import '../../../widgets/nx_avatar.dart' show nxAvatarImage;
 import '../../../widgets/nx_icons.dart';
 import '../../../widgets/nx_overlay_panel.dart';
 import 'cal_model.dart';
@@ -278,7 +279,8 @@ class CalBirthdayAvatar extends StatelessWidget {
           ),
           child: CircleAvatar(
             backgroundColor: const Color(0xFFFCE7F3),
-            foregroundImage: b.imageUrl != null && b.imageUrl!.startsWith('http') ? NetworkImage(b.imageUrl!) : null,
+            foregroundImage: b.imageUrl != null && b.imageUrl!.startsWith('http') ? nxAvatarImage(context, b.imageUrl!, size) : null,
+            onForegroundImageError: b.imageUrl != null && b.imageUrl!.startsWith('http') ? (_, _) {} : null,
             child: Text(initials, style: TextStyle(color: calBirthdayColor, fontWeight: FontWeight.w800, fontSize: size * 0.4)),
           ),
         ),
