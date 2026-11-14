@@ -720,6 +720,28 @@ class AppConfig extends ChangeNotifier {
     UnreadNotifications.instance.refresh(apiClient);
     PendingApprovals.instance.refresh(apiClient, userId: _session.userId);
     bindCalls(this);
+    unawaited(syncServerLanguage());
+  }
+
+  /// Prefs key: the language last saved on this server for this account.
+  String get _serverLangKey => 'server_lang_v1|$_apiBaseUrl|${_session.userId ?? ''}';
+
+  /// Tells the server which language to write my notifications in
+  /// (`PUT /api/me/language`): when the language changes, and once per
+  /// account / server when it does not know yet. Older servers (404) and
+  /// errors are ignored — it is tried again at the next start.
+  Future<void> syncServerLanguage({bool force = false}) async {
+    if (!isLoggedIn) return;
+    final lang = _uiLocaleCode;
+    final key = _serverLangKey;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!force && prefs.getString(key) == lang) return;
+      await _api.setMyLanguage(lang);
+      await prefs.setString(key, lang);
+    } catch (e) {
+      debugPrint('[lang] server: $e');
+    }
   }
 
   Future<void> setApiBaseUrl(String url) async {
@@ -791,6 +813,7 @@ class AppConfig extends ChangeNotifier {
       _uiLocaleCode = c;
       L10n.set(c);
       notifyListeners();
+      unawaited(syncServerLanguage(force: true));
     }
 
     final switcher = L10n.switcher;
@@ -1300,6 +1323,8 @@ class AppConfig extends ChangeNotifier {
       await _api.logoutRemote();
     } catch (_) {}
     RealtimeService.instance.disconnect();
+    // Nothing unread for nobody: the app icon badge goes too.
+    UnreadNotifications.instance.clear();
     await _secure.delete(key: _secureTokenKey);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyUserId);

@@ -10,6 +10,7 @@ import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../services/api_client.dart';
+import '../../widgets/app_bottom_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../../widgets/settings_tiles.dart';
@@ -89,12 +90,131 @@ Map<String, Map<String, bool>> notifEventChanges(Map<String, Map<String, bool>> 
 /// "Test sent" message from `POST /api/notifications/test`'s answer.
 String notifTestResultText(Map<String, dynamic> r) {
   int? n(Object? v) => v is num ? v.toInt() : int.tryParse('${v ?? ''}');
-  final devices = n(r['devices']) ?? n(r['device_count']) ?? n(r['tokens']);
+  final list = r['devices'];
+  final devices = list is List ? list.length : (n(r['devices']) ?? n(r['device_count']) ?? n(r['tokens']));
   final sent = n(r['sent']) ?? n(r['delivered']);
-  if (devices == 0 || (devices == null && sent == 0)) {
+  if (r['no_devices'] == true || devices == 0 || (devices == null && sent == 0)) {
     return 'ส่งแล้ว แต่ยังไม่มีเครื่องที่ลงทะเบียนรับแจ้งเตือน — ลองปิดแล้วเปิดแอปใหม่';
   }
   return 'ส่งการแจ้งเตือนทดสอบแล้ว — ควรขึ้นบนเครื่องนี้ภายในไม่กี่วินาที';
+}
+
+/// Per-device rows of a new server's test answer (`devices:[{platform,
+/// device_name, token_hint, result, detail}]`); empty for older servers.
+List<Map<String, dynamic>> notifTestDevices(Map<String, dynamic> r) {
+  final list = r['devices'];
+  if (list is! List) return const [];
+  return [for (final d in list) if (d is Map) Map<String, dynamic>.from(d)];
+}
+
+/// Look of one device result: sent / invalid (token expired, removed) / failed.
+({String label, IconData icon, Color color}) notifTestResultStyle(String? result) => switch ((result ?? '').trim()) {
+      'sent' => (label: 'ส่งแล้ว', icon: NxI.checkCircle, color: const Color(0xFF16A34A)),
+      'invalid' => (label: 'เครื่องนี้ใช้ไม่ได้แล้ว', icon: NxI.prohibit, color: const Color(0xFFF59E0B)),
+      _ => (label: 'ส่งไม่สำเร็จ', icon: NxI.xCircle, color: const Color(0xFFDC2626)),
+    };
+
+/// Readable platform of a registered device.
+String notifPlatformLabel(String? p) => switch ((p ?? '').trim().toLowerCase()) {
+      'android' => 'Android',
+      'ios' => 'iPhone',
+      'huawei' || 'hms' => 'Huawei',
+      'web' || 'web_push' || 'webpush' => 'เบราว์เซอร์',
+      final other => other,
+    };
+
+/// How the server sent it (`transport`).
+String notifTransportLabel(String? t) => switch ((t ?? '').trim()) {
+      'notify' => 'ส่งผ่าน Notify',
+      'fcm' || 'fcm_direct' => 'ส่งผ่าน Firebase โดยตรง',
+      'hms' => 'ส่งผ่าน Huawei Push',
+      'queued' || 'queue' => 'เข้าคิวรอส่งใหม่',
+      'none' || '' => '',
+      final other => 'ส่งผ่าน $other',
+    };
+
+/// Bottom sheet: the result of the test on each of my devices.
+Future<void> showNotifTestResultSheet(BuildContext context, Map<String, dynamic> r) {
+  final theme = Theme.of(context);
+  final cs = theme.colorScheme;
+  final devices = notifTestDevices(r);
+  final okCount = devices.where((d) => d['result'] == 'sent').length;
+  final transport = notifTransportLabel(r['transport']?.toString());
+  final job = '${r['job_id'] ?? ''}'.trim();
+  final sub = [
+    if (transport.isNotEmpty) tr(transport),
+    if (job.isNotEmpty && job != 'null') 'job $job',
+  ].join(' · ');
+  return showAppBottomSheet<void>(
+    context: context,
+    title: 'ผลการส่งทดสอบ',
+    child: Column(
+      key: const ValueKey('np-test-sheet'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          tr('ส่งถึง $okCount จาก ${devices.length} เครื่อง'),
+          key: const ValueKey('np-test-summary'),
+          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        if (sub.isNotEmpty) Text(sub, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+        const SizedBox(height: 12),
+        for (final (i, d) in devices.indexed)
+          Builder(builder: (context) {
+            final st = notifTestResultStyle(d['result']?.toString());
+            final platform = notifPlatformLabel(d['platform']?.toString());
+            final name = '${d['device_name'] ?? ''}'.trim();
+            final hint = '${d['token_hint'] ?? ''}'.trim();
+            final detail = '${d['detail'] ?? ''}'.trim();
+            final pIcon = '${d['platform']}'.startsWith('web') ? NxI.globe : NxI.deviceMobile;
+            return Container(
+              key: ValueKey('np-test-device-$i'),
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              decoration: BoxDecoration(
+                color: st.color.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: st.color.withValues(alpha: 0.25)),
+              ),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Icon(pIcon, color: cs.onSurfaceVariant, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(
+                      name.isNotEmpty ? name : (platform.isEmpty ? tr('เครื่องที่ลงทะเบียน') : platform),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      [if (name.isNotEmpty && platform.isNotEmpty) platform, if (hint.isNotEmpty && hint != 'null') hint].join(' · '),
+                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    if (detail.isNotEmpty && detail != 'null')
+                      Text(detail, maxLines: 3, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: st.color)),
+                  ]),
+                ),
+                const SizedBox(width: 8),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(st.icon, size: 16, color: st.color),
+                  const SizedBox(width: 4),
+                  Text(tr(st.label), style: theme.textTheme.labelMedium?.copyWith(color: st.color, fontWeight: FontWeight.w800)),
+                ]),
+              ]),
+            );
+          }),
+        if (devices.any((d) => d['result'] == 'invalid'))
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              tr('เครื่องที่ใช้ไม่ได้แล้ว (ถอนแอป / ล้างข้อมูล) ระบบลบออกให้เอง'),
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 /// "จัดการการแจ้งเตือน": what the server sends (only the events the company
@@ -305,13 +425,20 @@ class _NotificationPrefsScreenState extends State<NotificationPrefsScreen> with 
     setState(() => _testing = true);
     final messenger = ScaffoldMessenger.maybeOf(context);
     String text;
+    Map<String, dynamic>? result;
     try {
-      text = tr(notifTestResultText(await _api.sendTestNotification()));
+      result = await _api.sendTestNotification();
+      text = tr(notifTestResultText(result));
     } catch (e) {
       text = isMissingEndpoint(e) ? tr('ระบบของพื้นที่ทำงานนี้ยังส่งทดสอบไม่ได้ — ต้องอัปเดตก่อน') : tr('ส่งทดสอบไม่สำเร็จ · ${formatApiError(e)}');
     }
     if (!mounted) return;
     setState(() => _testing = false);
+    // New servers: what happened on each of my devices.
+    if (result != null && notifTestDevices(result).isNotEmpty) {
+      await showNotifTestResultSheet(context, result);
+      return;
+    }
     messenger?.showSnackBar(SnackBar(key: const ValueKey('np-test-result'), content: Text(text)));
   }
 

@@ -15,7 +15,7 @@ String notifCategory(Map<String, dynamic> n) {
   final meta = n['meta'];
   if (meta is Map) {
     final m = '${meta['module'] ?? ''}'.toLowerCase();
-    const known = {'work', 'case', 'calendar', 'chat', 'sales', 'quotation', 'contract', 'job', 'mail', 'store', 'ai'};
+    const known = {'work', 'case', 'calendar', 'chat', 'sales', 'quotation', 'contract', 'job', 'mail', 'store', 'ai', 'hr', 'social'};
     if (m == 'workspace') return 'work';
     if (known.contains(m)) return m;
     if (m == 'system') return 'other';
@@ -25,11 +25,16 @@ String notifCategory(Map<String, dynamic> n) {
   if (path.startsWith('/workspace')) return 'work';
   if (type.contains('chat') || type.contains('mention') || path.startsWith('/community-chat') || path.startsWith('/camp')) return 'chat';
   if (type.contains('quotation') || path.contains('/quotation')) return 'quotation';
+  if (type == 'contract' || path.startsWith('/modules/service_contract')) return 'contract';
+  if (type == 'ai_job' || path == '/ai' || path.startsWith('/ai/')) return 'ai';
   if (type.contains('job') || path.contains('/job')) return 'job';
+  if (path.startsWith('/commercial-store') || path.startsWith('/mini-store')) return 'store';
   if (type.contains('mail') || path.startsWith('/mail')) return 'mail';
   if (type.contains('case') || path.contains('/modules/case')) return 'case';
   if (type == 'sales' || RegExp(r'/(lead|deal|contact|account)').hasMatch(path)) return 'sales';
   if (type.contains('calendar') || path.startsWith('/calendar') || path.startsWith('/boards')) return 'calendar';
+  if (path == '/hr' || path.startsWith('/hr/') || type.contains('leave')) return 'hr';
+  if (path.startsWith('/social')) return 'social';
   return 'other';
 }
 
@@ -47,6 +52,10 @@ const kNotifTrayTabs = ['all', 'work', 'chat', 'case', 'calendar', 'sales', 'oth
       'contract' => (label: 'สัญญา', icon: NxI.note, color: const Color(0xFF8B5CF6)),
       'job' => (label: 'งานบริการ', icon: NxI.wrench, color: const Color(0xFF0EA5E9)),
       'mail' => (label: 'เมล', icon: NxI.envelope, color: const Color(0xFF6366F1)),
+      'store' => (label: 'ร้านค้า', icon: NxI.package, color: const Color(0xFFEC4899)),
+      'ai' => (label: 'AI', icon: NxI.sparkle, color: const Color(0xFF7C3AED)),
+      'hr' => (label: 'บุคคล', icon: NxI.idCard, color: const Color(0xFF0D9488)),
+      'social' => (label: 'โซเชียล', icon: NxI.shareNetwork, color: const Color(0xFF2563EB)),
       _ => (label: 'อื่นๆ', icon: NxI.bell, color: const Color(0xFF64748B)),
     };
 

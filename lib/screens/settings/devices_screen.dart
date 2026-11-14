@@ -107,6 +107,16 @@ Map<String, dynamic> thisDeviceInfo() {
   };
 }
 
+/// Icon + label of a device that gets push (`platform` of `/api/notifications/devices`).
+(IconData, String) pushDeviceKind(String? platform) => switch ((platform ?? '').toLowerCase().trim()) {
+      'android' => (NxI.deviceMobile, 'Android'),
+      'ios' => (NxI.deviceMobile, 'iPhone / iPad'),
+      'ipados' => (NxI.tablet, 'iPad'),
+      'huawei' || 'hms' => (NxI.deviceMobile, 'Huawei'),
+      'web' || 'webpush' || 'web_push' || 'browser' => (NxI.globe, 'เบราว์เซอร์'),
+      _ => (NxI.deviceMobile, 'มือถือ'),
+    };
+
 /// "จัดการอุปกรณ์": this device (always), the other devices signed in to the
 /// account (sign out one / all others, with confirmation), and the settings
 /// that shape the app on this device: bottom menu, role, Home layout.
@@ -127,11 +137,41 @@ class _DevicesScreenState extends State<DevicesScreen> {
   bool _busy = false;
   bool _loading = true;
 
+  /// `GET /api/notifications/devices`: null while loading; hidden on older servers (404).
+  List<Map<String, dynamic>>? _push;
+  bool _pushHidden = false;
+  Object? _pushError;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      _loadPush();
+    });
   }
+
+  Future<void> _loadPush() async {
+    try {
+      final items = await context.read<AppConfig>().apiClient.getNotificationDevices();
+      if (!mounted) return;
+      setState(() {
+        _push = items;
+        _pushError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        if (isMissingEndpoint(e)) {
+          _pushHidden = true;
+        } else {
+          _pushError = e;
+        }
+      });
+    }
+  }
+
+  Future<void> _refresh() => Future.wait([_load(), _loadPush()]);
 
   Future<void> _load() async {
     try {
@@ -249,7 +289,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
     return ProfileSubPage(
       title: 'จัดการอุปกรณ์',
-      onRefresh: _load,
+      onRefresh: _refresh,
       children: [
         Text(
           [config.activeSpace?.title, session.email].where((e) => (e ?? '').isNotEmpty).join(' · '),
@@ -324,6 +364,42 @@ class _DevicesScreenState extends State<DevicesScreen> {
             ),
           ),
 
+        // ── Phones / browsers that get this account's notifications.
+        if (!_pushHidden && (_push != null || _pushError != null))
+          SettingsAppear(
+            index: i++,
+            child: SettingsGroup(
+              key: const ValueKey('dev-push'),
+              title: _push == null ? 'อุปกรณ์ที่รับแจ้งเตือน' : 'อุปกรณ์ที่รับแจ้งเตือน (${_push!.length})',
+              caption: 'เครื่องที่ได้รับการแจ้งเตือนของบัญชีนี้ — ออกจากระบบเครื่องไหน เครื่องนั้นจะหยุดรับ',
+              children: [
+                if (_pushError != null)
+                  Padding(
+                    key: const ValueKey('dev-push-error'),
+                    padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+                    child: Row(children: [
+                      Icon(NxI.warningCircle, color: cs.error, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(tr(formatApiError(_pushError!)), style: theme.textTheme.bodySmall)),
+                      TextButton(onPressed: _loadPush, child: Text(tr('ลองใหม่'))),
+                    ]),
+                  )
+                else if (_push!.isEmpty)
+                  Padding(
+                    key: const ValueKey('dev-push-empty'),
+                    padding: const EdgeInsets.all(18),
+                    child: Row(children: [
+                      Icon(NxI.bellSlash, color: cs.onSurfaceVariant),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(tr('ยังไม่มีเครื่องที่รับแจ้งเตือน — เปิดแอปและอนุญาตการแจ้งเตือนก่อน'), style: theme.textTheme.bodyMedium)),
+                    ]),
+                  )
+                else
+                  for (final d in _sortedPush(_push!)) _PushDeviceRow(d: d),
+              ],
+            ),
+          ),
+
         // ── How the app looks / works on this device (moved from settings).
         SettingsAppear(
           index: i++,
@@ -369,6 +445,71 @@ class _DevicesScreenState extends State<DevicesScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// This phone first, then the most recently seen.
+List<Map<String, dynamic>> _sortedPush(List<Map<String, dynamic>> list) => [...list]
+  ..sort((a, b) {
+    final ca = a['current'] == true ? 0 : 1, cb = b['current'] == true ? 0 : 1;
+    if (ca != cb) return ca - cb;
+    return _clean(b['last_seen_at']).compareTo(_clean(a['last_seen_at']));
+  });
+
+/// One device of "อุปกรณ์ที่รับแจ้งเตือน": platform icon, name, last seen (Thai time), "เครื่องนี้".
+class _PushDeviceRow extends StatelessWidget {
+  const _PushDeviceRow({required this.d});
+  final Map<String, dynamic> d;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    const green = Color(0xFF16A34A);
+    final (icon, kind) = pushDeviceKind(_clean(d['platform']));
+    final name = _clean(d['device_name']).isEmpty ? kind : _clean(d['device_name']);
+    final current = d['current'] == true;
+    final seen = deviceLastActive(d['last_seen_at']);
+    final color = current ? green : cs.primary;
+    return Padding(
+      key: ValueKey('dev-push-${d['id']}'),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: Row(children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: color, size: 22),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Flexible(
+                child: Text(tr(name), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+              if (current) ...[
+                const SizedBox(width: 8),
+                Container(
+                  key: ValueKey('dev-push-this-${d['id']}'),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: green.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(999)),
+                  child: Text(tr('เครื่องนี้'), style: theme.textTheme.labelSmall?.copyWith(color: green, fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ]),
+            if (name != kind) Text(tr(kind), style: theme.textTheme.bodySmall),
+            if (seen.isNotEmpty)
+              Text(
+                '${tr('ใช้งานล่าสุด')} $seen',
+                key: ValueKey('dev-push-seen-${d['id']}'),
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+          ]),
+        ),
+        Icon(NxI.bellRinging, size: 18, color: color.withValues(alpha: 0.8)),
+      ]),
     );
   }
 }

@@ -14,9 +14,12 @@ import 'nx_back_handler.dart';
 
 /// One choice inside a filter group.
 class NxFilterOption {
-  const NxFilterOption(this.value, this.label);
+  const NxFilterOption(this.value, this.label, {this.icon});
   final String value;
   final String label;
+
+  /// Shown on the quick chip (e.g. notification categories).
+  final IconData? icon;
 }
 
 /// A filter section (สถานะ, ประเภท, …). [multi] = several values may be on.
@@ -607,6 +610,7 @@ class _NxListToolbarState extends State<NxListToolbar> {
                           for (final o in quick.options)
                             chip(
                               label: o.label,
+                              icon: o.icon,
                               on: q.has(quick.key, o.value),
                               onTap: () => widget.onChanged(q.toggle(quick, o.value)),
                             ),

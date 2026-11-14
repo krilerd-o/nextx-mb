@@ -25,17 +25,15 @@ import '../../widgets/nx_split_view.dart';
 import '../../core/nx_breakpoint.dart';
 import '../deep_link_loaders.dart' show nxPaneForRoute;
 
-/// NEXTX notification categories (backend/src/services/notificationCategory.js).
-const notificationCategories = <String, String>{
-  'all': 'ทั้งหมด',
-  'work': 'งาน',
-  'chat': 'แชท',
-  'case': 'เคส',
-  'calendar': 'ปฏิทิน',
-  'sales': 'การขาย',
-  'quotation': 'ใบเสนอราคา',
-  'job': 'งานบริการ',
-  'mail': 'เมล',
+/// NEXTX notification categories (backend/src/services/notificationCategory.js);
+/// labels and icons from [notifCategoryStyle].
+const notificationCategoryKeys = [
+  'all', 'work', 'chat', 'case', 'calendar', 'sales', 'quotation', 'contract', //
+  'job', 'mail', 'store', 'ai', 'hr', 'social', 'other',
+];
+
+final notificationCategories = <String, String>{
+  for (final k in notificationCategoryKeys) k: notifCategoryStyle(k).label,
 };
 
 IconData notificationIcon(Map<String, dynamic> n) {
@@ -351,8 +349,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                 label: 'หมวด',
                 multi: false,
                 options: [
-                  for (final e in notificationCategories.entries)
-                    if (e.key != 'all') NxFilterOption(e.key, e.value),
+                  for (final k in notificationCategoryKeys)
+                    if (k != 'all') NxFilterOption(k, notifCategoryStyle(k).label, icon: notifCategoryStyle(k).icon),
                 ],
               ),
               const NxFilterGroup(
