@@ -603,6 +603,17 @@ class _EntityListScreenState extends State<EntityListScreen> {
     if (!mounted) return;
     if (saved != null) _query = saved;
     _cvId = cv;
+    // Opened before (this view / search): show that first page now; views,
+    // schema and page 1 refresh it underneath.
+    final hit = NxSwrCache.instance.peek<_FirstPage>(_cacheKey);
+    if (hit != null && _items.isEmpty) {
+      setState(() {
+        _items.addAll(hit.items);
+        _total = hit.total;
+        _loading = false;
+        _refreshing = true;
+      });
+    }
     if (!context.read<AppConfig>().isLoggedIn) {
       _load(reset: true);
       return;

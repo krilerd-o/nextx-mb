@@ -863,7 +863,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                     style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ],
-                if (status != null && statusOptions.isEmpty && !_journey) ...[const SizedBox(height: 10), Chip(label: Text(statusValueLabel(status, module: widget.module)), visualDensity: VisualDensity.compact)],
+                if (status != null && statusOptions.isEmpty && !_journey && !reserveBar) ...[const SizedBox(height: 10), Chip(label: Text(statusValueLabel(status, module: widget.module)), visualDensity: VisualDensity.compact)],
                 const SizedBox(height: 12),
                 EntityQuickActions(row: _row, onDuplicate: canEdit ? _duplicate : null),
                 // The convert button appears once the record is in: keep its room meanwhile.
