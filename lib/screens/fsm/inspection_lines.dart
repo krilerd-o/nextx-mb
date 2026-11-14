@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../widgets/nx_skeleton.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../services/api_client.dart';
@@ -287,10 +288,8 @@ class _InspectionLinesEditorState extends State<InspectionLinesEditor> {
         ],
         const SizedBox(height: 12),
         if (_loading)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator()),
-          ),
+          // Checklist line cards: result dot, item, note line.
+          const NxSkeletonRows(key: ValueKey('insp-lines-skeleton'), count: 4, padded: false, top: 0, leading: NxSkelLeading.icon, leadingSize: 32, trailing: NxSkelTrailing.pill),
         if (!_loading && _error != null && !_savedOnce)
           Padding(
             padding: const EdgeInsets.all(12),

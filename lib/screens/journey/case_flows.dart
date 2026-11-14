@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../widgets/nx_skeleton.dart';
 import '../../core/app_config.dart';
 import '../../core/history_events.dart' show historyActionTitle;
 import '../../core/i18n.dart';
@@ -757,7 +758,7 @@ Future<void> showCaseStatusHistory(BuildContext context, String caseId) {
         final theme = Theme.of(context);
         final cs = theme.colorScheme;
         if (snap.connectionState != ConnectionState.done) {
-          return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
+          return const NxSkeletonTimeline(key: ValueKey('case-status-events-skeleton'), rows: 4, padded: true);
         }
         if (snap.hasError) return Padding(padding: const EdgeInsets.all(24), child: Text(caseErrorText(snap.error!)));
         final list = snap.data ?? const [];

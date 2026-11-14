@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../widgets/nx_skeleton.dart';
 import '../../core/activity_guests.dart' show activityTypeLabel;
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart' show userDisplayName;
@@ -547,7 +548,7 @@ class _JobActivityGenScreenState extends State<JobActivityGenScreen> {
         Text(tr('จากเทมเพลต'), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         if (_loading)
-          const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)))
+          const NxSkeletonRows(key: ValueKey('job-activity-templates-skeleton'), count: 3, padded: false, top: 0, leading: NxSkelLeading.icon, leadingSize: 40, trailing: NxSkelTrailing.chevron)
         else if (_loadError != null)
           Container(
             key: const ValueKey('gen-templates-error'),

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../widgets/nx_skeleton.dart';
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
@@ -147,7 +148,17 @@ class _InspectionSummaryState extends State<InspectionSummary> {
     final cs = theme.colorScheme;
     final lines = _lines;
     if (lines == null && _error == null) {
-      return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)));
+      // Counter tiles, then the result card and line rows.
+      return const NxSkeleton(
+        key: ValueKey('insp-summary-skeleton'),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          NxSkeletonGrid(cols: 3, count: 3, tileHeight: 84, gap: 8),
+          SizedBox(height: 12),
+          NxSkeletonKeyValueCard(rows: 3, total: false),
+          NxSkeletonRow(leading: NxSkelLeading.icon, leadingSize: 32, trailing: NxSkelTrailing.pill),
+          NxSkeletonRow(leading: NxSkelLeading.icon, leadingSize: 32, trailing: NxSkelTrailing.pill, wide: false),
+        ]),
+      );
     }
     final c = InspCounts.of(lines ?? const []);
     final verdict = inspVerdict(c);

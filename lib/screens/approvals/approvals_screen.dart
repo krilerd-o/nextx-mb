@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../widgets/nx_refresh_bar.dart';
+import '../../core/nx_swr_cache.dart';
 import '../../services/unread_service.dart';
 import '../../widgets/nx_split_view.dart';
 import '../../widgets/nx_scroll_scaffold.dart';
@@ -211,8 +213,11 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   ),
                   for (final e in sections.entries)
                     if (_query.values('type').isEmpty || _query.has('type', e.key))
+                      // Keyed by kind only: after a decision the section reloads in
+                      // place (rows stay, thin line) instead of a new skeleton.
                       _ApprovalSection(
-                        key: ValueKey('${e.key}-$_revision-$_journey'),
+                        key: ValueKey('${e.key}-$_journey'),
+                        revision: _revision,
                         kind: e.key,
                         section: e.value,
                         query: _query,
@@ -235,8 +240,11 @@ class _ApprovalSection extends StatefulWidget {
     required this.onDecide,
     this.onOpen,
     this.query = const NxListQuery(),
+    this.revision = 0,
   });
 
+  /// Bumped after a decision / refresh: reload, keeping the rows on screen.
+  final int revision;
   final String kind;
   final NxListQuery query;
   final _Section section;
@@ -248,8 +256,25 @@ class _ApprovalSection extends StatefulWidget {
 }
 
 class _ApprovalSectionState extends State<_ApprovalSection> {
-  late final Future<List<Map<String, dynamic>>> _future = widget.section.load();
+  late Future<List<Map<String, dynamic>>> _future = _fetch();
+
+  /// Last answer for this kind (this visit, or the last one via [NxSwrCache]).
+  late List<Map<String, dynamic>>? _last = NxSwrCache.instance.peek<List<Map<String, dynamic>>>(_cacheKey);
   final Set<String> _busy = {};
+
+  String get _cacheKey => NxSwrCache.key('/api/approvals', query: {'kind': widget.kind});
+
+  Future<List<Map<String, dynamic>>> _fetch() => widget.section.load().then((v) {
+        _last = v;
+        NxSwrCache.instance.put(_cacheKey, v);
+        return v;
+      });
+
+  @override
+  void didUpdateWidget(covariant _ApprovalSection old) {
+    super.didUpdateWidget(old);
+    if (old.revision != widget.revision) _future = _fetch();
+  }
 
   (String, String) _describe(Map<String, dynamic> r) {
     switch (widget.kind) {
@@ -304,6 +329,8 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _future,
       builder: (context, snap) {
+        final waiting = snap.connectionState != ConnectionState.done;
+        final data = waiting || snap.hasError ? _last : snap.data;
         final header = Padding(
           padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
           child: Row(
@@ -311,16 +338,20 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
               Icon(widget.section.icon, size: 18, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
               Text(tr(widget.section.title), style: theme.textTheme.titleSmall),
-              if (snap.hasData) ...[
+              if (data != null) ...[
                 const SizedBox(width: 8),
-                Text('(${snap.data!.length})', style: theme.textTheme.bodySmall),
+                Text('(${data.length})', style: theme.textTheme.bodySmall),
+              ],
+              if (waiting && data != null) ...[
+                const SizedBox(width: 10),
+                const Expanded(child: NxRefreshBar(visible: true)),
               ],
             ],
           ),
         );
-        final rows = snap.hasData
+        final rows = data != null
             ? nxApplyLocalQuery<Map<String, dynamic>>(
-                snap.data!,
+                data,
                 widget.query.copyWith(filters: const {}),
                 text: (r) {
                   final (t, sub) = _describe(r);
@@ -333,9 +364,9 @@ class _ApprovalSectionState extends State<_ApprovalSection> {
               )
             : const <Map<String, dynamic>>[];
         Widget body;
-        if (snap.connectionState != ConnectionState.done) {
-          body = const NxSkeletonList(rows: 2);
-        } else if (snap.hasError) {
+        if (data == null && waiting) {
+          body = const NxSkeletonRows(count: 2, padded: false, top: 0, leading: NxSkelLeading.icon, leadingSize: 40, trailing: NxSkelTrailing.badge);
+        } else if (snap.hasError && data == null) {
           body = Text(tr(formatApiError(snap.error!)), style: TextStyle(color: theme.colorScheme.error));
         } else if (rows.isEmpty) {
           body = Padding(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../widgets/nx_skeleton.dart';
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
@@ -246,7 +247,7 @@ class _UserPickerState extends State<_UserPicker> {
       ),
       Expanded(
         child: _users == null
-            ? const Center(child: CircularProgressIndicator(strokeWidth: 2.4))
+            ? const NxSkeletonRows(count: 7, style: NxSkelRowStyle.flat, leadingSize: 40, lines: 2, trailing: NxSkelTrailing.none, top: 0)
             : ListView.builder(
                 itemCount: list.length,
                 itemBuilder: (_, i) => ListTile(

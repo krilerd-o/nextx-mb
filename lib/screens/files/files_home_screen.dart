@@ -310,9 +310,48 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
       },
     );
 
+    final toolbar = NxListToolbar(
+      key: ValueKey('files-${_folderId ?? 'root'}'),
+      query: lq,
+      liveSearch: true,
+      padding: EdgeInsets.zero,
+      searchHint: 'ค้นหาในโฟลเดอร์นี้',
+      quickGroup: 'kind',
+      groups: const [
+        NxFilterGroup(key: 'kind', label: 'ชนิดไฟล์', options: [
+          NxFilterOption('folder', 'โฟลเดอร์'),
+          NxFilterOption('image', 'รูปภาพ'),
+          NxFilterOption('pdf', 'PDF'),
+          NxFilterOption('doc', 'เอกสาร'),
+          NxFilterOption('sheet', 'ตาราง'),
+          NxFilterOption('video', 'วิดีโอ'),
+          NxFilterOption('other', 'อื่นๆ'),
+        ]),
+      ],
+      sorts: const [
+        NxSortOption('name', 'ชื่อ ก–ฮ'),
+        NxSortOption('new', 'ใหม่ล่าสุด'),
+        NxSortOption('size', 'ขนาดใหญ่สุด'),
+      ],
+      onChanged: (q) => setState(() {
+        _query = q.q;
+        _lq = q.copyWith(q: '');
+      }),
+    );
+
     Widget body;
     if (_loading) {
-      body = const NxSkeletonList();
+      // The real toolbar stays; folder / file rows (icon tile, name, size line) load under it.
+      body = ListView(
+        key: const ValueKey('files-skeleton'),
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+        children: [
+          IgnorePointer(child: toolbar),
+          const SizedBox(height: 8),
+          const NxSkeletonRows(count: 9, style: NxSkelRowStyle.flat, leading: NxSkelLeading.icon, leadingSize: 40, trailing: NxSkelTrailing.none, padded: false, top: 4),
+        ],
+      );
     } else if (_error != null) {
       body = ListView(children: [
         const SizedBox(height: 80),
@@ -324,34 +363,7 @@ class _FilesHomeScreenState extends State<FilesHomeScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: [
-          NxListToolbar(
-            key: ValueKey('files-${_folderId ?? 'root'}'),
-            query: lq,
-            liveSearch: true,
-            padding: EdgeInsets.zero,
-            searchHint: 'ค้นหาในโฟลเดอร์นี้',
-            quickGroup: 'kind',
-            groups: const [
-              NxFilterGroup(key: 'kind', label: 'ชนิดไฟล์', options: [
-                NxFilterOption('folder', 'โฟลเดอร์'),
-                NxFilterOption('image', 'รูปภาพ'),
-                NxFilterOption('pdf', 'PDF'),
-                NxFilterOption('doc', 'เอกสาร'),
-                NxFilterOption('sheet', 'ตาราง'),
-                NxFilterOption('video', 'วิดีโอ'),
-                NxFilterOption('other', 'อื่นๆ'),
-              ]),
-            ],
-            sorts: const [
-              NxSortOption('name', 'ชื่อ ก–ฮ'),
-              NxSortOption('new', 'ใหม่ล่าสุด'),
-              NxSortOption('size', 'ขนาดใหญ่สุด'),
-            ],
-            onChanged: (q) => setState(() {
-              _query = q.q;
-              _lq = q.copyWith(q: '');
-            }),
-          ),
+          toolbar,
           const SizedBox(height: 8),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,

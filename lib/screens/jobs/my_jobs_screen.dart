@@ -275,7 +275,7 @@ class _MyJobsScreenState extends State<MyJobsScreen> {
             onChanged: (i) => setState(() => _tab = order[i]),
           ),
           const SizedBox(height: 12),
-          if (jobs == null && _error == null) const NxSkeletonList(),
+          if (jobs == null && _error == null) const NxSkeletonEntityCards(padded: false),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.all(24),

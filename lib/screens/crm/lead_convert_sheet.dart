@@ -239,7 +239,7 @@ class _LeadConvertBodyState extends State<LeadConvertBody> {
       ]);
     }
     if (_p == null) {
-      return ListView(controller: widget.controller, padding: pad, children: const [NxSkeletonList(rows: 4)]);
+      return ListView(controller: widget.controller, padding: pad, children: const [NxSkeletonList(rows: 4, padded: false)]);
     }
     if (_result != null) return _success(theme, pad);
     final p = _p!;

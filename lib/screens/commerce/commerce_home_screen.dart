@@ -437,7 +437,7 @@ class _StockTabState extends State<_StockTab> {
             ),
           ),
           const SizedBox(height: 12),
-          if (_loading) const NxSkeletonList(rows: 6),
+          if (_loading) const NxSkeletonList(rows: 6, padded: false),
           if (_error != null) Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error)),
           if (!_loading && _error == null && _items.isEmpty)
             Padding(padding: EdgeInsets.all(48), child: Center(child: Text(tr('ไม่พบสินค้า')))),

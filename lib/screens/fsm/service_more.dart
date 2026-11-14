@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../widgets/nx_skeleton.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/nx_page_route.dart';
@@ -60,7 +61,7 @@ class _BoardPickerState extends State<_BoardPicker> {
       ),
       Expanded(
         child: _boards == null
-            ? const Center(child: CircularProgressIndicator(strokeWidth: 2.4))
+            ? const NxSkeletonRows(count: 6, style: NxSkelRowStyle.flat, leading: NxSkelLeading.icon, leadingSize: 36, lines: 2, trailing: NxSkelTrailing.none, top: 0)
             : list.isEmpty
                 ? Center(child: Text(tr('ไม่มีบอร์ดที่แก้ไขได้')))
                 : ListView.builder(
@@ -395,7 +396,8 @@ class _MandayTransferSheetState extends State<_MandayTransferSheet> {
     if (_error != null) {
       body = Text(tr(formatApiError(_error!)), style: TextStyle(color: cs.error));
     } else if (p == null) {
-      body = const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(strokeWidth: 2.4)));
+      // Contract card: heading, key-value lines.
+      body = const NxSkeletonKeyValueCard(key: ValueKey('service-contract-skeleton'), rows: 4, total: false);
     } else {
       final c = p['contract'] is Map ? Map<String, dynamic>.from(p['contract'] as Map) : <String, dynamic>{};
       final hpd = _n(c['md_hours_per_day']) == 0 ? 8 : _n(c['md_hours_per_day']);
@@ -590,7 +592,7 @@ class _CaseTemplateSheetState extends State<_CaseTemplateSheet> {
           child: _error != null
               ? Center(child: Text(tr(formatApiError(_error!))))
               : list == null
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2.4))
+                  ? const NxSkeletonRows(count: 5, style: NxSkelRowStyle.flat, leading: NxSkelLeading.avatar, leadingSize: 22, lines: 2, trailing: NxSkelTrailing.none, top: 0)
                   : list.isEmpty
                       ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(tr('ยังไม่มีเทมเพลตงานของเคส — สร้างได้ที่เว็บ (ตั้งค่า › เทมเพลตงานเคส)'), textAlign: TextAlign.center)))
                       : ListView(padding: const EdgeInsets.symmetric(horizontal: 12), children: [

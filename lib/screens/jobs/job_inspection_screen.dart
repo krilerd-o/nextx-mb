@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../widgets/nx_skeleton.dart';
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
@@ -90,7 +91,9 @@ class _JobInspectionScreenState extends State<JobInspectionScreen> {
               decoration: BoxDecoration(color: cs.errorContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(14)),
               child: Text(error(_error!), style: TextStyle(color: cs.onErrorContainer)),
             ),
-          if (list == null && _error == null) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
+          if (list == null && _error == null)
+            // Inspection cards: number + status pill, title, counters line.
+            const NxSkeletonEntityCards(key: ValueKey('job-insp-skeleton'), count: 3, padded: false),
           if (list != null && list.isEmpty) ...[
             Container(
               key: const ValueKey('job-insp-empty'),

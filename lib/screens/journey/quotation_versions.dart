@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../widgets/nx_skeleton.dart';
 import '../../core/app_config.dart';
 import '../../core/card_layout.dart' show formatMoney;
 import '../../core/i18n.dart';
@@ -189,7 +190,22 @@ class _QuotationCompareScreenState extends State<QuotationCompareScreen> {
             child: FutureBuilder<Map<String, dynamic>>(
               future: _future,
               builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+                // Version comparison: two summary cards, then changed lines.
+                if (snap.connectionState != ConnectionState.done) {
+                  return const NxSkeleton(
+                    key: ValueKey('quotation-versions-skeleton'),
+                    child: NxSkeletonListView(padding: EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
+                      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Expanded(child: NxSkeletonKeyValueCard(rows: 3, total: false)),
+                        SizedBox(width: 10),
+                        Expanded(child: NxSkeletonKeyValueCard(rows: 3, total: false)),
+                      ]),
+                      NxSkeletonRow(leading: NxSkelLeading.none, trailing: NxSkelTrailing.text),
+                      NxSkeletonRow(leading: NxSkelLeading.none, trailing: NxSkelTrailing.text, wide: false),
+                      NxSkeletonRow(leading: NxSkelLeading.none, trailing: NxSkelTrailing.text),
+                    ]),
+                  );
+                }
                 if (snap.hasError) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(journeyErrorText(snap.error!))));
                 final d = snap.data ?? const {};
                 final a = (d['a'] is Map ? Map<String, dynamic>.from(d['a'] as Map) : <String, dynamic>{});

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../widgets/nx_skeleton.dart';
 import '../../core/app_config.dart';
 import '../../core/entity_display.dart';
 import '../../core/i18n.dart';
@@ -208,7 +209,7 @@ class _CaseMandayPanelState extends State<CaseMandayPanel> {
         ]),
         const SizedBox(height: 10),
         if (_loading)
-          const Padding(padding: EdgeInsets.all(12), child: Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))))
+          const NxSkeletonRows(key: ValueKey('case-manday-skeleton'), count: 2, padded: false, top: 0, leading: NxSkelLeading.icon, leadingSize: 36, trailing: NxSkelTrailing.pill)
         else if (contracts.isEmpty && _requests.isEmpty)
           Text(tr('ยังไม่ผูกสัญญาบริการกับเคสนี้'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
         else ...[
