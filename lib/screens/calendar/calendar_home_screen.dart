@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import '../../widgets/nx_skeleton.dart';
+import '../../widgets/nx_refresh_bar.dart';
+import '../../core/nx_swr_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -209,8 +211,13 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
     if (mounted && _mode != _CalMode.calendar) setState(() => _special = _fetchSpecial(_mode));
   }
 
+  /// [NxSwrCache] key of the upcoming / overdue list: switching back shows the last copy.
+  static String _specialKey(_CalMode m) => NxSwrCache.key('/api/entity/activity', query: {'cal': m.name});
+
   // ── upcoming / overdue (same API flags as before)
-  Future<List<CalEvent>> _fetchSpecial(_CalMode m) async {
+  Future<List<CalEvent>> _fetchSpecial(_CalMode m) => NxSwrCache.instance.fetch(_specialKey(m), () => _fetchSpecialFresh(m));
+
+  Future<List<CalEvent>> _fetchSpecialFresh(_CalMode m) async {
     final page = await context.read<AppConfig>().apiClient.getEntityList('activity', limit: 200, extra: {
       'cols': CalStore.cols,
       'sort': 'date_start',
@@ -431,6 +438,11 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
               tabs: [for (final v in CalView.values) Tab(key: ValueKey('cal-tab-${v.name}'), text: tr(v.label))],
             ),
           ),
+          // Months loading under a view that already shows (grids stay; only a thin line).
+          ValueListenableBuilder<bool>(
+            valueListenable: _store.busy,
+            builder: (context, busy, _) => NxRefreshBar(visible: busy && _view != CalView.list),
+          ),
           Expanded(
             key: _bodyKey,
             child: ClipRect(
@@ -540,12 +552,16 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
         return FutureBuilder<List<CalEvent>>(
           future: _special,
           builder: (context, snap) {
-            if (snap.hasError) return Center(child: Text(tr(formatApiError(snap.error!))));
-            if (!snap.hasData) return const NxSkeletonCalendar();
-            return CalAgendaView(
+            // Last copy of this list (switching modes) while the fresh one loads.
+            final data = snap.data ?? NxSwrCache.instance.peek<List<CalEvent>>(_specialKey(_mode));
+            if (snap.hasError && data == null) return Center(child: Text(tr(formatApiError(snap.error!))));
+            if (data == null) return const NxSkeletonAgenda(key: ValueKey('cal-special-skeleton'));
+            return NxRefreshOverlay(
+              refreshing: !snap.hasData && !snap.hasError,
+              child: CalAgendaView(
               store: _store,
               anchor: _date,
-              events: [for (final e in snap.data!) if (_passes(e)) e],
+              events: [for (final e in data) if (_passes(e)) e],
               onOpen: _open,
               onEventMenu: _eventMenu,
               header: Padding(
@@ -559,6 +575,7 @@ class _CalendarHomeScreenState extends State<CalendarHomeScreen> with SingleTick
                   ),
                 ),
               ),
+            ),
             );
           },
         );

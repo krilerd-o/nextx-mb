@@ -140,7 +140,7 @@ class _CalAgendaViewState extends State<CalAgendaView> {
                 ]),
               ],
               if (widget.store.loading && widget.events == null)
-                const NxSkeletonCalendar(),
+                const NxSkeletonAgenda(key: ValueKey('cal-agenda-skeleton')),
             ],
           ),
         );

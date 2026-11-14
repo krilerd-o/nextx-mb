@@ -1,3 +1,4 @@
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../services/api_client.dart';
@@ -31,6 +32,7 @@ class CalStore extends ChangeNotifier {
     _disposed = true;
     birthdays.removeListener(notifyListeners);
     birthdays.dispose();
+    busy.dispose();
     super.dispose();
   }
 
@@ -52,6 +54,14 @@ class CalStore extends ChangeNotifier {
   static String _mk(DateTime d) => '${d.year}-${d.month}';
 
   bool get loading => _loading.isNotEmpty;
+
+  /// Months are loading (for a thin progress line). Set after the frame: views
+  /// ask for months while they build.
+  final ValueNotifier<bool> busy = ValueNotifier(false);
+
+  void _syncBusy() => SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) busy.value = loading;
+      });
   bool hasMonth(DateTime d) => _months.containsKey(_mk(d));
 
   /// Loads every month touching [from]…[to] that is not cached yet.
@@ -66,8 +76,10 @@ class CalStore extends ChangeNotifier {
     for (final m in want) {
       _loading.add(_mk(m));
     }
+    _syncBusy();
     // Views call this while building: only notify once data has arrived.
     await Future.wait([for (final m in want) _loadMonth(m)]);
+    _syncBusy();
     notifyListeners();
   }
 
