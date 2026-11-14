@@ -30,6 +30,17 @@ class AppRoutes {
   static const String attendance = '/hr/attendance';
   static const String leaveList = '/hr/leave';
   static const String leaveRequest = '/hr/leave/request';
+
+  /// Leave screen on one tab (`balance` | `request` | `mine` | `approve`),
+  /// optionally with one request [id] picked out (from a notification).
+  static String leave({String? tab, String? id}) {
+    final q = {if (tab != null && tab.isNotEmpty) 'tab': tab, if (id != null && id.isNotEmpty) 'id': id};
+    return q.isEmpty ? leaveList : Uri(path: leaveList, queryParameters: q).toString();
+  }
+
+  /// Notification center, optionally opening one notification ([id]).
+  static String notificationsOf(String? id) =>
+      (id == null || id.isEmpty) ? notifications : Uri(path: notifications, queryParameters: {'id': id}).toString();
   static const String attendanceReport = '/hr/attendance-report';
 
   static const String moduleHub = '/module-hub';

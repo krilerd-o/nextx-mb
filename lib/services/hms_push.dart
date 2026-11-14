@@ -6,7 +6,7 @@ import 'package:huawei_push/huawei_push.dart';
 
 import '../core/build_target.dart';
 import '../core/navigation/notification_deep_link.dart';
-import '../core/push_navigation.dart';
+import '../core/navigation/push_tap.dart';
 
 /// Huawei Push Kit for the AppGallery build (`--dart-define=NX_STORE=huawei`).
 ///
@@ -75,8 +75,8 @@ class HmsPush {
   }
 
   static void _remember(dynamic opened) {
-    final loc = deepLinkFromHmsTap(opened);
-    if (loc != null) PushNavigation.instance.remember(loc);
+    final data = hmsTapData(opened);
+    if (data != null) handlePushTap(data);
   }
 }
 
@@ -85,6 +85,12 @@ class HmsPush {
 /// `extras` or as the JSON `remoteMessage.data`.
 @visibleForTesting
 String? deepLinkFromHmsTap(dynamic opened) {
+  final data = hmsTapData(opened);
+  return data == null ? null : notificationDeepLinkFromData(data);
+}
+
+/// The push `data` of a tapped HMS notification (null when it has none).
+Map<String, dynamic>? hmsTapData(dynamic opened) {
   if (opened is! Map) return null;
   final data = <String, dynamic>{};
   final extras = opened['extras'];
@@ -99,6 +105,5 @@ String? deepLinkFromHmsTap(dynamic opened) {
   } else if (raw is Map) {
     data.addAll(raw.map((k, v) => MapEntry('$k', v)));
   }
-  if (data.isEmpty) return null;
-  return notificationDeepLinkFromData(data);
+  return data.isEmpty ? null : data;
 }

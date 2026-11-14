@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/navigation/app_routes.dart';
 import '../../core/navigation/notification_deep_link.dart';
+import '../../widgets/app_bottom_sheet.dart';
 import '../../services/api_client.dart';
 import '../../services/realtime_service.dart';
 import '../../services/unread_service.dart';
@@ -63,7 +65,11 @@ String relativeTime(dynamic raw, {DateTime? now}) {
 }
 
 class NotificationCenterScreen extends StatefulWidget {
-  const NotificationCenterScreen({super.key});
+  const NotificationCenterScreen({super.key, this.focusId});
+
+  /// Notification to open on arrival (a tapped push about an announcement /
+  /// system notice): marked read and shown in full.
+  final String? focusId;
 
   @override
   State<NotificationCenterScreen> createState() => _NotificationCenterScreenState();
@@ -120,6 +126,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         _loading = false;
       });
       UnreadNotifications.instance.refresh(_api);
+      _openFocusOnce();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -158,6 +165,19 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     UnreadNotifications.instance.markedRead();
   }
 
+  bool _focusDone = false;
+
+  void _openFocusOnce() {
+    final id = widget.focusId;
+    if (_focusDone || id == null || id.isEmpty) return;
+    _focusDone = true;
+    final item = _items.where((n) => n['id']?.toString() == id).firstOrNull;
+    if (item == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _open(item);
+    });
+  }
+
   void _open(Map<String, dynamic> item) {
     final id = item['id']?.toString() ?? '';
     if (notifUnread(item) && id.isNotEmpty) {
@@ -166,10 +186,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       });
       _markLocalRead(item);
     }
-    final path = item['link_path']?.toString() ?? '';
-    final meta = item['meta'];
-    final extra = item['link_extra']?.toString() ?? (meta is Map ? meta['kind']?.toString() : null);
-    final route = notificationDeepLink(path, linkId: item['link_id']?.toString(), extra: extra);
+    final route = notificationItemRoute(item);
+    // No record behind it (announcement, system notice): read it right here.
+    if (Uri.tryParse(route)?.path == AppRoutes.notifications) {
+      showNotificationReader(context, item);
+      return;
+    }
     // Tablet / unfolded: open the record beside the list.
     if (NxBreakpoint.of(context).twoPane && nxPaneForRoute(route) != null) {
       setState(() => _paneRoute = route);
@@ -357,4 +379,48 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
       ),
     );
   }
+}
+
+/// Full text of one notification (announcements are longer than a row shows).
+Future<void> showNotificationReader(BuildContext context, Map<String, dynamic> item) {
+  final theme = Theme.of(context);
+  final cs = theme.colorScheme;
+  final style = notifCategoryStyle(notifCategory(item));
+  final body = '${item['body'] ?? ''}'.trim();
+  final when = relativeTime(item['created_at']);
+  return showAppBottomSheet<void>(
+    context: context,
+    title: null,
+    child: Column(
+      key: const ValueKey('notif-reader'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: style.color.withValues(alpha: 0.14), shape: BoxShape.circle),
+            child: Icon(style.icon, size: 19, color: style.color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(tr(style.label), style: theme.textTheme.labelLarge?.copyWith(color: style.color, fontWeight: FontWeight.w700)),
+          ),
+          if (when.isNotEmpty) Text(tr(when), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+        ]),
+        const SizedBox(height: 14),
+        Text.rich(
+          TextSpan(children: boldSpans(tr('${item['title'] ?? ''}'))),
+          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        if (body.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          SelectableText.rich(
+            TextSpan(children: boldSpans(tr(body))),
+            style: theme.textTheme.bodyMedium?.copyWith(height: 1.5, color: cs.onSurface),
+          ),
+        ],
+      ],
+    ),
+  );
 }

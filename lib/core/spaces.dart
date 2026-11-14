@@ -169,3 +169,23 @@ Space? findSpaceFor(List<Space> list, String baseUrl, String? userId) {
   }
   return null;
 }
+
+/// The saved Space whose business is [businessId] (a push from another
+/// Space). Not [excludeId] (the active one); same server as [preferBaseUrl]
+/// first when several match. [bundleKey] = the business id preference key.
+Space? spaceForBusiness(List<Space> list, String businessId, {String? excludeId, String? preferBaseUrl, String bundleKey = 'session_business_id'}) {
+  final bid = businessId.trim();
+  if (bid.isEmpty) return null;
+  String norm(String u) => u.trim().replaceAll(RegExp(r'/+$'), '').toLowerCase();
+  final hits = [
+    for (final s in list)
+      if (s.id != excludeId && '${s.bundle[bundleKey] ?? ''}'.trim() == bid) s,
+  ];
+  if (hits.isEmpty) return null;
+  if (preferBaseUrl != null) {
+    for (final s in hits) {
+      if (norm(s.baseUrl) == norm(preferBaseUrl)) return s;
+    }
+  }
+  return hits.first;
+}

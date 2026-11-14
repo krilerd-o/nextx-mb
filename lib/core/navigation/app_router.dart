@@ -121,6 +121,8 @@ GoRouter createAppRouter(AppConfig config) {
       if (!config.isLoggedIn || !config.hasBusinessContext || !config.hasPackage || !config.roleSetupDone) {
         return null; // still in the sign-in / setup flow
       }
+      // A push from another Space's business: switch Space first, open after.
+      if (config.holdPushForSpace()) return accessRedirectFor(config.session, loc);
       final pending = PushNavigation.instance.take();
       if (pending != null && pending.isNotEmpty && pending != loc) {
         // A tapped notification opens ON TOP of the app (home stays below),
@@ -210,7 +212,7 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: AppRoutes.notifications,
-        builder: (_, _) => const NotificationCenterScreen(),
+        builder: (_, state) => NotificationCenterScreen(focusId: state.uri.queryParameters['id']),
       ),
       GoRoute(
         path: AppRoutes.devices,
@@ -226,7 +228,10 @@ GoRouter createAppRouter(AppConfig config) {
       ),
       GoRoute(
         path: AppRoutes.leaveList,
-        builder: (_, _) => const LeaveScreen(),
+        builder: (_, state) {
+          final q = state.uri.queryParameters;
+          return LeaveScreen(initialTab: leaveTabIndex(q['tab']), focusId: q['id']);
+        },
       ),
       GoRoute(
         path: AppRoutes.attendanceReport,

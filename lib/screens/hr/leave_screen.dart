@@ -4,6 +4,7 @@ import '../../widgets/nx_scroll_scaffold.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
+import '../../core/app_theme.dart';
 import '../../core/menu_access.dart';
 import '../../core/nx_breakpoint.dart';
 import '../../services/api_client.dart';
@@ -21,11 +22,36 @@ import '../../core/i18n.dart';
 import '../../widgets/nx_list_toolbar.dart';
 import '../../widgets/nx_shake.dart';
 
+/// Tab index of `/hr/leave?tab=` (`balance` | `request` | `mine` | `approve`).
+int leaveTabIndex(String? tab) {
+  switch (tab) {
+    case 'request':
+      return 1;
+    case 'mine':
+      return 2;
+    case 'approve':
+      return 3;
+    default:
+      return 0;
+  }
+}
+
+/// Moves the request [focusId] to the top of [rows] (opened from a notification).
+List<Map<String, dynamic>> leaveFocusFirst(List<Map<String, dynamic>> rows, String? focusId) {
+  if (focusId == null || focusId.isEmpty) return rows;
+  final i = rows.indexWhere((r) => '${r['id']}' == focusId);
+  if (i <= 0) return rows;
+  return [rows[i], ...rows.sublist(0, i), ...rows.sublist(i + 1)];
+}
+
 class LeaveScreen extends StatefulWidget {
-  const LeaveScreen({super.key, this.initialTab = 0});
+  const LeaveScreen({super.key, this.initialTab = 0, this.focusId});
 
   /// 0 = balance, 1 = request form, 2 = mine, 3 = approve.
   final int initialTab;
+
+  /// Leave request a notification is about: shown first and outlined.
+  final String? focusId;
 
   @override
   State<LeaveScreen> createState() => _LeaveScreenState();
@@ -64,8 +90,8 @@ class _LeaveScreenState extends State<LeaveScreen> {
                 children: [
                   const _LeaveBalanceTab(),
                   _LeaveRequestTab(onSubmitted: () => setState(() => _mineRevision++)),
-                  _LeaveMineTab(revision: _mineRevision),
-                  if (canApprove) const _LeaveApprovalTab(),
+                  _LeaveMineTab(revision: _mineRevision, focusId: widget.focusId),
+                  if (canApprove) _LeaveApprovalTab(focusId: widget.focusId),
                 ],
               ),
             ),
@@ -587,8 +613,9 @@ class _LeaveSummary extends StatelessWidget {
 }
 
 class _LeaveMineTab extends StatefulWidget {
-  const _LeaveMineTab({required this.revision});
+  const _LeaveMineTab({required this.revision, this.focusId});
   final int revision;
+  final String? focusId;
 
   @override
   State<_LeaveMineTab> createState() => _LeaveMineTabState();
@@ -640,7 +667,7 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
         String ym(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}';
         final thisMonth = ym(now);
         final lastMonth = ym(DateTime(now.year, now.month - 1));
-        final list = nxApplyLocalQuery<Map<String, dynamic>>(
+        final list = leaveFocusFirst(nxApplyLocalQuery<Map<String, dynamic>>(
           all,
           _lq,
           text: (p) => '${p['leave_type_name'] ?? ''} ${p['reason'] ?? ''}',
@@ -658,7 +685,7 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
             'new': (a, b) => '${b['start_date'] ?? ''}'.compareTo('${a['start_date'] ?? ''}'),
             'old': (a, b) => '${a['start_date'] ?? ''}'.compareTo('${b['start_date'] ?? ''}'),
           },
-        );
+        ), widget.focusId);
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: NxBreakpoint.of(context).scrollPadding(context),
@@ -690,6 +717,7 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
             for (final p in list)
               _LeaveRequestCard(
                 row: p,
+                focused: widget.focusId != null && '${p['id']}' == widget.focusId,
                 onCancel: p['status']?.toString() == 'Pending' ? () => _cancel(p) : null,
                 editableFiles: p['status']?.toString() == 'Pending',
               ),
@@ -717,8 +745,11 @@ class _LeaveMineTabState extends State<_LeaveMineTab> {
 }
 
 class _LeaveRequestCard extends StatelessWidget {
-  const _LeaveRequestCard({required this.row, this.onCancel, this.trailing, this.editableFiles = false});
+  const _LeaveRequestCard({required this.row, this.onCancel, this.trailing, this.editableFiles = false, this.focused = false});
   final Map<String, dynamic> row;
+
+  /// The request a tapped notification is about.
+  final bool focused;
 
   /// The requester's own Pending request: may add / remove files.
   final bool editableFiles;
@@ -736,7 +767,11 @@ class _LeaveRequestCard extends StatelessWidget {
     final start = parseThaiDate(row['start_date']);
     const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
     return Card(
+      key: ValueKey('leave-card-${row['id']}${focused ? '-focused' : ''}'),
       margin: const EdgeInsets.only(bottom: 10),
+      shape: focused
+          ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.cardRadius), side: BorderSide(color: theme.colorScheme.primary, width: 1.6))
+          : null,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
         child: Row(
@@ -853,7 +888,8 @@ class _BalanceCard extends StatelessWidget {
 }
 
 class _LeaveApprovalTab extends StatefulWidget {
-  const _LeaveApprovalTab();
+  const _LeaveApprovalTab({this.focusId});
+  final String? focusId;
 
   @override
   State<_LeaveApprovalTab> createState() => _LeaveApprovalTabState();
@@ -904,9 +940,10 @@ class _LeaveApprovalTabState extends State<_LeaveApprovalTab> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: NxBreakpoint.of(context).scrollPadding(context),
           children: [
-            for (final p in pending)
+            for (final p in leaveFocusFirst(pending, widget.focusId))
               _LeaveRequestCard(
                 row: p,
+                focused: widget.focusId != null && '${p['id']}' == widget.focusId,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

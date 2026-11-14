@@ -191,10 +191,48 @@ String _notificationDeepLink(String path, {String? linkId, String? extra}) {
     return AppRoutes.workspaceHome;
   }
 
+  // HR: the web's leave pages (approver: /hr/leave-management, requester: /hr/leave).
+  if (segs.isNotEmpty && segs.first == 'hr') {
+    final id = (open != null && open.isNotEmpty) ? open : linkId;
+    if (segs.length >= 2 && segs[1] == 'leave-management') return AppRoutes.leave(tab: 'approve', id: id);
+    if (segs.length >= 2 && segs[1] == 'leave') return AppRoutes.leave(tab: 'mine', id: id);
+    if (segs.length >= 2 && segs[1] == 'attendance-report') return AppRoutes.attendanceReport;
+    return AppRoutes.attendance;
+  }
+
+  // Web pages without a screen of their own in the app.
+  if (segs.isNotEmpty) {
+    switch (segs.first) {
+      case 'commercial-store':
+        return AppRoutes.commerce;
+      case 'mailbox':
+        return AppRoutes.mail;
+      case 'approvals':
+        return AppRoutes.approvals;
+      case 'call-log':
+        return uri == null ? AppRoutes.callLog : '${AppRoutes.callLog}${uri.hasQuery ? '?${uri.query}' : ''}';
+      case 'analytics-reports':
+      case 'customize-reports':
+        return AppRoutes.notifications;
+      case 'settings':
+        if (segs.length >= 2 && segs[1] == 'comm-ai') return AppRoutes.commAiSettings;
+        if (segs.length >= 2 && segs[1] == 'lead-scoring') return AppRoutes.crmModule('lead');
+        if (segs.length >= 2 && (segs[1] == 'mail' || segs[1] == 'mailbox')) return AppRoutes.mail;
+        return AppRoutes.notifications;
+      case 'ai':
+        // AI Agent job results open in the Assistant (same conversation id).
+        if (segs.length >= 2 && segs[1] == 'agent') return uri!.hasQuery ? '${AppRoutes.aiChat}?${uri.query}' : AppRoutes.aiChat;
+    }
+  } else if (path.trim() == '/') {
+    return AppRoutes.notifications;
+  }
+
+  final room = uri?.queryParameters['room'];
+  final chatId = (linkId != null && linkId.isNotEmpty) ? linkId : room;
   if ((path.contains('chat') || path.contains('camp') || path.contains('community-chat')) &&
-      linkId != null &&
-      linkId.isNotEmpty) {
-    return AppRoutes.chatRoom(linkId);
+      chatId != null &&
+      chatId.isNotEmpty) {
+    return AppRoutes.chatRoom(chatId);
   }
   if (path.contains('hr')) return AppRoutes.attendance;
   if (path.contains('chat') || path.contains('camp') || path.contains('community-chat')) {
@@ -212,9 +250,55 @@ String _notificationDeepLink(String path, {String? linkId, String? extra}) {
   return AppRoutes.notifications;
 }
 
+/// Where an event that has no record page of its own opens (push `event`).
+/// Null → follow the notification's `url`.
+String? notificationEventRoute(String? event, {String? id, String? notificationId}) {
+  switch ((event ?? '').trim()) {
+    case 'leave_request':
+      return AppRoutes.leave(tab: 'approve', id: id);
+    case 'leave_result':
+      return AppRoutes.leave(tab: 'mine', id: id);
+    case 'announcement':
+    case 'app_update':
+    case 'system_notice':
+      return AppRoutes.notificationsOf(notificationId);
+  }
+  return null;
+}
+
+/// Route of one row of `GET /api/notifications` (bell tray / center). A row
+/// without a record page (announcement, system notice) opens itself in the
+/// notification center.
+String notificationItemRoute(Map<String, dynamic> item) {
+  final meta = item['meta'];
+  final extra = item['link_extra']?.toString() ?? (meta is Map ? meta['kind']?.toString() : null);
+  final event = item['event']?.toString() ?? (meta is Map ? meta['event']?.toString() : null);
+  final path = item['link_path']?.toString() ?? '';
+  final linkId = item['link_id']?.toString();
+  final id = item['id']?.toString();
+  if (path.trim().isEmpty || path.trim() == '/') {
+    final byEvent = notificationEventRoute(event, id: linkId, notificationId: id);
+    if (byEvent != null) return byEvent;
+    if (linkId == null || linkId.isEmpty) return AppRoutes.notificationsOf(id);
+  }
+  final route = notificationDeepLink(path, linkId: linkId, extra: extra);
+  return route == AppRoutes.notifications ? AppRoutes.notificationsOf(id) : route;
+}
+
 String? notificationDeepLinkFromData(Map<String, dynamic> data) {
-  final url = data['url']?.toString() ?? data['link_path']?.toString() ?? '';
-  final id = data['link_id']?.toString() ?? data['id']?.toString();
-  if (url.isEmpty && (id == null || id.isEmpty)) return AppRoutes.notifications;
-  return notificationDeepLink(url, linkId: id, extra: data['extra']?.toString() ?? data['link_extra']?.toString());
+  String? s(String k) {
+    final v = data[k]?.toString().trim();
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  final url = s('url') ?? s('link_path') ?? '';
+  final id = s('link_id') ?? s('id');
+  final event = s('event');
+  final byEvent = notificationEventRoute(event, id: id, notificationId: s('notification_id'));
+  // Leave events carry the leave id; the web's /hr/leave* url maps the same way.
+  if (byEvent != null && (url.isEmpty || event == 'announcement' || event == 'app_update' || event == 'system_notice' || url == '/')) return byEvent;
+  if (url.isEmpty && id == null) return byEvent ?? AppRoutes.notificationsOf(s('notification_id'));
+  final route = notificationDeepLink(url, linkId: id, extra: s('extra') ?? s('link_extra'));
+  // No screen for it in the app (e.g. a report on the web): open the notification itself.
+  return route == AppRoutes.notifications ? AppRoutes.notificationsOf(s('notification_id')) : route;
 }

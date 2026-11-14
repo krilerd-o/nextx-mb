@@ -5,7 +5,7 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../core/i18n.dart';
-import '../core/push_navigation.dart';
+import '../core/navigation/push_tap.dart';
 import '../core/thai_time.dart';
 import '../screens/calendar/cal/cal_birthdays.dart';
 import '../screens/calendar/cal/cal_model.dart';
@@ -66,10 +66,8 @@ class BirthdayReminders {
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
           iOS: DarwinInitializationSettings(),
         ),
-        onDidReceiveNotificationResponse: (r) {
-          final p = r.payload;
-          if (p != null && p.isNotEmpty) PushNavigation.instance.remember(p);
-        },
+        // Push banners shown in the foreground carry their data as JSON.
+        onDidReceiveNotificationResponse: (r) => handleNotificationPayload(r.payload),
       );
       await _plugin
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()

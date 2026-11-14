@@ -8,9 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/app_config.dart';
 import 'api_client.dart';
 import '../core/navigation/notification_deep_link.dart';
+import '../core/navigation/push_tap.dart';
 import '../core/push_navigation.dart';
 import 'calls/call_system_ui.dart';
 import 'hms_push.dart';
+import 'unread_service.dart';
 
 const _tokenKey = 'staff_device_push_token';
 const _hmsTokenKey = 'staff_device_hms_token';
@@ -41,12 +43,7 @@ Future<void> _ensureLocalNotifications() async {
   const ios = DarwinInitializationSettings();
   await _localNotifications.initialize(
     const InitializationSettings(android: android, iOS: ios),
-    onDidReceiveNotificationResponse: (response) {
-      final payload = response.payload;
-      if (payload != null && payload.isNotEmpty) {
-        PushNavigation.instance.remember(payload);
-      }
-    },
+    onDidReceiveNotificationResponse: (response) => handleNotificationPayload(response.payload),
   );
   final androidPlugin = _localNotifications.resolvePlatformSpecificImplementation<
       AndroidFlutterLocalNotificationsPlugin>();
@@ -60,11 +57,33 @@ Future<void> _ensureLocalNotifications() async {
   );
 }
 
+/// Whether a push that arrives while the app is open needs our own banner.
+/// iOS already shows a push with a `notification` part itself
+/// (`setForegroundNotificationPresentationOptions(alert: true)`), so a local
+/// one on top would show it twice; Android never shows it in the foreground.
+bool shouldShowLocalForeground({required bool ios, required bool hasNotification}) => !(ios && hasNotification);
+
+/// A push arrived with the app open: count it, and show it unless the phone does.
+@visibleForTesting
+Future<void> onForegroundPush(
+  Map<String, dynamic> data, {
+  required bool hasNotification,
+  bool? ios,
+  String? currentBusinessId,
+  Future<void> Function()? show,
+}) async {
+  // Calls in the foreground come over the socket (in-app call screen) — no notification.
+  if (isCallPush(data)) return;
+  UnreadNotifications.instance.onPush(data, currentBusinessId: currentBusinessId);
+  final isIos = ios ?? (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS);
+  if (shouldShowLocalForeground(ios: isIos, hasNotification: hasNotification)) await show?.call();
+}
+
 Future<void> _showForegroundNotification(RemoteMessage message) async {
   final n = message.notification;
   final title = n?.title ?? message.data['title']?.toString() ?? 'MOAI NEXT';
   final body = n?.body ?? message.data['body']?.toString() ?? '';
-  final loc = notificationDeepLinkFromData(Map<String, dynamic>.from(message.data));
+  final loc = encodePushPayload(Map<String, dynamic>.from(message.data));
   await _localNotifications.show(
     message.hashCode,
     title,
@@ -92,20 +111,17 @@ Future<void> initFirebasePush() async {
     await _ensureLocalNotifications();
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     final initial = await FirebaseMessaging.instance.getInitialMessage();
-    if (initial != null) {
-      PushNavigation.instance.remember(
-        notificationDeepLinkFromData(Map<String, dynamic>.from(initial.data)),
-      );
-    }
+    if (initial != null) await handlePushTap(Map<String, dynamic>.from(initial.data));
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      PushNavigation.instance.remember(
-        notificationDeepLinkFromData(Map<String, dynamic>.from(message.data)),
-      );
+      handlePushTap(Map<String, dynamic>.from(message.data));
     });
     FirebaseMessaging.onMessage.listen((message) {
-      // Calls in the foreground come over the socket (in-app call screen) — no notification.
-      if (isCallPush(Map<String, dynamic>.from(message.data))) return;
-      _showForegroundNotification(message);
+      onForegroundPush(
+        Map<String, dynamic>.from(message.data),
+        hasNotification: message.notification != null,
+        currentBusinessId: DevicePushService.instance._boundConfig?.session.businessId,
+        show: () => _showForegroundNotification(message),
+      );
     });
     FirebaseMessaging.instance.onTokenRefresh.listen((value) {
       DevicePushService.instance.onTokenRefreshed(value);

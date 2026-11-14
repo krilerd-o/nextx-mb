@@ -33,6 +33,7 @@ import '../services/birthday_reminders.dart';
 import 'session_state.dart';
 import 'ui_font.dart';
 import 'shell_tabs.dart';
+import 'push_navigation.dart';
 import 'spaces.dart';
 
 const String _keyApiBaseUrl = 'api_base_url';
@@ -1630,6 +1631,40 @@ class AppConfig extends ChangeNotifier {
     _spaces = upsertSpace(_spaces, sp.copyWith(lastUsedAt: DateTime.now()));
     await _saveSpaces(prefs);
     await _load();
+  }
+
+  /// Another saved Space that is signed in to business [businessId] (a
+  /// tapped push from it); null when it is this one or none matches.
+  Space? spaceForPushBusiness(String? businessId) {
+    final bid = businessId?.trim() ?? '';
+    if (bid.isEmpty || bid == _session.businessId) return null;
+    return spaceForBusiness(_spaces, bid, excludeId: _activeSpaceId, preferBaseUrl: _apiBaseUrl, bundleKey: _keyBusinessId);
+  }
+
+  bool _pushSwitching = false;
+
+  /// A tapped push belongs to another Space's business: switch there first
+  /// (once). True while the app should keep the push waiting; the router
+  /// opens it after the other Space has loaded.
+  bool holdPushForSpace() {
+    final nav = PushNavigation.instance;
+    final bid = nav.pendingBusinessId;
+    if (bid == null || nav.pending == null) return false;
+    if (_pushSwitching) return true;
+    final sp = spaceForPushBusiness(bid);
+    if (sp == null) {
+      // This business, or one the user has no Space for: open it here.
+      nav.clearBusiness(notify: false);
+      return false;
+    }
+    _pushSwitching = true;
+    unawaited(switchSpace(sp.id).catchError((Object e) {
+      debugPrint('[push] switch space: $e');
+    }).whenComplete(() {
+      _pushSwitching = false;
+      nav.clearBusiness();
+    }));
+    return true;
   }
 
   /// Switches to another signed-in Space. Each Space keeps its own server,

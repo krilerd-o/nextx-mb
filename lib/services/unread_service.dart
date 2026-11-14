@@ -57,6 +57,21 @@ class UnreadNotifications extends ChangeNotifier {
   }
 
   void bump() => _set(_count + 1);
+
+  /// A push arrived while the app is open. `badge` (the server's unread
+  /// count) wins; without it count one more — unless the socket is up, whose
+  /// `notification` event has counted it already. Pushes about another
+  /// business (another Space) leave this Space's count alone.
+  void onPush(Map<String, dynamic> data, {String? currentBusinessId}) {
+    final bid = '${data['business_id'] ?? ''}'.trim();
+    if (bid.isNotEmpty && currentBusinessId != null && currentBusinessId.isNotEmpty && bid != currentBusinessId) return;
+    final badge = int.tryParse('${data['badge'] ?? ''}'.trim());
+    if (badge != null && badge >= 0) {
+      _set(badge);
+    } else if (!RealtimeService.instance.connected) {
+      bump();
+    }
+  }
   void markedRead() => _set(_count - 1);
   void clear() => _set(0);
 }
