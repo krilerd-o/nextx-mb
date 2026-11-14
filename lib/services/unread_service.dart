@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/approval_queue.dart';
 import 'api_client.dart';
+import 'app_icon_badge.dart';
 import 'realtime_service.dart';
 
 /// Unread count from `GET /api/notifications/summary`
@@ -36,6 +37,8 @@ class UnreadNotifications extends ChangeNotifier {
 
   void _set(int v) {
     final next = v < 0 ? 0 : v;
+    // The app icon shows the same number (first call sets it even when 0).
+    unawaited(AppIconBadge.instance.set(next));
     if (next == _count) return;
     _count = next;
     notifyListeners();

@@ -47,15 +47,54 @@ Future<void> _ensureLocalNotifications() async {
   );
   final androidPlugin = _localNotifications.resolvePlatformSpecificImplementation<
       AndroidFlutterLocalNotificationsPlugin>();
-  await androidPlugin?.createNotificationChannel(
-    const AndroidNotificationChannel(
-      _androidChannelId,
-      'MOAI NEXT',
-      description: 'แจ้งเตือนงานและแชท',
-      importance: Importance.high,
-    ),
-  );
+  // Also the FCM default channel (AndroidManifest) for pushes while the app is
+  // closed: high importance = heads-up banner with sound. Android keeps a
+  // channel's first settings, so these must stay as they are.
+  await androidPlugin?.createNotificationChannel(highImportanceChannel);
 }
+
+/// The one notification channel of the app (`high_importance_channel`).
+const highImportanceChannel = AndroidNotificationChannel(
+  _androidChannelId,
+  'MOAI NEXT',
+  description: 'แจ้งเตือนงานและแชท',
+  importance: Importance.high,
+  playSound: true,
+  enableVibration: true,
+  showBadge: true,
+);
+
+/// Id + tag of a foreground notification. Chat messages of one room share
+/// both, so a new message replaces the room's previous notification instead
+/// of piling up; everything else gets its own ([fallbackId]).
+({int id, String? tag}) foregroundNotificationSlot(Map<String, dynamic> data, {required int fallbackId}) {
+  final event = '${data['event'] ?? ''}'.trim();
+  final isChatMessage = event == 'chat_message' || event == 'chat_mention' || (event.isEmpty && '${data['url'] ?? ''}'.contains('room='));
+  final room = isChatMessage ? pushChatRoom(data) : null;
+  if (room == null || room.isEmpty) return (id: fallbackId, tag: null);
+  final key = 'chat:$room';
+  // Stable across runs (String.hashCode is not): 31-hash kept positive 31-bit.
+  var h = 17;
+  for (final c in key.codeUnits) {
+    h = (h * 31 + c) & 0x7fffffff;
+  }
+  return (id: h, tag: 'chat-$room');
+}
+
+/// What a foreground notification looks like on Android / iOS.
+NotificationDetails foregroundNotificationDetails({String? tag, int? badge}) => NotificationDetails(
+      android: AndroidNotificationDetails(
+        _androidChannelId,
+        'MOAI NEXT',
+        channelDescription: 'แจ้งเตือนงานและแชท',
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+        tag: tag,
+        number: badge,
+      ),
+      iOS: const DarwinNotificationDetails(),
+    );
 
 /// Whether a push that arrives while the app is open needs our own banner.
 /// iOS already shows a push with a `notification` part itself
@@ -83,21 +122,14 @@ Future<void> _showForegroundNotification(RemoteMessage message) async {
   final n = message.notification;
   final title = n?.title ?? message.data['title']?.toString() ?? 'MOAI NEXT';
   final body = n?.body ?? message.data['body']?.toString() ?? '';
-  final loc = encodePushPayload(Map<String, dynamic>.from(message.data));
+  final data = Map<String, dynamic>.from(message.data);
+  final loc = encodePushPayload(data);
+  final slot = foregroundNotificationSlot(data, fallbackId: message.hashCode & 0x7fffffff);
   await _localNotifications.show(
-    message.hashCode,
+    slot.id,
     title,
     body,
-    const NotificationDetails(
-      android: AndroidNotificationDetails(
-        _androidChannelId,
-        'MOAI NEXT',
-        channelDescription: 'แจ้งเตือนงานและแชท',
-        importance: Importance.high,
-        priority: Priority.high,
-      ),
-      iOS: DarwinNotificationDetails(),
-    ),
+    foregroundNotificationDetails(tag: slot.tag, badge: int.tryParse('${data['badge'] ?? ''}')),
     payload: loc,
   );
 }

@@ -67,6 +67,9 @@ dependencies:
   printing: ^5.15.1
   # QR of the customer signing link (pure Dart; already in the build through printing → pdf → barcode).
   qr: ^3.0.2
+  # Unread count on the app icon (iOS + Samsung / Huawei / Xiaomi / OPPO / vivo / Sony launchers).
+  # Pinned: 1.4.0 is only days old.
+  app_badge_plus: 1.3.5
 
 dev_dependencies:
   flutter_test:
