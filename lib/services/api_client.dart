@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -3061,9 +3062,39 @@ class ApiClient {
         path,
         options: Options(responseType: ResponseType.bytes, method: 'GET', receiveTimeout: receiveTimeout),
       );
-      return res.data ?? <int>[];
+      // Keep the server's draft-mark answer with the file (PDF routes send it).
+      return DocPdfBytes(res.data ?? <int>[], watermark: res.headers.value(DocPdfBytes.header));
     } on DioException catch (e) {
       throw _fromDio(e);
     }
+  }
+}
+
+/// Downloaded file bytes plus the server's `X-Document-Watermark` answer:
+/// `stamped` (draft, DRAFT already printed in the PDF pages), `none` (not a
+/// draft) or `draft-unstamped` (draft, the server could not print it). Null
+/// = an older server that does not say.
+class DocPdfBytes extends ListBase<int> {
+  DocPdfBytes(this._bytes, {this.watermark});
+  final List<int> _bytes;
+  final String? watermark;
+
+  static const header = 'x-document-watermark';
+
+  @override
+  int get length => _bytes.length;
+  @override
+  set length(int v) => _bytes.length = v;
+  @override
+  int operator [](int i) => _bytes[i];
+  @override
+  void operator []=(int i, int v) => _bytes[i] = v;
+
+  /// Should the app draw DRAFT over these pages? From the server's answer;
+  /// null when the server did not say (then the app decides by the rules).
+  static bool? overlayFor(List<int>? bytes) {
+    final w = bytes is DocPdfBytes ? bytes.watermark?.trim().toLowerCase() : null;
+    if (w == null || w.isEmpty) return null;
+    return w == 'draft-unstamped';
   }
 }

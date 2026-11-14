@@ -394,7 +394,7 @@ class _RecordDocumentTabState extends State<RecordDocumentTab> {
           onTap: _fullScreen,
           child: Container(
             decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(blurRadius: 14, offset: Offset(0, 3), color: Color(0x26000000))]),
-            child: docPageImage(_pages[i], draft: _draft && _shown?.birt == true),
+            child: docPageImage(_pages[i], draft: _shown?.birt == true && (DocPdfBytes.overlayFor(_bytes) ?? _draft)),
           ),
         ),
       ],

@@ -54,6 +54,7 @@ class FakeNextxAdapter implements HttpClientAdapter {
       // Binary reply (PDF downloads).
       return ResponseBody.fromBytes(raw, code ?? 200, headers: {
         Headers.contentTypeHeader: ['application/pdf'],
+        for (final e in (headersFor[key] ?? const <String, String>{}).entries) e.key: [e.value],
       });
     }
     final Object body;

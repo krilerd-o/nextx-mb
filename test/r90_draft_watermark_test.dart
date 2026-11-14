@@ -12,6 +12,7 @@ import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/docs/document_preview.dart';
 import 'package:nextx_mobile/screens/docs/document_tab.dart';
+import 'package:nextx_mobile/services/api_client.dart' show DocPdfBytes;
 
 import 'support/fake_api.dart';
 
@@ -51,11 +52,12 @@ void main() {
     }
   }
 
-  Future<FakeNextxAdapter> pump(WidgetTester tester, Widget home, Map<String, Object?> replies, {Map<String, int> status = const {}}) async {
+  Future<FakeNextxAdapter> pump(WidgetTester tester, Widget home, Map<String, Object?> replies,
+      {Map<String, int> status = const {}, Map<String, Map<String, String>> headers = const {}}) async {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (c) async => null);
-    final adapter = FakeNextxAdapter(replies, statusFor: status);
+    final adapter = FakeNextxAdapter(replies, statusFor: status, headersFor: headers);
     final config = AppConfig();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
     config.debugOverrideSession(const SessionState(accessToken: 't', userId: '1', businessId: '1', menusLoaded: true, menuKeys: ['job', 'quotation']));
@@ -205,5 +207,55 @@ void main() {
     );
     expect(find.byKey(const ValueKey('doc-tab-page-0')), findsOneWidget);
     expect(find.byKey(_wm), findsNothing);
+  });
+
+  group('the server prints DRAFT into the PDF now (X-Document-Watermark)', () {
+    test('overlay only for draft-unstamped; unknown (older server) → null', () {
+      expect(DocPdfBytes.overlayFor(DocPdfBytes(pdf('a'), watermark: 'stamped')), isFalse);
+      expect(DocPdfBytes.overlayFor(DocPdfBytes(pdf('a'), watermark: 'none')), isFalse);
+      expect(DocPdfBytes.overlayFor(DocPdfBytes(pdf('a'), watermark: 'draft-unstamped')), isTrue);
+      expect(DocPdfBytes.overlayFor(DocPdfBytes(pdf('a'))), isNull);
+      expect(DocPdfBytes.overlayFor(pdf('a')), isNull);
+    });
+
+    test('document_watermark on the record wins over the copied rules', () {
+      expect(quotationDraftWatermark({...qt('none', 'เปิดใบเสนอราคา'), 'document_watermark': false}), isFalse);
+      expect(quotationDraftWatermark({...qt('approved', 'ปิดการขาย'), 'document_watermark': true}), isTrue);
+      expect(jobDraftWatermark({'template_key': 'template2', 'job_status': 'Draft', 'document_watermark': false}), isFalse);
+    });
+
+    for (final (answer, overlay) in const [('stamped', false), ('none', false), ('draft-unstamped', true)]) {
+      testWidgets('preview of a draft quotation, server says "$answer" → app overlay: $overlay', (tester) async {
+        await pump(
+          tester,
+          DocumentPreviewScreen(source: quotationDocumentSource(qt('none', 'เปิดใบเสนอราคา'))),
+          {'GET /api/quotation/5/birt-pdf': pdf('birt'), 'GET /api/settings/quotation': settingsOn},
+          headers: {
+            'GET /api/quotation/5/birt-pdf': {'x-document-watermark': answer},
+          },
+        );
+        expect(find.byKey(const ValueKey('doc-pages')), findsOneWidget, reason: 'pages are shown');
+        expect(find.byKey(_wm), overlay ? findsWidgets : findsNothing);
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
+
+    testWidgets('เอกสาร tab: server stamped → no second DRAFT on top', (tester) async {
+      await pump(
+        tester,
+        Scaffold(body: SingleChildScrollView(child: RecordDocumentTab(module: 'quotation', row: {...qt('none', 'เปิดใบเสนอราคา'), 'id': 8}))),
+        {
+          'GET /api/quotation/8/birt-pdf': pdf('birt'),
+          'GET /api/quotation/8/email-log': {'items': []},
+          'GET /api/settings/quotation': settingsOn,
+        },
+        headers: {
+          'GET /api/quotation/8/birt-pdf': {'x-document-watermark': 'stamped'},
+        },
+      );
+      expect(find.byKey(const ValueKey('doc-tab-page-0')), findsOneWidget);
+      expect(find.byKey(_wm), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 }

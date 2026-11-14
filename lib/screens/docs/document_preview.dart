@@ -77,6 +77,9 @@ class DocumentSource {
 /// [settings] is `GET /api/settings/quotation` (`{config: {...}}`) or its
 /// config. A row with no status at all is not marked (unknown, not a draft).
 bool quotationDraftWatermark(Map<String, dynamic> row, [Map<String, dynamic>? settings]) {
+  // The server says it on the record (document_watermark) — same rule as its PDF.
+  final flag = row['document_watermark'];
+  if (flag is bool) return flag;
   final cfg = settings?['config'] is Map ? settings!['config'] as Map : settings;
   final doc = cfg?['document'];
   if (doc is Map && doc['watermark_until_approved'] == false) return false;
@@ -89,8 +92,9 @@ bool quotationDraftWatermark(Map<String, dynamic> row, [Map<String, dynamic>? se
 
 /// The server's job report rule: Template-2 (`job_template2`) gets the DRAFT
 /// watermark while the job status is Draft; Template-1 has none.
-bool jobDraftWatermark(Map<String, dynamic> row) =>
-    '${row['template_key'] ?? ''}'.trim().toLowerCase() == 'template2' && '${row['job_status'] ?? ''}'.trim().toLowerCase() == 'draft';
+bool jobDraftWatermark(Map<String, dynamic> row) => row['document_watermark'] is bool
+    ? row['document_watermark'] as bool
+    : '${row['template_key'] ?? ''}'.trim().toLowerCase() == 'template2' && '${row['job_status'] ?? ''}'.trim().toLowerCase() == 'draft';
 
 /// The web's draft mark (BIRT `draft-watermark.png`): "DRAFT" in bold
 /// slate grey at ~18% opacity, rising diagonally (55°) across the page
@@ -317,7 +321,10 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> with Sing
   bool _draft = false;
 
   /// DRAFT over the pages: draft document, template (BIRT) variant shown.
-  bool get _showDraft => _draft && _shownId != null && _variant(_shownId!).birt;
+  // The server's answer with the file wins: it prints DRAFT into the PDF itself
+  // now, so the app only draws it for an older server or when printing failed.
+  bool get _showDraft =>
+      _shownId != null && _variant(_shownId!).birt && (DocPdfBytes.overlayFor(_cache[_shownId!]) ?? _draft);
 
   final _tc = TransformationController();
   late final AnimationController _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 260));
