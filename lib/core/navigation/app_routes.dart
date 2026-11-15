@@ -60,6 +60,9 @@ class AppRoutes {
   static const String aiChat = '/ai';
   static String aiShared(String token) => '/share/ai/${Uri.encodeComponent(token)}';
 
+  /// AI Assistant with [prompt] ready in the input (not sent).
+  static String aiWithPrompt(String prompt) => Uri(path: aiChat, queryParameters: {'prompt': prompt}).toString();
+
   /// AI Assistant about one record (web context_module / context_id).
   static String aiAsk({required String module, required String id, String? title}) =>
       Uri(path: aiChat, queryParameters: {'ctx_module': module, 'ctx_id': id, if (title != null && title.isNotEmpty) 'ctx_title': title}).toString();

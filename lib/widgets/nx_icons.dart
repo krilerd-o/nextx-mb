@@ -186,6 +186,16 @@ class NxI {
   static const arrowsClockwiseFill = LucideIcons500.refreshCw;
   static const arrowCounterClockwise = LucideIcons300.rotateCcw;
   static const arrowCounterClockwiseFill = LucideIcons500.rotateCcw;
+  // ISAAC chat (AI Assistant redesign)
+  static const brain = LucideIcons300.brain;
+  static const squareSlash = LucideIcons300.squareSlash;
+  static const folderPlus = LucideIcons300.folderPlus;
+  static const folderOpen = LucideIcons300.folderOpen;
+  static const pinOff = LucideIcons300.pinOff;
+  static const archiveRestore = LucideIcons300.archiveRestore;
+  static const arrowDownToLine = LucideIcons300.arrowDownToLine;
+  static const messageSquarePlus = LucideIcons300.messageSquarePlus;
+  static const wandSparkles = LucideIcons300.wandSparkles;
   static const sparkle = LucideIcons300.sparkles;
   static const sparkleFill = LucideIcons500.sparkles;
   static const copySimple = LucideIcons300.copy;

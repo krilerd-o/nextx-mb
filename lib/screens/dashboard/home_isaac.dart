@@ -84,6 +84,14 @@ class IsaacBrief {
   }
 }
 
+/// "ถามต่อในไอแซค": the brief carried into the chat, with the part to ask selected.
+String isaacFollowUpPrompt(IsaacBrief brief) {
+  final lines = [for (final i in brief.items.take(8)) '- ${i.text}'];
+  var body = lines.join('\n');
+  if (body.length > 1500) body = '${body.substring(0, 1500)}…';
+  return 'จากสรุปวันนี้ของฉัน:\n$body\n\nช่วย [ขยายความ / จัดลำดับสิ่งที่ควรทำก่อน]';
+}
+
 /// `yyyy-mm-dd` of [d] (the Thai wall-clock day the summary belongs to).
 String isaacDayKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -485,7 +493,7 @@ class _IsaacBriefCardState extends State<IsaacBriefCard> {
                     child: TextButton(
                       key: const ValueKey('home-isaac-ask'),
                       style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 8)),
-                      onPressed: () => context.push(AppRoutes.aiChat),
+                      onPressed: () => context.push(_brief == null ? AppRoutes.aiChat : AppRoutes.aiWithPrompt(isaacFollowUpPrompt(_brief!))),
                       child: Text(tr('ถามต่อในไอแซค'), maxLines: 1, overflow: TextOverflow.ellipsis),
                     ),
                   ),

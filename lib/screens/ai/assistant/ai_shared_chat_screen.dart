@@ -11,6 +11,8 @@ import '../../../widgets/nx_markdown.dart';
 import '../../../widgets/nx_skeleton.dart';
 import 'ai_assistant_controller.dart' show aiErrorText;
 import 'ai_assistant_screen.dart' show handleInAppWebLink;
+import 'ai_cards.dart';
+import '../../../widgets/nx_attachments.dart';
 
 /// A chat someone shared (web `/share/ai/:token`), read-only.
 class AiSharedChatScreen extends StatefulWidget {
@@ -94,7 +96,10 @@ class _AiSharedChatScreenState extends State<AiSharedChatScreen> {
                             margin: const EdgeInsets.only(top: 10, bottom: 6, left: 40),
                             padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                             decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(18)),
-                            child: SelectableText(m.content, style: theme.textTheme.bodyLarge?.copyWith(height: 1.5)),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                              if (m.attachments.isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 6), child: NxAttachmentStrip(items: m.attachments, thumb: 64)),
+                              if (m.content.trim().isNotEmpty) SelectableText(m.content, style: theme.textTheme.bodyLarge?.copyWith(height: 1.5)),
+                            ]),
                           ),
                         )
                       else
@@ -108,6 +113,8 @@ class _AiSharedChatScreenState extends State<AiSharedChatScreen> {
                             ]),
                             const SizedBox(height: 6),
                             NxMarkdown(data: m.content, onOpenLink: (href) => handleInAppWebLink(context, href)),
+                            if (m.downloads.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: AiDownloadChips(downloads: m.downloads)),
+                            if (m.citations.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: AiCitationChips(citations: m.citations)),
                           ]),
                         ),
                   ],

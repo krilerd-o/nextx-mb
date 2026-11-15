@@ -2,23 +2,35 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/ai_assistant.dart';
+import '../../../core/ai_commands.dart';
+import '../../../core/i18n.dart';
 import '../../../services/api_client.dart';
-import '../../../services/api_exceptions.dart';
 
 /// State of the ISAAC AI Assistant (web `AiAssistantProvider.jsx`):
-/// conversations on the server, one open chat, streaming replies, proposals.
+/// conversations and folders on the server, one open chat, streaming replies,
+/// proposals, answer mode and slash commands.
 class AiAssistantController extends ChangeNotifier {
   AiAssistantController(this.api);
 
   final ApiClient api;
 
+  /// Chats per page in the history list.
+  static const pageSize = 50;
+
   List<AiConversation> conversations = [];
   bool listLoading = false;
+  bool loadingMore = false;
+  bool hasMore = false;
   String query = '';
 
-  /// The record this chat is about ("ถาม Isaac" from a record page).
+  /// Archived chats (loaded when the user opens that section).
+  List<AiConversation> archivedChats = [];
+  bool archivedLoading = false;
+
+  /// The record this chat is about ("ถาม Isaac" from a record page, or `@` mention).
   String? contextModule;
   String? contextId;
   String? contextTitle;
@@ -28,19 +40,43 @@ class AiAssistantController extends ChangeNotifier {
     _notify();
   }
 
-  /// AI projects (folders for chats) and the one shown, null = all.
-  List<Map<String, dynamic>> projects = const [];
+  void setContext(String module, String id, String title) {
+    contextModule = module;
+    contextId = id;
+    contextTitle = title;
+    _notify();
+  }
+
+  /// Chat folders (server "AI projects") and the one shown, null = all.
+  List<AiFolder> folders = const [];
   String? projectFilter;
 
-  /// Chats visible in the list (project filter applied).
-  List<AiConversation> get visibleConversations =>
-      projectFilter == null ? conversations : conversations.where((c) => c.projectId == projectFilter).toList();
+  /// Kept for older callers / tests: folders as raw maps.
+  List<Map<String, dynamic>> get projects => [
+    for (final f in folders) {'id': f.id, 'name': f.name, 'color': f.color, 'icon': f.icon, 'instructions': f.instructions},
+  ];
+
+  AiFolder? folderById(String? id) => id == null ? null : folders.where((f) => f.id == id).firstOrNull;
+
+  /// Chats visible in the list (folder filter applied).
+  List<AiConversation> get visibleConversations => projectFilter == null ? conversations : conversations.where((c) => c.projectId == projectFilter).toList();
+
+  int chatCountIn(String folderId) {
+    final f = folderById(folderId);
+    final local = conversations.where((c) => c.projectId == folderId).length;
+    // The server counts every chat; the local list may be one page only.
+    return f?.chatCount != null && f!.chatCount! > local ? f.chatCount! : local;
+  }
 
   String? activeId;
   String activeTitle = '';
   bool activeStarred = false;
+  String? activeProjectId;
   List<AiMessage> messages = [];
   bool chatLoading = false;
+
+  /// New chat started from a folder page: filed there when it is created.
+  String? pendingProjectId;
 
   /// A reply is streaming.
   bool sending = false;
@@ -50,10 +86,24 @@ class AiAssistantController extends ChangeNotifier {
   String? error;
   String? errorCode;
 
-  /// `auto` or a provider id; model when not auto.
+  /// Bumped (at most every [_tokenFrame]) while tokens arrive. Only the
+  /// streaming message listens, so the screen does not rebuild per token.
+  final ValueNotifier<int> streamTick = ValueNotifier(0);
+  static const _tokenFrame = Duration(milliseconds: 50);
+  DateTime _lastTick = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _tickTimer;
+
+  /// `auto` or a provider id; model when not auto (the "ขั้นสูง" picker).
   String provider = 'auto';
   String? model;
   ({String provider, String model})? sticky;
+
+  /// Answer mode with Auto: `auto` · `fast` · `deep`.
+  String autoMode = 'auto';
+
+  /// Use CRM data (business knowledge) in answers.
+  bool injectContext = true;
+  double temperature = 0.7;
 
   Map<String, dynamic>? usage;
   AiModelPolicy? policy;
@@ -62,12 +112,26 @@ class AiAssistantController extends ChangeNotifier {
   List<Map<String, dynamic>> suggestedPrompts = const [];
   List<Map<String, dynamic>> followUps = const [];
 
+  /// Slash commands from the business and from the user.
+  List<AiCommand> businessCommands = const [];
+  List<AiCommand> myCommands = const [];
+
+  /// Built-in + business + mine, for the `/` menu.
+  List<AiCommand> get allCommands => [...kAiBuiltinCommands, ...businessCommands, ...myCommands];
+
   /// Files uploaded for the next message.
   final List<Map<String, dynamic>> pendingAttachments = [];
   bool uploading = false;
 
-  /// Proposals confirmed / cancelled this session: proposalId → result.
+  /// Upload progress 0..1 of the file being sent (null when unknown).
+  double? uploadProgress;
+
+  /// Proposals confirmed / cancelled: proposalId → working | done | cancelled.
+  /// Filled from the server when a chat opens, so a reopened chat stays done.
   final Map<String, String> proposalState = {};
+
+  /// Link returned when a proposal ran (open the new record).
+  final Map<String, String> proposalLinks = {};
 
   CancelToken? _cancel;
   bool _disposed = false;
@@ -79,6 +143,9 @@ class AiAssistantController extends ChangeNotifier {
     return r != null && r <= 0;
   }
 
+  /// "Auto · คิดลึก" or the picked model.
+  String get modeLabel => provider == 'auto' ? (autoMode == 'auto' ? 'Auto' : aiModeLabel(autoMode)) : aiModelBadge(provider, model);
+
   void _notify() {
     if (!_disposed) notifyListeners();
   }
@@ -87,13 +154,17 @@ class AiAssistantController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _cancel?.cancel();
+    _tickTimer?.cancel();
+    streamTick.dispose();
     super.dispose();
   }
 
   Future<void> init() async {
+    await _loadPrefs();
     await Future.wait([
       loadConversations(),
       loadProjects(),
+      loadCommands(),
       api.getAiUsage().then((u) => usage = u).catchError((_) => <String, dynamic>{}),
       api.getAiModelPolicy().then((p) => policy = AiModelPolicy.fromJson(p)).catchError((_) => const AiModelPolicy({}, {})),
       api.getAiSuggestedPrompts().then((p) => suggestedPrompts = p).catchError((_) => <Map<String, dynamic>>[]),
@@ -101,15 +172,65 @@ class AiAssistantController extends ChangeNotifier {
     _notify();
   }
 
+  // ── preferences (answer mode, CRM data, temperature)
+
+  static const _kMode = 'ai.mode';
+  static const _kCtx = 'ai.inject_context';
+  static const _kTemp = 'ai.temperature';
+
+  Future<void> _loadPrefs() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final m = p.getString(_kMode);
+      if (m != null && kAiModes.contains(m)) autoMode = m;
+      injectContext = p.getBool(_kCtx) ?? true;
+      temperature = p.getDouble(_kTemp) ?? 0.7;
+    } catch (_) {}
+  }
+
+  Future<void> _savePrefs() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(_kMode, autoMode);
+      await p.setBool(_kCtx, injectContext);
+      await p.setDouble(_kTemp, temperature);
+    } catch (_) {}
+  }
+
+  /// Auto / Fast / Deep: back to Auto routing (drops a manual model).
+  void setMode(String mode) {
+    if (!kAiModes.contains(mode)) return;
+    autoMode = mode;
+    provider = 'auto';
+    model = null;
+    sticky = null;
+    if ((errorCode ?? '').contains('EXHAUSTED')) clearError();
+    _notify();
+    unawaited(_savePrefs());
+    unawaited(reloadUsage());
+  }
+
+  void setInjectContext(bool v) {
+    injectContext = v;
+    _notify();
+    unawaited(_savePrefs());
+  }
+
+  void setTemperature(double v) {
+    temperature = v;
+    _notify();
+    unawaited(_savePrefs());
+  }
+
+  // ── chat list
+
   Future<void> loadConversations() async {
     listLoading = true;
     _notify();
     try {
-      final rows = await api.getAiConversations(q: query);
-      conversations = [
-        for (final r in rows)
-          if ('${r['mode'] ?? 'chat'}' == 'chat' || r['mode'] == null) AiConversation.fromJson(r),
-      ];
+      final rows = await api.getAiConversations(q: query, archived: false, limit: pageSize);
+      conversations = _chatRows(rows);
+      hasMore = rows.length >= pageSize;
     } catch (_) {
     } finally {
       listLoading = false;
@@ -117,11 +238,62 @@ class AiAssistantController extends ChangeNotifier {
     }
   }
 
-  void newChat() {
+  /// Next page of the history list (dedupes in case the server ignores paging).
+  Future<void> loadMore() async {
+    if (!hasMore || loadingMore || listLoading) return;
+    loadingMore = true;
+    _notify();
+    try {
+      final rows = await api.getAiConversations(q: query, archived: false, limit: pageSize, offset: conversations.length);
+      final seen = {for (final c in conversations) c.id};
+      final fresh = _chatRows(rows).where((c) => seen.add(c.id)).toList();
+      conversations = [...conversations, ...fresh];
+      hasMore = fresh.isNotEmpty && rows.length >= pageSize;
+    } catch (_) {
+      hasMore = false;
+    } finally {
+      loadingMore = false;
+      _notify();
+    }
+  }
+
+  Future<void> loadArchived() async {
+    archivedLoading = true;
+    _notify();
+    try {
+      archivedChats = _chatRows(await api.getAiConversations(archived: true, limit: pageSize)).where((c) => c.archived).toList();
+    } catch (_) {
+      archivedChats = [];
+    } finally {
+      archivedLoading = false;
+      _notify();
+    }
+  }
+
+  List<AiConversation> _chatRows(List<Map<String, dynamic>> rows) => [
+    for (final r in rows)
+      if ('${r['mode'] ?? 'chat'}' == 'chat' || r['mode'] == null) AiConversation.fromJson(r),
+  ].where((c) => !c.archived).toList();
+
+  /// Search the history (debounced by the caller).
+  Future<void> search(String q) async {
+    query = q;
+    await loadConversations();
+  }
+
+  /// Most recent chats for the welcome screen ("ทำต่อ").
+  List<AiConversation> get recentChats {
+    final list = [...conversations]..sort((a, b) => (b.updatedAt ?? '').compareTo(a.updatedAt ?? ''));
+    return list.take(3).toList();
+  }
+
+  void newChat({String? inFolder}) {
     if (sending) stop();
     activeId = null;
     activeTitle = '';
     activeStarred = false;
+    activeProjectId = inFolder;
+    pendingProjectId = inFolder;
     messages = [];
     followUps = const [];
     error = null;
@@ -133,6 +305,7 @@ class AiAssistantController extends ChangeNotifier {
   Future<void> open(String id) async {
     if (sending) stop();
     activeId = id;
+    pendingProjectId = null;
     chatLoading = true;
     error = null;
     followUps = const [];
@@ -142,10 +315,21 @@ class AiAssistantController extends ChangeNotifier {
       final c = await api.getAiConversation(id);
       activeTitle = '${c['title'] ?? ''}';
       activeStarred = c['starred'] == true || c['starred'] == 1;
+      activeProjectId = c['project_id']?.toString();
       messages = [
         for (final m in (c['messages'] is List ? c['messages'] as List : const []))
           if (m is Map) AiMessage.fromJson(Map<String, dynamic>.from(m)),
       ];
+      // Proposals already confirmed / cancelled on the server stay that way.
+      for (final m in messages) {
+        for (final p in m.proposals) {
+          final pid = '${p['proposalId'] ?? ''}';
+          final st = '${p['status'] ?? ''}';
+          if (pid.isEmpty) continue;
+          if (st == 'done' || st == 'cancelled') proposalState[pid] = st;
+          if (p['link'] != null) proposalLinks[pid] = '${p['link']}';
+        }
+      }
     } catch (e) {
       error = formatApiError(e);
     } finally {
@@ -156,21 +340,28 @@ class AiAssistantController extends ChangeNotifier {
 
   Future<String> _ensureConversation(String titleHint) async {
     if (activeId != null) return activeId!;
+    final folder = pendingProjectId;
     final c = await api.createAiConversation({
       'title': titleHint,
       'mode': 'chat',
+      'project_id': ?(folder == null ? null : int.tryParse(folder) ?? folder),
       if (contextModule != null && contextId != null) ...{'context_module': contextModule, 'context_id': int.tryParse(contextId!) ?? contextId},
     });
     activeId = '${c['id']}';
     activeTitle = '${c['title'] ?? titleHint}';
-    conversations = [AiConversation.fromJson({...c, 'title': activeTitle}), ...conversations.where((x) => x.id != activeId)];
+    activeProjectId = folder;
+    pendingProjectId = null;
+    conversations = [
+      AiConversation.fromJson({...c, 'title': activeTitle, 'project_id': ?folder}),
+      ...conversations.where((x) => x.id != activeId),
+    ];
     _notify();
     return activeId!;
   }
 
   /// Send like the web: ensure conversation → save user message → stream →
-  /// save assistant message.
-  Future<void> send(String text) async {
+  /// save assistant message. [deep] sends this one message in "คิดลึก" mode.
+  Future<void> send(String text, {bool deep = false}) async {
     final trimmed = text.trim();
     if ((trimmed.isEmpty && pendingAttachments.isEmpty) || sending || uploading) return;
     error = null;
@@ -178,21 +369,50 @@ class AiAssistantController extends ChangeNotifier {
     followUps = const [];
     final attachments = List<Map<String, dynamic>>.from(pendingAttachments);
     pendingAttachments.clear();
-    final user = AiMessage(role: 'user', content: trimmed, attachments: attachments, provider: provider, model: model);
+    final user = AiMessage(
+      role: 'user',
+      content: trimmed,
+      attachments: attachments,
+      provider: provider,
+      model: model,
+      createdAt: DateTime.now().toUtc().toIso8601String(),
+    );
     final prior = List<AiMessage>.from(messages);
     messages = [...messages, user];
     _notify();
     try {
       final titleHint = trimmed.isNotEmpty ? (trimmed.length > 80 ? trimmed.substring(0, 80) : trimmed) : '${attachments.first['original_name'] ?? 'แชทใหม่'}';
       final convId = await _ensureConversation(titleHint);
-      await api.appendAiMessage(convId, user.toSaveJson()).catchError((_) => <String, dynamic>{});
-      await _stream(convId, aiHistoryForApi([...prior, user]), [for (final a in attachments) if (aiIsImage(a) && a['id'] != null) '${a['id']}']);
+      final saved = await api.appendAiMessage(convId, user.toSaveJson()).catchError((_) => <String, dynamic>{});
+      if (saved['id'] != null) user.id = '${saved['id']}';
+      await _stream(convId, aiHistoryForApi([...prior, user]), _imageIds(attachments), deep: deep);
     } catch (e) {
       _fail(e);
     }
   }
 
-  Future<void> _stream(String convId, List<Map<String, dynamic>> history, List<String> imageIds) async {
+  List<String> _imageIds(List<Map<String, dynamic>> attachments) => [
+    for (final a in attachments)
+      if (aiIsImage(a) && a['id'] != null) '${a['id']}',
+  ];
+
+  void _tickStream() {
+    final now = DateTime.now();
+    if (now.difference(_lastTick) >= _tokenFrame) {
+      _lastTick = now;
+      _tickTimer?.cancel();
+      _tickTimer = null;
+      streamTick.value++;
+    } else {
+      _tickTimer ??= Timer(_tokenFrame, () {
+        _tickTimer = null;
+        _lastTick = DateTime.now();
+        if (!_disposed) streamTick.value++;
+      });
+    }
+  }
+
+  Future<void> _stream(String convId, List<Map<String, dynamic>> history, List<String> imageIds, {bool deep = false}) async {
     sending = true;
     status = const AiStreamEvent('status', {'phase': 'thinking'});
     routeSteps = provider == 'auto'
@@ -202,7 +422,7 @@ class AiAssistantController extends ChangeNotifier {
           ]
         : const [];
     sendStartedAt = DateTime.now();
-    final reply = AiMessage(role: 'assistant', streaming: true, provider: provider, model: model);
+    final reply = AiMessage(role: 'assistant', streaming: true, provider: provider, model: model, createdAt: DateTime.now().toUtc().toIso8601String());
     messages = [...messages, reply];
     _notify();
     final cancel = _cancel = CancelToken();
@@ -214,26 +434,56 @@ class AiAssistantController extends ChangeNotifier {
         conversationId: convId,
         provider: provider,
         model: model,
-        sticky: sticky,
+        sticky: deep ? null : sticky,
         attachmentIds: imageIds,
         contextModule: contextModule,
         contextId: contextId,
         contextTitle: contextTitle,
+        autoMode: deep ? 'deep' : autoMode,
+        injectContext: injectContext,
+        temperature: temperature,
       );
       await for (final ev in api.streamAiChat(body, cancel: cancel)) {
         switch (ev.type) {
           case 'token':
+            final first = reply.content.isEmpty;
             reply.content += ev.token;
+            if (first) {
+              // Waiting → text: the tile changes shape, rebuild once.
+              _notify();
+            } else {
+              _tickStream();
+            }
+            continue;
           case 'tool_proposal':
             final p = ev.data['proposal'];
             if (p is Map) reply.proposals = _mergeProposals(reply.proposals, [Map<String, dynamic>.from(p)]);
+          case 'tool_start':
+            status = ev;
+            final name = '${ev.data['name'] ?? ev.data['tool'] ?? ''}';
+            if (name.isNotEmpty) {
+              reply.toolSteps = [
+                ...reply.toolSteps,
+                {'name': name, 'label': ev.data['label'] ?? aiToolLabel(name), 'done': false},
+              ];
+            }
+          case 'tool_done':
+            status = ev;
+            final name = '${ev.data['name'] ?? ev.data['tool'] ?? ''}';
+            final i = reply.toolSteps.lastIndexWhere((s) => s['name'] == name && s['done'] != true);
+            if (i >= 0) reply.toolSteps = [...reply.toolSteps]..[i] = {...reply.toolSteps[i], 'done': true};
           case 'auto_route':
             status = ev;
             final steps = ev.data['steps'];
-            if (steps is List) routeSteps = [for (final s in steps) if (s is Map) Map<String, dynamic>.from(s)];
+            if (steps is List) {
+              routeSteps = [
+                for (final s in steps)
+                  if (s is Map) Map<String, dynamic>.from(s),
+              ];
+            }
             final p = '${ev.data['provider'] ?? ''}', m = '${ev.data['model'] ?? ''}';
             if (p.isNotEmpty && m.isNotEmpty) {
-              sticky = (provider: p, model: m);
+              if (!deep) sticky = (provider: p, model: m);
               reply.provider = p;
               reply.model = m;
             }
@@ -247,6 +497,8 @@ class AiAssistantController extends ChangeNotifier {
         }
         _notify();
       }
+      _tickTimer?.cancel();
+      _tickTimer = null;
       if (cancel.isCancelled) return;
       if (streamError != null) throw streamError;
       final d = done ?? const <String, dynamic>{};
@@ -259,12 +511,16 @@ class AiAssistantController extends ChangeNotifier {
       reply.citations = _maps(d['citations']).isNotEmpty ? _maps(d['citations']) : _maps(msg['citations']);
       reply.provider = '${d['provider'] ?? reply.provider ?? provider}';
       reply.model = d['model']?.toString() ?? reply.model;
+      reply.toolSteps = [
+        for (final s in reply.toolSteps) {...s, 'done': true},
+      ];
       reply.streaming = false;
       if (d['usageSummary'] is Map) usage = Map<String, dynamic>.from(d['usageSummary'] as Map);
       sending = false;
       status = null;
       _notify();
-      await api.appendAiMessage(convId, reply.toSaveJson()).catchError((_) => <String, dynamic>{});
+      final saved = await api.appendAiMessage(convId, reply.toSaveJson()).catchError((_) => <String, dynamic>{});
+      if (saved['id'] != null) reply.id = '${saved['id']}';
       _loadFollowUps(history, reply.content);
       // Title comes from the first message on the server: refresh the list.
       unawaited(loadConversations());
@@ -285,7 +541,7 @@ class AiAssistantController extends ChangeNotifier {
     if (reply.trim().isEmpty) return;
     final lastUser = history.lastWhere((m) => m['role'] == 'user', orElse: () => const {'content': ''});
     try {
-      final items = await api.postAiReplySuggestions(lastReply: reply, lastUserMessage: '${lastUser['content']}');
+      final items = await api.postAiReplySuggestions(lastReply: reply, lastUserMessage: '${lastUser['content']}', locale: L10n.isEn ? 'en' : 'th');
       followUps = items.take(6).toList();
       _notify();
     } catch (_) {}
@@ -311,6 +567,8 @@ class AiAssistantController extends ChangeNotifier {
   void stop() {
     _cancel?.cancel();
     _cancel = null;
+    _tickTimer?.cancel();
+    _tickTimer = null;
     messages = messages.where((m) => !(m.streaming && m.content.trim().isEmpty)).map((m) => m..streaming = false).toList();
     sending = false;
     status = null;
@@ -329,7 +587,65 @@ class AiAssistantController extends ChangeNotifier {
       }
       _notify();
       final last = messages.where((m) => m.isUser).lastOrNull;
-      await _stream(id, aiHistoryForApi(messages), [for (final a in last?.attachments ?? const <Map<String, dynamic>>[]) if (aiIsImage(a) && a['id'] != null) '${a['id']}']);
+      await _stream(id, aiHistoryForApi(messages), _imageIds(last?.attachments ?? const []));
+    } catch (e) {
+      _fail(e);
+    }
+  }
+
+  /// "ลองใหม่" on the error banner: when the last message is the user's (no
+  /// reply came back) stream again for it; otherwise regenerate the reply.
+  Future<void> retry() async {
+    if (sending) return;
+    clearError();
+    final last = messages.lastOrNull;
+    if (last == null) return;
+    if (!last.isUser) return regenerate();
+    final id = activeId;
+    try {
+      if (id == null) {
+        // The chat was never created: send the text again from scratch.
+        messages = messages.sublist(0, messages.length - 1);
+        pendingAttachments
+          ..clear()
+          ..addAll(last.attachments);
+        await send(last.content);
+        return;
+      }
+      await _stream(id, aiHistoryForApi(messages), _imageIds(last.attachments));
+    } catch (e) {
+      _fail(e);
+    }
+  }
+
+  /// Edit a sent message: keep the chat up to it, replace it with [text] on
+  /// the server, then answer again.
+  Future<void> editAndResend(AiMessage original, String text) async {
+    final trimmed = text.trim();
+    final i = messages.indexOf(original);
+    if (i < 0 || !original.isUser || trimmed.isEmpty || sending) return;
+    error = null;
+    errorCode = null;
+    followUps = const [];
+    final edited = AiMessage(
+      role: 'user',
+      content: trimmed,
+      attachments: original.attachments,
+      provider: provider,
+      model: model,
+      createdAt: DateTime.now().toUtc().toIso8601String(),
+    );
+    messages = [...messages.sublist(0, i), edited];
+    _notify();
+    try {
+      final id = activeId;
+      if (id == null) {
+        messages = messages.sublist(0, i);
+        await send(trimmed);
+        return;
+      }
+      await api.replaceAiMessages(id, [for (final m in messages) m.toSaveJson()]);
+      await _stream(id, aiHistoryForApi(messages), _imageIds(edited.attachments));
     } catch (e) {
       _fail(e);
     }
@@ -341,10 +657,12 @@ class AiAssistantController extends ChangeNotifier {
     proposalState[id] = 'working';
     _notify();
     try {
-      final r = await api.confirmAiTool(id, boardId: boardId);
+      final r = await api.confirmAiTool(id, boardId: boardId, conversationId: activeId, messageId: _messageIdOf(id));
       proposalState[id] = 'done';
+      final link = (r['link'] ?? r['board_link'])?.toString();
+      if (link != null && link.isNotEmpty) proposalLinks[id] = link;
       _notify();
-      return (r['link'] ?? r['board_link'])?.toString();
+      return link;
     } catch (e) {
       proposalState.remove(id);
       error = aiErrorText(e);
@@ -359,21 +677,40 @@ class AiAssistantController extends ChangeNotifier {
     proposalState[id] = 'cancelled';
     _notify();
     try {
-      await api.cancelAiTool(id);
+      await api.cancelAiTool(id, conversationId: activeId, messageId: _messageIdOf(id));
     } catch (_) {}
   }
 
+  String? _messageIdOf(String proposalId) => messages.where((m) => m.proposals.any((p) => '${p['proposalId']}' == proposalId)).firstOrNull?.id;
+
   Future<void> uploadAttachment(MultipartFile file) async {
     uploading = true;
+    uploadProgress = null;
     _notify();
     try {
-      final a = await api.uploadAiAttachment(file, conversationId: activeId);
+      final a = await api.uploadAiAttachment(
+        file,
+        conversationId: activeId,
+        onSendProgress: (sent, total) {
+          if (total <= 0) return;
+          uploadProgress = sent / total;
+          _notify();
+        },
+      );
       pendingAttachments.add(a);
     } catch (e) {
       error = aiErrorText(e);
     } finally {
       uploading = false;
+      uploadProgress = null;
       _notify();
+    }
+  }
+
+  /// Several files picked at once, uploaded one after another.
+  Future<void> uploadAttachments(List<MultipartFile> files) async {
+    for (final f in files) {
+      await uploadAttachment(f);
     }
   }
 
@@ -381,6 +718,8 @@ class AiAssistantController extends ChangeNotifier {
     pendingAttachments.remove(a);
     _notify();
   }
+
+  // ── chat actions
 
   Future<void> rename(String id, String title) async {
     if (title.trim().isEmpty) return;
@@ -402,6 +741,21 @@ class AiAssistantController extends ChangeNotifier {
     _notify();
   }
 
+  /// Archive (hide from history) or bring back.
+  Future<void> setArchived(String id, bool archived) async {
+    await api.updateAiConversation(id, {'archived': archived});
+    if (archived) {
+      final c = conversations.where((x) => x.id == id).firstOrNull;
+      conversations = conversations.where((x) => x.id != id).toList();
+      if (c != null) archivedChats = [c.copyWith(archived: true), ...archivedChats];
+      if (id == activeId) newChat();
+    } else {
+      archivedChats = archivedChats.where((x) => x.id != id).toList();
+      unawaited(loadConversations());
+    }
+    _notify();
+  }
+
   /// Hide a chat now; the caller deletes it on the server unless undone.
   ({int index, AiConversation chat})? removeLocal(String id) {
     final i = conversations.indexWhere((c) => c.id == id);
@@ -420,12 +774,14 @@ class AiAssistantController extends ChangeNotifier {
     _notify();
   }
 
+  // ── folders
+
   Future<void> loadProjects() async {
     try {
-      projects = await api.getAiProjects();
-      if (projectFilter != null && !projects.any((p) => '${p['id']}' == projectFilter)) projectFilter = null;
+      folders = [for (final m in await api.getAiProjects()) AiFolder.fromJson(m)];
+      if (projectFilter != null && folderById(projectFilter) == null) projectFilter = null;
     } catch (_) {
-      projects = const [];
+      folders = const [];
     }
     _notify();
   }
@@ -437,7 +793,73 @@ class AiAssistantController extends ChangeNotifier {
 
   Future<void> moveToProject(String chatId, String? projectId) async {
     await api.updateAiConversation(chatId, {'project_id': projectId});
-    await loadConversations();
+    if (chatId == activeId) activeProjectId = projectId;
+    await Future.wait([loadConversations(), loadProjects()]);
+  }
+
+  /// Move several chats at once (multi-select in the history).
+  Future<void> moveManyToProject(Iterable<String> chatIds, String? projectId) async {
+    for (final id in chatIds) {
+      await api.updateAiConversation(id, {'project_id': projectId});
+      if (id == activeId) activeProjectId = projectId;
+    }
+    await Future.wait([loadConversations(), loadProjects()]);
+  }
+
+  Future<AiFolder?> createFolder({required String name, String? color, String? icon, String? instructions}) async {
+    final r = await api.createAiProject({
+      'name': name.trim(),
+      'color': ?color,
+      'icon': ?icon,
+      if (instructions != null && instructions.trim().isNotEmpty) 'instructions': instructions.trim(),
+    });
+    await loadProjects();
+    return r['id'] == null ? null : AiFolder.fromJson(r);
+  }
+
+  Future<void> updateFolder(String id, {String? name, String? color, String? icon, String? instructions}) async {
+    await api.updateAiProject(id, {if (name != null) 'name': name.trim(), 'color': ?color, 'icon': ?icon, 'instructions': ?instructions?.trim()});
+    await loadProjects();
+  }
+
+  /// The folder goes; its chats stay (outside any folder).
+  Future<void> deleteFolder(String id) async {
+    await api.deleteAiProject(id);
+    if (projectFilter == id) projectFilter = null;
+    if (activeProjectId == id) activeProjectId = null;
+    await Future.wait([loadProjects(), loadConversations()]);
+  }
+
+  // ── slash commands
+
+  Future<void> loadCommands() async {
+    await Future.wait([
+      api
+          .getAiQuickPrompts()
+          .then(
+            (rows) =>
+                businessCommands = [for (final r in rows) AiCommand.fromQuickPrompt(r, en: L10n.isEn)].where((c) => c.template.trim().isNotEmpty).toList(),
+          )
+          .catchError((_) => businessCommands = const []),
+      api.getAiMyPrompts().then((rows) => myCommands = [for (final r in rows) AiCommand.fromMine(r)]).catchError((_) => myCommands = const []),
+    ]);
+    _notify();
+  }
+
+  Future<void> saveMyCommand({String? id, required String command, required String title, required String prompt}) async {
+    final body = {'command': command, 'title': title.trim(), 'prompt': prompt.trim()};
+    if (id == null) {
+      await api.createAiMyPrompt(body);
+    } else {
+      await api.updateAiMyPrompt(id, body);
+    }
+    await loadCommands();
+  }
+
+  Future<void> deleteMyCommand(String id) async {
+    await api.deleteAiMyPrompt(id);
+    myCommands = myCommands.where((c) => c.id != id).toList();
+    _notify();
   }
 
   void setModel(String p, String? m) {
@@ -456,7 +878,12 @@ class AiAssistantController extends ChangeNotifier {
   }
 }
 
-List<Map<String, dynamic>> _maps(dynamic v) => v is List ? [for (final e in v) if (e is Map) Map<String, dynamic>.from(e)] : <Map<String, dynamic>>[];
+List<Map<String, dynamic>> _maps(dynamic v) => v is List
+    ? [
+        for (final e in v)
+          if (e is Map) Map<String, dynamic>.from(e),
+      ]
+    : <Map<String, dynamic>>[];
 
 List<Map<String, dynamic>> _mergeProposals(List<Map<String, dynamic>> a, List<Map<String, dynamic>> b) {
   final seen = <String>{};
@@ -464,6 +891,34 @@ List<Map<String, dynamic>> _mergeProposals(List<Map<String, dynamic>> a, List<Ma
     for (final p in [...a, ...b])
       if (seen.add('${p['proposalId'] ?? p.hashCode}')) p,
   ];
+}
+
+/// Thai label for a tool the agent runs (shown in the reply's step line).
+String aiToolLabel(String name) {
+  const labels = {
+    'search_entities': 'ค้นหาข้อมูล',
+    'get_entity': 'อ่านรายละเอียด',
+    'list_related': 'ดูรายการที่เกี่ยวข้อง',
+    'search_workspace_boards': 'ค้นหาบอร์ด',
+    'search_workspace_items': 'ค้นหางาน',
+    'get_workspace_item': 'อ่านงาน',
+    'create_lead': 'สร้าง Lead',
+    'create_contact': 'สร้าง Contact',
+    'create_account': 'สร้างบัญชีลูกค้า',
+    'create_case': 'เปิดเคส',
+    'create_activity': 'สร้างนัด',
+    'update_entity': 'แก้ไขข้อมูล',
+    'update_status': 'เปลี่ยนสถานะ',
+    'export_records': 'ส่งออกไฟล์',
+    'generate_document': 'สร้างเอกสาร',
+    'export_document': 'ส่งออกเอกสาร',
+    'web_lookup': 'ค้นเว็บ',
+    'summarize_attachment': 'อ่านไฟล์แนบ',
+    'create_workspace_item': 'สร้างงานบนบอร์ด',
+    'plan_workspace_tree': 'วางแผนงาน',
+    'create_analytics_dashboard': 'สร้างแดชบอร์ด',
+  };
+  return labels[name] ?? name.replaceAll('_', ' ');
 }
 
 /// Friendly Thai text for AI errors (web `friendlyAiError`).

@@ -42,8 +42,12 @@ class AiProposalCard extends StatelessWidget {
     this.boards,
     this.boardId,
     this.onBoard,
+    this.onOpen,
   });
   final Map<String, dynamic> proposal;
+
+  /// After it ran: opens the new / changed record.
+  final VoidCallback? onOpen;
 
   /// Workspace tree proposals: boards the user can write to, and the pick.
   final List<Map<String, dynamic>>? boards;
@@ -73,9 +77,12 @@ class AiProposalCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: cs.primary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: cs.primary.withValues(alpha: 0.25)),
+        color: theme.brightness == Brightness.dark ? cs.primary.withValues(alpha: 0.10) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.18)),
+        boxShadow: theme.brightness == Brightness.dark
+            ? null
+            : [BoxShadow(color: const Color(0xFF1C1C3A).withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 6))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
@@ -147,9 +154,16 @@ class AiProposalCard extends StatelessWidget {
         const SizedBox(height: 10),
         if (done)
           Row(children: [
-            const Icon(NxI.checkCircle, size: 18, color: Color(0xFF16A34A)),
+            Icon(NxI.checkCircle, size: 18, color: _ok(theme)),
             const SizedBox(width: 6),
-            Text(tr('ทำรายการแล้ว'), style: theme.textTheme.bodyMedium?.copyWith(color: const Color(0xFF16A34A), fontWeight: FontWeight.w700)),
+            Expanded(child: Text(tr('ทำรายการแล้ว'), style: theme.textTheme.bodyMedium?.copyWith(color: _ok(theme), fontWeight: FontWeight.w700))),
+            if (onOpen != null)
+              TextButton.icon(
+                key: const ValueKey('ai-proposal-open'),
+                onPressed: onOpen,
+                icon: const Icon(NxI.arrowSquareOut, size: 16),
+                label: Text(tr('เปิดเรคคอร์ด')),
+              ),
           ])
         else if (cancelled)
           Text(tr('ยกเลิกแล้ว'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
@@ -168,6 +182,9 @@ class AiProposalCard extends StatelessWidget {
       ]),
     );
   }
+
+  /// Success green readable in light and dark.
+  static Color _ok(ThemeData t) => t.brightness == Brightness.dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
 
   static String _fmt(String key, dynamic v, [String? module]) {
     if (v == null) return '—';
