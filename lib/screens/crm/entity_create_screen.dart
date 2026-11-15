@@ -149,6 +149,15 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
     });
   }
 
+  /// A picklist value with its label (`{id, label}`) for the chat card.
+  dynamic _withLabel(String field, dynamic v) {
+    final opts = _picklists[field];
+    if (opts == null || v == null) return v;
+    final hit = opts.where((o) => '${o['value']}' == '$v').firstOrNull;
+    final label = hit == null ? null : (hit['label_th'] ?? hit['label'] ?? hit['label_en']);
+    return label == null ? v : {'id': '$v', 'label': '$label'};
+  }
+
   String _labelOf(String name) {
     final f = _fields.where((x) => fieldName(x) == name).firstOrNull;
     return f == null ? name : (f['label_th'] ?? f['label'] ?? name).toString();
@@ -328,9 +337,8 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
         final res = await api.postEntity(widget.module, payload);
         id = '${res['id'] ?? res['insertId'] ?? res['record']?['id'] ?? ''}';
         if (id.isNotEmpty && id != 'null') {
-          // Labels (names, not ids) for the chat card.
           // What was saved, with names (not ids) for people / linked records.
-          widget.onCreated?.call(id, payload.map((k, v) => MapEntry(k, _values[k] is Map ? _values[k] : v)));
+          widget.onCreated?.call(id, payload.map((k, v) => MapEntry(k, _values[k] is Map ? _values[k] : _withLabel(k, v))));
         }
       }
       // Card photo goes with the saved record (a failure never undoes the save).

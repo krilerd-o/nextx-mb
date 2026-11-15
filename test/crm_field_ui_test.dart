@@ -52,6 +52,10 @@ void main() {
     expect(formatTaxIdDisplay('1234567890123'), '1-2345-67890-12-3');
     expect(digitsOnly('1-2345-67890-12-3', 13), '1234567890123');
     expect(formatPhoneDisplay('0812345678'), '081-234-5678');
+    expect(formatPhoneDisplay('02-555-0000'), '02-555-0000'); // Bangkok landline
+    expect(formatPhoneDisplay('025'), '02-5');
+    expect(formatPhoneDisplay('053123456'), '053-123-456'); // provincial landline
+    expect(formatPhoneDisplay('0612345678'), '061-234-5678');
   });
 
   testWidgets('every uitype paints its own widget in light and dark', (tester) async {

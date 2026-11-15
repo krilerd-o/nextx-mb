@@ -54,7 +54,11 @@ class QuotationStepForm extends StatefulWidget {
     this.embedded = false,
     this.onFinished,
     this.initialStep,
+    this.aiNotice,
   });
+
+  /// "ไอแซคกรอกให้: …" when opened from the AI chat with Isaac's values.
+  final String? aiNotice;
 
   final DocFormMode mode;
 
@@ -737,6 +741,13 @@ class QuotationStepFormState extends State<QuotationStepForm> {
         ),
       if (_locked && _lockReason != null)
         DocBanner(key: const ValueKey('docform-locked'), icon: NxI.lock, color: cs.error, text: _lockReason!),
+      if (widget.aiNotice != null && _step == 0 && _mode == DocFormMode.create)
+        DocBanner(
+          key: const ValueKey('docform-ai-banner'),
+          icon: NxI.sparkle,
+          title: 'ไอแซคกรอกให้',
+          text: '${widget.aiNotice!} — ตรวจสอบก่อนบันทึก',
+        ),
     ];
   }
 

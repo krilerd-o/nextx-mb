@@ -696,7 +696,7 @@ class AiAssistantController extends ChangeNotifier {
     for (final k in _kCardFieldOrder) {
       final v = values[k];
       if (v == null || '$v'.isEmpty || summary.length >= 6) continue;
-      summary[k] = v is Map ? '${v['label'] ?? v['id']}' : v;
+      summary[k] = v is Map ? '${v['label'] ?? v['id']}' : (k == 'priority' ? (_kPriorityTh['$v'] ?? v) : v);
     }
     final owner = values['smownerid'] ?? values['assignee_id'];
     final proposal = <String, dynamic>{
@@ -973,6 +973,9 @@ List<Map<String, dynamic>> _mergeProposals(List<Map<String, dynamic>> a, List<Ma
       if (seen.add('${p['proposalId'] ?? p.hashCode}')) p,
   ];
 }
+
+/// Workspace priority values → Thai.
+const _kPriorityTh = {'low': 'ต่ำ', 'medium': 'ปานกลาง', 'high': 'สูง', 'urgent': 'ด่วน', 'highest': 'สูงสุด', 'lowest': 'ต่ำสุด'};
 
 /// Fields shown on a "created" card, in this order (names before ids).
 const _kCardFieldOrder = [

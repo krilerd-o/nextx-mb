@@ -14,8 +14,15 @@ String digitsOnly(dynamic raw, [int max = 32]) {
   ).substringSafe(max);
 }
 
+/// Thai numbers: Bangkok landlines `02-XXX-XXXX` (9 digits), other
+/// landlines `0XX-XXX-XXX`, mobiles `0XX-XXX-XXXX`.
 String formatPhoneDisplay(dynamic raw) {
   final d = digitsOnly(raw, 10);
+  if (d.startsWith('02') && d.length <= 9) {
+    if (d.length <= 2) return d;
+    if (d.length <= 5) return '02-${d.substring(2)}';
+    return '02-${d.substring(2, 5)}-${d.substring(5)}';
+  }
   if (d.length <= 3) return d;
   if (d.length <= 6) return '${d.substring(0, 3)}-${d.substring(3)}';
   return '${d.substring(0, 3)}-${d.substring(3, 6)}-${d.substring(6)}';

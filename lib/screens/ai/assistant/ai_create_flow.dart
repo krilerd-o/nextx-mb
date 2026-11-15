@@ -97,16 +97,23 @@ class AiCreateFlow {
     Future<AiFillResult> fill(String t) => api.extractAiFields(module, t, contextModule: contextModule, contextId: contextId, contextTitle: contextTitle);
 
     if (module == 'workspace_item') {
-      return _workspace(context, api, kind: kind ?? 'task', text: text, initial: initialValues, fill: fill);
+      return _workspace(context, api, kind: kind ?? 'task', text: text, initial: initialValues, fill: fill, chatText: chatText);
     }
     if (module == 'quotation') {
       var values = {...initialValues};
       var lines = const <Map<String, dynamic>>[];
+      String? aiNote;
       if (text.trim().isNotEmpty) {
         try {
           final r = await fill(text);
           values = {...values, ...r.values};
           lines = r.lines;
+          final parts = [
+            if (r.values['customer_name'] != null || r.values['related_account_id'] != null) 'ลูกค้า',
+            if (r.values['subject'] != null || r.values['title_th'] != null) 'ชื่อเรื่อง',
+            if (r.lines.isNotEmpty) '${r.lines.length} รายการสินค้า',
+          ];
+          if (parts.isNotEmpty) aiNote = parts.join(', ');
         } catch (_) {
           /* open the form anyway */
         }
@@ -119,6 +126,7 @@ class AiCreateFlow {
             module: 'quotation',
             initialValues: values,
             initialLines: lines.isEmpty ? null : lines,
+            aiNotice: aiNote,
             embedded: true,
             onFinished: (r) => Navigator.of(ctx).pop(r),
           ),
@@ -166,6 +174,7 @@ class AiCreateFlow {
     required String text,
     required Map<String, dynamic> initial,
     required AiFillFn fill,
+    String Function()? chatText,
   }) async {
     // Board first: given by Isaac's proposal, else picked (writable boards only).
     var boardId = '${initial['board_id'] ?? ''}';
@@ -190,10 +199,12 @@ class AiCreateFlow {
           '${u['id']}': [u['first_name'], u['last_name']].where((e) => e != null && '$e'.isNotEmpty).join(' ').trim(),
       };
       var values = {...initial}..remove('board_id');
+      var aiKeys = const <String>[];
       if (text.trim().isNotEmpty) {
         try {
           final f = await fill(text);
           values = {...values, ...f.values};
+          aiKeys = f.filled;
         } catch (_) {
           /* form still opens */
         }
@@ -205,7 +216,17 @@ class AiCreateFlow {
       final saved = await Navigator.of(context, rootNavigator: true).push<Map<String, dynamic>>(
         MaterialPageRoute(
           fullscreenDialog: true,
-          builder: (_) => WorkspaceItemFormScreen(board: board!, statuses: statuses, epics: epics, kind: kind, users: users, initial: values),
+          builder: (_) => WorkspaceItemFormScreen(
+            board: board!,
+            statuses: statuses,
+            epics: epics,
+            kind: kind,
+            users: users,
+            initial: values,
+            aiFill: fill,
+            aiFilledKeys: aiKeys,
+            aiChatText: chatText,
+          ),
         ),
       );
       final id = '${saved?['id'] ?? ''}';

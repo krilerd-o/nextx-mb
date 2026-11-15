@@ -287,12 +287,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('ai-board-12')));
     await _settle(tester, 16);
+    expect(find.byKey(const ValueKey('ai-fill-box')), findsOneWidget, reason: 'Isaac box in the task form too');
+    expect(find.byKey(const ValueKey('ai-filled-title')), findsOneWidget);
     expect(_body(a, 'POST', '/api/ai/extract-fields')['module'], 'workspace_item');
     expect(find.text('ทำสไลด์ขาย'), findsWidgets);
     await tester.ensureVisible(find.byKey(const ValueKey('ws-save')));
     await tester.tap(find.byKey(const ValueKey('ws-save')));
     await _settle(tester, 16);
     final body = _body(a, 'POST', '/api/boards/12/tasks');
+    final msgP = Map<String, dynamic>.from(_body(a, 'POST', '/api/ai/conversations/c1/messages')['message'] as Map);
+    expect((((msgP['proposals'] as List).single as Map)['preview'] as Map)['fields']['priority'], 'สูง', reason: 'Thai label on the card');
     expect(body['title'], 'ทำสไลด์ขาย');
     expect('${body['assignee_id']}', '2');
     final msg = Map<String, dynamic>.from(_body(a, 'POST', '/api/ai/conversations/c1/messages')['message'] as Map);
@@ -352,5 +356,33 @@ void main() {
     expect(_body(a, 'POST', '/api/ai/tools/cancel')['proposalId'], 'p9');
     expect(find.text('บันทึกผ่านฟอร์มแล้ว'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('/quotation: Isaac fills the customer and product lines, the form says so', (tester) async {
+    final a = await _pump(
+      tester,
+      menus: const ['quotation'],
+      extra: {
+        'GET /api/fields/quotation': {'list': <Object>[], 'picklists': <String, Object>{}},
+        'GET /api/quotation/context': <String, Object>{},
+        'POST /api/ai/extract-fields': {
+          'fields': {
+            'customer_name': {'value': 'ABC Co., Ltd.'},
+            'subject': {'value': 'ใบเสนอราคา CRM'},
+          },
+          'lines': [
+            {'description': 'ระบบ CRM', 'quantity': 10, 'unit': 'ผู้ใช้', 'unit_price': 1500},
+          ],
+        },
+      },
+    );
+    await tester.enterText(find.byKey(const ValueKey('ai-input')), '/quotation CRM 10 ผู้ใช้ คนละ 1500 ให้ ABC');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('ai-send')));
+    await _settle(tester, 20);
+    expect(_body(a, 'POST', '/api/ai/extract-fields')['module'], 'quotation');
+    expect(find.byKey(const ValueKey('docform-ai-banner')), findsOneWidget);
+    expect(find.textContaining('1 รายการสินค้า'), findsOneWidget);
+    expect(find.text('ABC Co., Ltd.'), findsWidgets);
   });
 }
