@@ -101,10 +101,12 @@ class AiCreateFlow {
     }
     if (module == 'quotation') {
       var values = {...initialValues};
+      var lines = const <Map<String, dynamic>>[];
       if (text.trim().isNotEmpty) {
         try {
           final r = await fill(text);
           values = {...values, ...r.values};
+          lines = r.lines;
         } catch (_) {
           /* open the form anyway */
         }
@@ -113,7 +115,13 @@ class AiCreateFlow {
       final saved = await Navigator.of(context, rootNavigator: true).push<Map<String, dynamic>>(
         MaterialPageRoute(
           fullscreenDialog: true,
-          builder: (ctx) => docFormScreen(module: 'quotation', initialValues: values, embedded: true, onFinished: (r) => Navigator.of(ctx).pop(r)),
+          builder: (ctx) => docFormScreen(
+            module: 'quotation',
+            initialValues: values,
+            initialLines: lines.isEmpty ? null : lines,
+            embedded: true,
+            onFinished: (r) => Navigator.of(ctx).pop(r),
+          ),
         ),
       );
       final id = '${saved?['id'] ?? ''}';

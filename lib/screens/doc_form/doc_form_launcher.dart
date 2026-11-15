@@ -15,6 +15,7 @@ Widget docFormScreen({
   DocFormMode mode = DocFormMode.create,
   String? id,
   Map<String, dynamic>? initialValues,
+  List<Map<String, dynamic>>? initialLines,
   ({String module, Map<String, dynamic> row})? parent,
   bool embedded = false,
   ValueChanged<Map<String, dynamic>?>? onFinished,
@@ -36,6 +37,7 @@ Widget docFormScreen({
     mode: mode,
     recordId: id,
     initialValues: initialValues,
+    initialLines: initialLines,
     embedded: embedded,
     onFinished: onFinished,
   );

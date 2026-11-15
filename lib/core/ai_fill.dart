@@ -2,7 +2,7 @@
 /// create form, already shaped for the app's forms (people and linked
 /// records as `{id, label}`).
 class AiFillResult {
-  const AiFillResult({this.values = const {}, this.filled = const [], this.hints = const {}, this.missing = const [], this.duplicates = const []});
+  const AiFillResult({this.values = const {}, this.filled = const [], this.hints = const {}, this.missing = const [], this.duplicates = const [], this.lines = const []});
 
   /// Field name → form value.
   final Map<String, dynamic> values;
@@ -19,6 +19,9 @@ class AiFillResult {
 
   /// Same customer may already exist `{module, id, name, reason}`.
   final List<Map<String, dynamic>> duplicates;
+
+  /// Quotation items `{description, quantity, unit, unit_price}`.
+  final List<Map<String, dynamic>> lines;
 
   bool get isEmpty => values.isEmpty && hints.isEmpty;
 
@@ -51,7 +54,7 @@ class AiFillResult {
       for (final e in (x is List ? x : const []))
         if (e is Map) Map<String, dynamic>.from(e),
     ];
-    return AiFillResult(values: values, filled: filled, hints: hints, missing: maps(j['missing_required']), duplicates: maps(j['duplicates']));
+    return AiFillResult(values: values, filled: filled, hints: hints, missing: maps(j['missing_required']), duplicates: maps(j['duplicates']), lines: maps(j['lines']));
   }
 }
 
