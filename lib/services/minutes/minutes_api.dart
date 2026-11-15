@@ -157,6 +157,9 @@ extension MinutesApi on ApiClient {
 
   Future<void> removeMinuteParticipant(String meetingId, String identity) async => _send('POST', '/api/ai/minutes/rooms/$meetingId/remove', data: {'identity': identity});
 
+  /// Host: stop someone's screen share.
+  Future<void> stopMinuteShare(String meetingId, String identity) async => _send('POST', '/api/ai/minutes/rooms/$meetingId/stop-share', data: {'identity': identity});
+
   Future<void> setMinuteCohost(String meetingId, String identity, {bool on = true}) async =>
       _send('POST', '/api/ai/minutes/rooms/$meetingId/cohost', data: {'identity': identity, 'on': on});
 

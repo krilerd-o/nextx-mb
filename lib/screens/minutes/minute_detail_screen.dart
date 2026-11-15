@@ -520,9 +520,8 @@ class _SummaryTab extends StatelessWidget {
       children: [
         Text(s.headline.isEmpty ? meeting.title : s.headline, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
-        Row(children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Flexible(child: Chip(label: Text(tr(minuteTemplateLabel(s.template)), overflow: TextOverflow.ellipsis), visualDensity: VisualDensity.compact)),
-          const Spacer(),
           TextButton.icon(key: const ValueKey('minute-resummarize'), onPressed: busy ? null : () => onSummarize(), icon: const Icon(NxI.arrowClockwise, size: 16), label: Text(tr('สรุปใหม่'))),
         ]),
         const SizedBox(height: 6),

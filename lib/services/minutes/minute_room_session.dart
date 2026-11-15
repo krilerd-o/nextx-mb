@@ -315,6 +315,10 @@ class MinuteRoomSession extends ChangeNotifier {
         chat.value = [...chat.value, RoomChatMessage(from: '${d['name'] ?? from}', text: '${d['text'] ?? ''}', at: DateTime.now())];
       case 'reaction':
         reactions.add(('${d['name'] ?? from}', '${d['emoji'] ?? '👍'}'));
+      case 'stop_share':
+      case 'share_takeover':
+        // Phones do not present yet; nothing to stop here.
+        break;
       case 'hand':
         final h = {...hands.value};
         d['up'] == true ? h.add('${d['name'] ?? from}') : h.remove('${d['name'] ?? from}');

@@ -190,7 +190,56 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
     ]),
   );
 
+  /// Someone presenting (screen share / whiteboard / slides from the web): big stage + a strip of people.
+  Widget _stage(lk.Participant presenter, List<lk.Participant> parts) {
+    return Column(children: [
+      Expanded(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+          child: Stack(children: [
+            Positioned.fill(child: _Tile(key: const ValueKey('room-stage'), p: presenter, hand: false, stage: true)),
+            Positioned(
+              left: 8,
+              top: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(99)),
+                child: Text('${presenter.name.isEmpty ? presenter.identity : presenter.name} ${tr('กำลังแชร์หน้าจอ')}', style: const TextStyle(color: Colors.white, fontSize: 12)),
+              ),
+            ),
+            if (s.isHost && presenter is! lk.LocalParticipant)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: FilledButton.tonal(
+                  key: const ValueKey('room-stop-share'),
+                  style: FilledButton.styleFrom(backgroundColor: kMinuteRecord, foregroundColor: Colors.white, visualDensity: VisualDensity.compact),
+                  onPressed: () async {
+                    await s.media.sendData({'type': 'stop_share', 'identity': presenter.identity}, topic: 'share');
+                    try {
+                      await _api.stopMinuteShare(s.meetingId, presenter.identity);
+                    } catch (_) {}
+                  },
+                  child: Text(tr('หยุดการแชร์นี้')),
+                ),
+              ),
+          ]),
+        ),
+      ),
+      SizedBox(
+        height: 96,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          children: [for (final p in parts.take(12)) Padding(padding: const EdgeInsets.only(right: 6), child: SizedBox(width: 76, child: _Tile(p: p, hand: s.hands.value.contains(p.name), cameraOnly: true)))],
+        ),
+      ),
+    ]);
+  }
+
   Widget _grid(List<lk.Participant> parts) {
+    final presenter = parts.where((p) => p.videoTrackPublications.any((t) => t.source == lk.TrackSource.screenShareVideo && t.track != null && !t.muted)).firstOrNull;
+    if (presenter != null) return _stage(presenter, parts);
     if (parts.isEmpty) return Center(child: Text(tr(s.connected ? 'รอผู้เข้าร่วม…' : 'กำลังเชื่อมต่อ…'), style: const TextStyle(color: Colors.white54)));
     final visible = parts.take(9).toList();
     final cols = visible.length <= 1 ? 1 : visible.length <= 4 ? 2 : 3;
@@ -208,7 +257,7 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
 
   Widget _captions() => Container(
     key: const ValueKey('room-captions'),
-    height: 110,
+    constraints: const BoxConstraints(minHeight: 64, maxHeight: 150),
     margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
     padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
     decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(16)),
@@ -221,7 +270,7 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
             builder: (_, tr0, _) {
               final last = caps.length > 3 ? caps.sublist(caps.length - 3) : caps;
               if (last.isEmpty) return Text(tr('คำบรรยายสดจะแสดงที่นี่'), style: const TextStyle(color: Colors.white38));
-              return ListView(reverse: true, children: [
+              return ListView(reverse: true, shrinkWrap: true, children: [
                 for (final c in last.reversed)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
@@ -297,7 +346,14 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
               Navigator.pop(ctx);
               s.flipCamera();
             }),
-            // Screen sharing from the phone needs a native broadcast extension (next app build); the web shares screens.
+            // Presenting from the phone needs a native screen-capture service (next app build). People on the
+            // web can share a tab / window / the whole screen, a whiteboard, slides or a second camera.
+            ListTile(
+              enabled: false,
+              leading: const Icon(NxI.screencast),
+              title: Text(tr('แชร์หน้าจอ')),
+              subtitle: Text(tr('ใช้ได้บนเว็บตอนนี้ (แท็บ / หน้าต่าง / ทั้งหน้าจอ / ไวท์บอร์ด / ไฟล์) — มือถือจะตามมาในแอปเวอร์ชันถัดไป')),
+            ),
           ]),
         ),
       ),
@@ -431,13 +487,17 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
 }
 
 class _Tile extends StatelessWidget {
-  const _Tile({required this.p, required this.hand});
+  const _Tile({super.key, required this.p, required this.hand, this.stage = false, this.cameraOnly = false});
   final lk.Participant p;
   final bool hand;
+  final bool stage;
+  final bool cameraOnly;
 
   @override
   Widget build(BuildContext context) {
-    final pub = p.videoTrackPublications.where((t) => t.source == lk.TrackSource.screenShareVideo || t.source == lk.TrackSource.camera).firstOrNull;
+    final pub = p.videoTrackPublications
+        .where((t) => stage ? t.source == lk.TrackSource.screenShareVideo : cameraOnly ? t.source == lk.TrackSource.camera : (t.source == lk.TrackSource.screenShareVideo || t.source == lk.TrackSource.camera))
+        .firstOrNull;
     final track = pub?.track;
     final showVideo = track is lk.VideoTrack && !(pub?.muted ?? true);
     final name = p.name.isEmpty ? p.identity : p.name;
@@ -446,7 +506,7 @@ class _Tile extends StatelessWidget {
       decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(16), border: Border.all(color: p.isSpeaking ? const Color(0xFF818CF8) : Colors.transparent, width: 3)),
       clipBehavior: Clip.antiAlias,
       child: Stack(fit: StackFit.expand, children: [
-        if (showVideo) lk.VideoTrackRenderer(track, fit: lk.VideoViewFit.cover) else Center(child: CircleAvatar(radius: 28, child: Text(roomInitials(name)))),
+        if (showVideo) lk.VideoTrackRenderer(track, fit: stage ? lk.VideoViewFit.contain : lk.VideoViewFit.cover) else Center(child: CircleAvatar(radius: 28, child: Text(roomInitials(name)))),
         Positioned(
           left: 6,
           right: 6,
