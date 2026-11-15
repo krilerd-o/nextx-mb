@@ -5,13 +5,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/i18n.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/app_config.dart';
 import '../../core/minutes/minutes.dart';
+import '../../services/api_client.dart';
+import '../../services/minutes/minute_board_controller.dart';
 import '../../services/minutes/minute_recorder.dart';
 import '../../services/minutes/minute_uploader.dart';
 import '../../services/notebook/notebook_recorder.dart' show LiveState;
 import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import 'minute_record_flow.dart';
+import 'minute_workspace.dart';
 import 'minutes_widgets.dart';
 
 /// Camera seam (tests run without a camera).
@@ -106,8 +112,32 @@ class _MinuteRecordScreenState extends State<MinuteRecordScreen> {
     }
   }
 
+  MinuteBoardController? _board;
+
+  /// Notes / checklist / board / sketch while recording — kept with the meeting and used in the summary.
+  Future<void> _workspace() async {
+    final id = widget.recorder.meetingId;
+    if (id == null) return;
+    final api = _boardApi();
+    if (_board == null || _board!.meetingId != id) {
+      _board?.dispose();
+      _board = MinuteBoardController(meetingId: id, api: api);
+      unawaited(_board!.start());
+    }
+    await showMinuteWorkspaceSheet(context, _board!, api: api);
+  }
+
+  ApiClient? _boardApi() {
+    try {
+      return context.read<AppConfig>().apiClient;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   void dispose() {
+    _board?.dispose();
     _tick?.cancel();
     r.removeListener(_changed);
     r.lines.removeListener(_follow);
@@ -214,6 +244,8 @@ class _MinuteRecordScreenState extends State<MinuteRecordScreen> {
                         child: Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
                       ),
                     ),
+                    if (r.meetingId != null)
+                      IconButton(key: const ValueKey('minute-rec-workspace'), tooltip: tr('โน้ต · เช็กลิสต์ · บอร์ด · สเก็ตช์'), icon: const Icon(NxI.notePencil, color: Colors.white), onPressed: _workspace),
                     IconButton(key: const ValueKey('minute-rec-discard'), tooltip: tr('ทิ้ง'), icon: const Icon(NxI.trash, color: Colors.white54), onPressed: _discard),
                   ],
                 ),

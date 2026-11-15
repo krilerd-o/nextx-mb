@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show VoidCallback;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:nextx_mobile/core/minutes/minutes.dart';
@@ -274,6 +275,12 @@ class _FakeRealtime implements RealtimeService {
   void emit(String event, Map<String, dynamic> data) => emits.add((event, data));
   @override
   void emitRoomAudio(Uint8List pcm) => roomAudio++;
+  @override
+  bool get connected => true;
+  @override
+  void addListener(VoidCallback l) {}
+  @override
+  void removeListener(VoidCallback l) {}
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }

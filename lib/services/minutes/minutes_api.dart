@@ -92,6 +92,21 @@ extension MinutesApi on ApiClient {
   Future<Map<String, dynamic>> emailMinutes(String id, Map<String, dynamic> body) async =>
       _dataMap(await _send('POST', '/api/ai/minutes/$id/share/email', data: body, options: Options(receiveTimeout: const Duration(minutes: 3))));
 
+  // ── workspace: notes · checklist · board · sketch
+
+  /// `{items:[{uid, kind, data, pos, version, author…}], can_edit}`.
+  Future<Map<String, dynamic>> getMinuteBoard(String id) async => _dataMap(await _send('GET', '/api/ai/minutes/$id/board'));
+
+  /// Ops `{t:'put'|'del'|'clear', …}` → `{items, errors, cleared}` (when the socket is down).
+  Future<Map<String, dynamic>> postMinuteBoardOps(String id, List<Map<String, dynamic>> ops) async =>
+      _dataMap(await _send('POST', '/api/ai/minutes/$id/board/ops', data: {'ops': ops}));
+
+  /// Open checklist items → CRM tasks; `[{uid, activity_id, owner_id, error?}]`.
+  Future<List<Map<String, dynamic>>> createMinuteBoardTasks(String id, {List<String>? uids}) async {
+    final d = _dataMap(await _send('POST', '/api/ai/minutes/$id/board/tasks', data: {'uids': ?uids}));
+    return extractMapList(d['results']);
+  }
+
   // ── resumable upload
 
   /// `{upload:{upload_id, part_size, parts_total, missing}, item}`.
@@ -159,6 +174,13 @@ extension MinutesApi on ApiClient {
 
   /// Host: stop someone's screen share.
   Future<void> stopMinuteShare(String meetingId, String identity) async => _send('POST', '/api/ai/minutes/rooms/$meetingId/stop-share', data: {'identity': identity});
+
+  /// Pin a camera / screen / the shared board on everyone's stage (`null` = unpin) → `{pin, by, at}`.
+  Future<Map<String, dynamic>> setMinuteRoomStage(String meetingId, Map<String, dynamic>? pin) async {
+    final d = _dataMap(await _send('POST', '/api/ai/minutes/rooms/$meetingId/stage', data: {'pin': pin}));
+    final st = d['stage'];
+    return st is Map ? Map<String, dynamic>.from(st) : const {};
+  }
 
   Future<void> setMinuteCohost(String meetingId, String identity, {bool on = true}) async =>
       _send('POST', '/api/ai/minutes/rooms/$meetingId/cohost', data: {'identity': identity, 'on': on});

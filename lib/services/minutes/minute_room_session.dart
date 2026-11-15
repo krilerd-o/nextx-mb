@@ -5,11 +5,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show StringCharacters;
 import 'package:livekit_client/livekit_client.dart' as lk;
 
+import '../../core/minutes/minute_board.dart';
 import '../../core/minutes/minutes.dart';
 import '../audio/mic_tap.dart';
 import '../audio/pcm.dart';
 import '../calls/call_mic_tap_native.dart';
 import '../realtime_service.dart';
+import 'minute_board_controller.dart';
 
 /// One live caption line in a room.
 class RoomCaption {
@@ -46,6 +48,9 @@ abstract class RoomMedia extends ChangeNotifier {
   String? get localAudioTrackId;
   Future<void> sendData(Map<String, dynamic> data, {String topic});
   Stream<(String from, String topic, Map<String, dynamic> data)> get data;
+
+  /// LiveKit room metadata (JSON): `{stage:{pin, by}}` when the host pinned something for everyone.
+  String? get roomMetadata => null;
 }
 
 class LivekitRoomMedia extends RoomMedia {
@@ -69,6 +74,7 @@ class LivekitRoomMedia extends RoomMedia {
     _listener = room.createListener()
       ..on<lk.ParticipantEvent>((_) => notifyListeners())
       ..on<lk.ActiveSpeakersChangedEvent>((_) => notifyListeners())
+      ..on<lk.RoomMetadataChangedEvent>((_) => notifyListeners())
       ..on<lk.DataReceivedEvent>((e) {
         try {
           final m = jsonDecode(utf8.decode(e.data));
@@ -145,6 +151,9 @@ class LivekitRoomMedia extends RoomMedia {
   Stream<(String, String, Map<String, dynamic>)> get data => _data.stream;
 
   @override
+  String? get roomMetadata => _room?.metadata;
+
+  @override
   void dispose() {
     _room?.removeListener(notifyListeners);
     _data.close();
@@ -165,10 +174,65 @@ class MinuteRoomSession extends ChangeNotifier {
     RoomMedia? media,
     RealtimeService? realtime,
     CallMicTap Function()? mic,
+    Map<String, dynamic>? stage,
+    this.boardMode = 'all',
   }) : media = media ?? LivekitRoomMedia(),
        _rt = realtime ?? RealtimeService.instance,
-       _micFactory = mic {
-    this.media.addListener(notifyListeners);
+       _micFactory = mic,
+       stagePin = StagePin.fromJson(stage) {
+    this.media.addListener(_onMedia);
+    board = MinuteBoardController(meetingId: meetingId, ticket: ticket, realtime: _rt);
+  }
+
+  /// Room setting `board`: all | host | off.
+  final String boardMode;
+  bool get boardOn => boardMode != 'off' && meetingId.isNotEmpty;
+
+  /// Notes / checklist / board / sketch of this meeting (live, also for guests).
+  late final MinuteBoardController board;
+
+  /// Pin for everyone (host) — from the join answer, room metadata and `stage` data messages.
+  StagePin? stagePin;
+
+  /// My own pin (only my screen).
+  StagePin? localPin;
+
+  /// I chose my own view while the host pinned something.
+  bool stageOverride = false;
+  String? _lastMeta;
+
+  void _onMedia() {
+    final meta = media.roomMetadata;
+    if (meta != null && meta != _lastMeta) {
+      _lastMeta = meta;
+      try {
+        final m = jsonDecode(meta);
+        if (m is Map) _setStage(StagePin.fromJson(m['stage']));
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  void _setStage(StagePin? pin) {
+    final changed = pin?.identity != stagePin?.identity || pin?.source != stagePin?.source;
+    stagePin = pin;
+    if (changed) stageOverride = false;
+  }
+
+  /// After the host's pin call (or a stage message).
+  void applyStage(Map<String, dynamic>? stage) {
+    _setStage(StagePin.fromJson(stage));
+    notifyListeners();
+  }
+
+  void pinForMe(StagePin? pin) {
+    localPin = pin;
+    notifyListeners();
+  }
+
+  void setStageOverride(bool on) {
+    stageOverride = on;
+    notifyListeners();
   }
 
   final String meetingId;
@@ -218,6 +282,7 @@ class MinuteRoomSession extends ChangeNotifier {
     }
     _dataSub = media.data.listen(_onData);
     _evSub = _rt.events.listen(_onEvent);
+    if (boardOn) unawaited(board.start());
     final ack = await _rt.emitAck('minute:room_join', {'ticket': ticket});
     if (ack['ok'] == true) {
       captionsOn = ack['captions'] == true;
@@ -319,6 +384,8 @@ class MinuteRoomSession extends ChangeNotifier {
       case 'share_takeover':
         // Phones do not present yet; nothing to stop here.
         break;
+      case 'stage':
+        applyStage(d['stage'] is Map ? Map<String, dynamic>.from(d['stage'] as Map) : null);
       case 'hand':
         final h = {...hands.value};
         d['up'] == true ? h.add('${d['name'] ?? from}') : h.remove('${d['name'] ?? from}');
@@ -372,7 +439,8 @@ class MinuteRoomSession extends ChangeNotifier {
 
   @override
   void dispose() {
-    media.removeListener(notifyListeners);
+    media.removeListener(_onMedia);
+    board.dispose();
     unawaited(_micSub?.cancel());
     unawaited(_mic?.stop());
     _evSub?.cancel();
@@ -396,7 +464,8 @@ String roomConsentText({required bool transcribe, required String record}) {
 
 /// Two-letter initials of a name for the avatar tile.
 String roomInitials(String name) {
-  final p = name.trim().split(RegExp(r'\s+')).where((x) => x.isNotEmpty).toList();
+  // "ธนา (ฝ่ายขาย)" → "ธ": skip bracketed / symbol words.
+  final p = name.replaceAll(RegExp(r'\([^)]*\)|\[[^\]]*\]'), ' ').trim().split(RegExp(r'\s+')).where((x) => x.isNotEmpty && RegExp(r'^[\p{L}\p{N}]', unicode: true).hasMatch(x)).toList();
   if (p.isEmpty) return '?';
   return (p.length == 1 ? p.first.characters.take(2).toString() : '${p.first.characters.first}${p[1].characters.first}').toUpperCase();
 }

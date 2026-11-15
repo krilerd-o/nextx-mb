@@ -87,6 +87,10 @@ class RealtimeService extends ChangeNotifier {
     'minute:caption_tr',
     'minute:room_admit',
     'minute:room_waiting',
+    // Meeting workspace (notes / checklist / board / sketch), see services/minutes/minute_board_controller.dart.
+    'minute:board',
+    'minute:board_ink',
+    'minute:board_presence',
   ];
 
   /// Synthetic event sent on every (re)connect.

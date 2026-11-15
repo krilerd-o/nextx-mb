@@ -12,11 +12,13 @@ import 'package:video_player/video_player.dart';
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/minutes/minutes.dart';
+import '../../services/minutes/minute_board_controller.dart';
 import '../../services/api_client.dart';
 import '../../services/realtime_service.dart';
 import '../../widgets/nx_confirm_sheet.dart';
 import '../../widgets/nx_icons.dart';
 import 'minute_share_sheet.dart';
+import 'minute_workspace.dart';
 import 'minutes_widgets.dart';
 
 /// One meeting: player + tabs สรุป · ถอดข้อความ · แปล · ถามไอแซค.
@@ -29,7 +31,7 @@ class MinuteDetailScreen extends StatefulWidget {
 }
 
 class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTickerProviderStateMixin {
-  late final _tabs = TabController(length: 4, vsync: this);
+  late final _tabs = TabController(length: 5, vsync: this)..addListener(() => mounted ? setState(() {}) : null);
   MinuteMeeting? _m;
   List<MinuteLine> _lines = const [];
   List<MinuteSummary> _summaries = const [];
@@ -286,7 +288,7 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
           controller: _tabs,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
-          tabs: [Tab(text: tr('สรุป')), Tab(text: tr('ถอดข้อความ')), Tab(text: tr('แปล')), Tab(text: tr('ถามไอแซค'))],
+          tabs: [Tab(text: tr('สรุป')), Tab(text: tr('ถอดข้อความ')), Tab(text: tr('แปล')), Tab(text: tr('ถามไอแซค')), Tab(key: const ValueKey('minute-tab-workspace'), text: tr('โน้ต · บอร์ด'))],
         ),
       ),
       body: _loading
@@ -300,6 +302,8 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
                 Expanded(
                   child: TabBarView(
                     controller: _tabs,
+                    // Drawing / dragging cards must not swipe to another tab.
+                    physics: _tabs.index == 4 ? const NeverScrollableScrollPhysics() : null,
                     children: [
                       _SummaryTab(meeting: m, summary: _summary, busy: _summarizing, onSummarize: _summarize, onSeek: _seek, onCreateTasks: _createTasks),
                       _TranscriptTab(lines: _lines, speakerOf: _speaker, positionMs: _player.positionMs, onSeek: _seek, onEdit: _editLine),
@@ -314,6 +318,7 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
                         speakerOf: _speaker,
                       ),
                       _AskTab(meetingId: m.id, onSeek: _seek, enabled: _lines.isNotEmpty),
+                      _WorkspaceTab(meetingId: m.id, api: _api),
                     ],
                   ),
                 ),
@@ -842,4 +847,27 @@ class _AskTabState extends State<_AskTab> with AutomaticKeepAliveClientMixin {
       ],
     );
   }
+}
+
+/// Notes / checklist / board / sketch of the meeting — live with everyone who has it open.
+class _WorkspaceTab extends StatefulWidget {
+  const _WorkspaceTab({required this.meetingId, required this.api});
+  final String meetingId;
+  final ApiClient api;
+
+  @override
+  State<_WorkspaceTab> createState() => _WorkspaceTabState();
+}
+
+class _WorkspaceTabState extends State<_WorkspaceTab> {
+  late final _c = MinuteBoardController(meetingId: widget.meetingId, api: widget.api)..start();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(top: 8), child: MinuteWorkspace(controller: _c, api: widget.api));
 }

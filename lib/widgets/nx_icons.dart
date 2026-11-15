@@ -98,6 +98,15 @@ class NxI {
   static const shieldCheck = LucideIcons300.shieldCheck;
   static const fingerprint = LucideIcons300.fingerprint;
   static const pushPin = LucideIcons300.pin;
+  static const pushPinSlash = LucideIcons300.pinOff;
+  static const thumbsUp = LucideIcons300.thumbsUp;
+  static const thumbsUpFill = LucideIcons500.thumbsUp;
+  static const highlighter = LucideIcons300.highlighter;
+  static const lineSegment = LucideIcons300.minus;
+  static const arrowUpRight = LucideIcons300.moveUpRight;
+  static const square = LucideIcons300.square;
+  static const eraser = LucideIcons300.eraser;
+  static const notePencil = LucideIcons300.notebookPen;
   static const info = LucideIcons300.info;
   static const link = LucideIcons300.link;
   static const palette = LucideIcons300.palette;
