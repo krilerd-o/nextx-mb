@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nextx_mobile/core/app_config.dart';
 import 'package:nextx_mobile/core/home_layout.dart';
 import 'package:nextx_mobile/core/session_state.dart';
+import 'package:nextx_mobile/core/thai_time.dart';
 import 'package:nextx_mobile/screens/calendar/cal/cal_birthdays.dart';
 import 'package:nextx_mobile/screens/dashboard/home_chart_data.dart';
 import 'package:nextx_mobile/screens/dashboard/mobile_dashboard_screen.dart';
@@ -192,7 +193,9 @@ void main() {
   });
 
   testWidgets('birthday box: one upcoming call on newer servers (no 500-row pages)', (tester) async {
-    final today = DateTime.now();
+    // The box counts days in Bangkok time (thaiNow), so "today" must too: on a UTC machine
+    // DateTime.now() is still yesterday from 17:00 UTC on, and the birthday fell out of the box.
+    final today = thaiNow();
     String ymd(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     final fake = FakeNextxAdapter({
       ..._baseReplies(),
