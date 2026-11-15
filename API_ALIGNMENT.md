@@ -123,3 +123,20 @@ Menu key `ai-minute-meeting` (AI group). Backend: NEXTX `backend/src/routes/aiMi
 | rooms | `POST /rooms`, `GET /rooms/:mid`, `PATCH /rooms/:mid/settings`, `POST /rooms/:mid/end`, `GET /rooms/:mid/participants`, `POST /rooms/:mid/admit|remove|cohost|invite`; public `GET/POST /api/public/minutes/rooms/:code[/join|/leave]` |
 | room captions | socket `minute:room_join`, `minute:room_lang`, `minute:room_stt`, `minute:room_audio`, `minute:room_wait` → `minute:caption`, `minute:caption_tr`, `minute:room_admit`, `minute:room_waiting` |
 | processing | socket `ai:minute_status`, `ai:minute_ready`, `ai:minute_translation` |
+
+## AI Assistant (ไอแซค) — endpoints the app uses since the redesign
+
+These need NEXTX with `run-migrate-ai-mobile-chat.js` (see NEXTX `backend/docs/ai-assistant-mobile.md`). On an older server the app still works, but the new features stay empty.
+
+| Endpoint | Used for |
+|---|---|
+| `POST /api/ai/chat` + `auto_mode: fast\|deep`, `inject_context`, `temperature` | Answer modes (Auto · เร็ว · คิดลึก) and the "ใช้ข้อมูล CRM" switch |
+| `GET /api/ai/conversations?project_id&starred&archived&limit&offset` | History paging, folder pages, archived chats (hidden by default) |
+| `PATCH /api/ai/conversations/:id {archived}` | Archive / bring back |
+| `POST /api/ai/conversations/:id/messages {messages, replace:true}` | Edit and resend |
+| `GET/POST/PATCH/DELETE /api/ai/projects` (+ `instructions`, `icon`, `chat_count`) | Folders and the instructions for each folder |
+| `GET/POST/PATCH/DELETE /api/ai/my-prompts` | The user's own `/` commands |
+| `GET /api/ai/quick-prompts` | The business's `/` commands |
+| `POST /api/ai/tools/confirm` and `/cancel` + `conversation_id`, `message_id` | Remembers the result on the saved proposal |
+| `POST /api/ai/extract-fields {module, text, context}` | "ไอแซคช่วยกรอก" in the create forms for `/lead /contact /account /case /นัด /งาน /epic /quotation` |
+| `POST /api/entity/:module`, `POST /api/boards/:id/tasks\|epics` | The records themselves; owner = the signed-in user unless changed |

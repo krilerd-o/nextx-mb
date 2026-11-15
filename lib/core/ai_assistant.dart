@@ -30,7 +30,8 @@ class AiMessage {
     this.error,
   });
 
-  final String? id;
+  /// Server id once saved (set after `appendAiMessage` for streamed replies).
+  String? id;
   final String role; // user | assistant
   String content;
   List<Map<String, dynamic>> attachments;
@@ -44,7 +45,16 @@ class AiMessage {
   bool streaming;
   String? error;
 
+  /// 👍 = 1, 👎 = -1 (the user's own feedback on an answer).
+  int? feedback;
+
+  /// Tools the agent ran for this reply (`tool_start` / `tool_done`): `{name, label, done}`.
+  /// Shown live while streaming; not saved.
+  List<Map<String, dynamic>> toolSteps = [];
+
   bool get isUser => role == 'user';
+
+  DateTime? get createdLocal => createdAt == null ? null : parseThai(createdAt!);
 
   factory AiMessage.fromJson(Map<String, dynamic> m) => AiMessage(
         id: m['id']?.toString(),
@@ -58,7 +68,7 @@ class AiMessage {
         provider: m['provider']?.toString(),
         model: m['model']?.toString(),
         createdAt: m['created_at']?.toString(),
-      );
+      )..feedback = m['feedback'] is Map ? int.tryParse('${(m['feedback'] as Map)['rating']}') : null;
 
   /// Body for `POST /ai/conversations/:id/messages` (web `persistMessage`).
   Map<String, dynamic> toSaveJson() => {
@@ -75,13 +85,27 @@ class AiMessage {
 }
 
 class AiConversation {
-  const AiConversation({required this.id, required this.title, this.starred = false, this.projectId, this.updatedAt, this.mode});
+  const AiConversation({required this.id, required this.title, this.starred = false, this.projectId, this.updatedAt, this.mode, this.archived = false, this.snippet});
   final String id;
   final String title;
   final bool starred;
   final String? projectId;
   final String? updatedAt;
   final String? mode;
+  final bool archived;
+
+  /// Search hit inside the chat's messages (text around the match).
+  final String? snippet;
+
+  AiConversation copyWith({String? title, bool? starred, String? projectId, bool clearProject = false, bool? archived}) => AiConversation(
+        id: id,
+        title: title ?? this.title,
+        starred: starred ?? this.starred,
+        projectId: clearProject ? null : (projectId ?? this.projectId),
+        updatedAt: updatedAt,
+        mode: mode,
+        archived: archived ?? this.archived,
+      );
 
   factory AiConversation.fromJson(Map<String, dynamic> m) => AiConversation(
         id: '${m['id']}',
@@ -90,18 +114,70 @@ class AiConversation {
         projectId: m['project_id']?.toString(),
         updatedAt: (m['updated_at'] ?? m['created_at'])?.toString(),
         mode: m['mode']?.toString(),
+        archived: m['archived'] == true || m['archived'] == 1,
+        snippet: (m['snippet'] as Object?)?.toString(),
       );
 }
 
-/// Chats grouped วันนี้ / เมื่อวาน / ก่อนหน้า by Bangkok day (web
-/// `groupChatsByDate`); starred chats get their own group on top.
+/// A chat folder (server "AI project"): optional colour, icon and standing instructions.
+class AiFolder {
+  const AiFolder({required this.id, required this.name, this.color, this.icon, this.instructions, this.chatCount});
+  final String id;
+  final String name;
+  final String? color;
+  final String? icon;
+  final String? instructions;
+  final int? chatCount;
+
+  factory AiFolder.fromJson(Map<String, dynamic> m) => AiFolder(
+        id: '${m['id']}',
+        name: '${m['name'] ?? ''}',
+        color: (m['color'] as Object?)?.toString(),
+        icon: (m['icon'] as Object?)?.toString(),
+        instructions: (m['instructions'] as Object?)?.toString(),
+        chatCount: m['chat_count'] == null ? null : int.tryParse('${m['chat_count']}'),
+      );
+}
+
+/// Folder colours offered in the app (hex, like the web picker).
+const kAiFolderColors = ['#6366F1', '#8B5CF6', '#EC4899', '#EF4444', '#F59E0B', '#10B981', '#06B6D4', '#64748B'];
+
+/// `#RRGGBB` → ARGB int, null when not a colour.
+int? aiHexColor(String? hex) {
+  final h = (hex ?? '').replaceFirst('#', '').trim();
+  if (h.length != 6) return null;
+  final v = int.tryParse(h, radix: 16);
+  return v == null ? null : 0xFF000000 | v;
+}
+
+/// Answer modes in the composer. `auto` lets the server pick; `fast` / `deep`
+/// steer the Auto router (`auto_mode`). A manual provider/model lives under "ขั้นสูง".
+const kAiModes = ['auto', 'fast', 'deep'];
+
+String aiModeLabel(String mode) => switch (mode) {
+      'fast' => 'เร็ว',
+      'deep' => 'คิดลึก',
+      _ => 'Auto',
+    };
+
+String aiModeHint(String mode) => switch (mode) {
+      'fast' => 'ตอบไว สั้น กระชับ',
+      'deep' => 'วิเคราะห์ละเอียด หลายขั้นตอน',
+      _ => 'เลือกโมเดลที่เหมาะให้อัตโนมัติ',
+    };
+
+/// Temperature presets (web session settings): แม่นยำ · สมดุล · สร้างสรรค์.
+const kAiTemperatures = [(0.3, 'แม่นยำ'), (0.7, 'สมดุล'), (1.0, 'สร้างสรรค์')];
+
+/// Chats grouped ปักหมุด / วันนี้ / เมื่อวาน / 7 วันที่ผ่านมา / ก่อนหน้า by Bangkok
+/// day (web `groupChatsByDate`); pinned (starred) chats get their own group on top.
 List<({String label, List<AiConversation> items})> groupAiChats(List<AiConversation> chats, {DateTime? now}) {
   final n = now ?? thaiNow();
   final today = DateTime(n.year, n.month, n.day);
-  final groups = <String, List<AiConversation>>{'ติดดาว': [], 'วันนี้': [], 'เมื่อวาน': [], 'ก่อนหน้า': []};
+  final groups = <String, List<AiConversation>>{'ปักหมุด': [], 'วันนี้': [], 'เมื่อวาน': [], '7 วันที่ผ่านมา': [], 'ก่อนหน้า': []};
   for (final c in chats) {
     if (c.starred) {
-      groups['ติดดาว']!.add(c);
+      groups['ปักหมุด']!.add(c);
       continue;
     }
     final d = parseThai(c.updatedAt ?? '');
@@ -110,7 +186,7 @@ List<({String label, List<AiConversation> items})> groupAiChats(List<AiConversat
       continue;
     }
     final diff = today.difference(DateTime(d.year, d.month, d.day)).inDays;
-    groups[diff <= 0 ? 'วันนี้' : (diff == 1 ? 'เมื่อวาน' : 'ก่อนหน้า')]!.add(c);
+    groups[diff <= 0 ? 'วันนี้' : (diff == 1 ? 'เมื่อวาน' : (diff < 7 ? '7 วันที่ผ่านมา' : 'ก่อนหน้า'))]!.add(c);
   }
   return [for (final e in groups.entries) if (e.value.isNotEmpty) (label: e.key, items: e.value)];
 }
@@ -172,16 +248,19 @@ Map<String, dynamic> aiChatBody({
   String? contextModule,
   String? contextId,
   String? contextTitle,
+  String autoMode = 'auto',
+  double temperature = 0.7,
 }) {
   final auto = provider == 'auto';
   return {
     if (auto) 'auto': true,
+    if (auto && (autoMode == 'fast' || autoMode == 'deep')) 'auto_mode': autoMode,
     'provider': provider,
     if (!auto && model != null && model.isNotEmpty) 'model': model,
     if (auto && sticky != null) 'sticky_provider': sticky.provider,
     if (auto && sticky != null) 'sticky_model': sticky.model,
     'messages': history,
-    'temperature': 0.7,
+    'temperature': temperature,
     'inject_context': injectContext,
     'context_module': ?contextModule,
     'context_id': ?contextId,

@@ -3,35 +3,62 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/ai_assistant.dart';
+import '../../../core/ai_commands.dart';
 import '../../../core/app_config.dart';
 import '../../../core/i18n.dart';
 import '../../../core/isaac_states.dart';
 import '../../../core/navigation/app_routes.dart';
+import '../../../core/navigation/notification_deep_link.dart';
 import '../../../core/nx_breakpoint.dart';
 import '../../../core/nx_network.dart';
 import '../../../services/nx_speech.dart';
-import '../../../core/navigation/notification_deep_link.dart';
+import '../../../widgets/app_bottom_sheet.dart';
 import '../../../widgets/isaac_sticker.dart';
 import '../../../widgets/nx_attachments.dart';
 import '../../../widgets/nx_icons.dart';
-import '../../../widgets/nx_markdown.dart';
 import '../../../widgets/nx_skeleton.dart';
 import '../../../widgets/nx_split_view.dart' show NxHingeSplit;
+import '../../search/search_modules.dart';
 import '../web_session_screen.dart';
 import 'ai_assistant_controller.dart';
 import 'ai_cards.dart';
+import 'ai_create_flow.dart';
+import 'ai_speaker.dart';
+import '../../../services/device_push_service.dart' show showAppLocalNotification;
+import 'ai_project_screen.dart';
+import 'ai_prompt_library_screen.dart';
+import 'widgets/ai_chat_drawer.dart';
+import 'widgets/ai_composer.dart';
+import 'widgets/ai_header.dart';
+import 'widgets/ai_message_tile.dart';
+import 'widgets/ai_mode_sheet.dart';
+import 'widgets/ai_sheets.dart';
+import 'widgets/ai_style.dart';
+import 'widgets/ai_welcome.dart';
 
-/// ISAAC AI Assistant (web `/ai`): chats kept on the server, streamed
-/// answers with Isaac's moods, action cards, files, follow-ups, model + quota.
+/// ISAAC AI Assistant (web `/ai`), redesigned for phones: a calm chat with
+/// three header controls, quick starters, `/` commands, `@` records, answer
+/// modes, folders and smooth streaming.
 class AiAssistantScreen extends StatefulWidget {
-  const AiAssistantScreen({super.key, this.controller, this.contextModule, this.contextId, this.contextTitle});
+  const AiAssistantScreen({
+    super.key,
+    this.controller,
+    this.contextModule,
+    this.contextId,
+    this.contextTitle,
+    this.initialPrompt,
+    this.initialChatId,
+    this.initialCommand,
+  });
 
   /// For tests.
   final AiAssistantController? controller;
@@ -41,30 +68,59 @@ class AiAssistantScreen extends StatefulWidget {
   final String? contextId;
   final String? contextTitle;
 
+  /// Text put in the input on open (e.g. Home brief → "ถามต่อ").
+  final String? initialPrompt;
+
+  /// Chat to open (notification "ไอแซคตอบแล้ว").
+  final String? initialChatId;
+
+  /// A command to have waiting in the composer (Home shortcut), e.g. `lead`.
+  final String? initialCommand;
+
   @override
   State<AiAssistantScreen> createState() => _AiAssistantScreenState();
 }
 
-class _AiAssistantScreenState extends State<AiAssistantScreen> {
+class _AiAssistantScreenState extends State<AiAssistantScreen> with WidgetsBindingObserver {
   late final AiAssistantController _c = widget.controller ?? AiAssistantController(context.read<AppConfig>().apiClient);
   final _input = TextEditingController();
   final _focus = FocusNode();
   final _scroll = ScrollController();
   final _scaffold = GlobalKey<ScaffoldState>();
-  Timer? _tick;
   DateTime? _finishedAt;
   bool _wasSending = false;
+
+  /// Follow new text only while the user is at the bottom.
+  bool _pinned = true;
+  bool _showJump = false;
+
+  /// `/` and `@` being typed (null = not).
+  String? _slash;
+  String? _mention;
+
+  /// A `/วิเคราะห์` command: the next message goes in "คิดลึก".
+  bool _deepNext = false;
+
+  /// A create command picked from "/" (shown as a chip in the composer).
+  AiCommand? _createCmd;
 
   /// Voice input: listening, and the text typed before speaking started.
   bool _listening = false;
   String _speechBase = '';
+
+  /// First-run hint "ลองพิมพ์ / …" (once per device).
+  bool _showSlashHint = false;
+  static const _kHintSeen = 'ai.slash_hint_seen';
+
+  /// Drafts per chat (kept while switching chats / leaving the screen).
+  String? _draftKeyFor;
+  Timer? _draftSave;
 
   /// Boards for workspace tree proposals (loaded once) and the pick per proposal.
   List<Map<String, dynamic>>? _boards;
   bool _boardsLoading = false;
   final Map<String, String?> _boardFor = {};
 
-  /// The board picked for [p]: the user's choice, else the proposal's board, else the first one (like the web).
   String? _boardOf(Map<String, dynamic> p) {
     final id = '${p['proposalId']}';
     if (_boardFor.containsKey(id)) return _boardFor[id];
@@ -82,10 +138,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       _c.api
           .getBoards(writable: true)
           .then((list) {
-            if (!mounted) return;
-            setState(() {
-              _boards = list;
-            });
+            if (mounted) setState(() => _boards = list);
           })
           .catchError((_) {
             if (mounted) setState(() => _boards = const []);
@@ -98,65 +151,381 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   void initState() {
     super.initState();
     _c.addListener(_onChange);
+    WidgetsBinding.instance.addObserver(this);
+    AiSpeaker.instance.speaking.addListener(_onSpeaking);
+    _c.onBackgroundReply = (chatId, title, text) {
+      final body = text.replaceAll(RegExp(r'[#*_`>|]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
+      showAppLocalNotification(
+        id: chatId.hashCode & 0x7fffffff,
+        title: tr('ไอแซคตอบแล้ว'),
+        body: '${title.isEmpty ? '' : '$title: '}${body.length > 120 ? '${body.substring(0, 120)}…' : body}',
+        payload: AppRoutes.aiOpenChat(chatId),
+      );
+    };
+    _c.streamTick.addListener(_follow);
     _focus.addListener(() => setState(() {}));
-    _input.addListener(() => setState(() {}));
+    _input.addListener(_onInput);
+    _scroll.addListener(_onScroll);
     NxNetwork.instance.ensureStarted();
     if (widget.contextModule != null && widget.contextId != null) {
       _c.contextModule = widget.contextModule;
       _c.contextId = widget.contextId;
       _c.contextTitle = widget.contextTitle;
       _input.text = tr('สรุปรายการนี้ให้หน่อย และควรทำอะไรต่อ');
+    } else if ((widget.initialPrompt ?? '').trim().isNotEmpty) {
+      final t = widget.initialPrompt!.trim();
+      _input.value = TextEditingValue(text: t, selection: aiTemplateSelection(t));
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _c.init();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      unawaited(_c.init().then((_) {
+        if (!mounted) return;
+        final chat = widget.initialChatId;
+        if (chat != null && chat.isNotEmpty) _c.open(chat);
+        final cmd = widget.initialCommand;
+        if (cmd != null && cmd.isNotEmpty) {
+          final c = _usableCommands().where((x) => x.command == cmd).firstOrNull;
+          if (c != null) _pickCommand(c);
+        }
+      }));
       if (mounted) IsaacSticker.preload(context);
+      await _loadPrefs();
     });
+  }
+
+  Future<void> _loadPrefs() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final seen = p.getBool(_kHintSeen) ?? false;
+      if (_input.text.isEmpty) {
+        final draft = p.getString(_draftKey(null));
+        if (draft != null && draft.isNotEmpty) _input.text = draft;
+      }
+      _draftKeyFor = _draftKey(_c.activeId);
+      if (mounted) setState(() => _showSlashHint = !seen);
+    } catch (_) {}
+  }
+
+  Future<void> _markHintSeen() async {
+    if (!_showSlashHint) return;
+    setState(() => _showSlashHint = false);
+    try {
+      (await SharedPreferences.getInstance()).setBool(_kHintSeen, true);
+    } catch (_) {}
   }
 
   @override
   void dispose() {
     if (_listening) NxSpeech.instance.stop();
+    _draftSave?.cancel();
     _c.removeListener(_onChange);
-    if (widget.controller == null) _c.dispose();
+    _c.streamTick.removeListener(_follow);
+    WidgetsBinding.instance.removeObserver(this);
+    AiSpeaker.instance.speaking.removeListener(_onSpeaking);
+    if (widget.controller == null) {
+      if (_c.busy) {
+        // Left mid-answer: let Isaac finish, notify, then let go.
+        _c.notifyOnFinish = true;
+        _c.disposeWhenIdle = true;
+      } else {
+        _c.dispose();
+      }
+    }
     _input.dispose();
     _focus.dispose();
     _scroll.dispose();
-    _tick?.cancel();
     super.dispose();
   }
 
+  // ── state hooks
+
   void _onChange() {
-    if (_c.sending && !_wasSending) {
-      _tick?.cancel();
-      _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() {});
-      });
-    }
     if (!_c.sending && _wasSending) {
-      _tick?.cancel();
       _finishedAt = DateTime.now();
       Future.delayed(const Duration(milliseconds: kIsaacDoneMs + 100), () {
         if (mounted) setState(() {});
       });
     }
     _wasSending = _c.sending;
+    final key = _draftKey(_c.activeId);
+    if (_draftKeyFor != null && key != _draftKeyFor) _switchDraft(key);
     if (mounted) setState(() {});
-    _scrollToEnd();
+    _follow();
   }
 
-  void _scrollToEnd() {
+  void _onInput() {
+    final sel = _input.selection;
+    final cursor = sel.isValid ? sel.baseOffset : _input.text.length;
+    final slash = aiSlashQuery(_input.text, cursor);
+    final mention = slash == null ? aiMentionQuery(_input.text, cursor) : null;
+    if (slash != null) _markHintSeen();
+    setState(() {
+      _slash = slash;
+      _mention = mention;
+    });
+    _draftSave?.cancel();
+    _draftSave = Timer(const Duration(milliseconds: 400), _saveDraft);
+  }
+
+  String _draftKey(String? chatId) => 'ai.draft.${chatId ?? 'new'}';
+
+  Future<void> _saveDraft() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final k = _draftKeyFor ?? _draftKey(_c.activeId);
+      if (_input.text.trim().isEmpty) {
+        await p.remove(k);
+      } else {
+        await p.setString(k, _input.text);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _switchDraft(String key) async {
+    // A brand-new chat just got its id: the text was sent, nothing to carry.
+    final fromNew = _draftKeyFor == _draftKey(null);
+    _draftKeyFor = key;
+    if (fromNew && _c.messages.isNotEmpty) return;
+    try {
+      final p = await SharedPreferences.getInstance();
+      final d = p.getString(key) ?? '';
+      if (mounted && _input.text != d) _input.text = d;
+    } catch (_) {}
+  }
+
+  bool get _nearBottom => _scroll.hasClients && _scroll.position.maxScrollExtent - _scroll.offset < 80;
+
+  /// Any scroll: back at the bottom (not dragging up) → follow again;
+  /// away from it while not following → show "↓".
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final near = _nearBottom;
+    final up = _scroll.position.userScrollDirection == ScrollDirection.forward;
+    if (near && !up && (!_pinned || _showJump)) {
+      setState(() {
+        _pinned = true;
+        _showJump = false;
+      });
+    } else if (!near && !_pinned && !_showJump) {
+      setState(() => _showJump = true);
+    }
+  }
+
+  /// Only the user's own drag up stops following (our jumps do not).
+  bool _onUserScroll(UserScrollNotification n) {
+    if (n.direction == ScrollDirection.forward && _pinned) setState(() => _pinned = false);
+    return false;
+  }
+
+  /// Keep the newest text in view — only while the user has not scrolled up.
+  void _follow([int tries = 10]) {
+    if (!_pinned) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
+      if (!_scroll.hasClients || !_pinned) return;
       final max = _scroll.position.maxScrollExtent;
-      if (max - _scroll.offset < 400 || _c.sending) _scroll.jumpTo(max);
+      if (_scroll.offset < max - 0.5) {
+        _scroll.jumpTo(max);
+        // The lazy list measures the items it just built and may grow:
+        // check again next frame until it settles.
+        if (tries > 1) {
+          _follow(tries - 1);
+          WidgetsBinding.instance.scheduleFrame();
+        }
+      }
     });
   }
 
+  void _jumpToEnd() {
+    if (!_scroll.hasClients) return;
+    setState(() {
+      _pinned = true;
+      _showJump = false;
+    });
+    _scroll.animateTo(_scroll.position.maxScrollExtent, duration: AiStyle.of(context, const Duration(milliseconds: 300)), curve: AiStyle.curve);
+  }
+
+  // ── sending
+
   Future<void> _send([String? text]) async {
+    // A create command (/lead …): open its form, filled from what was typed.
+    final create = _createCmd;
+    if (text == null && create != null) {
+      final typed = _input.text.trim();
+      _input.clear();
+      setState(() => _createCmd = null);
+      await _runCreate(create.create!, kind: create.kind, text: typed);
+      return;
+    }
+    if (text == null) {
+      final m = RegExp(r'^/(\S+)(?:\s+([\s\S]*))?$').firstMatch(_input.text.trim());
+      final cmd = m == null ? null : _createCommands().where((c) => c.command == m.group(1)).firstOrNull;
+      if (cmd != null) {
+        final rest = (m!.group(2) ?? '').trim();
+        _input.clear();
+        await _runCreate(cmd.create!, kind: cmd.kind, text: rest);
+        return;
+      }
+    }
     final t = text ?? _input.text;
+    final deep = _deepNext;
     if (text == null) _input.clear();
+    _deepNext = false;
+    _pinned = true;
     HapticFeedback.lightImpact();
-    await _c.send(t);
+    unawaited(_markHintSeen());
+    await _c.send(t, deep: deep);
+  }
+
+  void _insertTemplate(String template) {
+    _input.value = TextEditingValue(text: template, selection: aiTemplateSelection(template));
+    _focus.requestFocus();
+  }
+
+  void _pickCommand(AiCommand c) {
+    HapticFeedback.selectionClick();
+    unawaited(aiCountCommandUse(c.command));
+    if (c.isCreate) {
+      // Becomes a chip: type / speak the details (or nothing) and send.
+      setState(() {
+        _createCmd = c;
+        _deepNext = false;
+      });
+      _input.clear();
+      _focus.requestFocus();
+      return;
+    }
+    setState(() => _deepNext = c.deep);
+    _insertTemplate(tr(c.template));
+  }
+
+  /// Create commands this user may use (menu access per module).
+  List<AiCommand> _createCommands() => [
+    for (final c in _c.allCommands)
+      if (c.isCreate && aiCanCreate(context, c.create!)) c,
+  ];
+
+  /// Slash menu: create commands the user can't use are hidden.
+  List<AiCommand> _usableCommands() => [
+    for (final c in _c.allCommands)
+      if (!c.isCreate || aiCanCreate(context, c.create!)) c,
+  ];
+
+  /// The chat so far as plain text, for "เติมจากแชทนี้".
+  String _chatText() {
+    final last = _c.messages.where((m) => m.content.trim().isNotEmpty).toList();
+    final tail = last.length > 6 ? last.sublist(last.length - 6) : last;
+    return [for (final m in tail) '${m.isUser ? 'ผู้ใช้' : 'ไอแซค'}: ${m.content.trim()}'].join('\n');
+  }
+
+  /// Opens the real create form; when saved, a result card joins the chat.
+  Future<void> _runCreate(
+    String module, {
+    String? kind,
+    String text = '',
+    Map<String, dynamic> initialValues = const {},
+    Map<String, dynamic>? replacesProposal,
+  }) async {
+    if (!aiCanCreate(context, module)) {
+      _snack('คุณไม่มีสิทธิ์สร้างรายการนี้');
+      return;
+    }
+    HapticFeedback.selectionClick();
+    final r = await AiCreateFlow.run(
+      context,
+      module: module,
+      kind: kind,
+      text: text,
+      initialValues: initialValues,
+      contextModule: _c.contextModule,
+      contextId: _c.contextId,
+      contextTitle: _c.contextTitle,
+      chatText: _c.messages.isEmpty ? null : _chatText,
+    );
+    if (r == null || !mounted) return;
+    if (replacesProposal != null) await _c.cancelProposal(replacesProposal);
+    _pinned = true;
+    await _c.addCreatedCard(
+      module: r.module,
+      id: r.id,
+      kind: r.kind,
+      label: aiCreateLabel(r.module, kind: r.kind),
+      title: r.title,
+      values: r.values,
+      link: r.link,
+      replacesProposal: replacesProposal,
+    );
+  }
+
+  /// "แก้ไขในฟอร์ม" on Isaac's proposal: same values in the full form.
+  Future<void> _editProposal(Map<String, dynamic> p) async {
+    final tool = '${p['tool'] ?? ''}';
+    final preview = p['preview'] is Map ? Map<String, dynamic>.from(p['preview'] as Map) : <String, dynamic>{};
+    final fields = preview['fields'] is Map ? Map<String, dynamic>.from(preview['fields'] as Map) : <String, dynamic>{};
+    final owner = preview['owner'] is Map ? Map<String, dynamic>.from(preview['owner'] as Map) : null;
+    final workspace = tool == 'create_workspace_item' || tool == 'create_workspace_epic';
+    final module = workspace ? 'workspace_item' : '${preview['module'] ?? tool.replaceFirst('create_', '')}';
+    final values = <String, dynamic>{...fields};
+    if (owner != null) values[workspace ? 'assignee_id' : 'smownerid'] = {'id': '${owner['id']}', 'label': '${owner['label'] ?? owner['id']}'};
+    await _runCreate(module, kind: tool == 'create_workspace_epic' ? 'epic' : 'task', initialValues: values, replacesProposal: p);
+  }
+
+  /// Proposal tools the form can take over.
+  static const _formTools = {
+    'create_lead',
+    'create_contact',
+    'create_account',
+    'create_case',
+    'create_activity',
+    'create_quotation',
+    'create_workspace_item',
+    'create_workspace_epic',
+  };
+
+  /// Under a record created here: follow-up appointment, ask about it.
+  Widget? _recordActions(Map<String, dynamic> p) {
+    final preview = p['preview'] is Map ? p['preview'] as Map : const {};
+    final rec = preview['record'] is Map ? preview['record'] as Map : null;
+    if (rec == null) return null;
+    final module = '${rec['module']}';
+    final id = '${rec['id']}';
+    final title = '${rec['title'] ?? ''}';
+    final crm = const {'lead', 'contact', 'account', 'case', 'quotation'}.contains(module);
+    if (!crm) return null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          ActionChip(
+            key: ValueKey('ai-followup-appt-$id'),
+            avatar: const Icon(NxI.calendarPlus, size: 16),
+            label: Text(tr('สร้างนัดติดตาม')),
+            onPressed: () =>
+                _runCreate('activity', initialValues: {'related_module': module, 'related_id': id, if (title.isNotEmpty) 'subject': '${tr('ติดตาม')} $title'}),
+          ),
+          ActionChip(
+            key: ValueKey('ai-ask-record-$id'),
+            avatar: const Icon(NxI.sparkle, size: 16),
+            label: Text(tr('ถามไอแซคเกี่ยวกับรายการนี้')),
+            onPressed: () {
+              _c.setContext(module, id, title.isEmpty ? '$module #$id' : title);
+              _focus.requestFocus();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _pickMention(AiMention m) {
+    final sel = _input.selection;
+    final r = aiStripMention(_input.text, sel.isValid ? sel.baseOffset : _input.text.length);
+    _input.value = TextEditingValue(
+      text: r.text,
+      selection: TextSelection.collapsed(offset: r.cursor),
+    );
+    _c.setContext(m.module, m.id, m.title);
+    HapticFeedback.selectionClick();
   }
 
   void _openLink(String href) {
@@ -164,83 +533,121 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     openNxFile(href.startsWith('/') ? _c.api.absoluteUrl(href) : href);
   }
 
-  // ── attachments
+  void _snack(String text, {SnackBarAction? action}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(tr(text)), action: action, persist: action == null ? null : false));
+  }
+
+  // ── attachments, mode, quick actions
 
   Future<void> _attachMenu() async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(leading: const Icon(NxI.camera), title: Text(tr('ถ่ายรูป')), onTap: () => Navigator.pop(ctx, 'camera')),
-            ListTile(leading: const Icon(NxI.image), title: Text(tr('รูปภาพ')), onTap: () => Navigator.pop(ctx, 'gallery')),
-            ListTile(leading: const Icon(NxI.paperclip), title: Text(tr('ไฟล์ (PDF, Word, Excel, เสียง, วิดีโอ)')), onTap: () => Navigator.pop(ctx, 'file')),
-          ],
-        ),
-      ),
-    );
-    if (picked == null) return;
-    if (picked == 'file') {
-      final r = await FilePicker.platform.pickFiles(
-        withData: true,
-        type: FileType.custom,
-        allowedExtensions: const ['pdf', 'txt', 'doc', 'docx', 'json', 'csv', 'xls', 'xlsx', 'png', 'jpg', 'jpeg', 'webp', 'mp3', 'm4a', 'wav', 'mp4', 'mov'],
-      );
-      final f = r?.files.firstOrNull;
-      if (f == null || f.bytes == null) return;
-      await _c.uploadAttachment(MultipartFile.fromBytes(f.bytes!, filename: f.name));
-      return;
+    final picked = await showAiAttachSheet(context, canAttach: !_c.uploading);
+    if (picked == null || !mounted) return;
+    switch (picked) {
+      case 'mention':
+        _insertAtCursor('@');
+        return;
+      case 'commands':
+        _input.value = const TextEditingValue(text: '/', selection: TextSelection.collapsed(offset: 1));
+        _focus.requestFocus();
+        return;
+      case 'file':
+        final r = await FilePicker.platform.pickFiles(
+          withData: true,
+          allowMultiple: true,
+          type: FileType.custom,
+          allowedExtensions: const ['pdf', 'txt', 'doc', 'docx', 'json', 'csv', 'xls', 'xlsx', 'png', 'jpg', 'jpeg', 'webp', 'mp3', 'm4a', 'wav', 'mp4', 'mov'],
+        );
+        final files = [
+          for (final f in r?.files ?? const <PlatformFile>[])
+            if (f.bytes != null) MultipartFile.fromBytes(f.bytes!, filename: f.name),
+        ];
+        if (files.isNotEmpty) await _c.uploadAttachments(files.take(8).toList());
+        return;
+      case 'gallery':
+        final xs = await ImagePicker().pickMultiImage(maxWidth: 2200, imageQuality: 85, limit: 8);
+        if (xs.isEmpty) return;
+        await _c.uploadAttachments([for (final x in xs) MultipartFile.fromBytes(await x.readAsBytes(), filename: x.name)]);
+        return;
+      case 'camera':
+        final x = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 2200, imageQuality: 85);
+        if (x == null) return;
+        await _c.uploadAttachment(MultipartFile.fromBytes(await x.readAsBytes(), filename: x.name));
     }
-    final x = await ImagePicker().pickImage(source: picked == 'camera' ? ImageSource.camera : ImageSource.gallery, maxWidth: 2200, imageQuality: 85);
-    if (x == null) return;
-    await _c.uploadAttachment(MultipartFile.fromBytes(await x.readAsBytes(), filename: x.name));
   }
 
-  // ── model picker
-
-  static const _providers = [
-    ('gemini', 'Gemini'),
-    ('claude', 'Claude'),
-    ('openai', 'ChatGPT'),
-    ('deepseek', 'DeepSeek'),
-    ('kimi', 'Kimi'),
-    ('qwen', 'Qwen'),
-    ('gemma', 'Gemma'),
-    ('ollama', 'Ollama'),
-  ];
-
-  Future<void> _pickModel() async {
-    final choice = await showModalBottomSheet<(String, String?)>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (ctx) => _ModelSheet(api: _c.api, current: (_c.provider, _c.model), providers: _providers, policy: _c.policy),
+  void _insertAtCursor(String s) {
+    final sel = _input.selection;
+    final at = sel.isValid ? sel.baseOffset : _input.text.length;
+    final before = _input.text.substring(0, at);
+    final pad = before.isEmpty || before.endsWith(' ') || before.endsWith('\n') ? '' : ' ';
+    final text = '$before$pad$s${_input.text.substring(at)}';
+    _input.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: at + pad.length + s.length),
     );
-    if (choice != null) _c.setModel(choice.$1, choice.$2);
+    _focus.requestFocus();
   }
 
-  // ── conversation menu
-
-  Future<void> _rename(AiConversation c) async {
-    final ctl = TextEditingController(text: c.title);
-    final v = await showDialog<String>(
+  Future<void> _pickMode() async {
+    await showAppBottomSheet<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('เปลี่ยนชื่อแชท')),
-        content: TextField(controller: ctl, autofocus: true),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('ยกเลิก'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctl.text), child: Text(tr('บันทึก'))),
-        ],
-      ),
+      title: null,
+      child: AiModeSheet(controller: _c),
     );
-    if (v != null) await _c.rename(c.id, v);
+    if (mounted) setState(() => _deepNext = false);
   }
 
-  /// Delete with undo (5s), like CRM records: hidden now, removed on the
-  /// server only when the snackbar closes without "เลิกทำ".
+  Future<void> _quickAction(AiQuickAction a) async {
+    HapticFeedback.selectionClick();
+    if (a.template != null) return _insertTemplate(tr(a.template!));
+    if (a.key == 'create') {
+      final cmd = await showAiCreatePicker(context, _createCommands());
+      if (cmd != null && mounted) await _runCreate(cmd.create!, kind: cmd.kind);
+    }
+  }
+
+  // ── chat menu
+
+  AiConversation _activeChat() => [..._c.conversations, ..._c.archivedChats].firstWhere(
+    (x) => x.id == _c.activeId,
+    orElse: () =>
+        AiConversation(id: _c.activeId!, title: _c.activeTitle, starred: _c.activeStarred, projectId: _c.activeProjectId, archived: _c.activeArchived),
+  );
+
+  Future<void> _chatMenu(AiConversation chat) async {
+    final action = await showAiChatMenu(context, chat, canShare: true);
+    if (action == null || !mounted) return;
+    try {
+      switch (action) {
+        case 'pin':
+          await _c.toggleStar(chat.id, !chat.starred);
+        case 'rename':
+          final v = await showAiTextDialog(context, title: 'เปลี่ยนชื่อแชท', initial: chat.title);
+          if (v != null) await _c.rename(chat.id, v);
+        case 'move':
+          await _moveToFolder({chat.id}, current: chat.projectId);
+        case 'share':
+          await _share(chat.id, chat.title);
+        case 'archive':
+          await _c.setArchived(chat.id, !chat.archived);
+          if (mounted && !chat.archived) {
+            _snack(
+              'เก็บ "${chat.title}" ถาวรแล้ว',
+              action: SnackBarAction(label: tr('เลิกทำ'), onPressed: () => _c.setArchived(chat.id, false)),
+            );
+          }
+        case 'delete':
+          await _delete(chat);
+      }
+    } catch (e) {
+      if (mounted) _snack(aiErrorText(e));
+    }
+  }
+
+  /// Delete with undo (5s): hidden now, removed on the server only when the
+  /// snackbar closes without "เลิกทำ".
   Future<void> _delete(AiConversation c) async {
     final removed = _c.removeLocal(c.id);
     if (removed == null) return;
@@ -251,7 +658,6 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             key: const ValueKey('ai-delete-undo'),
             content: Text(tr('ลบ "${c.title}" แล้ว')),
             duration: const Duration(seconds: 5),
-            // Actions make snackbars persist by default; these must time out.
             persist: false,
             action: SnackBarAction(label: tr('เลิกทำ'), onPressed: () {}),
           ),
@@ -269,118 +675,176 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     }
   }
 
-  Future<void> _moveToProject(AiConversation c) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              leading: const Icon(NxI.x),
-              title: Text(tr('ไม่อยู่ในโปรเจกต์')),
-              trailing: c.projectId == null ? const Icon(NxI.check) : null,
-              onTap: () => Navigator.pop(ctx, ''),
-            ),
-            for (final p in _c.projects)
-              ListTile(
-                leading: const Icon(NxI.folder),
-                title: Text('${p['name'] ?? ''}'),
-                trailing: c.projectId == '${p['id']}' ? const Icon(NxI.check) : null,
-                onTap: () => Navigator.pop(ctx, '${p['id']}'),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (picked == null) return;
-    try {
-      await _c.moveToProject(c.id, picked.isEmpty ? null : picked);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(aiErrorText(e)))));
+  Future<void> _moveToFolder(Set<String> chatIds, {String? current}) async {
+    var picked = await showAiFolderPicker(context, _c.folders, current: current);
+    if (picked == null || !mounted) return;
+    if (picked == '__new__') {
+      final f = await _createFolder();
+      if (f == null) return;
+      picked = f.id;
+    }
+    final target = picked.isEmpty ? null : picked;
+    if (chatIds.length == 1) {
+      await _c.moveToProject(chatIds.first, target);
+    } else {
+      await _c.moveManyToProject(chatIds, target);
+    }
+    if (mounted) {
+      final name = _c.folderById(target)?.name;
+      _snack(name == null ? 'นำออกจากโฟลเดอร์แล้ว' : 'ย้ายไป "$name" แล้ว');
     }
   }
 
-  Future<void> _share() async {
-    final id = _c.activeId;
-    if (id == null) return;
-    final mode = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(NxI.users),
-            title: Text(tr('คนในธุรกิจนี้')),
-            subtitle: Text(tr('ต้องเข้าสู่ระบบจึงเปิดดูได้')),
-            onTap: () => Navigator.pop(ctx, 'business'),
-          ),
-          ListTile(
-            leading: const Icon(NxI.globe),
-            title: Text(tr('ทุกคนที่มีลิงก์')),
-            subtitle: Text(tr('เปิดดูได้โดยไม่ต้องเข้าสู่ระบบ')),
-            onTap: () => Navigator.pop(ctx, 'public'),
-          ),
-        ]),
+  Future<AiFolder?> _createFolder() async {
+    final r = await showAiFolderEditor(context);
+    if (r == null) return null;
+    try {
+      return await _c.createFolder(name: r.name, color: r.color, instructions: r.instructions);
+    } catch (e) {
+      if (mounted) _snack(aiErrorText(e));
+      return null;
+    }
+  }
+
+  Future<void> _folderMenu(AiFolder f, {bool showOpen = true}) async {
+    final action = await showAiFolderMenu(context, f, showOpen: showOpen);
+    if (action == null || !mounted) return;
+    try {
+      switch (action) {
+        case 'open':
+          await _openFolder(f);
+        case 'edit':
+          final r = await showAiFolderEditor(context, folder: f);
+          if (r != null) await _c.updateFolder(f.id, name: r.name, color: r.color, instructions: r.instructions);
+        case 'delete':
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text(tr('ลบโฟลเดอร์ "${f.name}"?')),
+              content: Text(tr('แชทในโฟลเดอร์จะยังอยู่ ย้ายออกมาไว้นอกโฟลเดอร์')),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+                FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ลบ'))),
+              ],
+            ),
+          );
+          if (ok == true) await _c.deleteFolder(f.id);
+      }
+    } catch (e) {
+      if (mounted) _snack(aiErrorText(e));
+    }
+  }
+
+  Future<void> _openFolder(AiFolder f) async {
+    _closeDrawer();
+    final r = await Navigator.of(context).push<AiFolderResult>(
+      MaterialPageRoute(
+        builder: (_) => AiProjectScreen(controller: _c, folderId: f.id, onEdit: () => _folderMenu(f, showOpen: false)),
       ),
     );
+    if (r == null || !mounted) return;
+    if (r.newChat) {
+      _c.newChat(inFolder: f.id);
+      _focus.requestFocus();
+    } else if (r.chatId != null) {
+      await _c.open(r.chatId!);
+    }
+  }
+
+  Future<void> _openPrompts() async {
+    _closeDrawer();
+    final cmd = await Navigator.of(context).push<AiCommand>(MaterialPageRoute(builder: (_) => AiPromptLibraryScreen(controller: _c)));
+    if (cmd != null && mounted) _pickCommand(cmd);
+  }
+
+  Future<void> _share(String id, String title) async {
+    final mode = await showAiShareSheet(context);
     if (mode == null || !mounted) return;
     try {
       final r = await _c.api.createAiShare(id, accessMode: mode);
       if (!mounted) return;
       final url = aiShareUrl(WebSessionScreen.webOrigin(context.read<AppConfig>().apiBaseUrl), r);
-      if (url.isNotEmpty) await Share.share('${_c.activeTitle}\n$url');
+      if (url.isNotEmpty) await Share.share('$title\n$url');
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(aiErrorText(e)))));
+      if (mounted) _snack(aiErrorText(e));
     }
   }
 
-  void _chatMenu(AiConversation c) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(c.starred ? NxI.star : NxI.star, color: c.starred ? const Color(0xFFF59E0B) : null),
-              title: Text(tr(c.starred ? 'เลิกติดดาว' : 'ติดดาว')),
-              onTap: () {
-                Navigator.pop(ctx);
-                _c.toggleStar(c.id, !c.starred);
-              },
-            ),
-            ListTile(
-              leading: const Icon(NxI.pencilSimple),
-              title: Text(tr('เปลี่ยนชื่อ')),
-              onTap: () {
-                Navigator.pop(ctx);
-                _rename(c);
-              },
-            ),
-            if (_c.projects.isNotEmpty)
-              ListTile(
-                leading: const Icon(NxI.folder),
-                title: Text(tr('ย้ายไปโปรเจกต์')),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _moveToProject(c);
-                },
-              ),
-            ListTile(
-              leading: Icon(NxI.trash, color: Theme.of(ctx).colorScheme.error),
-              title: Text(tr('ลบ'), style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _delete(c);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
+  void _closeDrawer() {
+    if (_scaffold.currentState?.isDrawerOpen ?? false) Navigator.of(context).pop();
+  }
+
+  // ── message actions
+
+  Future<void> _messageActions(AiMessage m) async {
+    HapticFeedback.mediumImpact();
+    final isLastReply = !m.isUser && identical(m, _c.messages.lastOrNull);
+    final action = await showAiMessageActions(context, isUser: m.isUser, canRegenerate: isLastReply && !_c.sending, canEdit: !_c.sending);
+    if (action == null || !mounted) return;
+    switch (action) {
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: m.content));
+        if (mounted) _snack('คัดลอกแล้ว');
+      case 'select':
+        await showAppBottomSheet<void>(
+          context: context,
+          title: 'เลือกข้อความ',
+          child: SelectableText(m.content, style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.55)),
+        );
+      case 'share':
+        await Share.share(m.content);
+      case 'edit':
+        final v = await showAiTextDialog(context, title: 'แก้ไขข้อความ', initial: m.content, action: 'ส่งใหม่', multiline: true);
+        if (v != null && v.trim().isNotEmpty) {
+          _pinned = true;
+          await _c.editAndResend(m, v);
+        }
+      case 'save':
+        final r = await showAiCommandEditor(context, prompt: m.content);
+        if (r != null) {
+          try {
+            await _c.saveMyCommand(command: r.command, title: r.title, prompt: r.prompt);
+            if (mounted) _snack('บันทึกเป็นคำสั่ง /${r.command} แล้ว');
+          } catch (e) {
+            if (mounted) _snack(aiErrorText(e));
+          }
+        }
+      case 'speak':
+        await _speak(m);
+      case 'regenerate':
+        await _c.regenerate();
+    }
+  }
+
+  Future<void> _thumbDown(AiMessage m) async {
+    HapticFeedback.selectionClick();
+    if (m.feedback == -1) return _c.setFeedback(m, -1); // clear
+    final why = await showAiThumbDownSheet(context);
+    if (why == null || !mounted) return;
+    await _c.setFeedback(m, -1, note: why);
+    if (mounted) _snack('ขอบคุณ — ไอแซคจะนำไปปรับปรุง');
+  }
+
+  Future<void> _speak(AiMessage m) async {
+    try {
+      await AiSpeaker.instance.toggle(_c.api, m, m.content);
+    } catch (e) {
+      if (mounted) _snack(aiErrorText(e));
+    }
+  }
+
+  void _onSpeaking() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // In the background while Isaac answers: say so when it is done.
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      if (_c.busy) _c.notifyOnFinish = true;
+    } else if (state == AppLifecycleState.resumed) {
+      _c.notifyOnFinish = false;
+    }
   }
 
   // ── build
@@ -389,83 +853,73 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final empty = _c.messages.isEmpty && !_c.chatLoading;
     final bp = NxBreakpoint.of(context);
     final docked = bp.twoPane;
+    final empty = _c.messages.isEmpty && !_c.chatLoading;
+    final activeFolder = _c.folderById(_c.activeId == null ? _c.pendingProjectId : _c.activeProjectId);
+    final cramped = MediaQuery.viewInsetsOf(context).bottom > 0 && MediaQuery.sizeOf(context).height < 700;
+    final name = context.read<AppConfig>().session.displayName ?? '';
+
     final chat = SafeArea(
       bottom: false,
       child: Column(
         children: [
-          // Header: chats · title · new chat · ⋯
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
-            child: Row(
+          AiHeader(
+            title: _c.activeId == null ? (activeFolder != null ? tr('แชทใหม่') : tr('ไอแซค')) : (_c.activeTitle.isEmpty ? tr('แชทใหม่') : _c.activeTitle),
+            subtitle: activeFolder?.name,
+            folderColor: activeFolder == null ? null : AiStyle.folderColor(context, activeFolder.color),
+            showHistoryButton: !docked,
+            onHistory: () {
+              _c.loadConversations();
+              _scaffold.currentState?.openDrawer();
+            },
+            onNewChat: () {
+              HapticFeedback.selectionClick();
+              _c.newChat();
+            },
+            onTitle: _c.activeId == null ? null : () => _chatMenu(_activeChat()),
+          ),
+          if (_c.activeId != null && _c.activeArchived)
+            _Banner(
+              key: const ValueKey('ai-archived-banner'),
+              color: cs.onSurfaceVariant,
+              icon: NxI.archive,
+              text: 'แชทนี้เก็บถาวรแล้ว',
+              action: 'นำกลับ',
+              onAction: () => _c.setArchived(_c.activeId!, false),
+            ),
+          if (_c.quotaExhausted) _Banner(color: cs.error, icon: NxI.warningCircle, text: 'โควตา AI เดือนนี้หมดแล้ว — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ'),
+          Expanded(
+            child: Stack(
               children: [
-                if (Navigator.of(context).canPop())
-                  IconButton(tooltip: tr('กลับ'), icon: const Icon(NxI.arrowLeft), onPressed: () => Navigator.of(context).maybePop()),
-                if (!docked)
-                  IconButton(
-                    key: const ValueKey('ai-open-chats'),
-                    tooltip: tr('รายการแชท'),
-                    icon: const Icon(NxI.listBullets),
-                    onPressed: () {
-                      _c.loadConversations();
-                      _scaffold.currentState?.openDrawer();
-                    },
-                  ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _c.activeId == null
-                        ? null
-                        : () => _rename(
-                            _c.conversations.firstWhere(
-                              (x) => x.id == _c.activeId,
-                              orElse: () => AiConversation(id: _c.activeId!, title: _c.activeTitle),
-                            ),
+                Positioned.fill(
+                  child: _c.chatLoading
+                      ? const NxSkeletonChat()
+                      : empty
+                      ? _centered(
+                          AiWelcome(
+                            name: name,
+                            onAction: _quickAction,
+                            suggestions: _c.suggestedPrompts,
+                            onSuggestion: _send,
+                            recents: _c.recentChats,
+                            folderOf: _c.folderById,
+                            onOpenChat: _c.open,
+                            contextTitle: _c.contextModule != null ? (_c.contextTitle ?? '${_c.contextModule} #${_c.contextId}') : null,
+                            folderName: _c.activeId == null ? activeFolder?.name : null,
+                            showSlashHint: _showSlashHint,
                           ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _c.activeId == null ? 'AI Assistant' : (_c.activeTitle.isEmpty ? tr('แชทใหม่') : _c.activeTitle),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                        Text(tr('ไอแซคเอไอ'), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                      ],
-                    ),
-                  ),
+                        )
+                      : _messageList(context),
                 ),
-                IconButton(key: const ValueKey('ai-new-chat'), tooltip: tr('แชทใหม่'), icon: const Icon(NxI.squarePen), onPressed: _c.newChat),
-                if (_c.activeId != null)
-                  IconButton(
-                    tooltip: tr('เพิ่มเติม'),
-                    icon: const Icon(NxI.dotsThree),
-                    onPressed: () => _chatMenu(
-                      _c.conversations.firstWhere(
-                        (x) => x.id == _c.activeId,
-                        orElse: () => AiConversation(id: _c.activeId!, title: _c.activeTitle, starred: _c.activeStarred),
-                      ),
-                    ),
+                if (_showJump && !empty)
+                  Positioned(
+                    right: 16,
+                    bottom: 8,
+                    child: _JumpButton(onTap: _jumpToEnd, live: _c.sending),
                   ),
-                if (_c.activeId != null) IconButton(tooltip: tr('แชร์'), icon: const Icon(NxI.shareNetwork), onPressed: _share),
               ],
             ),
-          ),
-          if (_c.quotaExhausted) _Banner(color: cs.error, icon: NxI.warningCircle, text: tr('โควตา AI เดือนนี้หมดแล้ว — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ')),
-          Expanded(
-            child: _c.chatLoading
-                ? const NxSkeletonChat()
-                : empty
-                ? _welcome(context)
-                : ListView.builder(
-                    key: const ValueKey('ai-messages'),
-                    controller: _scroll,
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    itemCount: _c.messages.length,
-                    itemBuilder: (context, i) => _message(context, _c.messages[i], last: i == _c.messages.length - 1),
-                  ),
           ),
           if (_c.error != null)
             _Banner(
@@ -474,34 +928,110 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               icon: NxI.warningCircle,
               text: _c.error!,
               action: _c.messages.any((m) => m.isUser) ? 'ลองใหม่' : null,
-              onAction: () {
-                _c.clearError();
-                if (_c.activeId != null) _c.regenerate();
-              },
+              onAction: _c.retry,
               onClose: _c.clearError,
             ),
-          if (_c.followUps.isNotEmpty && !_c.sending && !_cramped(context)) _followUps(context),
-          if (!_cramped(context)) _usageStrip(context),
-          if (_c.contextModule != null) _contextChip(context),
-          _composer(context),
+          ValueListenableBuilder<bool>(
+            valueListenable: NxNetwork.instance.online,
+            builder: (context, online, _) => online
+                ? const SizedBox.shrink()
+                : _Banner(
+                    key: const ValueKey('ai-offline'),
+                    color: AiStyle.warn(context),
+                    icon: NxI.cloud,
+                    text: 'ออฟไลน์ — ข้อความจะยังไม่ถูกส่ง ข้อความที่พิมพ์ไว้จะเก็บไว้ให้',
+                  ),
+          ),
+          if (_c.followUps.isNotEmpty && !_c.sending && !cramped && _slash == null && _mention == null) _followUps(context),
+          if (!cramped) _usageStrip(context),
+          _centered(
+            AiComposer(
+              input: _input,
+              focus: _focus,
+              locked: _c.quotaExhausted,
+              sending: _c.sending,
+              uploading: _c.uploading,
+              uploadProgress: _c.uploadProgress,
+              attachments: _c.pendingAttachments,
+              onRemoveAttachment: _c.removeAttachment,
+              modeLabel: _deepNext ? 'คิดลึก (ครั้งนี้)' : _c.modeLabel,
+              modeIcon: _deepNext ? AiStyle.modeIcon('deep') : (_c.provider == 'auto' ? AiStyle.modeIcon(_c.autoMode) : NxI.sparkle),
+              onMode: _pickMode,
+              onAttach: _attachMenu,
+              listening: _listening,
+              onMic: _toggleMic,
+              onSend: () {
+                if (!NxNetwork.instance.online.value) {
+                  _snack('ออฟไลน์อยู่ — ต่ออินเทอร์เน็ตแล้วส่งอีกครั้ง');
+                  return;
+                }
+                _send();
+              },
+              onStop: _c.stop,
+              contextTitle: _c.contextModule == null ? null : (_c.contextTitle ?? '${_c.contextModule} #${_c.contextId}'),
+              onClearContext: _c.clearContext,
+              compact: MediaQuery.sizeOf(context).height < 520,
+              panel: _panel(),
+              actionLabel: _createCmd == null ? null : tr(aiCreateLabel(_createCmd!.create!, kind: _createCmd!.kind)),
+              onClearAction: () => setState(() => _createCmd = null),
+            ),
+          ),
         ],
       ),
     );
-    if (!docked)
+
+    final drawer = AiChatDrawer(
+      controller: _c,
+      docked: docked,
+      onNewChat: () {
+        _closeDrawer();
+        _c.newChat();
+      },
+      onOpenChat: (id) {
+        _closeDrawer();
+        _c.open(id);
+      },
+      onChatMenu: _chatMenu,
+      onOpenFolder: _openFolder,
+      onFolderMenu: _folderMenu,
+      onCreateFolder: _createFolder,
+      onMoveMany: (ids) => _moveToFolder(ids),
+      onAgent: () {
+        _closeDrawer();
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const WebSessionScreen(path: '/ai/agent', title: 'AI Agent', subtitle: 'ไอแซคเอไอ'),
+          ),
+        );
+      },
+      onNotebook: () {
+        _closeDrawer();
+        context.push(AppRoutes.notebook);
+      },
+      onPrompts: _openPrompts,
+    );
+
+    if (!docked) {
       return Scaffold(
         key: _scaffold,
-        drawer: Drawer(child: SafeArea(child: _chatList(context))),
+        backgroundColor: AiStyle.canvas(context),
+        drawer: Drawer(
+          backgroundColor: AiStyle.canvas(context),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(right: Radius.circular(AiStyle.sheetRadius))),
+          child: SafeArea(child: drawer),
+        ),
         body: chat,
       );
-    // Tablet / opened foldable: chats stay on the left (left of the fold,
-    // measured from where this view starts, e.g. after the side rail).
+    }
+    // Tablet / opened foldable: history stays on the left.
     final sidebar = Material(
       key: const ValueKey('ai-chat-sidebar'),
       color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-      child: SafeArea(right: false, child: _chatList(context, docked: true)),
+      child: SafeArea(right: false, child: drawer),
     );
     return Scaffold(
       key: _scaffold,
+      backgroundColor: AiStyle.canvas(context),
       body: bp.hinge != null
           ? NxHingeSplit(hinge: bp.hinge!, list: sidebar, detail: chat)
           : Row(
@@ -511,6 +1041,89 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 Expanded(child: chat),
               ],
             ),
+    );
+  }
+
+  /// Keeps the chat readable on wide screens.
+  Widget _centered(Widget child) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: AiStyle.maxContentWidth),
+      child: child,
+    ),
+  );
+
+  Widget? _panel() {
+    if (_slash != null) {
+      return AiSlashMenu(commands: aiFilterCommands(_usableCommands(), _slash!), onPick: _pickCommand, onManage: _openPrompts);
+    }
+    if (_mention != null) {
+      return AiMentionPicker(api: _c.api, query: _mention!, modules: _mentionModules(), onPick: _pickMention);
+    }
+    return null;
+  }
+
+  List<String> _mentionModules() {
+    const preferred = ['account', 'contact', 'lead', 'deal'];
+    try {
+      final allowed = globalSearchModulesFor(context.read<AppConfig>().session);
+      final list = preferred.where(allowed.contains).toList();
+      return list.isEmpty ? allowed.take(4).toList() : list;
+    } catch (_) {
+      return preferred;
+    }
+  }
+
+  Widget _messageList(BuildContext context) {
+    final msgs = _c.messages;
+    return NotificationListener<ScrollMetricsNotification>(
+      // Content grew (an answer laid out, an image loaded): stay at the end.
+      onNotification: (_) {
+        if (_pinned) _follow();
+        return false;
+      },
+      child: NotificationListener<UserScrollNotification>(
+        onNotification: _onUserScroll,
+        child: ListView.builder(
+          key: const ValueKey('ai-messages'),
+          controller: _scroll,
+          padding: const EdgeInsets.fromLTRB(AiStyle.gutter, 4, AiStyle.gutter, 16),
+          itemCount: msgs.length,
+          itemBuilder: (context, i) {
+            final m = msgs[i];
+            final last = i == msgs.length - 1;
+            final day = m.createdLocal;
+            final prevDay = i == 0 ? null : msgs[i - 1].createdLocal;
+            final newDay = day != null && (prevDay == null || prevDay.year != day.year || prevDay.month != day.month || prevDay.day != day.day);
+            Widget tile = m.isUser ? AiUserBubble(message: m, onLongPress: () => _messageActions(m)) : _reply(context, m, last: last);
+            if (_c.unsaved.contains(m)) {
+              tile = Column(
+                crossAxisAlignment: m.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  tile,
+                  TextButton.icon(
+                    key: ValueKey('ai-unsaved-${m.hashCode}'),
+                    onPressed: () => _c.resave(m),
+                    icon: Icon(NxI.warningCircle, size: 14, color: Theme.of(context).colorScheme.error),
+                    label: Text(tr('ยังไม่บันทึก · ลองอีกครั้ง'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  ),
+                ],
+              );
+            }
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: AiStyle.maxContentWidth),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (newDay && msgs.length > 1) AiDaySeparator(day: day),
+                    _FadeIn(key: ValueKey('fade-${m.hashCode}'), animate: last, child: tile),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -536,298 +1149,119 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     );
   }
 
-  Widget _welcome(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final name = context.read<AppConfig>().session.displayName ?? '';
-    const intents = [
-      (NxI.magnifyingGlass, 'ค้นหาในระบบ', 'ลูกค้า สัญญา เคส บอร์ด', 'ช่วยค้นหาลูกค้าหรือรายการในระบบให้หน่อย'),
-      (NxI.plus, 'สร้างรายการ', 'Lead, Contact, Case, นัด', 'อยากสร้างรายการใหม่ในระบบ'),
-      (NxI.file, 'เอกสาร / ส่งออก', 'Word, PDF, Excel จากข้อมูล', 'ช่วยสร้างเอกสารหรือส่งออกข้อมูลเป็นไฟล์'),
-      (NxI.kanban, 'งานบนบอร์ด', 'Workspace task / epic', 'สร้างงานบนบอร์ด Workspace'),
-    ];
-    return ListView(
-      key: const ValueKey('ai-welcome'),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      children: [
-        const Center(child: IsaacSticker(state: 'hello', size: 104)),
-        const SizedBox(height: 12),
-        _TypedText(
-          text: name.isEmpty ? tr('สวัสดี') : tr('สวัสดี คุณ $name'),
-          style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          tr('ถามอะไรเกี่ยวกับงาน CRM ก็ได้'),
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-        ),
-        const SizedBox(height: 20),
-        LayoutBuilder(
-          builder: (context, box) {
-            final w = (box.maxWidth - 10) / 2;
-            return Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final (icon, title, desc, prompt) in intents)
-                  SizedBox(
-                    width: w,
-                    child: Material(
-                      color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(18),
-                      child: InkWell(
-                        key: ValueKey('ai-intent-$title'),
-                        borderRadius: BorderRadius.circular(18),
-                        onTap: () {
-                          _input.text = tr(prompt);
-                          _focus.requestFocus();
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(icon, size: 20, color: cs.primary),
-                              const SizedBox(height: 8),
-                              Text(tr(title), style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                              const SizedBox(height: 2),
-                              Text(
-                                tr(desc),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            );
+  Widget _reply(BuildContext context, AiMessage m, {required bool last}) {
+    final extras = <Widget>[
+      for (final p in m.proposals)
+        AiProposalCard(
+          proposal: p,
+          state: _c.proposalState['${p['proposalId']}'],
+          boards: aiIsWorkspaceTree(p) ? _writableBoards() : null,
+          boardId: _boardOf(p),
+          onBoard: (v) => setState(() => _boardFor['${p['proposalId']}'] = v),
+          onOpen: _c.proposalLinks['${p['proposalId']}'] == null ? null : () => _openLink(_c.proposalLinks['${p['proposalId']}']!),
+          onConfirm: () async {
+            final board = _boardOf(p);
+            if (aiNeedsBoard(p) && (board == null || board.isEmpty)) {
+              _snack('เลือกบอร์ดก่อนยืนยัน');
+              return;
+            }
+            HapticFeedback.mediumImpact();
+            final link = await _c.confirmProposal(p, boardId: aiIsWorkspaceTree(p) ? board : null);
+            if (link != null && link.isNotEmpty && mounted) {
+              _snack(
+                'ทำรายการแล้ว',
+                action: SnackBarAction(label: tr('เปิด'), onPressed: () => _openLink(link)),
+              );
+            }
           },
+          onCancel: () => _c.cancelProposal(p),
+          onEdit: _formTools.contains('${p['tool']}') ? () => _editProposal(p) : null,
+          footer: _recordActions(p),
         ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          alignment: WrapAlignment.center,
-          children: [
-            for (final p in _c.suggestedPrompts.take(3))
-              ActionChip(
-                avatar: Icon(NxI.sparkle, size: 14, color: cs.primary),
-                label: Text('${(L10n.isEn ? p['name_en'] : p['name_th']) ?? p['name_th'] ?? ''}'),
-                onPressed: () => _send('${(L10n.isEn ? p['prompt_en'] : p['prompt_th']) ?? p['prompt_th'] ?? ''}'),
-              ),
-            ActionChip(
-              avatar: Icon(NxI.briefcase, size: 14, color: cs.primary),
-              label: Text(tr('ใช้บริบท CRM')),
-              onPressed: () => _send(tr('จากบริบท CRM ของฉัน วันนี้ควรโฟกัสอะไร?')),
-            ),
-          ],
+      if (m.askUser.isNotEmpty) AiAskUserCard(questions: m.askUser, enabled: !_c.sending, onPick: _send),
+      if (m.downloads.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: AiDownloadChips(downloads: m.downloads, onRegenerate: last ? _c.regenerate : null),
         ),
-      ],
-    );
-  }
-
-  Widget _message(BuildContext context, AiMessage m, {required bool last}) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    if (m.isUser) {
-      return Align(
-        alignment: Alignment.centerRight,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.85),
-          child: Container(
-            margin: const EdgeInsets.only(top: 10, bottom: 6, left: 40),
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-            decoration: BoxDecoration(
-              color: cs.primary.withValues(alpha: 0.10),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(6),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (m.attachments.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: NxAttachmentStrip(items: m.attachments, thumb: 72),
-                  ),
-                if (m.content.trim().isNotEmpty) SelectableText(m.content, style: theme.textTheme.bodyLarge?.copyWith(height: 1.5)),
-              ],
-            ),
-          ),
+      if (m.citations.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: AiCitationChips(citations: m.citations),
         ),
-      );
-    }
-    final waiting = m.streaming && m.content.isEmpty;
-    final mood = _mood(m: m, last: last);
-    return Padding(
-      key: ValueKey('ai-reply-${m.id ?? m.hashCode}'),
-      padding: const EdgeInsets.only(top: 10, bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IsaacSticker(state: last ? mood : 'happy', size: 40, animate: last),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(999)),
-                child: Text(
-                  aiModelBadge(m.provider, m.model),
-                  style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant),
-                ),
-              ),
-              if (last && _c.sending) ...[
-                const SizedBox(width: 8),
-                Text(tr(kIsaacLabels[mood] ?? ''), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-              ],
-            ],
-          ),
-          const SizedBox(height: 6),
-          if (waiting) _waiting(context) else NxMarkdown(data: m.content, streaming: m.streaming, onOpenLink: _openLink),
-          for (final p in m.proposals)
-            AiProposalCard(
-              proposal: p,
-              state: _c.proposalState['${p['proposalId']}'],
-              boards: aiIsWorkspaceTree(p) ? _writableBoards() : null,
-              boardId: _boardOf(p),
-              onBoard: (v) => setState(() => _boardFor['${p['proposalId']}'] = v),
-              onConfirm: () async {
-                final board = _boardOf(p);
-                if (aiNeedsBoard(p) && (board == null || board.isEmpty)) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('เลือกบอร์ดก่อนยืนยัน'))));
-                  return;
-                }
-                final link = await _c.confirmProposal(p, boardId: aiIsWorkspaceTree(p) ? board : null);
-                if (link != null && link.isNotEmpty && mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(tr('ทำรายการแล้ว')),
-                      // Actions make snackbars persist by default; these must time out.
-                      persist: false,
-                      action: SnackBarAction(label: tr('เปิด'), onPressed: () => _openLink(link)),
-                    ),
-                  );
-                }
+    ];
+    return AiAssistantTile(
+      message: m,
+      isLast: last,
+      sending: _c.sending,
+      mood: _mood(m: m, last: last),
+      streamTick: _c.streamTick,
+      statusLabel: aiStatusLabel(_c.status),
+      routeSteps: _c.routeSteps,
+      sendStartedAt: _c.sendStartedAt,
+      onOpenLink: _openLink,
+      onLongPress: () => _messageActions(m),
+      extras: extras,
+      actions: last && !m.streaming && m.content.trim().isNotEmpty
+          ? AiReplyActions(
+              onCopy: () {
+                Clipboard.setData(ClipboardData(text: m.content));
+                HapticFeedback.selectionClick();
+                _snack('คัดลอกแล้ว');
               },
-              onCancel: () => _c.cancelProposal(p),
-            ),
-          if (m.askUser.isNotEmpty) AiAskUserCard(questions: m.askUser, enabled: !_c.sending, onPick: _send),
-          if (m.downloads.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: AiDownloadChips(downloads: m.downloads, onRegenerate: last ? _c.regenerate : null),
-            ),
-          if (m.citations.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: AiCitationChips(citations: m.citations),
-            ),
-          if (!m.streaming && m.content.trim().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Row(
-                children: [
-                  _ActionIcon(
-                    icon: NxI.copySimple,
-                    label: 'คัดลอก',
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: m.content));
-                      HapticFeedback.selectionClick();
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('คัดลอกแล้ว'))));
-                    },
-                  ),
-                  if (last)
-                    _ActionIcon(key: const ValueKey('ai-regenerate'), icon: NxI.arrowsClockwise, label: 'สร้างใหม่', onTap: _c.sending ? null : _c.regenerate),
-                  _ActionIcon(icon: NxI.shareNetwork, label: 'แชร์', onTap: () => Share.share(m.content)),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _waiting(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final secs = _c.sendStartedAt == null ? 0 : DateTime.now().difference(_c.sendStartedAt!).inSeconds;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _Shimmer(
-          child: Container(
-            key: const ValueKey('ai-status'),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(999)),
-            child: Text(
-              '${tr(aiStatusLabel(_c.status))}${secs >= 3 ? '  ${secs}s' : ''}',
-              style: theme.textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ),
-        if (_c.routeSteps.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          for (final (i, s) in _c.routeSteps.indexed)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(color: i == _c.routeSteps.length - 1 ? cs.primary : cs.outline, shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text('${s['label'] ?? s['id'] ?? ''}', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ],
+              onRegenerate: _c.sending ? null : _c.regenerate,
+              onShare: () => Share.share(m.content),
+              onMore: () => _messageActions(m),
+              feedback: m.feedback,
+              onThumbUp: m.id == null ? null : () {
+                HapticFeedback.selectionClick();
+                _c.setFeedback(m, 1);
+              },
+              onThumbDown: m.id == null ? null : () => _thumbDown(m),
+              onSpeak: () => _speak(m),
+              speaking: AiSpeaker.instance.speaking.value == m,
+            )
+          : null,
     );
   }
 
   Widget _followUps(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return SizedBox(
-      height: 44,
+      height: 46,
       child: ListView(
         key: const ValueKey('ai-followups'),
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: AiStyle.gutter, vertical: 4),
         children: [
           for (final f in _c.followUps)
             Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: ActionChip(label: Text('${f['label'] ?? f['prompt'] ?? ''}'), onPressed: () => _send('${f['prompt'] ?? f['label'] ?? ''}')),
+              child: ActionChip(
+                avatar: Icon(NxI.sparkle, size: 14, color: cs.primary),
+                label: Text('${f['label'] ?? f['prompt'] ?? ''}'),
+                shape: const StadiumBorder(),
+                side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)),
+                backgroundColor: AiStyle.surface(context),
+                onPressed: () => _send('${f['prompt'] ?? f['label'] ?? ''}'),
+              ),
             ),
         ],
       ),
     );
   }
 
-  /// Quota meter under the chat (cloud-metered plans only) + "switch model"
-  /// choices when the month or this model's day runs out (web `AiUsageStrip`).
+  /// Quota meter (cloud-metered plans only) + "switch model" choices when the
+  /// month or this model's day runs out (web `AiUsageStrip`).
   Widget _usageStrip(BuildContext context) {
     final u = _c.usageView;
     if (u == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final color = u.exhausted ? cs.error : (u.low ? const Color(0xFFF59E0B) : cs.primary);
+    final color = u.exhausted ? cs.error : (u.low ? AiStyle.warn(context) : cs.primary);
     return Padding(
       key: const ValueKey('ai-usage'),
-      padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
+      padding: const EdgeInsets.fromLTRB(24, 2, 24, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -836,7 +1270,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               Expanded(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(value: u.usedFraction, minHeight: 4, color: color, backgroundColor: cs.surfaceContainerHighest),
+                  child: LinearProgressIndicator(value: u.usedFraction, minHeight: 3, color: color, backgroundColor: cs.surfaceContainerHighest),
                 ),
               ),
               const SizedBox(width: 8),
@@ -898,353 +1332,71 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     );
     if (!mounted) return;
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ใช้ไมค์ไม่ได้ — ตรวจสิทธิ์ไมโครโฟนในการตั้งค่าเครื่อง'))));
+      _snack('ใช้ไมค์ไม่ได้ — ตรวจสิทธิ์ไมโครโฟนในการตั้งค่าเครื่อง');
       return;
     }
     setState(() => _listening = true);
   }
-
-  /// Keyboard up in a short window: drop the extras around the composer.
-  bool _cramped(BuildContext context) => MediaQuery.viewInsetsOf(context).bottom > 0 && MediaQuery.sizeOf(context).height < 700;
-
-  Widget _contextChip(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Padding(
-      key: const ValueKey('ai-context'),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: InputChip(
-          avatar: Icon(NxI.link, size: 14, color: cs.primary),
-          label: Text(tr('เกี่ยวกับ: ${_c.contextTitle ?? '${_c.contextModule} #${_c.contextId}'}'), overflow: TextOverflow.ellipsis),
-          onDeleted: _c.clearContext,
-          deleteButtonTooltipMessage: tr('ไม่ใช้บริบทนี้'),
-        ),
-      ),
-    );
-  }
-
-  Widget _composer(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final locked = _c.quotaExhausted;
-    final canSend = !locked && !_c.uploading && (_input.text.trim().isNotEmpty || _c.pendingAttachments.isNotEmpty);
-    return SafeArea(
-      top: false,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: _focus.hasFocus ? cs.primary.withValues(alpha: 0.5) : cs.outlineVariant.withValues(alpha: 0.6)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_c.pendingAttachments.isNotEmpty || _c.uploading)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: NxAttachmentStrip(items: _c.pendingAttachments, thumb: 56, onRemove: _c.removeAttachment),
-                    ),
-                    if (_c.uploading) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-                  ],
-                ),
-              ),
-            TextField(
-              key: const ValueKey('ai-input'),
-              controller: _input,
-              focusNode: _focus,
-              enabled: !locked,
-              minLines: 1,
-              // Short window (landscape / split screen): keep the chat visible above the keyboard.
-              maxLines: MediaQuery.sizeOf(context).height < 520 ? 2 : 6,
-              textInputAction: TextInputAction.newline,
-              decoration: InputDecoration(
-                hintText: tr(locked ? 'โควตาหมด — ส่งข้อความไม่ได้' : 'ถามอะไรก็ได้…'),
-                border: InputBorder.none,
-                filled: false,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              ),
-            ),
-            Row(
-              children: [
-                IconButton(
-                  key: const ValueKey('ai-attach'),
-                  tooltip: tr('แนบไฟล์'),
-                  icon: const Icon(NxI.plus),
-                  onPressed: locked || _c.sending ? null : _attachMenu,
-                ),
-                Flexible(
-                  child: ActionChip(
-                    key: const ValueKey('ai-model'),
-                    avatar: Icon(NxI.sparkle, size: 14, color: cs.primary),
-                    label: Text(_c.provider == 'auto' ? 'Auto' : aiModelBadge(_c.provider, _c.model), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    onPressed: _c.sending ? null : _pickModel,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Spacer(),
-                if (!_c.sending && !locked)
-                  IconButton(
-                    key: const ValueKey('ai-mic'),
-                    tooltip: tr(_listening ? 'หยุดฟัง' : 'พูดแทนพิมพ์'),
-                    onPressed: _toggleMic,
-                    icon: Icon(_listening ? NxI.stop : NxI.microphone, color: _listening ? cs.error : null),
-                  ),
-                if (_c.sending)
-                  IconButton.filled(key: const ValueKey('ai-stop'), tooltip: tr('หยุด'), onPressed: _c.stop, icon: const Icon(NxI.stop, size: 16))
-                else
-                  IconButton.filled(
-                    key: const ValueKey('ai-send'),
-                    tooltip: tr('ส่ง'),
-                    onPressed: canSend ? () => _send() : null,
-                    icon: const Icon(NxI.paperPlaneTilt, size: 18),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _chatList(BuildContext context, {bool docked = false}) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final groups = groupAiChats(_c.visibleConversations);
-    void close() {
-      if (!docked) Navigator.pop(context);
-    }
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
-          child: Row(
-            children: [
-              const IsaacSticker(state: 'idle', size: 36, animate: false),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(tr('ไอแซคเอไอ'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: () {
-                  close();
-                  _c.newChat();
-                },
-                icon: const Icon(NxI.squarePen, size: 16),
-                label: Text(tr('แชทใหม่')),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: TextField(
-            decoration: InputDecoration(prefixIcon: const Icon(NxI.magnifyingGlass, size: 18), hintText: tr('ค้นหาแชท'), isDense: true),
-            onSubmitted: (v) {
-              _c.query = v;
-              _c.loadConversations();
-            },
-          ),
-        ),
-        if (_c.projects.isNotEmpty)
-          SizedBox(
-            height: 44,
-            child: ListView(
-              key: const ValueKey('ai-project-filter'),
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(label: Text(tr('ทั้งหมด')), selected: _c.projectFilter == null, onSelected: (_) => _c.setProjectFilter(null)),
-                ),
-                for (final p in _c.projects)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ChoiceChip(
-                      avatar: const Icon(NxI.folder, size: 14),
-                      label: Text('${p['name'] ?? ''}'),
-                      selected: _c.projectFilter == '${p['id']}',
-                      onSelected: (_) => _c.setProjectFilter('${p['id']}'),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        const SizedBox(height: 6),
-        // Agent stays on the web (signed in automatically); Notebook is native.
-        ListTile(
-          dense: true,
-          leading: Icon(NxI.robot, color: cs.primary),
-          title: Text(tr('Agent')),
-          subtitle: Text(tr('งาน Agent และงานพื้นหลัง')),
-          onTap: () {
-            close();
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const WebSessionScreen(path: '/ai/agent', title: 'AI Agent', subtitle: 'ไอแซคเอไอ'),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          key: const ValueKey('ai-open-notebook'),
-          dense: true,
-          leading: Icon(NxI.bookOpen, color: cs.primary),
-          title: Text(tr('Notebook')),
-          subtitle: Text(tr('ถามจากแหล่งข้อมูลในสมุดของคุณ')),
-          onTap: () {
-            close();
-            context.push(AppRoutes.notebook);
-          },
-        ),
-        const Divider(),
-        Expanded(
-          child: _c.listLoading && _c.conversations.isEmpty
-              ? const SingleChildScrollView(child: NxSkeletonList(rows: 5))
-              : _c.visibleConversations.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const IsaacSticker(state: 'confused', size: 64, animate: false),
-                      const SizedBox(height: 8),
-                      Text(tr('ยังไม่มีแชท'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-                    ],
-                  ),
-                )
-              : ListView(
-                  key: const ValueKey('ai-chat-list'),
-                  children: [
-                    for (final g in groups) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                        child: Text(
-                          tr(g.label),
-                          style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      for (final c in g.items)
-                        ListTile(
-                          key: ValueKey('ai-chat-${c.id}'),
-                          dense: true,
-                          selected: c.id == _c.activeId,
-                          selectedTileColor: cs.primary.withValues(alpha: 0.08),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          leading: c.starred ? const Icon(NxI.star, size: 16, color: Color(0xFFF59E0B)) : const Icon(NxI.chatCircle, size: 16),
-                          title: Text(c.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                          trailing: IconButton(icon: const Icon(NxI.dotsThree, size: 18), onPressed: () => _chatMenu(c)),
-                          onTap: () {
-                            close();
-                            _c.open(c.id);
-                          },
-                          onLongPress: () => _chatMenu(c),
-                        ),
-                    ],
-                  ],
-                ),
-        ),
-      ],
-    );
-  }
 }
 
-class _ModelSheet extends StatefulWidget {
-  const _ModelSheet({required this.api, required this.current, required this.providers, this.policy});
-  final dynamic api;
-  final (String, String?) current;
-  final List<(String, String)> providers;
-
-  /// Business policy: hides disabled providers / models (null = all).
-  final AiModelPolicy? policy;
-
-  @override
-  State<_ModelSheet> createState() => _ModelSheetState();
-}
-
-class _ModelSheetState extends State<_ModelSheet> {
-  String? _open;
-  final Map<String, List<String>> _models = {};
-  final Set<String> _loading = {};
-
-  Future<void> _load(String p) async {
-    setState(() {
-      _open = _open == p ? null : p;
-      if (!_models.containsKey(p)) _loading.add(p);
-    });
-    if (_models.containsKey(p)) return;
-    final fromPolicy = widget.policy?.models(p);
-    if (fromPolicy != null) {
-      _models[p] = fromPolicy;
-      setState(() => _loading.remove(p));
-      return;
-    }
-    try {
-      final r = await widget.api.getAiModels(provider: p) as Map<String, dynamic>;
-      final list = r['models'] is List ? r['models'] as List : const [];
-      _models[p] = [
-        for (final m in list)
-          if (m is Map) '${m['id'] ?? m['name'] ?? m['model'] ?? ''}' else '$m',
-      ].where((e) => e.isNotEmpty).toList();
-    } catch (_) {
-      _models[p] = const [];
-    }
-    if (mounted) setState(() => _loading.remove(p));
-  }
+/// "↓" back to the newest message (pulses while a reply is streaming).
+class _JumpButton extends StatelessWidget {
+  const _JumpButton({required this.onTap, required this.live});
+  final VoidCallback onTap;
+  final bool live;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.7),
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              leading: Icon(NxI.sparkle, color: cs.primary),
-              title: Text(tr('Auto (แนะนำ)')),
-              subtitle: Text(tr('ระบบเลือกโมเดลที่พร้อมและเหมาะกับคำถาม')),
-              trailing: widget.current.$1 == 'auto' ? Icon(NxI.check, color: cs.primary) : null,
-              onTap: () => Navigator.pop(context, ('auto', null)),
-            ),
-            const Divider(),
-            for (final (id, label) in widget.providers.where((x) => widget.policy?.providerEnabled(x.$1) ?? true)) ...[
-              ListTile(
-                title: Text(label),
-                trailing: _loading.contains(id)
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Icon(_open == id ? NxI.caretUp : NxI.caretDown, size: 18),
-                onTap: () => _load(id),
-              ),
-              if (_open == id)
-                if ((_models[id] ?? const []).isEmpty && !_loading.contains(id))
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: Text(tr('ยังไม่ได้ตั้งค่าผู้ให้บริการนี้'), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                  )
-                else
-                  for (final m in _models[id] ?? const <String>[])
-                    ListTile(
-                      contentPadding: const EdgeInsets.only(left: 32, right: 16),
-                      dense: true,
-                      title: Text(m),
-                      trailing: widget.current.$1 == id && widget.current.$2 == m ? Icon(NxI.check, color: cs.primary) : null,
-                      onTap: () => Navigator.pop(context, (id, m)),
-                    ),
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      key: const ValueKey('ai-jump-bottom'),
+      color: AiStyle.surface(context),
+      shape: const StadiumBorder(),
+      elevation: 2,
+      shadowColor: Colors.black26,
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(AiIcons.toBottom, size: 16, color: cs.primary),
+              if (live) ...[
+                const SizedBox(width: 6),
+                Text(
+                  tr('ข้อความใหม่'),
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// New messages fade in and rise 8px (off with reduced motion).
+class _FadeIn extends StatelessWidget {
+  const _FadeIn({super.key, required this.child, required this.animate});
+  final Widget child;
+  final bool animate;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = AiStyle.of(context, const Duration(milliseconds: 260));
+    if (!animate || d == Duration.zero) return child;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: d,
+      curve: AiStyle.curve,
+      builder: (_, v, c) => Opacity(
+        opacity: v,
+        child: Transform.translate(offset: Offset(0, 8 * (1 - v)), child: c),
+      ),
+      child: child,
     );
   }
 }
@@ -1263,8 +1415,8 @@ class _Banner extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           Icon(icon, size: 18, color: color),
@@ -1273,80 +1425,9 @@ class _Banner extends StatelessWidget {
             child: Text(tr(text), style: theme.textTheme.bodySmall?.copyWith(color: color)),
           ),
           if (action != null) TextButton(onPressed: onAction, child: Text(tr(action!))),
-          if (onClose != null) IconButton(visualDensity: VisualDensity.compact, icon: const Icon(NxI.x, size: 16), onPressed: onClose),
+          if (onClose != null) IconButton(tooltip: tr('ปิด'), visualDensity: VisualDensity.compact, icon: const Icon(NxI.x, size: 16), onPressed: onClose),
         ],
       ),
-    );
-  }
-}
-
-class _ActionIcon extends StatelessWidget {
-  const _ActionIcon({super.key, required this.icon, required this.label, this.onTap});
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return IconButton(
-      tooltip: tr(label),
-      visualDensity: VisualDensity.compact,
-      onPressed: onTap,
-      icon: Icon(icon, size: 17, color: cs.onSurfaceVariant),
-    );
-  }
-}
-
-/// Greeting typed out letter by letter (web `AiWelcome`).
-class _TypedText extends StatelessWidget {
-  const _TypedText({required this.text, this.style});
-  final String text;
-  final TextStyle? style;
-
-  @override
-  Widget build(BuildContext context) {
-    final chars = text.characters.toList();
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: chars.length.toDouble()),
-      duration: Duration(milliseconds: (chars.length * 35).clamp(200, 1400)),
-      builder: (context, v, _) => Text(chars.take(v.round()).join(), textAlign: TextAlign.center, style: style),
-    );
-  }
-}
-
-/// Soft shimmer on the status chip while waiting.
-class _Shimmer extends StatefulWidget {
-  const _Shimmer({required this.child});
-  final Widget child;
-
-  @override
-  State<_Shimmer> createState() => _ShimmerState();
-}
-
-class _ShimmerState extends State<_Shimmer> with SingleTickerProviderStateMixin {
-  late final AnimationController _a = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
-
-  @override
-  void dispose() {
-    _a.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _a,
-      builder: (context, child) => ShaderMask(
-        blendMode: BlendMode.srcATop,
-        shaderCallback: (r) => LinearGradient(
-          begin: Alignment(-1.5 + 3 * _a.value, 0),
-          end: Alignment(-0.5 + 3 * _a.value, 0),
-          colors: [Colors.transparent, Colors.white.withValues(alpha: 0.35), Colors.transparent],
-        ).createShader(r),
-        child: child,
-      ),
-      child: widget.child,
     );
   }
 }

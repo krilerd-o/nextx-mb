@@ -310,7 +310,7 @@ GoRouter createAppRouter(AppConfig config) {
         path: AppRoutes.aiChat,
         builder: (_, state) {
           final q = state.uri.queryParameters;
-          return AiAssistantScreen(contextModule: q['ctx_module'], contextId: q['ctx_id'], contextTitle: q['ctx_title']);
+          return AiAssistantScreen(contextModule: q['ctx_module'], contextId: q['ctx_id'], contextTitle: q['ctx_title'], initialPrompt: q['prompt'] ?? q['share_text'], initialChatId: q['chat'], initialCommand: q['cmd']);
         },
       ),
       GoRoute(

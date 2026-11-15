@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import '../core/ai_fill.dart';
 import '../core/nx_swr_cache.dart';
 import '../core/ai_assistant.dart';
 import 'package:flutter/foundation.dart';
@@ -1912,8 +1913,17 @@ class ApiClient {
     yield* parseAiSse(stream);
   }
 
-  Future<List<Map<String, dynamic>>> getAiConversations({String? q}) async {
-    final env = await _send('GET', '/api/ai/conversations', query: {if (q != null && q.trim().isNotEmpty) 'q': q.trim()});
+  /// [projectId] `none` = chats outside any folder. [archived] false hides archived chats
+  /// (servers before the archive migration ignore it). [limit]/[offset] page the list.
+  Future<List<Map<String, dynamic>>> getAiConversations({String? q, String? projectId, bool? starred, bool? archived, int? limit, int? offset}) async {
+    final env = await _send('GET', '/api/ai/conversations', query: {
+      if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+      'project_id': ?projectId,
+      if (starred != null) 'starred': starred ? '1' : '0',
+      if (archived != null) 'archived': archived ? '1' : '0',
+      if (limit != null) 'limit': '$limit',
+      if (offset != null && offset > 0) 'offset': '$offset',
+    });
     final d = env['data'];
     return extractMapList(d is Map ? d['items'] : d);
   }
@@ -1932,6 +1942,10 @@ class ApiClient {
   Future<Map<String, dynamic>> appendAiMessage(String conversationId, Map<String, dynamic> message) async =>
       _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/messages', data: {'message': message}));
 
+  /// Replaces every message of the chat (edit and resend).
+  Future<void> replaceAiMessages(String conversationId, List<Map<String, dynamic>> messages) async =>
+      _send('POST', '/api/ai/conversations/$conversationId/messages', data: {'messages': messages, 'replace': true});
+
   /// Drops the last assistant reply; the client then streams again.
   Future<Map<String, dynamic>> regenerateAi(String conversationId) async =>
       _dataMap(await _send('POST', '/api/ai/conversations/$conversationId/regenerate'));
@@ -1949,6 +1963,60 @@ class ApiClient {
     return extractMapList(d is Map ? d['items'] : d);
   }
 
+  /// Chat folder: `{name, color?, icon?, instructions?}`.
+  Future<Map<String, dynamic>> createAiProject(Map<String, dynamic> body) async => _dataMap(await _send('POST', '/api/ai/projects', data: body));
+
+  Future<Map<String, dynamic>> updateAiProject(String id, Map<String, dynamic> body) async =>
+      _dataMap(await _send('PATCH', '/api/ai/projects/$id', data: body));
+
+  /// Its chats stay, outside any folder.
+  Future<void> deleteAiProject(String id) async => _send('DELETE', '/api/ai/projects/$id');
+
+  /// The signed-in user's saved prompts / slash commands `{id, command, title, prompt}`.
+  Future<List<Map<String, dynamic>>> getAiMyPrompts() async {
+    final env = await _send('GET', '/api/ai/my-prompts');
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
+
+  Future<Map<String, dynamic>> createAiMyPrompt(Map<String, dynamic> body) async => _dataMap(await _send('POST', '/api/ai/my-prompts', data: body));
+
+  Future<Map<String, dynamic>> updateAiMyPrompt(String id, Map<String, dynamic> body) async =>
+      _dataMap(await _send('PATCH', '/api/ai/my-prompts/$id', data: body));
+
+  Future<void> deleteAiMyPrompt(String id) async => _send('DELETE', '/api/ai/my-prompts/$id');
+
+  /// 👍 / 👎 on an answer (rating 1 / -1, 0 clears).
+  Future<void> postAiFeedback(String conversationId, String messageId, int rating, {String? note}) async =>
+      _send('POST', '/api/ai/conversations/$conversationId/messages/$messageId/feedback', data: {'rating': rating, 'note': ?note});
+
+  /// Reads [text] aloud: the mp3 bytes (server TTS of the business).
+  Future<List<int>> aiSpeech(String text) async {
+    final r = _dataMap(await _send('POST', '/api/ai/tts', data: {'text': text}));
+    final url = '${r['downloadUrl'] ?? ''}';
+    if (url.isEmpty) throw StateError('no audio');
+    return _downloadBytes(url, receiveTimeout: const Duration(minutes: 2));
+  }
+
+  /// "ไอแซคช่วยกรอก": suggested values for a create form from free text.
+  /// [module]: lead / contact / account / case / activity / quotation / workspace_item.
+  Future<AiFillResult> extractAiFields(String module, String text, {String? contextModule, String? contextId, String? contextTitle}) async {
+    final env = await _send('POST', '/api/ai/extract-fields', data: {
+      'module': module,
+      'text': text,
+      if (contextModule != null && contextId != null) 'context': {'module': contextModule, 'id': int.tryParse(contextId) ?? contextId, 'title': ?contextTitle},
+    });
+    final d = env['data'];
+    return AiFillResult.fromJson(d is Map ? Map<String, dynamic>.from(d) : const {});
+  }
+
+  /// Business quick prompts (admin-made + system), `{code, name_th, prompt_th, ...}`.
+  Future<List<Map<String, dynamic>>> getAiQuickPrompts({String? module}) async {
+    final env = await _send('GET', '/api/ai/quick-prompts', query: {'module': ?module});
+    final d = env['data'];
+    return extractMapList(d is Map ? d['items'] : d);
+  }
+
   /// `{id, url, original_name, kind, extract_status?, extracted_text?, ...}`.
   Future<Map<String, dynamic>> uploadAiAttachment(MultipartFile file, {String? conversationId, ProgressCallback? onSendProgress, CancelToken? cancel}) async {
     final form = FormData()..files.add(MapEntry('file', file));
@@ -1956,11 +2024,21 @@ class ApiClient {
     return _dataMap(await _send('POST', '/api/ai/attachments', data: form, onSendProgress: onSendProgress, cancel: cancel));
   }
 
-  Future<Map<String, dynamic>> confirmAiTool(String proposalId, {String? boardId}) async =>
-      _dataMap(await _send('POST', '/api/ai/tools/confirm', data: {'proposalId': proposalId, 'board_id': ?(boardId == null ? null : int.tryParse(boardId) ?? boardId)}));
+  /// [conversationId]/[messageId]: the server remembers the outcome on that saved message.
+  Future<Map<String, dynamic>> confirmAiTool(String proposalId, {String? boardId, String? conversationId, String? messageId}) async =>
+      _dataMap(await _send('POST', '/api/ai/tools/confirm', data: {
+        'proposalId': proposalId,
+        'board_id': ?(boardId == null ? null : int.tryParse(boardId) ?? boardId),
+        'conversation_id': ?(conversationId == null ? null : int.tryParse(conversationId) ?? conversationId),
+        'message_id': ?(messageId == null ? null : int.tryParse(messageId) ?? messageId),
+      }));
 
-  Future<Map<String, dynamic>> cancelAiTool(String proposalId) async =>
-      _dataMap(await _send('POST', '/api/ai/tools/cancel', data: {'proposalId': proposalId}));
+  Future<Map<String, dynamic>> cancelAiTool(String proposalId, {String? conversationId, String? messageId}) async =>
+      _dataMap(await _send('POST', '/api/ai/tools/cancel', data: {
+        'proposalId': proposalId,
+        'conversation_id': ?(conversationId == null ? null : int.tryParse(conversationId) ?? conversationId),
+        'message_id': ?(messageId == null ? null : int.tryParse(messageId) ?? messageId),
+      }));
 
   Future<List<Map<String, dynamic>>> getAiSuggestedPrompts({String? module}) async {
     final env = await _send('GET', '/api/ai/suggested-prompts', query: {'module': ?module});
