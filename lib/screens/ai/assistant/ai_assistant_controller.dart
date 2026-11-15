@@ -71,6 +71,7 @@ class AiAssistantController extends ChangeNotifier {
   String? activeId;
   String activeTitle = '';
   bool activeStarred = false;
+  bool activeArchived = false;
   String? activeProjectId;
   List<AiMessage> messages = [];
   bool chatLoading = false;
@@ -292,6 +293,7 @@ class AiAssistantController extends ChangeNotifier {
     activeId = null;
     activeTitle = '';
     activeStarred = false;
+    activeArchived = false;
     activeProjectId = inFolder;
     pendingProjectId = inFolder;
     messages = [];
@@ -315,6 +317,7 @@ class AiAssistantController extends ChangeNotifier {
       final c = await api.getAiConversation(id);
       activeTitle = '${c['title'] ?? ''}';
       activeStarred = c['starred'] == true || c['starred'] == 1;
+      activeArchived = c['archived'] == true || c['archived'] == 1;
       activeProjectId = c['project_id']?.toString();
       messages = [
         for (final m in (c['messages'] is List ? c['messages'] as List : const []))
@@ -383,12 +386,38 @@ class AiAssistantController extends ChangeNotifier {
     try {
       final titleHint = trimmed.isNotEmpty ? (trimmed.length > 80 ? trimmed.substring(0, 80) : trimmed) : '${attachments.first['original_name'] ?? 'แชทใหม่'}';
       final convId = await _ensureConversation(titleHint);
-      final saved = await api.appendAiMessage(convId, user.toSaveJson()).catchError((_) => <String, dynamic>{});
-      if (saved['id'] != null) user.id = '${saved['id']}';
+      await _save(convId, user);
       await _stream(convId, aiHistoryForApi([...prior, user]), _imageIds(attachments), deep: deep);
     } catch (e) {
       _fail(e);
     }
+  }
+
+  /// Messages the server has not stored yet (save failed twice): shown
+  /// with "ยังไม่บันทึก · ลองอีกครั้ง" so history never drifts silently.
+  final Set<AiMessage> unsaved = {};
+
+  /// Save [m] to chat [convId]: one quiet retry, then mark it unsaved.
+  Future<void> _save(String convId, AiMessage m) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final saved = await api.appendAiMessage(convId, m.toSaveJson());
+        if (saved['id'] != null) m.id = '${saved['id']}';
+        if (unsaved.remove(m)) _notify();
+        return;
+      } catch (_) {
+        if (attempt == 0) await Future<void>.delayed(const Duration(milliseconds: 600));
+      }
+    }
+    unsaved.add(m);
+    _notify();
+  }
+
+  /// "ลองอีกครั้ง" under an unsaved message.
+  Future<void> resave(AiMessage m) async {
+    final id = activeId;
+    if (id == null) return;
+    await _save(id, m);
   }
 
   List<String> _imageIds(List<Map<String, dynamic>> attachments) => [
@@ -519,8 +548,7 @@ class AiAssistantController extends ChangeNotifier {
       sending = false;
       status = null;
       _notify();
-      final saved = await api.appendAiMessage(convId, reply.toSaveJson()).catchError((_) => <String, dynamic>{});
-      if (saved['id'] != null) reply.id = '${saved['id']}';
+      await _save(convId, reply);
       _loadFollowUps(history, reply.content);
       // Title comes from the first message on the server: refresh the list.
       unawaited(loadConversations());
@@ -651,6 +679,58 @@ class AiAssistantController extends ChangeNotifier {
     }
   }
 
+  /// A record saved from a create form (/lead, /นัด …): an assistant
+  /// message with a done card + link, saved to the chat like any reply.
+  Future<void> addCreatedCard({
+    required String module,
+    required String id,
+    required String label,
+    required String title,
+    required Map<String, dynamic> values,
+    required String link,
+    String? kind,
+    Map<String, dynamic>? replacesProposal,
+  }) async {
+    final pid = 'form-$module-$id';
+    final summary = <String, dynamic>{};
+    for (final k in _kCardFieldOrder) {
+      final v = values[k];
+      if (v == null || '$v'.isEmpty || summary.length >= 6) continue;
+      summary[k] = v is Map ? '${v['label'] ?? v['id']}' : v;
+    }
+    final owner = values['smownerid'] ?? values['assignee_id'];
+    final proposal = <String, dynamic>{
+      'proposalId': pid,
+      'tool': 'create_${module == 'workspace_item' ? (kind == 'epic' ? 'workspace_epic' : 'workspace_item') : module}',
+      'status': 'done',
+      'link': link,
+      'preview': {
+        'module': module,
+        'record': {'module': module, 'id': id, 'title': title, 'kind': ?kind},
+        'fields': summary,
+        if (owner != null) 'owner': owner is Map ? {'id': owner['id'], 'label': owner['label']} : {'id': owner, 'label': '$owner'},
+      },
+    };
+    proposalState[pid] = 'done';
+    proposalLinks[pid] = link;
+    final text = title.isEmpty ? '$label แล้ว' : '$label **$title** แล้ว';
+    final reply = AiMessage(role: 'assistant', content: text, proposals: [proposal], createdAt: DateTime.now().toUtc().toIso8601String());
+    if (replacesProposal != null) {
+      final old = '${replacesProposal['proposalId'] ?? ''}';
+      if (old.isNotEmpty) proposalState[old] = 'form';
+    }
+    messages = [...messages, reply];
+    _notify();
+    try {
+      final convId = await _ensureConversation(title.isEmpty ? label : '$label $title');
+      await _save(convId, reply);
+      unawaited(loadConversations());
+    } catch (e) {
+      error = aiErrorText(e);
+      _notify();
+    }
+  }
+
   Future<String?> confirmProposal(Map<String, dynamic> p, {String? boardId}) async {
     final id = '${p['proposalId'] ?? ''}';
     if (id.isEmpty) return null;
@@ -744,6 +824,7 @@ class AiAssistantController extends ChangeNotifier {
   /// Archive (hide from history) or bring back.
   Future<void> setArchived(String id, bool archived) async {
     await api.updateAiConversation(id, {'archived': archived});
+    if (id == activeId) activeArchived = archived;
     if (archived) {
       final c = conversations.where((x) => x.id == id).firstOrNull;
       conversations = conversations.where((x) => x.id != id).toList();
@@ -892,6 +973,32 @@ List<Map<String, dynamic>> _mergeProposals(List<Map<String, dynamic>> a, List<Ma
       if (seen.add('${p['proposalId'] ?? p.hashCode}')) p,
   ];
 }
+
+/// Fields shown on a "created" card, in this order (names before ids).
+const _kCardFieldOrder = [
+  'lead_firstname',
+  'lead_lastname',
+  'contact_firstname',
+  'contact_lastname',
+  'account_name',
+  'company_name',
+  'case_name',
+  'subject',
+  'title',
+  'customer_name',
+  'related_account_id',
+  'account_id',
+  'mobile_1st',
+  'email_1st',
+  'lead_status',
+  'case_status',
+  'case_priority',
+  'priority',
+  'date_start',
+  'due_date',
+  'location',
+  'activitytype',
+];
 
 /// Thai label for a tool the agent runs (shown in the reply's step line).
 String aiToolLabel(String name) {

@@ -30,7 +30,12 @@ class WorkspaceItemFormScreen extends StatefulWidget {
     this.duplicateFrom,
     this.parent,
     this.users = const {},
+    this.initial,
   });
+
+  /// Prefilled values for a new item (e.g. from the AI chat): title,
+  /// description, priority, due_date, assignee_id (`{id, label}`), epic_id.
+  final Map<String, dynamic>? initial;
 
   /// user id → name (labels for people fields).
   final Map<String, String> users;
@@ -108,6 +113,11 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
     if (widget.duplicateFrom != null) {
       _values['title'] = '${_values['title'] ?? ''} ${tr('(สำเนา)')}'.trim();
       _values.remove('status_id');
+    }
+    if (!_isEdit && widget.initial != null) {
+      widget.initial!.forEach((k, v) {
+        if (v != null && '$v'.isNotEmpty) _values[k] = k.endsWith('_date') ? (taskDateOnly(v) ?? v) : v;
+      });
     }
     if (!_isEdit) {
       // Defaults like the web: initial status, medium priority, reporter/assignee = me.

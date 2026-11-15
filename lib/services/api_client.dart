@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+import '../core/ai_fill.dart';
 import '../core/nx_swr_cache.dart';
 import '../core/ai_assistant.dart';
 import 'package:flutter/foundation.dart';
@@ -1983,6 +1984,18 @@ class ApiClient {
       _dataMap(await _send('PATCH', '/api/ai/my-prompts/$id', data: body));
 
   Future<void> deleteAiMyPrompt(String id) async => _send('DELETE', '/api/ai/my-prompts/$id');
+
+  /// "ไอแซคช่วยกรอก": suggested values for a create form from free text.
+  /// [module]: lead / contact / account / case / activity / quotation / workspace_item.
+  Future<AiFillResult> extractAiFields(String module, String text, {String? contextModule, String? contextId, String? contextTitle}) async {
+    final env = await _send('POST', '/api/ai/extract-fields', data: {
+      'module': module,
+      'text': text,
+      if (contextModule != null && contextId != null) 'context': {'module': contextModule, 'id': int.tryParse(contextId) ?? contextId, 'title': ?contextTitle},
+    });
+    final d = env['data'];
+    return AiFillResult.fromJson(d is Map ? Map<String, dynamic>.from(d) : const {});
+  }
 
   /// Business quick prompts (admin-made + system), `{code, name_th, prompt_th, ...}`.
   Future<List<Map<String, dynamic>>> getAiQuickPrompts({String? module}) async {

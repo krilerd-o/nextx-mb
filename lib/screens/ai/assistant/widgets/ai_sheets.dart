@@ -309,19 +309,26 @@ class _BigTile extends StatelessWidget {
   }
 }
 
-/// "สร้าง" quick action: what to create → its template.
-Future<String?> showAiCreatePicker(BuildContext context) {
-  const items = ['lead', 'contact', 'case', 'นัด', 'งาน'];
-  final cmds = [for (final k in items) kAiBuiltinCommands.firstWhere((c) => c.command == k)];
-  return showAppBottomSheet<String>(
+/// "สร้าง" quick action: which record to create (only what the user may create).
+Future<AiCommand?> showAiCreatePicker(BuildContext context, List<AiCommand> commands) {
+  return showAppBottomSheet<AiCommand>(
     context: context,
     title: 'สร้างอะไร',
     child: Column(
       key: const ValueKey('ai-create-picker'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final c in cmds)
-          _Act(key: ValueKey('ai-create-${c.command}'), icon: AiStyle.commandIcon(c.icon), label: c.title, subtitle: c.description, value: c.template),
+        for (final c in commands)
+          ListTile(
+            key: ValueKey('ai-create-${c.command}'),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            minTileHeight: 52,
+            leading: Icon(AiStyle.commandIcon(c.icon), color: Theme.of(context).colorScheme.primary),
+            title: Text(tr(c.title)),
+            subtitle: Text(tr('ฟอร์มครบทุกช่อง · ไอแซคช่วยกรอก')),
+            onTap: () => Navigator.pop(context, c),
+          ),
+        if (commands.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text(tr('คุณยังไม่มีสิทธิ์สร้างรายการ'))),
       ],
     ),
   );

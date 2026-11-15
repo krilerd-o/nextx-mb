@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nextx_mobile/core/ai_assistant.dart';
 import 'package:nextx_mobile/core/ai_commands.dart';
 import 'package:nextx_mobile/core/app_config.dart';
+import 'package:nextx_mobile/core/nx_network.dart';
 import 'package:nextx_mobile/core/session_state.dart';
 import 'package:nextx_mobile/screens/ai/assistant/ai_assistant_controller.dart';
 import 'package:nextx_mobile/screens/ai/assistant/ai_assistant_screen.dart';
@@ -150,15 +151,15 @@ void main() {
     await tester.pump();
     expect(find.byKey(const ValueKey('ai-cmd-business-weekly-sales')), findsOneWidget);
 
-    await tester.enterText(find.byKey(const ValueKey('ai-input')), '/lea');
+    await tester.enterText(find.byKey(const ValueKey('ai-input')), '/อีเ');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.byKey(const ValueKey('ai-cmd-builtin-lead')));
+    await tester.tap(find.byKey(const ValueKey('ai-cmd-builtin-อีเมล')));
     await tester.pump();
     final field = tester.widget<TextField>(find.byKey(const ValueKey('ai-input')));
-    expect(field.controller!.text, startsWith('สร้าง Lead ใหม่'));
+    expect(field.controller!.text, startsWith('ร่างอีเมลติดตามถึง'));
     final sel = field.controller!.selection;
-    expect(field.controller!.text.substring(sel.start, sel.end), '[ชื่อ บริษัท เบอร์โทร อีเมล]');
+    expect(field.controller!.text.substring(sel.start, sel.end), '[ลูกค้า]');
     await tester.pump(const Duration(milliseconds: 300)); // menu slides away
     expect(find.byKey(const ValueKey('ai-slash-menu')), findsNothing);
     await tester.pump(const Duration(seconds: 4));
@@ -475,15 +476,67 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   });
 
-  testWidgets('quick action "สร้าง" asks what, then fills the template (nothing sent)', (tester) async {
-    final (adapter, _) = await _pump(tester);
+  testWidgets('quick action "สร้าง" lists only what the user may create', (tester) async {
+    await _pump(tester);
     await tester.tap(find.byKey(const ValueKey('ai-quick-create')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('ai-create-case')));
-    await tester.pumpAndSettle();
-    final field = tester.widget<TextField>(find.byKey(const ValueKey('ai-input')));
-    expect(field.controller!.text, startsWith('เปิดเคสใหม่'));
+    expect(find.byKey(const ValueKey('ai-create-lead')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-create-case')), findsNothing); // no case menu
+    expect(find.byKey(const ValueKey('ai-create-contact')), findsNothing);
+  });
+
+  testWidgets('a message the server failed to save shows "ยังไม่บันทึก" and can be saved again', (tester) async {
+    final (adapter, _) = await _pump(tester, status: {'POST /api/ai/conversations/c1/messages': 500});
+    await tester.enterText(find.byKey(const ValueKey('ai-input')), '[QA] บันทึกไม่ได้');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('ai-send')));
+    await _settle(tester, 30);
+    expect(find.text('ยังไม่บันทึก · ลองอีกครั้ง'), findsWidgets);
+    adapter.statusFor.remove('POST /api/ai/conversations/c1/messages');
+    await tester.tap(find.text('ยังไม่บันทึก · ลองอีกครั้ง').first);
+    await _settle(tester, 6);
+    expect(find.text('ยังไม่บันทึก · ลองอีกครั้ง'), findsNWidgets(1)); // one left (the reply)
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('offline: banner shows and send does not call the server', (tester) async {
+    final (adapter, _) = await _pump(tester);
+    NxNetwork.instance.online.value = false;
+    addTearDown(() => NxNetwork.instance.online.value = true);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('ai-offline')), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('ai-input')), '[QA] ออฟไลน์');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('ai-send')));
+    await _settle(tester, 4);
     expect(adapter.callKeys, isNot(contains('POST /api/ai/chat')));
+    expect(find.text('[QA] ออฟไลน์'), findsOneWidget, reason: 'text kept in the box');
+    NxNetwork.instance.online.value = true;
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('an archived chat says so and can be brought back', (tester) async {
+    final (adapter, _) = await _pump(
+      tester,
+      extra: {
+        'GET /api/ai/conversations/7': {
+          'id': 7,
+          'title': '[QA] แชทเก่า',
+          'archived': 1,
+          'messages': [
+            {'role': 'user', 'content': '[QA] เก่า'},
+          ],
+        },
+        'PATCH /api/ai/conversations/7': {'id': 7},
+      },
+    );
+    await tester.tap(find.byKey(const ValueKey('ai-recent-7')));
+    await _settle(tester, 6);
+    expect(find.byKey(const ValueKey('ai-archived-banner')), findsOneWidget);
+    await tester.tap(find.text('นำกลับ'));
+    await _settle(tester, 6);
+    expect(_body(adapter, '/api/ai/conversations/7')['archived'], false);
+    expect(find.byKey(const ValueKey('ai-archived-banner')), findsNothing);
     await tester.pump(const Duration(seconds: 4));
   });
 }

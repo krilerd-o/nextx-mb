@@ -37,7 +37,13 @@ class AiComposer extends StatelessWidget {
     this.onClearContext,
     this.panel,
     this.compact = false,
+    this.actionLabel,
+    this.onClearAction,
   });
+
+  /// A create command waiting for details ("สร้าง Lead" chip): send opens its form.
+  final String? actionLabel;
+  final VoidCallback? onClearAction;
 
   final TextEditingController input;
   final FocusNode focus;
@@ -70,7 +76,7 @@ class AiComposer extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final canSend = !locked && !uploading && (input.text.trim().isNotEmpty || attachments.isNotEmpty);
+    final canSend = !locked && !uploading && (actionLabel != null || input.text.trim().isNotEmpty || attachments.isNotEmpty);
     return SafeArea(
       top: false,
       child: Padding(
@@ -105,6 +111,28 @@ class AiComposer extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (actionLabel != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(6, 2, 6, 2),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: InputChip(
+                            key: const ValueKey('ai-create-chip'),
+                            avatar: Icon(NxI.plus, size: 14, color: cs.onPrimary),
+                            label: Text(
+                              actionLabel!,
+                              style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w600),
+                            ),
+                            shape: const StadiumBorder(),
+                            side: BorderSide.none,
+                            backgroundColor: cs.primary,
+                            deleteIcon: Icon(NxI.x, size: 14, color: cs.onPrimary),
+                            visualDensity: VisualDensity.compact,
+                            onDeleted: onClearAction,
+                            deleteButtonTooltipMessage: tr('ยกเลิก'),
+                          ),
+                        ),
+                      ),
                     if (contextTitle != null)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(6, 2, 6, 2),
@@ -154,7 +182,13 @@ class AiComposer extends StatelessWidget {
                       textInputAction: TextInputAction.newline,
                       style: theme.textTheme.bodyLarge?.copyWith(fontSize: 16, height: 1.45),
                       decoration: InputDecoration(
-                        hintText: tr(locked ? 'โควตาหมด — ส่งข้อความไม่ได้' : 'ถามไอแซค… พิมพ์ / หรือ @'),
+                        hintText: tr(
+                          locked
+                              ? 'โควตาหมด — ส่งข้อความไม่ได้'
+                              : actionLabel != null
+                              ? 'พิมพ์รายละเอียดให้ไอแซคกรอก หรือกดส่งเพื่อเปิดฟอร์ม'
+                              : 'ถามไอแซค… พิมพ์ / หรือ @',
+                        ),
                         hintStyle: theme.textTheme.bodyLarge?.copyWith(color: cs.onSurfaceVariant.withValues(alpha: 0.75), fontSize: 16),
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,

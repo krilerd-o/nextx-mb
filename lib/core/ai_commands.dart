@@ -15,6 +15,8 @@ class AiCommand {
     this.source = AiCommandSource.builtin,
     this.id,
     this.deep = false,
+    this.create,
+    this.kind,
   });
 
   /// Without the slash, e.g. `lead`, `สรุป`.
@@ -32,6 +34,15 @@ class AiCommand {
 
   /// Sends that one message in "คิดลึก" mode.
   final bool deep;
+
+  /// Create commands open a real form (filled by Isaac) instead of a prompt:
+  /// lead / contact / account / case / activity / quotation / workspace_item.
+  final String? create;
+
+  /// workspace_item: `task` or `epic`.
+  final String? kind;
+
+  bool get isCreate => create != null;
 
   factory AiCommand.fromQuickPrompt(Map<String, dynamic> m, {bool en = false}) {
     final name = '${(en ? m['name_en'] : m['name_th']) ?? m['name_th'] ?? m['name'] ?? ''}';
@@ -88,6 +99,7 @@ const kAiBuiltinCommands = <AiCommand>[
   ),
   AiCommand(
     command: 'lead',
+    create: 'lead',
     title: 'สร้าง Lead',
     description: 'ลูกค้าเป้าหมายใหม่',
     template: 'สร้าง Lead ใหม่: [ชื่อ บริษัท เบอร์โทร อีเมล]',
@@ -95,19 +107,44 @@ const kAiBuiltinCommands = <AiCommand>[
   ),
   AiCommand(
     command: 'contact',
+    create: 'contact',
     title: 'สร้าง Contact',
     description: 'ผู้ติดต่อใหม่',
     template: 'สร้าง Contact ใหม่: [ชื่อ บริษัท เบอร์โทร อีเมล]',
     icon: 'contact',
   ),
   AiCommand(
+    command: 'account',
+    create: 'account',
+    title: 'สร้างบัญชีลูกค้า',
+    description: 'บริษัท / ลูกค้าใหม่',
+    template: 'สร้างบัญชีลูกค้า: [ชื่อบริษัท เบอร์ อีเมล]',
+    icon: 'building',
+  ),
+  AiCommand(
+    command: 'quotation',
+    create: 'quotation',
+    title: 'สร้างใบเสนอราคา',
+    description: 'ใบเสนอราคาให้ลูกค้า',
+    template: 'ทำใบเสนอราคาให้ [ลูกค้า] รายการ [สินค้า จำนวน ราคา]',
+    icon: 'doc',
+  ),
+  AiCommand(
     command: 'case',
+    create: 'case',
     title: 'เปิดเคส',
     description: 'เคสบริการ / ปัญหาลูกค้า',
     template: 'เปิดเคสใหม่ให้ลูกค้า [ชื่อลูกค้า] เรื่อง [รายละเอียด]',
     icon: 'case',
   ),
-  AiCommand(command: 'นัด', title: 'นัดหมาย', description: 'สร้างนัดในปฏิทิน', template: 'นัด [ลูกค้า] วัน [วัน เวลา] เรื่อง [หัวข้อ]', icon: 'calendar'),
+  AiCommand(
+    command: 'นัด',
+    create: 'activity',
+    title: 'นัดหมาย',
+    description: 'สร้างนัดในปฏิทิน',
+    template: 'นัด [ลูกค้า] วัน [วัน เวลา] เรื่อง [หัวข้อ]',
+    icon: 'calendar',
+  ),
   AiCommand(
     command: 'สรุป',
     title: 'สรุป',
@@ -145,6 +182,8 @@ const kAiBuiltinCommands = <AiCommand>[
   ),
   AiCommand(
     command: 'งาน',
+    create: 'workspace_item',
+    kind: 'task',
     title: 'งานบนบอร์ด',
     description: 'สร้าง Task บน Workspace',
     template: 'สร้างงานบนบอร์ด [ชื่อบอร์ด]: [ชื่องาน] กำหนดส่ง [วัน]',
@@ -152,6 +191,8 @@ const kAiBuiltinCommands = <AiCommand>[
   ),
   AiCommand(
     command: 'epic',
+    create: 'workspace_item',
+    kind: 'epic',
     title: 'วางแผนเป็น Epic',
     description: 'แตกงานเป็น Epic / Task',
     template: 'วางแผนงาน [โครงการ] แตกเป็น Epic และ Task บนบอร์ด',

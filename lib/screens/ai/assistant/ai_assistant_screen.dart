@@ -31,6 +31,7 @@ import '../../search/search_modules.dart';
 import '../web_session_screen.dart';
 import 'ai_assistant_controller.dart';
 import 'ai_cards.dart';
+import 'ai_create_flow.dart';
 import 'ai_project_screen.dart';
 import 'ai_prompt_library_screen.dart';
 import 'widgets/ai_chat_drawer.dart';
@@ -82,6 +83,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
   /// A `/วิเคราะห์` command: the next message goes in "คิดลึก".
   bool _deepNext = false;
+
+  /// A create command picked from "/" (shown as a chip in the composer).
+  AiCommand? _createCmd;
 
   /// Voice input: listening, and the text typed before speaking started.
   bool _listening = false;
@@ -295,6 +299,25 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   // ── sending
 
   Future<void> _send([String? text]) async {
+    // A create command (/lead …): open its form, filled from what was typed.
+    final create = _createCmd;
+    if (text == null && create != null) {
+      final typed = _input.text.trim();
+      _input.clear();
+      setState(() => _createCmd = null);
+      await _runCreate(create.create!, kind: create.kind, text: typed);
+      return;
+    }
+    if (text == null) {
+      final m = RegExp(r'^/(\S+)(?:\s+([\s\S]*))?$').firstMatch(_input.text.trim());
+      final cmd = m == null ? null : _createCommands().where((c) => c.command == m.group(1)).firstOrNull;
+      if (cmd != null) {
+        final rest = (m!.group(2) ?? '').trim();
+        _input.clear();
+        await _runCreate(cmd.create!, kind: cmd.kind, text: rest);
+        return;
+      }
+    }
     final t = text ?? _input.text;
     final deep = _deepNext;
     if (text == null) _input.clear();
@@ -312,8 +335,138 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
   void _pickCommand(AiCommand c) {
     HapticFeedback.selectionClick();
+    if (c.isCreate) {
+      // Becomes a chip: type / speak the details (or nothing) and send.
+      setState(() {
+        _createCmd = c;
+        _deepNext = false;
+      });
+      _input.clear();
+      _focus.requestFocus();
+      return;
+    }
     setState(() => _deepNext = c.deep);
     _insertTemplate(tr(c.template));
+  }
+
+  /// Create commands this user may use (menu access per module).
+  List<AiCommand> _createCommands() => [
+    for (final c in _c.allCommands)
+      if (c.isCreate && aiCanCreate(context, c.create!)) c,
+  ];
+
+  /// Slash menu: create commands the user can't use are hidden.
+  List<AiCommand> _usableCommands() => [
+    for (final c in _c.allCommands)
+      if (!c.isCreate || aiCanCreate(context, c.create!)) c,
+  ];
+
+  /// The chat so far as plain text, for "เติมจากแชทนี้".
+  String _chatText() {
+    final last = _c.messages.where((m) => m.content.trim().isNotEmpty).toList();
+    final tail = last.length > 6 ? last.sublist(last.length - 6) : last;
+    return [for (final m in tail) '${m.isUser ? 'ผู้ใช้' : 'ไอแซค'}: ${m.content.trim()}'].join('\n');
+  }
+
+  /// Opens the real create form; when saved, a result card joins the chat.
+  Future<void> _runCreate(
+    String module, {
+    String? kind,
+    String text = '',
+    Map<String, dynamic> initialValues = const {},
+    Map<String, dynamic>? replacesProposal,
+  }) async {
+    if (!aiCanCreate(context, module)) {
+      _snack('คุณไม่มีสิทธิ์สร้างรายการนี้');
+      return;
+    }
+    HapticFeedback.selectionClick();
+    final r = await AiCreateFlow.run(
+      context,
+      module: module,
+      kind: kind,
+      text: text,
+      initialValues: initialValues,
+      contextModule: _c.contextModule,
+      contextId: _c.contextId,
+      contextTitle: _c.contextTitle,
+      chatText: _c.messages.isEmpty ? null : _chatText,
+    );
+    if (r == null || !mounted) return;
+    if (replacesProposal != null) await _c.cancelProposal(replacesProposal);
+    _pinned = true;
+    await _c.addCreatedCard(
+      module: r.module,
+      id: r.id,
+      kind: r.kind,
+      label: aiCreateLabel(r.module, kind: r.kind),
+      title: r.title,
+      values: r.values,
+      link: r.link,
+      replacesProposal: replacesProposal,
+    );
+  }
+
+  /// "แก้ไขในฟอร์ม" on Isaac's proposal: same values in the full form.
+  Future<void> _editProposal(Map<String, dynamic> p) async {
+    final tool = '${p['tool'] ?? ''}';
+    final preview = p['preview'] is Map ? Map<String, dynamic>.from(p['preview'] as Map) : <String, dynamic>{};
+    final fields = preview['fields'] is Map ? Map<String, dynamic>.from(preview['fields'] as Map) : <String, dynamic>{};
+    final owner = preview['owner'] is Map ? Map<String, dynamic>.from(preview['owner'] as Map) : null;
+    final workspace = tool == 'create_workspace_item' || tool == 'create_workspace_epic';
+    final module = workspace ? 'workspace_item' : '${preview['module'] ?? tool.replaceFirst('create_', '')}';
+    final values = <String, dynamic>{...fields};
+    if (owner != null) values[workspace ? 'assignee_id' : 'smownerid'] = {'id': '${owner['id']}', 'label': '${owner['label'] ?? owner['id']}'};
+    await _runCreate(module, kind: tool == 'create_workspace_epic' ? 'epic' : 'task', initialValues: values, replacesProposal: p);
+  }
+
+  /// Proposal tools the form can take over.
+  static const _formTools = {
+    'create_lead',
+    'create_contact',
+    'create_account',
+    'create_case',
+    'create_activity',
+    'create_quotation',
+    'create_workspace_item',
+    'create_workspace_epic',
+  };
+
+  /// Under a record created here: follow-up appointment, ask about it.
+  Widget? _recordActions(Map<String, dynamic> p) {
+    final preview = p['preview'] is Map ? p['preview'] as Map : const {};
+    final rec = preview['record'] is Map ? preview['record'] as Map : null;
+    if (rec == null) return null;
+    final module = '${rec['module']}';
+    final id = '${rec['id']}';
+    final title = '${rec['title'] ?? ''}';
+    final crm = const {'lead', 'contact', 'account', 'case', 'quotation'}.contains(module);
+    if (!crm) return null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          ActionChip(
+            key: ValueKey('ai-followup-appt-$id'),
+            avatar: const Icon(NxI.calendarPlus, size: 16),
+            label: Text(tr('สร้างนัดติดตาม')),
+            onPressed: () =>
+                _runCreate('activity', initialValues: {'related_module': module, 'related_id': id, if (title.isNotEmpty) 'subject': '${tr('ติดตาม')} $title'}),
+          ),
+          ActionChip(
+            key: ValueKey('ai-ask-record-$id'),
+            avatar: const Icon(NxI.sparkle, size: 16),
+            label: Text(tr('ถามไอแซคเกี่ยวกับรายการนี้')),
+            onPressed: () {
+              _c.setContext(module, id, title.isEmpty ? '$module #$id' : title);
+              _focus.requestFocus();
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   void _pickMention(AiMention m) {
@@ -402,16 +555,17 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     HapticFeedback.selectionClick();
     if (a.template != null) return _insertTemplate(tr(a.template!));
     if (a.key == 'create') {
-      final t = await showAiCreatePicker(context);
-      if (t != null && mounted) _insertTemplate(tr(t));
+      final cmd = await showAiCreatePicker(context, _createCommands());
+      if (cmd != null && mounted) await _runCreate(cmd.create!, kind: cmd.kind);
     }
   }
 
   // ── chat menu
 
-  AiConversation _activeChat() => _c.conversations.firstWhere(
+  AiConversation _activeChat() => [..._c.conversations, ..._c.archivedChats].firstWhere(
     (x) => x.id == _c.activeId,
-    orElse: () => AiConversation(id: _c.activeId!, title: _c.activeTitle, starred: _c.activeStarred, projectId: _c.activeProjectId),
+    orElse: () =>
+        AiConversation(id: _c.activeId!, title: _c.activeTitle, starred: _c.activeStarred, projectId: _c.activeProjectId, archived: _c.activeArchived),
   );
 
   Future<void> _chatMenu(AiConversation chat) async {
@@ -644,6 +798,15 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             },
             onTitle: _c.activeId == null ? null : () => _chatMenu(_activeChat()),
           ),
+          if (_c.activeId != null && _c.activeArchived)
+            _Banner(
+              key: const ValueKey('ai-archived-banner'),
+              color: cs.onSurfaceVariant,
+              icon: NxI.archive,
+              text: 'แชทนี้เก็บถาวรแล้ว',
+              action: 'นำกลับ',
+              onAction: () => _c.setArchived(_c.activeId!, false),
+            ),
           if (_c.quotaExhausted) _Banner(color: cs.error, icon: NxI.warningCircle, text: 'โควตา AI เดือนนี้หมดแล้ว — ติดต่อผู้ดูแลเพื่อเพิ่มแพ็กเกจ'),
           Expanded(
             child: Stack(
@@ -687,6 +850,17 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               onAction: _c.retry,
               onClose: _c.clearError,
             ),
+          ValueListenableBuilder<bool>(
+            valueListenable: NxNetwork.instance.online,
+            builder: (context, online, _) => online
+                ? const SizedBox.shrink()
+                : _Banner(
+                    key: const ValueKey('ai-offline'),
+                    color: AiStyle.warn(context),
+                    icon: NxI.cloud,
+                    text: 'ออฟไลน์ — ข้อความจะยังไม่ถูกส่ง ข้อความที่พิมพ์ไว้จะเก็บไว้ให้',
+                  ),
+          ),
           if (_c.followUps.isNotEmpty && !_c.sending && !cramped && _slash == null && _mention == null) _followUps(context),
           if (!cramped) _usageStrip(context),
           _centered(
@@ -705,12 +879,20 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               onAttach: _attachMenu,
               listening: _listening,
               onMic: _toggleMic,
-              onSend: () => _send(),
+              onSend: () {
+                if (!NxNetwork.instance.online.value) {
+                  _snack('ออฟไลน์อยู่ — ต่ออินเทอร์เน็ตแล้วส่งอีกครั้ง');
+                  return;
+                }
+                _send();
+              },
               onStop: _c.stop,
               contextTitle: _c.contextModule == null ? null : (_c.contextTitle ?? '${_c.contextModule} #${_c.contextId}'),
               onClearContext: _c.clearContext,
               compact: MediaQuery.sizeOf(context).height < 520,
               panel: _panel(),
+              actionLabel: _createCmd == null ? null : tr(aiCreateLabel(_createCmd!.create!, kind: _createCmd!.kind)),
+              onClearAction: () => setState(() => _createCmd = null),
             ),
           ),
         ],
@@ -791,7 +973,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
   Widget? _panel() {
     if (_slash != null) {
-      return AiSlashMenu(commands: aiFilterCommands(_c.allCommands, _slash!), onPick: _pickCommand, onManage: _openPrompts);
+      return AiSlashMenu(commands: aiFilterCommands(_usableCommands(), _slash!), onPick: _pickCommand, onManage: _openPrompts);
     }
     if (_mention != null) {
       return AiMentionPicker(api: _c.api, query: _mention!, modules: _mentionModules(), onPick: _pickMention);
@@ -831,7 +1013,21 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             final day = m.createdLocal;
             final prevDay = i == 0 ? null : msgs[i - 1].createdLocal;
             final newDay = day != null && (prevDay == null || prevDay.year != day.year || prevDay.month != day.month || prevDay.day != day.day);
-            final tile = m.isUser ? AiUserBubble(message: m, onLongPress: () => _messageActions(m)) : _reply(context, m, last: last);
+            Widget tile = m.isUser ? AiUserBubble(message: m, onLongPress: () => _messageActions(m)) : _reply(context, m, last: last);
+            if (_c.unsaved.contains(m)) {
+              tile = Column(
+                crossAxisAlignment: m.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  tile,
+                  TextButton.icon(
+                    key: ValueKey('ai-unsaved-${m.hashCode}'),
+                    onPressed: () => _c.resave(m),
+                    icon: Icon(NxI.warningCircle, size: 14, color: Theme.of(context).colorScheme.error),
+                    label: Text(tr('ยังไม่บันทึก · ลองอีกครั้ง'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  ),
+                ],
+              );
+            }
             return Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: AiStyle.maxContentWidth),
@@ -898,6 +1094,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             }
           },
           onCancel: () => _c.cancelProposal(p),
+          onEdit: _formTools.contains('${p['tool']}') ? () => _editProposal(p) : null,
+          footer: _recordActions(p),
         ),
       if (m.askUser.isNotEmpty) AiAskUserCard(questions: m.askUser, enabled: !_c.sending, onPick: _send),
       if (m.downloads.isNotEmpty)
