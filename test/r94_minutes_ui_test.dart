@@ -106,10 +106,19 @@ Future<void> _settle(WidgetTester tester, [int n = 8]) async {
 void main() {
   testWidgets('home: actions, meetings with status, search inside meetings, source filter', (tester) async {
     final a = await _pump(tester, const MinutesHomeScreen());
+    expect(find.text('[QA] ประชุมทีมขาย'), findsOneWidget);
+    // "+" opens the commands.
+    await tester.tap(find.byKey(const ValueKey('minutes-fab')));
+    await _settle(tester, 6);
     for (final k in ['record', 'video', 'upload', 'room', 'join']) {
       expect(find.byKey(ValueKey('minutes-action-$k')), findsOneWidget);
     }
-    expect(find.text('[QA] ประชุมทีมขาย'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await _settle(tester, 6);
+    // Search is an icon in the header.
+    expect(find.byKey(const ValueKey('minutes-search')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('minutes-search-toggle')));
+    await _settle(tester, 2);
     expect(find.textContaining('กำลังถอดข้อความ 40%'), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey('minutes-search')), 'ใบเสนอราคา');
     await tester.pump(const Duration(milliseconds: 400));
@@ -122,9 +131,12 @@ void main() {
 
   testWidgets('home: rooms off on this server → room buttons explain instead of opening', (tester) async {
     await _pump(tester, const MinutesHomeScreen(), extra: {'GET /api/ai/minutes/config': {'rooms': false}});
+    await tester.tap(find.byKey(const ValueKey('minutes-fab')));
+    await _settle(tester, 6);
+    expect(find.text('ผู้ดูแลยังไม่ได้เปิดใช้ห้องประชุม'), findsWidgets);
     await tester.tap(find.byKey(const ValueKey('minutes-action-room')));
     await tester.pump();
-    expect(find.text('ผู้ดูแลยังไม่ได้เปิดใช้ห้องประชุม'), findsOneWidget);
+    expect(find.byKey(const ValueKey('minutes-commands')), findsOneWidget, reason: 'stays open, nothing started');
   });
 
   testWidgets('detail: minutes by section, tasks to CRM, transcript with names, translate, ask ISAAC', (tester) async {
