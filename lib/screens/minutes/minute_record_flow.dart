@@ -101,7 +101,12 @@ class _StartPanelState extends State<_StartPanel> {
         TextField(
           key: const ValueKey('minute-start-title'),
           controller: _title,
-          decoration: InputDecoration(labelText: tr('ชื่อการประชุม'), hintText: tr('เช่น ประชุมทีมขายประจำสัปดาห์'), border: const OutlineInputBorder()),
+          decoration: InputDecoration(
+            hintText: tr('ชื่อการประชุม เช่น ประชุมทีมขายประจำสัปดาห์'),
+            prefixIcon: const Icon(NxI.pencilSimple, size: 18),
+            filled: true,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+          ),
         ),
         MinuteSectionTitle('ภาษาที่พูดในการประชุม', icon: NxI.microphone),
         MinuteLangChips(selected: [_spoken], single: true, onChanged: (v) => setState(() => _spoken = v.isEmpty ? _spoken : v.first)),

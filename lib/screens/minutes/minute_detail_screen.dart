@@ -492,8 +492,9 @@ class _SummaryTab extends StatelessWidget {
         ),
       );
     }
-    Widget section(String title, IconData icon, Color color, List<Widget> items) {
+    Widget section(String title, IconData icon, Color color0, List<Widget> items) {
       if (items.isEmpty) return const SizedBox.shrink();
+      final color = minuteTint(context, color0);
       return Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),

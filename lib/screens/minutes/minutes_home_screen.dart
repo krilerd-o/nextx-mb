@@ -12,7 +12,12 @@ import '../../services/api_client.dart';
 import '../../services/minutes/minute_recorder.dart';
 import '../../services/minutes/minute_uploader.dart';
 import '../../services/realtime_service.dart';
+import '../../core/nx_breakpoint.dart';
+import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_back_handler.dart';
+import '../../widgets/nx_create_fab.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import 'minute_record_flow.dart';
 import 'minute_join_sheet.dart';
 import 'minute_room_create_screen.dart';
@@ -129,165 +134,180 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
     if (mounted) _load(quiet: true);
   }
 
+  bool _searching = false;
+
+  void _toggleSearch() {
+    setState(() {
+      _searching = !_searching;
+      if (!_searching && _search.text.isNotEmpty) {
+        _search.clear();
+        _load(quiet: true);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return Scaffold(
-      key: const ValueKey('minutes-home'),
-      appBar: AppBar(title: Text(tr('ไอแซคบันทึกประชุม')), centerTitle: false),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _hero(theme)),
-            SliverToBoxAdapter(child: _activeBanner()),
-            SliverToBoxAdapter(child: _uploads()),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: TextField(
-                  key: const ValueKey('minutes-search'),
-                  controller: _search,
-                  onChanged: _onSearch,
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(NxI.magnifyingGlass, size: 20),
-                    hintText: tr('ค้นหาชื่อหรือคำในการประชุม'),
-                    filled: true,
-                    isDense: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+    final groups = _groups();
+    return NxBackHandler(
+      active: _searching,
+      onBack: _toggleSearch,
+      child: NxScrollScaffold(
+        key: const ValueKey('minutes-home'),
+        header: NxAppHeader(
+          title: 'ไอแซคบันทึกประชุม',
+          subtitle: 'บันทึก · ถอดข้อความ · สรุป · แปล',
+          actions: [
+            IconButton(
+              key: const ValueKey('minutes-search-toggle'),
+              tooltip: tr(_searching ? 'ปิดค้นหา' : 'ค้นหา'),
+              icon: Icon(_searching ? NxI.x : NxI.magnifyingGlass),
+              onPressed: _toggleSearch,
+            ),
+            IconButton(
+              key: const ValueKey('minutes-header-join'),
+              tooltip: tr('เข้าร่วมด้วยรหัส'),
+              icon: const Icon(NxI.signIn),
+              onPressed: () => _runAction('join'),
+            ),
+            if (NxBreakpoint.of(context).twoPane) NxAddButton(tooltip: tr('เริ่มใหม่'), onPressed: _openCommands),
+          ],
+        ),
+        floatingActionButton: NxCreateFab(key: const ValueKey('minutes-fab'), label: 'เริ่มใหม่', onPressed: _openCommands),
+        body: RefreshIndicator(
+          onRefresh: _load,
+          child: CustomScrollView(
+            slivers: [
+              if (_searching)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: TextField(
+                      key: const ValueKey('minutes-search'),
+                      controller: _search,
+                      autofocus: true,
+                      onChanged: _onSearch,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(NxI.magnifyingGlass, size: 20),
+                        hintText: tr('ค้นหาชื่อหรือคำที่พูดในการประชุม'),
+                        filled: true,
+                        isDense: true,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: Row(
-                  children: [
-                    for (final f in const [('all', 'ทั้งหมด'), ('record', 'บันทึกสด'), ('upload', 'ไฟล์'), ('room', 'ห้องประชุม')])
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: ChoiceChip(
-                          key: ValueKey('minutes-filter-${f.$1}'),
-                          label: Text(tr(f.$2)),
-                          selected: _filter == f.$1,
-                          onSelected: (_) {
-                            setState(() => _filter = f.$1);
-                            _load(quiet: true);
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            if (_loading)
-              const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))
-            else if (_error != null)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [Text(tr(_error!)), TextButton(onPressed: _load, child: Text(tr('ลองอีกครั้ง')))]),
-                ),
-              )
-            else if (_items.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+              SliverToBoxAdapter(child: _activeBanner()),
+              SliverToBoxAdapter(child: _uploads()),
+              SliverToBoxAdapter(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                  child: Row(
                     children: [
-                      Icon(NxI.microphone, size: 40, color: cs.outline),
-                      const SizedBox(height: 10),
-                      Text(tr(_search.text.isEmpty ? 'ยังไม่มีการประชุม' : 'ไม่พบการประชุมที่ค้นหา'), style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 4),
-                      Text(tr('เริ่มบันทึก อัปโหลดไฟล์ หรือเปิดห้องประชุม แล้วไอแซคจะถอดข้อความ สรุป และแปลให้'), textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+                      for (final f in const [('all', 'ทั้งหมด', NxI.squaresFour), ('record', 'บันทึกสด', NxI.microphone), ('upload', 'ไฟล์', NxI.uploadSimple), ('room', 'ห้องประชุม', NxI.users)])
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: ChoiceChip(
+                            key: ValueKey('minutes-filter-${f.$1}'),
+                            avatar: Icon(f.$3, size: 16),
+                            label: Text(tr(f.$2)),
+                            selected: _filter == f.$1,
+                            showCheckmark: false,
+                            onSelected: (_) {
+                              setState(() => _filter = f.$1);
+                              _load(quiet: true);
+                            },
+                          ),
+                        ),
                     ],
                   ),
                 ),
-              )
-            else
-              SliverList.builder(itemCount: _items.length, itemBuilder: (_, i) => _MeetingCard(meeting: _items[i], onTap: () => _open(_items[i]))),
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
-          ],
+              ),
+              if (_loading)
+                const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))
+              else if (_error != null)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(tr(_error!)), TextButton(onPressed: _load, child: Text(tr('ลองอีกครั้ง')))])),
+                )
+              else if (_items.isEmpty)
+                SliverFillRemaining(hasScrollBody: false, child: _empty(theme, cs))
+              else
+                for (final g in groups) ...[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+                      child: Text(tr(g.$1), style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  SliverList.builder(itemCount: g.$2.length, itemBuilder: (_, i) => _MeetingCard(meeting: g.$2[i], onTap: () => _open(g.$2[i]))),
+                ],
+              const SliverToBoxAdapter(child: SizedBox(height: 96)),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  /// Meetings by day: วันนี้ / เมื่อวาน / 7 วันที่ผ่านมา / ก่อนหน้า.
+  List<(String, List<MinuteMeeting>)> _groups() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final out = <String, List<MinuteMeeting>>{};
+    for (final m in _items) {
+      final t = m.startedAt;
+      final d = t == null ? null : DateTime(t.year, t.month, t.day);
+      final key = d == null
+          ? 'ก่อนหน้า'
+          : d == today
+          ? 'วันนี้'
+          : d == today.subtract(const Duration(days: 1))
+          ? 'เมื่อวาน'
+          : today.difference(d).inDays < 7
+          ? '7 วันที่ผ่านมา'
+          : 'ก่อนหน้า';
+      (out[key] ??= []).add(m);
+    }
+    return [for (final k in const ['วันนี้', 'เมื่อวาน', '7 วันที่ผ่านมา', 'ก่อนหน้า']) if (out[k] != null) (k, out[k]!)];
+  }
+
+  Widget _empty(ThemeData theme, ColorScheme cs) => Padding(
+    padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 84,
+          height: 84,
+          decoration: const BoxDecoration(gradient: kMinuteGradient, shape: BoxShape.circle),
+          child: const Icon(NxI.microphone, color: Colors.white, size: 38),
+        ),
+        const SizedBox(height: 16),
+        Text(tr(_search.text.isEmpty ? 'ยังไม่มีการประชุม' : 'ไม่พบการประชุมที่ค้นหา'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Text(tr('เริ่มบันทึก อัปโหลดไฟล์ หรือเปิดห้องประชุม แล้วไอแซคจะถอดข้อความ สรุป และแปลให้'), textAlign: TextAlign.center, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+        if (_search.text.isEmpty) ...[
+          const SizedBox(height: 18),
+          FilledButton.icon(key: const ValueKey('minutes-empty-start'), onPressed: _openCommands, icon: const Icon(NxI.plus), label: Text(tr('เริ่มประชุมแรก'))),
+        ],
+      ],
+    ),
+  );
+
+  /// "+" → what to start: record / video / upload / room / join.
+  Future<void> _openCommands() async {
+    final a = await showMinuteCommandSheet(context, roomsAvailable: _roomsAvailable);
+    if (a != null && mounted) await _runAction(a);
   }
 
   Future<void> _open(MinuteMeeting m) async {
     await context.push(AppRoutes.aiMinute(m.id));
     if (mounted) _load(quiet: true);
-  }
-
-  Widget _hero(ThemeData theme) {
-    Widget tile(String key, IconData icon, String label, String hint, {Color? color, bool enabled = true}) {
-      return Expanded(
-        child: Opacity(
-          opacity: enabled ? 1 : 0.45,
-          child: Material(
-            color: Colors.white.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(18),
-            child: InkWell(
-              key: ValueKey('minutes-action-$key'),
-              borderRadius: BorderRadius.circular(18),
-              onTap: enabled ? () => _runAction(key) : () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ผู้ดูแลยังไม่ได้เปิดใช้ห้องประชุม')))),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(color: color ?? Colors.white, shape: BoxShape.circle),
-                      child: Icon(icon, size: 20, color: color == null ? const Color(0xFF4F46E5) : Colors.white),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(tr(label), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12.5)),
-                    Text(tr(hint), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 10.5)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
-      decoration: BoxDecoration(gradient: kMinuteGradient, borderRadius: BorderRadius.circular(24)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(tr('บันทึก ถอดข้อความ สรุป และแปลการประชุม'), style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 2),
-          Text(tr('ไอแซคจดให้ครบ ทั้งสด และย้อนหลัง'), style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              tile('record', NxI.microphone, 'บันทึกเสียง', 'ถอดสด', color: kMinuteRecord),
-              const SizedBox(width: 8),
-              tile('video', NxI.videoCamera, 'บันทึกวิดีโอ', 'กล้อง + ถอดสด'),
-              const SizedBox(width: 8),
-              tile('upload', NxI.uploadSimple, 'อัปโหลดไฟล์', 'เสียง / วิดีโอ'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              tile('room', NxI.users, 'สร้างห้องประชุม', 'ลิงก์เชิญ', enabled: _roomsAvailable),
-              const SizedBox(width: 8),
-              tile('join', NxI.signIn, 'เข้าร่วมด้วยรหัส', 'รหัสห้อง / ลิงก์', enabled: _roomsAvailable),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _activeBanner() {
@@ -378,28 +398,33 @@ class _MeetingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final m = meeting;
     final color = minuteSourceColor(m.source);
-    final sub = [minuteWhen(m.startedAt), if (m.durationMs > 0) minuteClock(m.durationMs), tr(minuteSourceLabel(m.source))].where((s) => s.isNotEmpty).join(' · ');
+    final t = m.startedAt;
+    final time = t == null ? '' : '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    final text = m.snippet ?? m.headline;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Material(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
+        color: dark ? cs.surfaceContainer : cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(20),
         child: InkWell(
           key: ValueKey('minute-card-${m.id}'),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), border: Border.all(color: cs.outlineVariant.withValues(alpha: dark ? 0.25 : 0.5))),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
-                  child: Icon(minuteSourceIcon(m), color: color, size: 20),
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(color: color.withValues(alpha: dark ? 0.22 : 0.12), borderRadius: BorderRadius.circular(14)),
+                  child: Icon(minuteSourceIcon(m), color: minuteTint(context, color), size: 21),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -407,17 +432,31 @@ class _MeetingCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(m.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 2),
-                      Text(sub, style: theme.textTheme.bodySmall),
-                      if ((m.snippet ?? m.headline) != null) ...[
-                        const SizedBox(height: 6),
-                        Text(m.snippet ?? m.headline!, key: m.snippet != null ? ValueKey('minute-snippet-${m.id}') : null, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(NxI.clock, size: 13, color: cs.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Text(time, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                          if (m.durationMs > 0) ...[
+                            const SizedBox(width: 10),
+                            Icon(NxI.timer, size: 13, color: cs.onSurfaceVariant),
+                            const SizedBox(width: 4),
+                            Text(minuteClock(m.durationMs), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                          ],
+                          const SizedBox(width: 10),
+                          Flexible(child: Text(tr(minuteSourceLabel(m.source)), overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: minuteTint(context, color), fontWeight: FontWeight.w600))),
+                        ],
+                      ),
+                      if (text != null) ...[
+                        const SizedBox(height: 8),
+                        Text(text, key: m.snippet != null ? ValueKey('minute-snippet-${m.id}') : null, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.78), height: 1.4)),
                       ],
-                      const SizedBox(height: 8),
-                      MinuteStatusChip(meeting: m),
+                      if (!m.ready) ...[const SizedBox(height: 8), MinuteStatusChip(meeting: m)],
                     ],
                   ),
                 ),
+                Icon(NxI.caretRight, size: 18, color: cs.onSurfaceVariant.withValues(alpha: 0.6)),
               ],
             ),
           ),
