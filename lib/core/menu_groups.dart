@@ -216,6 +216,7 @@ const kMenuGroups = <MenuGroupDef>[
 IconData isaacMenuIcon(String key) => switch (key) {
       'ai-assistant' => NxI.sparkle,
       'isaac-notebook' => NxI.bookOpen,
+      'ai-minute-meeting' => NxI.users,
       'ai-minute-auto' => NxI.microphone,
       'isaac-ai-agent' => NxI.robot,
       _ => NxI.eye,

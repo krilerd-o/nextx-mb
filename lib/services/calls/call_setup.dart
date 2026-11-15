@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,8 @@ import '../../screens/chat/room/chat_call_hooks.dart';
 import '../../screens/chat/room/chat_message_bubble.dart' show chatSenderName;
 import '../../widgets/nx_avatar.dart';
 import '../notebook/notebook_recorder.dart';
+import '../minutes/minute_recorder.dart';
+import '../minutes/minute_uploader.dart';
 import 'call_media_webrtc.dart';
 import 'call_service.dart';
 import 'call_system_ui.dart';
@@ -61,6 +64,9 @@ void bindCalls(AppConfig config) {
   lt.ensureSettings();
   // ISAAC Notebook recordings share the mic with calls (a call pauses them) and the upload queue.
   bindNotebookRecorder(api: config.apiClient, businessId: config.session.businessId);
+  // AI Minute Meeting: live recordings (same mic rules) and large file uploads that continue after a restart.
+  bindMinuteRecorder(api: config.apiClient, businessId: config.session.businessId);
+  unawaited(MinuteUploader.instance.bind(config.apiClient));
 }
 
 /// Group rooms with more than 4 people: choose up to 3 to call.

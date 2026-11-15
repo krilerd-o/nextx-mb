@@ -16,6 +16,7 @@ export 'api_exceptions.dart';
 
 part 'api_journey.dart';
 part 'notebook/notebook_api.dart';
+part 'minutes/minutes_api.dart';
 
 /// Default production CRM API. Override with `--dart-define=API_BASE_URL=` or Settings.
 const String kDefaultApiBaseUrl = String.fromEnvironment(

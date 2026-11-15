@@ -69,6 +69,7 @@ IsaacMenuItem? isaacItemFor(String path) {
   if (p == IsaacMenu.notebook.route || p.startsWith('${IsaacMenu.notebook.route}/') || p == '/isaac' || p == '/ai/notebook' || p.startsWith('/ai/notebook/')) {
     return IsaacMenu.notebook;
   }
+  if (p.startsWith('${IsaacMenu.minuteMeeting.route}/')) return IsaacMenu.minuteMeeting;
   for (final item in IsaacMenu.all) {
     if (p == item.route || (item.route == '/ai' && p.startsWith('/ai/'))) return item;
   }

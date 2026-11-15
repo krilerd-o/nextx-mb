@@ -104,3 +104,22 @@
 9. `GET /api/picklists`
 
 > หมายเหตุ: แม้เว็บมี route จำนวนมาก ให้เลือกเฉพาะที่ mobile ใช้จริงก่อน แล้วค่อยขยาย
+
+## ไอแซคบันทึกประชุม (AI Minute Meeting) — `/api/ai/minutes`, `/api/public/minutes`
+
+Menu key `ai-minute-meeting` (AI group). Backend: NEXTX `backend/src/routes/aiMinutes.js`, `publicAiMinutes.js`, docs `backend/docs/ai-minutes.md`.
+
+| App | API |
+|---|---|
+| `getMinutesConfig` | `GET /api/ai/minutes/config` |
+| `getMinuteMeetings` | `GET /api/ai/minutes?q=&source=&status=&limit=&offset=` |
+| `createMinuteMeeting` / `uploadMinutePart` / `pause` / `resume` / `stopMinuteMeeting` | `POST /api/ai/minutes`, `/:id/parts`, `/:id/pause`, `/:id/resume`, `/:id/stop` (queued in `RecordingUploadQueue`, target `minute`) |
+| live captions / translation | socket `stt:start {session_kind:'minute'}`, `stt:audio {meeting_id, pcm}`, `minute:translate` → `stt:segment`, `minute:segment_tr` |
+| `getMinuteMeeting` / `updateMinuteMeeting` / `deleteMinuteMeeting` / `retryMinuteMeeting` | `GET/PATCH/DELETE /api/ai/minutes/:id`, `POST /:id/retry` |
+| `editMinuteSegment`, `summarizeMinuteMeeting`, `translateMinuteMeeting`, `askMinuteMeeting`, `createMinuteTasks` | `PATCH /:id/segments/:seq`, `POST /:id/summarize`, `/translate`, `/ask`, `/actions/create-tasks` |
+| `downloadMinuteExport`, `downloadMinuteMedia` | `GET /:id/export?format=pdf|docx|md|txt|srt|vtt`, `GET /:id/media` |
+| `getMinuteLinks` / `createMinuteLink` / `revokeMinuteLink`, `emailMinutes` | `GET/POST /:id/share/links`, `DELETE /share/links/:linkId`, `POST /:id/share/email` |
+| `MinuteUploader` | `POST /uploads`, `GET /uploads/:uid`, `PUT /uploads/:uid/parts/:n` (raw 16 MB parts), `POST /uploads/:uid/complete`, `DELETE /uploads/:uid` (phone video of a recording: `meeting_id` in the start body) |
+| rooms | `POST /rooms`, `GET /rooms/:mid`, `PATCH /rooms/:mid/settings`, `POST /rooms/:mid/end`, `GET /rooms/:mid/participants`, `POST /rooms/:mid/admit|remove|cohost|invite`; public `GET/POST /api/public/minutes/rooms/:code[/join|/leave]` |
+| room captions | socket `minute:room_join`, `minute:room_lang`, `minute:room_stt`, `minute:room_audio`, `minute:room_wait` → `minute:caption`, `minute:caption_tr`, `minute:room_admit`, `minute:room_waiting` |
+| processing | socket `ai:minute_status`, `ai:minute_ready`, `ai:minute_translation` |

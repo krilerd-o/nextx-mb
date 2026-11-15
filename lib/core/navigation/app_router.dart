@@ -8,6 +8,8 @@ import '../../screens/ai/assistant/ai_assistant_screen.dart';
 import '../../screens/ai/assistant/ai_shared_chat_screen.dart';
 import '../../screens/ai/isaac_coming_soon_screen.dart';
 import '../../screens/ai/isaac_embed_screen.dart';
+import '../../screens/minutes/minute_detail_screen.dart';
+import '../../screens/minutes/minutes_home_screen.dart';
 import '../../screens/notebook/notebook_home_screen.dart';
 import '../../screens/notebook/notebook_screen.dart';
 import '../../screens/approvals/approvals_screen.dart';
@@ -336,6 +338,9 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(path: '/ai/notebook', redirect: (_, _) => AppRoutes.notebook),
       GoRoute(path: '/ai/notebook/:id', redirect: (_, state) => notebookWebRedirect(state.pathParameters['id'] ?? '', state.uri.queryParameters)),
       GoRoute(path: AppRoutes.aiMinuteAuto, builder: (_, _) => const IsaacEmbedScreen(menu: 'minute_auto')),
+      GoRoute(path: AppRoutes.aiMinutes, builder: (_, state) => MinutesHomeScreen(key: ValueKey(state.uri.toString()), initialAction: state.uri.queryParameters['do'])),
+      GoRoute(path: '/ai-minutes/:id', builder: (_, state) => MinuteDetailScreen(key: ValueKey(state.pathParameters['id']), meetingId: state.pathParameters['id'] ?? '')),
+      GoRoute(path: '/m/:code', builder: (_, state) => MinutesHomeScreen(key: ValueKey(state.uri.toString()), initialAction: 'join:${state.pathParameters['code'] ?? ''}')),
       GoRoute(path: AppRoutes.isaacAgent, builder: (_, _) => const IsaacComingSoonScreen(product: 'agent')),
       GoRoute(path: AppRoutes.isaacSocialWatch, builder: (_, _) => const IsaacComingSoonScreen(product: 'social_watch')),
       GoRoute(

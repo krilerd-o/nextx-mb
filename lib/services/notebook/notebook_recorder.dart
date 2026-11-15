@@ -101,7 +101,7 @@ class NotebookRecorder extends ChangeNotifier {
   }) : _t = transport ?? RealtimeNotebookTransport(),
        _micFactory = mic ?? RecordMicTap.standalone,
        _queueOverride = queue,
-       _fg = foreground ?? NativeRecordingForeground(),
+       _fg = foreground ?? NativeRecordingForeground.shared,
        _now = now ?? DateTime.now,
        _permission = permission ?? defaultMicPermission {
     _sub = _t.events.listen(_onEvent);
@@ -659,6 +659,7 @@ class NotebookRecorder extends ChangeNotifier {
   }
 
   void _onAction(String a) {
+    if (!active) return; // the notification belongs to an AI Minute Meeting recording
     switch (a) {
       case 'pause':
         unawaited(pause());

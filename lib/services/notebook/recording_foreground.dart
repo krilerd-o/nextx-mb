@@ -26,6 +26,11 @@ class NativeRecordingForeground implements RecordingForeground {
     });
   }
 
+  /// One app-wide instance: the notebook and the AI Minute Meeting recorders share the Android
+  /// recording service (one channel handler; each recorder ignores actions while it is idle).
+  static NativeRecordingForeground? _shared;
+  static NativeRecordingForeground get shared => _shared ??= NativeRecordingForeground();
+
   final MethodChannel _ch;
   final _actions = StreamController<String>.broadcast();
 

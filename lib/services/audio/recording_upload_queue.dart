@@ -15,6 +15,9 @@ enum RecordingTarget {
 
   /// A notebook recording: `POST /api/ai/notebooks/:id/recordings[/:rid/parts|/stop]`.
   notebook,
+
+  /// An AI Minute Meeting recording: `POST /api/ai/minutes[/:id/parts|/stop]` ([RecordingPart.recordingId] = meeting id).
+  minute,
 }
 
 /// What a queued item does (notebook recordings also queue their create / stop so they keep their
@@ -46,7 +49,79 @@ class RecordingPart {
     this.title,
     this.locale,
     this.bookmarks = const [],
+    this.extra = const {},
   });
+
+  /// A part of an AI Minute Meeting recording ([meetingId] may be '' while its create is queued).
+  const RecordingPart.minute({
+    required String meetingId,
+    required this.clientSessionId,
+    required this.path,
+    required this.part,
+    this.isFinal = false,
+    this.parts = 0,
+    this.durationMs = 0,
+    this.businessId,
+    this.deviceId = '',
+    this.createdAt,
+  })  : recordingId = meetingId,
+        callId = '',
+        notebookId = '',
+        mime = 'audio/wav',
+        attempts = 0,
+        target = RecordingTarget.minute,
+        op = RecordingOp.part,
+        title = null,
+        locale = null,
+        bookmarks = const [],
+        extra = const {};
+
+  /// "Create the meeting" — queued when starting offline (idempotent on [clientSessionId]); [extra] = create body.
+  const RecordingPart.minuteCreate({
+    required this.clientSessionId,
+    this.title,
+    this.locale,
+    this.businessId,
+    this.deviceId = '',
+    this.createdAt,
+    this.extra = const {},
+  })  : callId = '',
+        notebookId = '',
+        path = '',
+        part = 0,
+        parts = 0,
+        isFinal = false,
+        durationMs = 0,
+        mime = 'audio/wav',
+        attempts = 0,
+        target = RecordingTarget.minute,
+        op = RecordingOp.create,
+        recordingId = '',
+        bookmarks = const [];
+
+  /// "Stop the meeting" after the final part; [extra] carries summary_mode / template / features / languages.
+  const RecordingPart.minuteStop({
+    required String meetingId,
+    required this.clientSessionId,
+    required this.durationMs,
+    this.parts = 0,
+    this.bookmarks = const [],
+    this.businessId,
+    this.deviceId = '',
+    this.createdAt,
+    this.extra = const {},
+  })  : recordingId = meetingId,
+        callId = '',
+        notebookId = '',
+        path = '',
+        part = 0,
+        isFinal = true,
+        mime = 'audio/wav',
+        attempts = 0,
+        target = RecordingTarget.minute,
+        op = RecordingOp.stop,
+        title = null,
+        locale = null;
 
   /// A part of a notebook recording ([recordingId] may still be '' while its create is queued).
   const RecordingPart.notebook({
@@ -68,7 +143,8 @@ class RecordingPart {
         op = RecordingOp.part,
         title = null,
         locale = null,
-        bookmarks = const [];
+        bookmarks = const [],
+        extra = const {};
 
   /// "Create the recording" — queued when starting offline (idempotent on [clientSessionId]).
   const RecordingPart.notebookCreate({
@@ -90,7 +166,8 @@ class RecordingPart {
         target = RecordingTarget.notebook,
         op = RecordingOp.create,
         recordingId = '',
-        bookmarks = const [];
+        bookmarks = const [],
+        extra = const {};
 
   /// "Stop the recording" — after the final part, so the server starts processing with every part.
   const RecordingPart.notebookStop({
@@ -112,7 +189,8 @@ class RecordingPart {
         target = RecordingTarget.notebook,
         op = RecordingOp.stop,
         title = null,
-        locale = null;
+        locale = null,
+        extra = const {};
 
   final String callId;
   final String path;
@@ -143,10 +221,18 @@ class RecordingPart {
   /// `[{at_ms, label?}]` (stop only).
   final List<Map<String, dynamic>> bookmarks;
 
+  /// Extra body of a minute create / stop (summary mode, template, features, languages …).
+  final Map<String, dynamic> extra;
+
+  /// Notebook and minute recordings: items keyed by a client session, with a create / stop.
+  bool get isSession => target != RecordingTarget.call;
+
   bool get hasFile => op == RecordingOp.part;
 
   /// Items of one recording (sent in order).
-  String get group => target == RecordingTarget.call ? 'call:$callId' : 'nb:${clientSessionId.isNotEmpty ? clientSessionId : recordingId}';
+  String get group => target == RecordingTarget.call
+      ? 'call:$callId'
+      : '${target == RecordingTarget.minute ? 'min' : 'nb'}:${clientSessionId.isNotEmpty ? clientSessionId : recordingId}';
 
   RecordingPart copyWith({int? attempts, String? recordingId, String? businessId, DateTime? createdAt}) => RecordingPart(
         callId: callId,
@@ -168,6 +254,7 @@ class RecordingPart {
         title: title,
         locale: locale,
         bookmarks: bookmarks,
+        extra: extra,
       );
 
   RecordingPart retried() => copyWith(attempts: attempts + 1);
@@ -186,13 +273,14 @@ class RecordingPart {
         'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
         if (target != RecordingTarget.call) 'target': target.name,
         if (op != RecordingOp.part) 'op': op.name,
-        if (target == RecordingTarget.notebook) ...{
-          'notebook_id': notebookId,
+        if (target != RecordingTarget.call) ...{
+          if (target == RecordingTarget.notebook) 'notebook_id': notebookId,
           'recording_id': recordingId,
           'client_session_id': clientSessionId,
           'title': ?title,
           'locale': ?locale,
           if (bookmarks.isNotEmpty) 'bookmarks': bookmarks,
+          if (extra.isNotEmpty) 'extra': extra,
         },
       };
 
@@ -209,6 +297,8 @@ class RecordingPart {
     if (op == RecordingOp.part && path.isEmpty) return null;
     if (target == RecordingTarget.call && (callId.isEmpty || op != RecordingOp.part)) return null;
     if (target == RecordingTarget.notebook && (notebookId.isEmpty || (recordingId.isEmpty && clientSessionId.isEmpty))) return null;
+    if (target == RecordingTarget.minute && recordingId.isEmpty && clientSessionId.isEmpty) return null;
+    final ex = j['extra'];
     final bm = j['bookmarks'];
     return RecordingPart(
       callId: callId,
@@ -230,6 +320,7 @@ class RecordingPart {
       title: j['title']?.toString(),
       locale: j['locale']?.toString(),
       bookmarks: bm is List ? [for (final b in bm) if (b is Map) Map<String, dynamic>.from(b)] : const [],
+      extra: ex is Map ? Map<String, dynamic>.from(ex) : const {},
     );
   }
 }
@@ -258,7 +349,22 @@ class RecordingUploadQueue extends ChangeNotifier {
   static final Map<RecordingTarget, RecordingSender> senders = {
     RecordingTarget.call: _sendCall,
     RecordingTarget.notebook: _sendNotebook,
+    RecordingTarget.minute: _sendMinute,
   };
+
+  static Future<String?> _sendMinute(ApiClient api, RecordingPart p) async {
+    switch (p.op) {
+      case RecordingOp.create:
+        final item = await api.createMinuteMeeting({...p.extra, 'title': ?p.title, 'locale': ?p.locale, 'device_id': p.deviceId, 'client_session_id': p.clientSessionId});
+        return '${item['id'] ?? ''}';
+      case RecordingOp.part:
+        await api.uploadMinutePart(p.recordingId, p.path, part: p.part, isFinal: p.isFinal, durationMs: p.durationMs);
+        return null;
+      case RecordingOp.stop:
+        await api.stopMinuteMeeting(p.recordingId, {...p.extra, 'duration_ms': p.durationMs, 'parts': p.parts, 'bookmarks': p.bookmarks});
+        return null;
+    }
+  }
 
   static Future<String?> _sendCall(ApiClient api, RecordingPart p) async {
     await api.uploadCallRecordingPart(p.callId, p.path, part: p.part, parts: p.parts, isFinal: p.isFinal, durationMs: p.durationMs, mime: p.mime, deviceId: p.deviceId);
@@ -303,7 +409,7 @@ class RecordingUploadQueue extends ChangeNotifier {
   /// Items still waiting for one notebook recording (by client session id or recording id).
   List<RecordingPart> pendingFor({String? clientSessionId, String? recordingId}) => [
         for (final p in _items)
-          if (p.target == RecordingTarget.notebook &&
+          if (p.isSession &&
               ((clientSessionId != null && clientSessionId.isNotEmpty && p.clientSessionId == clientSessionId) || (recordingId != null && recordingId.isNotEmpty && p.recordingId == recordingId)))
             p,
       ];
@@ -380,7 +486,7 @@ class RecordingUploadQueue extends ChangeNotifier {
     await load();
     // A notebook part queued after its create went through already knows the recording id.
     var item = p.copyWith(businessId: p.businessId ?? businessId, createdAt: p.createdAt ?? now());
-    if (item.target == RecordingTarget.notebook && item.recordingId.isEmpty) {
+    if (item.isSession && item.recordingId.isEmpty) {
       final known = _created[item.clientSessionId];
       if (known != null) item = item.copyWith(recordingId: known);
     }
@@ -435,7 +541,7 @@ class RecordingUploadQueue extends ChangeNotifier {
         await _save();
         continue;
       }
-      if (next.target == RecordingTarget.notebook && next.op != RecordingOp.create && next.recordingId.isEmpty) {
+      if (next.isSession && next.op != RecordingOp.create && next.recordingId.isEmpty) {
         // Its create is gone (refused for good): nowhere to send it.
         await _remove(next);
         _dropped.add(next);
@@ -450,7 +556,7 @@ class RecordingUploadQueue extends ChangeNotifier {
           _created[next.clientSessionId] = rid;
           for (var i = 0; i < _items.length; i++) {
             final p = _items[i];
-            if (p.target == RecordingTarget.notebook && p.clientSessionId == next.clientSessionId && p.recordingId.isEmpty) _items[i] = p.copyWith(recordingId: rid);
+            if (p.isSession && p.target == next.target && p.clientSessionId == next.clientSessionId && p.recordingId.isEmpty) _items[i] = p.copyWith(recordingId: rid);
           }
           await _save();
           _sent.add(next.copyWith(recordingId: rid));

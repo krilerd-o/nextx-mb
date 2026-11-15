@@ -20,11 +20,13 @@ class IsaacMenu {
 
   static const assistant = IsaacMenuItem('ai-assistant', '/ai', 'AI Assistant', 'ผู้ช่วย AI ถามตอบงาน CRM');
   static const notebook = IsaacMenuItem('isaac-notebook', '/notebook', 'AI Notebook', 'สมุดโน้ต AI จากไอแซค');
+  /// Native AI Minute Meeting (NEXTX `/api/ai/minutes`, menu `ai-minute-meeting`).
+  static const minuteMeeting = IsaacMenuItem('ai-minute-meeting', '/ai-minutes', 'AI Minute Meeting', 'บันทึก ถอดข้อความ สรุป แปล และห้องประชุม');
   static const minuteAuto = IsaacMenuItem('ai-minute-auto', '/ai-minute-auto', 'AI Minute Auto', 'จดบันทึกการประชุมอัตโนมัติ');
   static const agent = IsaacMenuItem('isaac-ai-agent', '/isaac-ai-agent', 'AI Agent', 'เร็วๆ นี้');
   static const socialWatch = IsaacMenuItem('isaac-social-watch', '/isaac-social-watch', 'AI Social Watch', 'เร็วๆ นี้');
 
-  static const all = [assistant, notebook, minuteAuto, agent, socialWatch];
+  static const all = [assistant, notebook, minuteMeeting, minuteAuto, agent, socialWatch];
 }
 
 /// What the web reads before drawing the ISAAC AI group:
@@ -80,6 +82,9 @@ class IsaacAccess {
         if (!on) return false;
         if (session.isSuperadmin || plugin?['audience'] != 'menu_permission') return true;
         return session.canAccess(item.key);
+      case 'ai-minute-meeting':
+        // A NEXTX menu of its own (Package + Role), not the ISAAC plugin.
+        return session.isSuperadmin || session.canAccess(item.key);
       case 'isaac-ai-agent':
       case 'isaac-social-watch':
         if (!pluginLoaded) return false;

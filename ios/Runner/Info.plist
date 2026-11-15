@@ -63,7 +63,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ใช้ไมโครโฟนสำหรับโทรและวิดีโอคอล, คำบรรยายสดและบันทึกเสียงในสาย (เมื่อคุณยินยอม) ให้ ISAAC สรุปการโทร, อัดเสียงประชุมใน ISAAC Notebook (อัดต่อได้แม้ปิดจอ) กับ AI Minute Auto และส่งข้อความเสียง</string>
 	<key>NSCameraUsageDescription</key>
-	<string>ใช้กล้องถ่ายหลักฐานเช็คอินและใบตรวจ</string>
+	<string>ใช้กล้องถ่ายหลักฐานเช็คอินและใบตรวจ วิดีโอคอล และห้องประชุม / บันทึกวิดีโอการประชุม</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>เลือกภาพหลักฐานเช็คอินและโปรไฟล์</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

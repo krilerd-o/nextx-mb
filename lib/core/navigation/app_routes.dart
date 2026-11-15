@@ -70,6 +70,12 @@ class AppRoutes {
   static const String notebook = '/notebook';
   static String notebookOf(String id) => '/notebook/${Uri.encodeComponent(id)}';
   static const String aiMinuteAuto = '/ai-minute-auto';
+
+  /// ไอแซคบันทึกประชุม (AI Minute Meeting): list, one meeting, quick actions, a room link (`/m/<code>`).
+  static const String aiMinutes = '/ai-minutes';
+  static String aiMinute(String id) => '/ai-minutes/${Uri.encodeComponent(id)}';
+  static String aiMinutesAction(String action) => '/ai-minutes?do=${Uri.encodeQueryComponent(action)}';
+  static String minuteRoomLink(String code) => '/m/${Uri.encodeComponent(code)}';
   static const String isaacAgent = '/isaac-ai-agent';
   static const String isaacSocialWatch = '/isaac-social-watch';
   static const String profile = '/profile';

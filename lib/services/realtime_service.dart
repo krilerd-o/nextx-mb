@@ -78,6 +78,15 @@ class RealtimeService extends ChangeNotifier {
     // stt:segment / stt:state with `recording_id`; the summary note when processing is done.
     'ai:notebook_recording_ready',
     'ai:notebook_recording_status',
+    // ไอแซคบันทึกประชุม (AI Minute Meeting): live translation, processing, rooms (captions / waiting room).
+    'minute:segment_tr',
+    'ai:minute_status',
+    'ai:minute_ready',
+    'ai:minute_translation',
+    'minute:caption',
+    'minute:caption_tr',
+    'minute:room_admit',
+    'minute:room_waiting',
   ];
 
   /// Synthetic event sent on every (re)connect.
@@ -202,6 +211,20 @@ class RealtimeService extends ChangeNotifier {
     final s = _socket;
     if (s == null || !connected) return;
     s.emit('stt:audio', notebookAudioArgs(recordingId, pcm));
+  }
+
+  /// AI Minute Meeting recording audio (`stt:audio {meeting_id, pcm}`). Dropped while offline.
+  void emitMinuteAudio(String meetingId, Uint8List pcm) {
+    final s = _socket;
+    if (s == null || !connected) return;
+    s.emit('stt:audio', {'meeting_id': int.tryParse(meetingId) ?? meetingId, 'pcm': socketBytes(pcm)});
+  }
+
+  /// AI Minute Meeting room: my microphone for live captions (`minute:room_audio`, after `minute:room_stt`).
+  void emitRoomAudio(Uint8List pcm) {
+    final s = _socket;
+    if (s == null || !connected) return;
+    s.emit('minute:room_audio', socketBytes(pcm));
   }
 
   /// Emit and wait for the server's acknowledgement (`{ok, ...}`); `{ok: false, error: 'timeout'}` after [timeout].
