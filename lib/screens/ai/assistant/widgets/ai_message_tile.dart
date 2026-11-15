@@ -350,19 +350,64 @@ class _AiTypingIndicatorState extends State<AiTypingIndicator> with SingleTicker
 
 /// Row of small actions under the latest reply.
 class AiReplyActions extends StatelessWidget {
-  const AiReplyActions({super.key, required this.onCopy, required this.onShare, this.onRegenerate, this.onMore});
+  const AiReplyActions({
+    super.key,
+    required this.onCopy,
+    required this.onShare,
+    this.onRegenerate,
+    this.onMore,
+    this.feedback,
+    this.onThumbUp,
+    this.onThumbDown,
+    this.onSpeak,
+    this.speaking = false,
+  });
   final VoidCallback onCopy;
   final VoidCallback onShare;
   final VoidCallback? onRegenerate;
   final VoidCallback? onMore;
 
+  /// 1 = 👍, -1 = 👎 (the user's own), null = none.
+  final int? feedback;
+  final VoidCallback? onThumbUp;
+  final VoidCallback? onThumbDown;
+
+  /// "อ่านออกเสียง" (tap again to stop).
+  final VoidCallback? onSpeak;
+  final bool speaking;
+
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(top: 2),
-      child: Row(
+      child: Wrap(
         children: [
           _ActionIcon(key: const ValueKey('ai-copy'), icon: NxI.copySimple, label: 'คัดลอก', onTap: onCopy),
+          if (onThumbUp != null)
+            _ActionIcon(
+              key: const ValueKey('ai-thumb-up'),
+              icon: feedback == 1 ? NxI.thumbsUpFill : NxI.thumbsUp,
+              label: 'ถูกใจคำตอบ',
+              color: feedback == 1 ? cs.primary : null,
+              onTap: onThumbUp,
+            ),
+          if (onThumbDown != null)
+            _ActionIcon(
+              key: const ValueKey('ai-thumb-down'),
+              icon: feedback == -1 ? NxI.thumbsDownFill : NxI.thumbsDown,
+              label: 'คำตอบยังไม่ดี',
+              color: feedback == -1 ? cs.error : null,
+              onTap: onThumbDown,
+            ),
+          if (onSpeak != null)
+            _ActionIcon(
+              key: const ValueKey('ai-speak'),
+              icon: speaking ? NxI.stop : NxI.speakerHigh,
+              label: speaking ? 'หยุดอ่าน' : 'อ่านออกเสียง',
+              color: speaking ? cs.primary : null,
+              onTap: onSpeak,
+            ),
           if (onRegenerate != null) _ActionIcon(key: const ValueKey('ai-regenerate'), icon: NxI.arrowsClockwise, label: 'สร้างใหม่', onTap: onRegenerate),
           _ActionIcon(icon: NxI.shareNetwork, label: 'แชร์', onTap: onShare),
           if (onMore != null) _ActionIcon(icon: NxI.dotsThree, label: 'เพิ่มเติม', onTap: onMore),
@@ -373,10 +418,11 @@ class AiReplyActions extends StatelessWidget {
 }
 
 class _ActionIcon extends StatelessWidget {
-  const _ActionIcon({super.key, required this.icon, required this.label, this.onTap});
+  const _ActionIcon({super.key, required this.icon, required this.label, this.onTap, this.color});
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -384,7 +430,7 @@ class _ActionIcon extends StatelessWidget {
     return IconButton(
       tooltip: tr(label),
       onPressed: onTap,
-      icon: Icon(icon, size: 18, color: cs.onSurfaceVariant),
+      icon: Icon(icon, size: 18, color: color ?? cs.onSurfaceVariant),
       constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
     );
   }

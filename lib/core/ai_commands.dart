@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Slash commands for the ISAAC composer: built-in ones, the business's quick
 /// prompts (`/api/ai/quick-prompts`) and the user's own (`/api/ai/my-prompts`).
@@ -266,4 +269,34 @@ TextSelection aiTemplateSelection(String template) {
   final m = RegExp(r'\[[^\]]*\]').firstMatch(template);
   if (m == null) return TextSelection.collapsed(offset: template.length);
   return TextSelection(baseOffset: m.start, extentOffset: m.end);
+}
+
+const _kCmdUse = 'ai.cmd_use';
+
+/// Counts a picked command (for the Home shortcuts).
+Future<void> aiCountCommandUse(String command) async {
+  try {
+    final p = await SharedPreferences.getInstance();
+    final m = Map<String, dynamic>.from(jsonDecode(p.getString(_kCmdUse) ?? '{}') as Map);
+    m[command] = (int.tryParse('${m[command] ?? 0}') ?? 0) + 1;
+    await p.setString(_kCmdUse, jsonEncode(m));
+  } catch (_) {}
+}
+
+/// The [n] most used commands, else lead / นัด / สรุป.
+Future<List<String>> aiTopCommands({int n = 3}) async {
+  const fallback = ['lead', 'นัด', 'สรุป'];
+  try {
+    final p = await SharedPreferences.getInstance();
+    final m = Map<String, dynamic>.from(jsonDecode(p.getString(_kCmdUse) ?? '{}') as Map);
+    final top = m.entries.toList()..sort((a, b) => (int.tryParse('${b.value}') ?? 0).compareTo(int.tryParse('${a.value}') ?? 0));
+    final out = [for (final e in top) e.key];
+    for (final f in fallback) {
+      if (out.length >= n) break;
+      if (!out.contains(f)) out.add(f);
+    }
+    return out.take(n).toList();
+  } catch (_) {
+    return fallback;
+  }
 }

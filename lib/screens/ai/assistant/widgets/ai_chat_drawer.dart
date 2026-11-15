@@ -331,6 +331,16 @@ class _AiChatDrawerState extends State<AiChatDrawer> {
         overflow: TextOverflow.ellipsis,
         style: theme.textTheme.bodyMedium?.copyWith(fontWeight: selected ? FontWeight.w600 : null),
       ),
+      // Found inside the chat's messages: the words around the match.
+      subtitle: chat.snippet == null
+          ? null
+          : Text(
+              chat.snippet!,
+              key: ValueKey('ai-snippet-${chat.id}'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
       trailing: _selecting ? null : IconButton(tooltip: tr('ตัวเลือก'), icon: const Icon(NxI.dotsThree, size: 18), onPressed: () => widget.onChatMenu(chat)),
       onTap: _selecting ? () => _toggleSelect(chat.id) : () => widget.onOpenChat(chat.id),
       onLongPress: _selecting ? null : () => widget.onChatMenu(chat),

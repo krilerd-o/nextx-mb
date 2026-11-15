@@ -53,6 +53,21 @@ Future<void> _ensureLocalNotifications() async {
   await androidPlugin?.createNotificationChannel(highImportanceChannel);
 }
 
+/// A local notification from inside the app (e.g. "ไอแซคตอบแล้ว"); tapping
+/// it opens [payload] (an app path). Tests replace it with [debugShowLocal].
+Future<void> showAppLocalNotification({required int id, required String title, required String body, String? payload}) async {
+  if (debugShowLocal != null) return debugShowLocal!(title, body, payload);
+  try {
+    await _ensureLocalNotifications();
+    await _localNotifications.show(id, title, body, foregroundNotificationDetails(), payload: payload);
+  } catch (_) {
+    /* no notification permission / platform: skip */
+  }
+}
+
+@visibleForTesting
+Future<void> Function(String title, String body, String? payload)? debugShowLocal;
+
 /// The one notification channel of the app (`high_importance_channel`).
 const highImportanceChannel = AndroidNotificationChannel(
   _androidChannelId,

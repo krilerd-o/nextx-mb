@@ -4111,6 +4111,19 @@ const Map<String, String> enStrings = {
   'ให้ไอแซคกรอก': 'Let Isaac fill',
   'ไอแซคกรอกให้': 'Filled by Isaac',
   'สร้างเคส': 'Create case',
+  // AI extras (feedback, read aloud, shortcuts)
+  'ด่วน': 'Urgent',
+  'ไอแซคตอบแล้ว': 'Isaac replied',
+  'ขอบคุณ — ไอแซคจะนำไปปรับปรุง': 'Thanks — Isaac will use this to improve',
+  'ถูกใจคำตอบ': 'Good answer',
+  'คำตอบยังไม่ดี': 'Bad answer',
+  'หยุดอ่าน': 'Stop reading',
+  'อ่านออกเสียง': 'Read aloud',
+  'ตอบไม่ครบ': 'Incomplete',
+  'ไม่ตรงคำถาม': 'Off topic',
+  'ช้าเกินไป': 'Too slow',
+  'คำตอบนี้ยังไม่ดีเพราะ': 'What\'s wrong with this answer',
+  'ไอแซคด่วน': 'Isaac shortcuts',
 };
 
 /// Thai templates with `{}` holes (from interpolated strings) → English.
@@ -4753,4 +4766,6 @@ const Map<String, String> enHistory = {
   'อาจซ้ำกับ {} ({})': 'May duplicate {} ({})',
   'สร้าง {} **{}** แล้ว': 'Created {} **{}**',
   'สร้าง{} **{}** แล้ว': 'Created {} **{}**',
+  '{} รายการสินค้า': '{} product lines',
+  '{} — ตรวจสอบก่อนบันทึก': '{} — check before saving',
 };

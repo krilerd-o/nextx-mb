@@ -45,6 +45,9 @@ class AiMessage {
   bool streaming;
   String? error;
 
+  /// 👍 = 1, 👎 = -1 (the user's own feedback on an answer).
+  int? feedback;
+
   /// Tools the agent ran for this reply (`tool_start` / `tool_done`): `{name, label, done}`.
   /// Shown live while streaming; not saved.
   List<Map<String, dynamic>> toolSteps = [];
@@ -65,7 +68,7 @@ class AiMessage {
         provider: m['provider']?.toString(),
         model: m['model']?.toString(),
         createdAt: m['created_at']?.toString(),
-      );
+      )..feedback = m['feedback'] is Map ? int.tryParse('${(m['feedback'] as Map)['rating']}') : null;
 
   /// Body for `POST /ai/conversations/:id/messages` (web `persistMessage`).
   Map<String, dynamic> toSaveJson() => {
@@ -82,7 +85,7 @@ class AiMessage {
 }
 
 class AiConversation {
-  const AiConversation({required this.id, required this.title, this.starred = false, this.projectId, this.updatedAt, this.mode, this.archived = false});
+  const AiConversation({required this.id, required this.title, this.starred = false, this.projectId, this.updatedAt, this.mode, this.archived = false, this.snippet});
   final String id;
   final String title;
   final bool starred;
@@ -90,6 +93,9 @@ class AiConversation {
   final String? updatedAt;
   final String? mode;
   final bool archived;
+
+  /// Search hit inside the chat's messages (text around the match).
+  final String? snippet;
 
   AiConversation copyWith({String? title, bool? starred, String? projectId, bool clearProject = false, bool? archived}) => AiConversation(
         id: id,
@@ -109,6 +115,7 @@ class AiConversation {
         updatedAt: (m['updated_at'] ?? m['created_at'])?.toString(),
         mode: m['mode']?.toString(),
         archived: m['archived'] == true || m['archived'] == 1,
+        snippet: (m['snippet'] as Object?)?.toString(),
       );
 }
 

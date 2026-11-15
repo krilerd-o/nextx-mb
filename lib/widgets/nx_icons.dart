@@ -196,6 +196,10 @@ class NxI {
   static const arrowDownToLine = LucideIcons300.arrowDownToLine;
   static const messageSquarePlus = LucideIcons300.messageSquarePlus;
   static const wandSparkles = LucideIcons300.wandSparkles;
+  static const thumbsUp = LucideIcons300.thumbsUp;
+  static const thumbsDown = LucideIcons300.thumbsDown;
+  static const thumbsUpFill = LucideIcons500.thumbsUp;
+  static const thumbsDownFill = LucideIcons500.thumbsDown;
   static const sparkle = LucideIcons300.sparkles;
   static const sparkleFill = LucideIcons500.sparkles;
   static const copySimple = LucideIcons300.copy;

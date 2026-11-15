@@ -239,6 +239,7 @@ Future<String?> showAiMessageActions(BuildContext context, {required bool isUser
         if (isUser && canEdit) const _Act(key: ValueKey('ai-act-edit'), icon: NxI.pencilSimple, label: 'แก้ไขแล้วส่งใหม่', value: 'edit'),
         if (isUser) const _Act(key: ValueKey('ai-act-save-command'), icon: AiIcons.slash, label: 'บันทึกเป็นคำสั่งของฉัน', value: 'save'),
         if (!isUser && canRegenerate) const _Act(icon: NxI.arrowsClockwise, label: 'สร้างคำตอบใหม่', value: 'regenerate'),
+        if (!isUser) const _Act(key: ValueKey('ai-act-speak'), icon: NxI.speakerHigh, label: 'อ่านออกเสียง', value: 'speak'),
       ],
     ),
   );
@@ -329,6 +330,24 @@ Future<AiCommand?> showAiCreatePicker(BuildContext context, List<AiCommand> comm
             onTap: () => Navigator.pop(context, c),
           ),
         if (commands.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text(tr('คุณยังไม่มีสิทธิ์สร้างรายการ'))),
+      ],
+    ),
+  );
+}
+
+/// 👎: what was wrong (optional) → note sent with the feedback; null = cancelled.
+Future<String?> showAiThumbDownSheet(BuildContext context) {
+  const reasons = ['ข้อมูลไม่ถูกต้อง', 'ตอบไม่ครบ', 'ไม่ตรงคำถาม', 'ช้าเกินไป', 'อื่นๆ'];
+  return showAppBottomSheet<String>(
+    context: context,
+    title: 'คำตอบนี้ยังไม่ดีเพราะ',
+    child: Wrap(
+      key: const ValueKey('ai-thumb-down-sheet'),
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final r in reasons)
+          ActionChip(key: ValueKey('ai-thumb-reason-$r'), label: Text(tr(r)), onPressed: () => Navigator.pop(context, r)),
       ],
     ),
   );

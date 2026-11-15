@@ -1985,6 +1985,18 @@ class ApiClient {
 
   Future<void> deleteAiMyPrompt(String id) async => _send('DELETE', '/api/ai/my-prompts/$id');
 
+  /// 👍 / 👎 on an answer (rating 1 / -1, 0 clears).
+  Future<void> postAiFeedback(String conversationId, String messageId, int rating, {String? note}) async =>
+      _send('POST', '/api/ai/conversations/$conversationId/messages/$messageId/feedback', data: {'rating': rating, 'note': ?note});
+
+  /// Reads [text] aloud: the mp3 bytes (server TTS of the business).
+  Future<List<int>> aiSpeech(String text) async {
+    final r = _dataMap(await _send('POST', '/api/ai/tts', data: {'text': text}));
+    final url = '${r['downloadUrl'] ?? ''}';
+    if (url.isEmpty) throw StateError('no audio');
+    return _downloadBytes(url, receiveTimeout: const Duration(minutes: 2));
+  }
+
   /// "ไอแซคช่วยกรอก": suggested values for a create form from free text.
   /// [module]: lead / contact / account / case / activity / quotation / workspace_item.
   Future<AiFillResult> extractAiFields(String module, String text, {String? contextModule, String? contextId, String? contextTitle}) async {

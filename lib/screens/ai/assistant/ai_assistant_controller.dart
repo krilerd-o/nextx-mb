@@ -137,6 +137,18 @@ class AiAssistantController extends ChangeNotifier {
   CancelToken? _cancel;
   bool _disposed = false;
 
+  /// The user left (screen closed / app in the background) while Isaac was
+  /// answering: tell them when it is done.
+  bool notifyOnFinish = false;
+  void Function(String chatId, String title, String text)? onBackgroundReply;
+
+  /// Screen closed mid-answer: finish the answer, then dispose.
+  bool disposeWhenIdle = false;
+
+  /// A message is on its way (creating the chat, saving, or streaming).
+  bool _starting = false;
+  bool get busy => sending || _starting;
+
   bool get quotaExhausted {
     final u = usage;
     if (u == null || u['meters_cloud'] == false) return false;
@@ -382,6 +394,7 @@ class AiAssistantController extends ChangeNotifier {
     );
     final prior = List<AiMessage>.from(messages);
     messages = [...messages, user];
+    _starting = true;
     _notify();
     try {
       final titleHint = trimmed.isNotEmpty ? (trimmed.length > 80 ? trimmed.substring(0, 80) : trimmed) : '${attachments.first['original_name'] ?? 'แชทใหม่'}';
@@ -390,6 +403,9 @@ class AiAssistantController extends ChangeNotifier {
       await _stream(convId, aiHistoryForApi([...prior, user]), _imageIds(attachments), deep: deep);
     } catch (e) {
       _fail(e);
+    } finally {
+      _starting = false;
+      if (disposeWhenIdle && !_disposed) dispose();
     }
   }
 
@@ -550,6 +566,10 @@ class AiAssistantController extends ChangeNotifier {
       _notify();
       await _save(convId, reply);
       _loadFollowUps(history, reply.content);
+      if (notifyOnFinish && onBackgroundReply != null) {
+        notifyOnFinish = false;
+        onBackgroundReply!(convId, activeTitle, reply.content);
+      }
       // Title comes from the first message on the server: refresh the list.
       unawaited(loadConversations());
     } catch (e) {
@@ -562,6 +582,7 @@ class AiAssistantController extends ChangeNotifier {
       sending = false;
       status = null;
       _notify();
+      if (disposeWhenIdle && !_disposed) dispose();
     }
   }
 
@@ -726,6 +747,23 @@ class AiAssistantController extends ChangeNotifier {
       await _save(convId, reply);
       unawaited(loadConversations());
     } catch (e) {
+      error = aiErrorText(e);
+      _notify();
+    }
+  }
+
+  /// 👍 (1) / 👎 (-1) on an answer; the same again clears it.
+  Future<void> setFeedback(AiMessage m, int rating, {String? note}) async {
+    final id = activeId;
+    if (id == null || m.id == null) return;
+    final before = m.feedback;
+    final next = before == rating && note == null ? 0 : rating;
+    m.feedback = next == 0 ? null : next;
+    _notify();
+    try {
+      await api.postAiFeedback(id, m.id!, next, note: note);
+    } catch (e) {
+      m.feedback = before;
       error = aiErrorText(e);
       _notify();
     }

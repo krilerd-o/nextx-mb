@@ -32,6 +32,8 @@ import '../web_session_screen.dart';
 import 'ai_assistant_controller.dart';
 import 'ai_cards.dart';
 import 'ai_create_flow.dart';
+import 'ai_speaker.dart';
+import '../../../services/device_push_service.dart' show showAppLocalNotification;
 import 'ai_project_screen.dart';
 import 'ai_prompt_library_screen.dart';
 import 'widgets/ai_chat_drawer.dart';
@@ -47,7 +49,16 @@ import 'widgets/ai_welcome.dart';
 /// three header controls, quick starters, `/` commands, `@` records, answer
 /// modes, folders and smooth streaming.
 class AiAssistantScreen extends StatefulWidget {
-  const AiAssistantScreen({super.key, this.controller, this.contextModule, this.contextId, this.contextTitle, this.initialPrompt});
+  const AiAssistantScreen({
+    super.key,
+    this.controller,
+    this.contextModule,
+    this.contextId,
+    this.contextTitle,
+    this.initialPrompt,
+    this.initialChatId,
+    this.initialCommand,
+  });
 
   /// For tests.
   final AiAssistantController? controller;
@@ -60,11 +71,17 @@ class AiAssistantScreen extends StatefulWidget {
   /// Text put in the input on open (e.g. Home brief → "ถามต่อ").
   final String? initialPrompt;
 
+  /// Chat to open (notification "ไอแซคตอบแล้ว").
+  final String? initialChatId;
+
+  /// A command to have waiting in the composer (Home shortcut), e.g. `lead`.
+  final String? initialCommand;
+
   @override
   State<AiAssistantScreen> createState() => _AiAssistantScreenState();
 }
 
-class _AiAssistantScreenState extends State<AiAssistantScreen> {
+class _AiAssistantScreenState extends State<AiAssistantScreen> with WidgetsBindingObserver {
   late final AiAssistantController _c = widget.controller ?? AiAssistantController(context.read<AppConfig>().apiClient);
   final _input = TextEditingController();
   final _focus = FocusNode();
@@ -134,6 +151,17 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   void initState() {
     super.initState();
     _c.addListener(_onChange);
+    WidgetsBinding.instance.addObserver(this);
+    AiSpeaker.instance.speaking.addListener(_onSpeaking);
+    _c.onBackgroundReply = (chatId, title, text) {
+      final body = text.replaceAll(RegExp(r'[#*_`>|]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
+      showAppLocalNotification(
+        id: chatId.hashCode & 0x7fffffff,
+        title: tr('ไอแซคตอบแล้ว'),
+        body: '${title.isEmpty ? '' : '$title: '}${body.length > 120 ? '${body.substring(0, 120)}…' : body}',
+        payload: AppRoutes.aiOpenChat(chatId),
+      );
+    };
     _c.streamTick.addListener(_follow);
     _focus.addListener(() => setState(() {}));
     _input.addListener(_onInput);
@@ -149,7 +177,16 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       _input.value = TextEditingValue(text: t, selection: aiTemplateSelection(t));
     }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      unawaited(_c.init());
+      unawaited(_c.init().then((_) {
+        if (!mounted) return;
+        final chat = widget.initialChatId;
+        if (chat != null && chat.isNotEmpty) _c.open(chat);
+        final cmd = widget.initialCommand;
+        if (cmd != null && cmd.isNotEmpty) {
+          final c = _usableCommands().where((x) => x.command == cmd).firstOrNull;
+          if (c != null) _pickCommand(c);
+        }
+      }));
       if (mounted) IsaacSticker.preload(context);
       await _loadPrefs();
     });
@@ -182,7 +219,17 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     _draftSave?.cancel();
     _c.removeListener(_onChange);
     _c.streamTick.removeListener(_follow);
-    if (widget.controller == null) _c.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    AiSpeaker.instance.speaking.removeListener(_onSpeaking);
+    if (widget.controller == null) {
+      if (_c.busy) {
+        // Left mid-answer: let Isaac finish, notify, then let go.
+        _c.notifyOnFinish = true;
+        _c.disposeWhenIdle = true;
+      } else {
+        _c.dispose();
+      }
+    }
     _input.dispose();
     _focus.dispose();
     _scroll.dispose();
@@ -335,6 +382,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
   void _pickCommand(AiCommand c) {
     HapticFeedback.selectionClick();
+    unawaited(aiCountCommandUse(c.command));
     if (c.isCreate) {
       // Becomes a chip: type / speak the details (or nothing) and send.
       setState(() {
@@ -761,8 +809,41 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             if (mounted) _snack(aiErrorText(e));
           }
         }
+      case 'speak':
+        await _speak(m);
       case 'regenerate':
         await _c.regenerate();
+    }
+  }
+
+  Future<void> _thumbDown(AiMessage m) async {
+    HapticFeedback.selectionClick();
+    if (m.feedback == -1) return _c.setFeedback(m, -1); // clear
+    final why = await showAiThumbDownSheet(context);
+    if (why == null || !mounted) return;
+    await _c.setFeedback(m, -1, note: why);
+    if (mounted) _snack('ขอบคุณ — ไอแซคจะนำไปปรับปรุง');
+  }
+
+  Future<void> _speak(AiMessage m) async {
+    try {
+      await AiSpeaker.instance.toggle(_c.api, m, m.content);
+    } catch (e) {
+      if (mounted) _snack(aiErrorText(e));
+    }
+  }
+
+  void _onSpeaking() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // In the background while Isaac answers: say so when it is done.
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      if (_c.busy) _c.notifyOnFinish = true;
+    } else if (state == AppLifecycleState.resumed) {
+      _c.notifyOnFinish = false;
     }
   }
 
@@ -1131,6 +1212,14 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               onRegenerate: _c.sending ? null : _c.regenerate,
               onShare: () => Share.share(m.content),
               onMore: () => _messageActions(m),
+              feedback: m.feedback,
+              onThumbUp: m.id == null ? null : () {
+                HapticFeedback.selectionClick();
+                _c.setFeedback(m, 1);
+              },
+              onThumbDown: m.id == null ? null : () => _thumbDown(m),
+              onSpeak: () => _speak(m),
+              speaking: AiSpeaker.instance.speaking.value == m,
             )
           : null,
     );

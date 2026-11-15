@@ -60,6 +60,12 @@ class AppRoutes {
   static const String aiChat = '/ai';
   static String aiShared(String token) => '/share/ai/${Uri.encodeComponent(token)}';
 
+  /// AI Assistant opening chat [id] (notification "ไอแซคตอบแล้ว").
+  static String aiOpenChat(String id) => Uri(path: aiChat, queryParameters: {'chat': id}).toString();
+
+  /// AI Assistant with command [cmd] waiting in the composer (Home shortcut).
+  static String aiCommand(String cmd) => Uri(path: aiChat, queryParameters: {'cmd': cmd}).toString();
+
   /// AI Assistant with [prompt] ready in the input (not sent).
   static String aiWithPrompt(String prompt) => Uri(path: aiChat, queryParameters: {'prompt': prompt}).toString();
 
