@@ -83,7 +83,8 @@ void main() {
       extra: {'POST /api/ai/conversations': {'id': 'c9', 'title': 'x'}, 'POST /api/ai/conversations/c9/messages': {'ok': true}},
     );
     expect(find.byKey(const ValueKey('ai-context')), findsOneWidget);
-    expect(find.textContaining('[QA] ลูกค้า A'), findsOneWidget);
+    expect(find.textContaining('[QA] ลูกค้า A'), findsWidgets); // chip + record card
+    expect(find.byKey(const ValueKey('ai-record-card')), findsOneWidget);
     expect(find.text('สรุปรายการนี้ให้หน่อย และควรทำอะไรต่อ'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('ai-send')));
     for (var i = 0; i < 10; i++) {

@@ -33,7 +33,11 @@ class NxEntityForm extends StatefulWidget {
     this.sections = const {},
     this.sectionOrder = const [],
     this.requiredOnly = false,
+    this.aiFilled = const {},
   });
+
+  /// Fields Isaac filled ("ไอแซคช่วยกรอก"): a small ✨ shows on each until edited.
+  final Set<String> aiFilled;
 
   /// Groups fields into titled cards (web "modern form" sections) when set.
   final String Function(String name)? sectionOf;
@@ -209,7 +213,7 @@ class NxEntityFormState extends State<NxEntityForm> {
         errorText: trn(widget.errors[name]),
         host: _host,
         onChanged: (v) => widget.onChanged(name, v),
-      ),
+      ).withAiMark(context, widget.aiFilled.contains(name), name),
       ),
     );
   }
@@ -701,5 +705,41 @@ void applyFieldDefaults(List<Map<String, dynamic>> fields, Map<String, dynamic> 
     if (d != null && d.toString().isNotEmpty) {
       values[name] = d;
     }
+  }
+}
+
+extension _AiMark on Widget {
+  /// ✨ in the field's corner when Isaac filled it.
+  Widget withAiMark(BuildContext context, bool on, String name) {
+    if (!on) return this;
+    final cs = Theme.of(context).colorScheme;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        this,
+        Positioned(
+          right: 4,
+          top: 0,
+          child: IgnorePointer(
+            child: Semantics(
+              label: tr('ไอแซคกรอกให้'),
+              child: Container(
+                key: ValueKey('ai-filled-$name'),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(NxI.sparkle, size: 11, color: cs.primary),
+                    const SizedBox(width: 3),
+                    Text(tr('ไอแซค'), style: TextStyle(fontSize: 10, color: cs.primary, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

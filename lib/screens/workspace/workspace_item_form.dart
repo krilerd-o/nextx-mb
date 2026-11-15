@@ -14,6 +14,8 @@ import '../../widgets/nx_app_header.dart';
 import '../../widgets/nx_hero_cta.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_unsaved_guard.dart';
+import '../../core/ai_fill.dart';
+import '../../widgets/ai_fill_box.dart';
 
 /// Create / edit / duplicate a Workspace item (Epic, Task, Bug, Story,
 /// Subtask, Checklist). Same fields and defaults as the NEXTX web form.
@@ -30,7 +32,22 @@ class WorkspaceItemFormScreen extends StatefulWidget {
     this.duplicateFrom,
     this.parent,
     this.users = const {},
+    this.initial,
+    this.aiFill,
+    this.aiFilledKeys = const [],
+    this.aiChatText,
   });
+
+  /// "ไอแซคช่วยกรอก" (from the AI chat).
+  final AiFillFn? aiFill;
+
+  /// Fields of [initial] Isaac filled (✨).
+  final List<String> aiFilledKeys;
+  final String Function()? aiChatText;
+
+  /// Prefilled values for a new item (e.g. from the AI chat): title,
+  /// description, priority, due_date, assignee_id (`{id, label}`), epic_id.
+  final Map<String, dynamic>? initial;
 
   /// user id → name (labels for people fields).
   final Map<String, String> users;
@@ -69,6 +86,21 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
   Map<String, String> _errors = {};
   bool _saving = false;
   bool _copyChildren = true;
+  AiFillResult? _ai;
+  late final Set<String> _aiFilled = {...widget.aiFilledKeys};
+
+  void _applyAi(AiFillResult r) {
+    setState(() {
+      _ai = r;
+      _aiFilled.clear();
+      r.values.forEach((k, v) {
+        if (k == 'board_id') return;
+        _values[k] = k.endsWith('_date') ? (taskDateOnly(v) ?? v) : v;
+        _errors.remove(k);
+        _aiFilled.add(k);
+      });
+    });
+  }
   List<String> _labelOptions = const [];
 
   bool get _isEdit => widget.edit != null;
@@ -108,6 +140,11 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
     if (widget.duplicateFrom != null) {
       _values['title'] = '${_values['title'] ?? ''} ${tr('(สำเนา)')}'.trim();
       _values.remove('status_id');
+    }
+    if (!_isEdit && widget.initial != null) {
+      widget.initial!.forEach((k, v) {
+        if (v != null && '$v'.isNotEmpty) _values[k] = k.endsWith('_date') ? (taskDateOnly(v) ?? v) : v;
+      });
     }
     if (!_isEdit) {
       // Defaults like the web: initial status, medium priority, reporter/assignee = me.
@@ -324,6 +361,17 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               children: [
+                if (widget.aiFill != null && !_isEdit)
+                  AiFillBox(extract: widget.aiFill!, onResult: _applyAi, chatText: widget.aiChatText),
+                if (_ai != null && !_ai!.isEmpty)
+                  AiFilledBanner(
+                    result: _ai!,
+                    labelOf: (n) => '${_fields.firstWhere((f) => f['name'] == n, orElse: () => {'label': n})['label']}',
+                    onPick: (field, c) => setState(() {
+                      _values[field] = {'id': '${c['id']}', 'label': '${c['label'] ?? c['id']}'};
+                      _aiFilled.add(field);
+                    }),
+                  ),
                 if (richDesc)
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -345,9 +393,11 @@ class _WorkspaceItemFormScreenState extends State<WorkspaceItemFormScreen> {
                   sectionOf: (name) => '${_fields.firstWhere((f) => f['name'] == name, orElse: () => {'_s': 'main'})['_s']}',
                   sections: _sections,
                   sectionOrder: const ['main', 'people', 'time', 'group'],
+                  aiFilled: _aiFilled,
                   onChanged: (name, v) => setState(() {
                     _values[name] = v;
                     _errors.remove(name);
+                    _aiFilled.remove(name);
                   }),
                 ),
                 if (widget.duplicateFrom != null && _kind == 'task')

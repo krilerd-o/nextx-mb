@@ -44,28 +44,41 @@ Future<FakeNextxAdapter> _pump(WidgetTester tester, {Size size = const Size(400,
   return adapter;
 }
 
+/// The chat row in the docked history (the welcome screen lists recent chats too).
+Finder _side(String text) => find.descendant(of: find.byKey(const ValueKey('ai-chat-sidebar')), matching: find.text(text));
+
 void main() {
   testWidgets('tablet: chats stay docked on the left, no drawer button', (tester) async {
     await _pump(tester, size: const Size(1200, 900));
     expect(find.byKey(const ValueKey('ai-chat-sidebar')), findsOneWidget);
     expect(find.byKey(const ValueKey('ai-open-chats')), findsNothing);
-    expect(find.text('[QA] แชทเก่า'), findsOneWidget);
+    expect(_side('[QA] แชทเก่า'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
   });
 
-  testWidgets('project filter shows only that project; move sends project_id', (tester) async {
-    final adapter = await _pump(tester, size: const Size(1200, 900));
-    expect(find.byKey(const ValueKey('ai-project-filter')), findsOneWidget);
-    await tester.tap(find.text('[QA] โปรเจกต์ A'));
-    await tester.pump();
-    expect(find.text('[QA] แชทเก่า'), findsNothing);
-    expect(find.text('[QA] แชทโปรเจกต์'), findsOneWidget);
-    await tester.tap(find.text('ทั้งหมด'));
-    await tester.pump();
-
-    await tester.longPress(find.text('[QA] แชทเก่า'));
+  testWidgets('folders: listed with a count, folder page shows its chats, move sends project_id', (tester) async {
+    final adapter = await _pump(tester, size: const Size(1200, 900), extra: {
+      'GET /api/ai/projects': {
+        'items': [
+          {'id': 3, 'name': '[QA] โปรเจกต์ A', 'chat_count': 1, 'instructions': '[QA] ตอบเป็นข้อ ๆ'},
+        ],
+      },
+    });
+    expect(find.byKey(const ValueKey('ai-folder-3')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('ai-folder-3')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('ย้ายไปโปรเจกต์'));
+    expect(find.byKey(const ValueKey('ai-folder-screen')), findsOneWidget);
+    expect(find.text('[QA] ตอบเป็นข้อ ๆ'), findsOneWidget); // folder instructions
+    final list = adapter.calls.lastWhere((c) => c.path == '/api/ai/conversations');
+    expect(list.queryParameters['project_id'], '3');
+    expect(find.byKey(const ValueKey('ai-folder-chat-8')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-folder-chat-7')), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.longPress(_side('[QA] แชทเก่า'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ย้ายไปโฟลเดอร์'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('[QA] โปรเจกต์ A').last);
     await tester.pump(const Duration(milliseconds: 200));
@@ -76,20 +89,20 @@ void main() {
 
   testWidgets('delete hides at once; undo keeps it (no DELETE)', (tester) async {
     final adapter = await _pump(tester, size: const Size(1200, 900));
-    await tester.longPress(find.text('[QA] แชทเก่า'));
+    await tester.longPress(_side('[QA] แชทเก่า'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('ลบ').last);
     await tester.pumpAndSettle();
-    expect(find.text('[QA] แชทเก่า'), findsNothing);
+    expect(_side('[QA] แชทเก่า'), findsNothing);
     await tester.tap(find.text('เลิกทำ'));
     await tester.pumpAndSettle();
-    expect(find.text('[QA] แชทเก่า'), findsOneWidget);
+    expect(_side('[QA] แชทเก่า'), findsOneWidget);
     expect(adapter.callKeys, isNot(contains('DELETE /api/ai/conversations/7')));
   });
 
   testWidgets('delete without undo removes it on the server', (tester) async {
     final adapter = await _pump(tester, size: const Size(1200, 900));
-    await tester.longPress(find.text('[QA] แชทเก่า'));
+    await tester.longPress(_side('[QA] แชทเก่า'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('ลบ').last);
     await tester.pumpAndSettle();
@@ -119,7 +132,7 @@ void main() {
     final last = adapter.calls.lastWhere((c) => c.path == '/api/ai/usage');
     expect(last.queryParameters['provider'], 'gemini');
     expect(last.queryParameters['model'], 'gemini-2.5-flash');
-    expect(find.text('gemini-2.5-flash'), findsWidgets); // model chip
+    expect(find.text('gemini-2.5-flash'), findsWidgets); // mode chip shows the picked model
     await tester.pump(const Duration(seconds: 4));
   });
 
@@ -148,6 +161,10 @@ void main() {
       },
     });
     await tester.tap(find.byKey(const ValueKey('ai-model')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ai-mode-sheet')), findsOneWidget);
+    expect(find.text('Gemini'), findsNothing); // models folded under "ขั้นสูง"
+    await tester.tap(find.byKey(const ValueKey('ai-mode-advanced')));
     await tester.pumpAndSettle();
     expect(find.text('ChatGPT'), findsNothing);
     await tester.tap(find.text('Gemini'));
@@ -188,7 +205,7 @@ void main() {
       ],
       'POST /api/ai/tools/confirm': {'ok': true},
     });
-    await tester.tap(find.text('[QA] แผนงาน').first);
+    await tester.tap(_side('[QA] แผนงาน'));
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }

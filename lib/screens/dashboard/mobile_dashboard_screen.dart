@@ -36,6 +36,7 @@ import 'home_charts.dart';
 import 'home_edit_mode.dart';
 import 'home_hero.dart';
 import 'home_isaac.dart';
+import 'home_isaac_shortcuts.dart';
 import 'home_widgets.dart';
 import 'widget_gallery_sheet.dart';
 import '../hr/attendance_punch_sheet.dart';
@@ -922,6 +923,10 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
                   key: ValueKey('home-isaac-card|${context.read<AppConfig>().businessScope}'),
                   suggestion: isaacSuggestion(_brief(counts, clockIn)),
                   facts: () => _isaacFacts(counts, clockIn, clockOut),
+                ),
+                const SizedBox(height: kHomeWidgetGap),
+                IsaacShortcuts(
+                  allowed: (c) => c.create == null || MenuAccess.allow(session, c.create == 'workspace_item' ? MenuAccess.workspace : EntityModules.menuKeyOf(c.create!)),
                 ),
               ],
             ],

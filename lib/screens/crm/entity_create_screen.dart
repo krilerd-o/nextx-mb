@@ -20,6 +20,8 @@ import '../../widgets/fields/field_validate.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/nx_unsaved_guard.dart';
 import '../doc_form/doc_form_launcher.dart';
+import '../../core/ai_fill.dart';
+import '../../widgets/ai_fill_box.dart';
 
 class EntityCreateScreen extends StatefulWidget {
   const EntityCreateScreen({
@@ -34,6 +36,10 @@ class EntityCreateScreen extends StatefulWidget {
     this.onFinished,
     this.autoScan = false,
     this.genericForm = false,
+    this.aiFill,
+    this.aiFillText,
+    this.aiChatText,
+    this.onCreated,
   });
 
   final String module;
@@ -50,6 +56,18 @@ class EntityCreateScreen extends StatefulWidget {
 
   /// Quotation / job open their step forms; true keeps the plain field list.
   final bool genericForm;
+
+  /// "ไอแซคช่วยกรอก" (from the AI chat): fills the form from text.
+  final AiFillFn? aiFill;
+
+  /// Text typed after the /command — filled in as soon as the form is ready.
+  final String? aiFillText;
+
+  /// The chat so far, for "เติมจากแชทนี้".
+  final String Function()? aiChatText;
+
+  /// New record saved: its id and the values sent (for the chat's result card).
+  final void Function(String id, Map<String, dynamic> values)? onCreated;
 
   bool get isEdit => recordId != null && recordId!.isNotEmpty;
 
@@ -110,6 +128,39 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
     });
     // The green "เติมจากนามบัตร" banner says what was filled (no snackbar over the Save button).
     HapticFeedback.lightImpact();
+  }
+
+  /// What Isaac filled last (banner + ✨ until the field is edited).
+  AiFillResult? _ai;
+  final Set<String> _aiFilled = {};
+
+  void _applyAi(AiFillResult r) {
+    final names = {for (final f in _fields) fieldName(f)};
+    setState(() {
+      _ai = r;
+      _aiFilled.clear();
+      r.values.forEach((k, v) {
+        if (!names.contains(k)) return;
+        _values[k] = v;
+        _errors.remove(k);
+        _aiFilled.add(k);
+      });
+      normalizeFormDates(_fields, _values, module: widget.module);
+    });
+  }
+
+  /// A picklist value with its label (`{id, label}`) for the chat card.
+  dynamic _withLabel(String field, dynamic v) {
+    final opts = _picklists[field];
+    if (opts == null || v == null) return v;
+    final hit = opts.where((o) => '${o['value']}' == '$v').firstOrNull;
+    final label = hit == null ? null : (hit['label_th'] ?? hit['label'] ?? hit['label_en']);
+    return label == null ? v : {'id': '$v', 'label': '$label'};
+  }
+
+  String _labelOf(String name) {
+    final f = _fields.where((x) => fieldName(x) == name).firstOrNull;
+    return f == null ? name : (f['label_th'] ?? f['label'] ?? name).toString();
   }
 
   /// "เฉพาะช่องจำเป็น": a short form with just what must be filled.
@@ -180,6 +231,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
     setState(() {
       _values[name] = v;
       _errors.remove(name);
+      _aiFilled.remove(name);
       if (widget.module == 'case' && name == 'case_type') {
         final cur = '${_values['case_name'] ?? ''}'.trim();
         if (cur.isEmpty || cur == _lastSuggestion) {
@@ -284,6 +336,10 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
       } else {
         final res = await api.postEntity(widget.module, payload);
         id = '${res['id'] ?? res['insertId'] ?? res['record']?['id'] ?? ''}';
+        if (id.isNotEmpty && id != 'null') {
+          // What was saved, with names (not ids) for people / linked records.
+          widget.onCreated?.call(id, payload.map((k, v) => MapEntry(k, _values[k] is Map ? _values[k] : _withLabel(k, v))));
+        }
       }
       // Card photo goes with the saved record (a failure never undoes the save).
       final card = _attachCard;
@@ -367,7 +423,21 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
                       children: [
                         if (_error != null)
                           Text(tr(formatApiError(_error!)), style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                        if (_canScan && _scannedLabels.isEmpty && !widget.isEdit)
+                        if (widget.aiFill != null && !widget.isEdit)
+                          AiFillBox(
+                            extract: widget.aiFill!,
+                            onResult: _applyAi,
+                            chatText: widget.aiChatText,
+                            initialText: widget.aiFillText,
+                            autoRun: (widget.aiFillText ?? '').trim().isNotEmpty,
+                          ),
+                        if (_ai != null && !_ai!.isEmpty)
+                          AiFilledBanner(
+                            result: _ai!,
+                            labelOf: _labelOf,
+                            onPick: (field, c) => _onField(field, {'id': '${c['id']}', 'label': '${c['label'] ?? c['id']}'}),
+                          ),
+                        if (_canScan && _scannedLabels.isEmpty && !widget.isEdit && widget.aiFill == null)
                           _ScanBanner(onTap: _scanCard),
                         if (_scannedLabels.isNotEmpty)
                           _ScannedBanner(labels: _scannedLabels, attach: _attachCard != null, onRescan: _scanCard),
@@ -395,6 +465,7 @@ class _EntityCreateScreenState extends State<EntityCreateScreen> {
                             sections: kFormSections,
                             sectionOrder: kFormSectionOrder,
                             requiredOnly: _requiredOnly,
+                            aiFilled: _aiFilled,
                             onChanged: _onField,
                           ),
                       ],

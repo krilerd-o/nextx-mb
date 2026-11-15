@@ -55,15 +55,16 @@ void main() {
     });
   });
 
-  test('chats grouped: starred, today, yesterday, earlier (Thai time)', () {
+  test('chats grouped: pinned, today, yesterday, last 7 days, earlier (Thai time)', () {
     final now = DateTime.utc(2026, 11, 8, 5); // 12:00 Bangkok
     final g = groupAiChats([
       const AiConversation(id: '1', title: 'a', updatedAt: '2026-11-08T03:00:00Z'),
       const AiConversation(id: '2', title: 'b', updatedAt: '2026-11-07T03:00:00Z'),
       const AiConversation(id: '3', title: 'c', updatedAt: '2026-10-01T03:00:00Z'),
       const AiConversation(id: '4', title: 'd', starred: true, updatedAt: '2026-10-01T03:00:00Z'),
+      const AiConversation(id: '5', title: 'e', updatedAt: '2026-11-04T03:00:00Z'),
     ], now: now);
-    expect([for (final x in g) x.label], ['ติดดาว', 'วันนี้', 'เมื่อวาน', 'ก่อนหน้า']);
+    expect([for (final x in g) x.label], ['ปักหมุด', 'วันนี้', 'เมื่อวาน', '7 วันที่ผ่านมา', 'ก่อนหน้า']);
     expect(g.first.items.single.id, '4');
   });
 
@@ -164,7 +165,9 @@ void main() {
 
     expect(find.byType(NxMarkdown), findsOneWidget);
     expect(find.text('[QA] ลูกค้า'), findsOneWidget); // GFM table cell
-    expect(find.text('gemini-2.5-flash'), findsOneWidget);
+    // Badge names the family; the exact model is in its tooltip.
+    expect(find.text('Gemini'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is Tooltip && w.message == 'gemini-2.5-flash'), findsOneWidget);
     expect(find.byKey(const ValueKey('ai-followups')), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
   });
