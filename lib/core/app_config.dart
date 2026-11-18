@@ -34,6 +34,7 @@ import 'qr_login.dart';
 import '../services/apple_auth.dart';
 import 'server_profile.dart';
 import '../services/birthday_reminders.dart';
+import 'session_ended.dart';
 import 'session_state.dart';
 import 'ui_font.dart';
 import 'shell_tabs.dart';
@@ -98,6 +99,7 @@ class AppConfig extends ChangeNotifier {
     // A new app state starts with no screen data from an earlier one.
     NxSwrCache.instance.reset();
     _api.setOnUnauthorized(_handleUnauthorized);
+    _api.setOnSessionEnded(_handleSessionEnded);
     _api.setOnSessionToken(_adoptSessionToken);
     _load();
   }
@@ -659,12 +661,44 @@ class AppConfig extends ChangeNotifier {
   /// Signed out because another device used "sign out this device / all devices".
   bool get sessionRevokedNotice => _sessionRevokedNotice;
 
+  SessionEnded? _sessionEnded;
+
+  /// Why the server signed this device out (usage mode, auto sign-out, admin, business rule) —
+  /// the login screen shows it in a dialog once ([takeSessionEnded]).
+  SessionEnded? get sessionEnded => _sessionEnded;
+  SessionEnded? takeSessionEnded() {
+    final e = _sessionEnded;
+    _sessionEnded = null;
+    return e;
+  }
+
   void _handleUnauthorized() {
     if (_loggingOut || !_session.isLoggedIn) return;
     _sessionRevokedNotice = _api.lastUnauthorizedRevoked;
+    _sessionEnded = _api.lastSessionEnded;
     _sessionExpiredNotice = true;
     SharedPreferences.getInstance().then((p) => p.setBool(_keySessionExpired, true));
     logout();
+  }
+
+  /// Signed out by NEXTX (revoked header on any response, socket `auth:session_ended` /
+  /// `auth:force_logout`, or a business security rule) → sign out here and explain.
+  void _handleSessionEnded(SessionEnded ended) {
+    if (_loggingOut || !_session.isLoggedIn) return;
+    _sessionRevokedNotice = true;
+    _sessionEnded = ended;
+    _sessionExpiredNotice = true;
+    SharedPreferences.getInstance().then((p) => p.setBool(_keySessionExpired, true));
+    logout();
+  }
+
+  StreamSubscription<RealtimeEvent>? _sessionEndedSub;
+
+  void _listenSessionEnded() {
+    _sessionEndedSub?.cancel();
+    _sessionEndedSub = RealtimeService.instance.events
+        .where((e) => e.type == 'auth:session_ended' || e.type == 'auth:force_logout')
+        .listen((e) => _handleSessionEnded(SessionEnded.fromMap(e.data)));
   }
 
   Future<void> _loadUserScoped([SharedPreferences? p]) async {
@@ -738,6 +772,7 @@ class AppConfig extends ChangeNotifier {
       token: token,
       businessId: _session.businessId,
     );
+    _listenSessionEnded();
     UnreadNotifications.instance.refresh(apiClient);
     PendingApprovals.instance.refresh(apiClient, userId: _session.userId);
     bindCalls(this);
