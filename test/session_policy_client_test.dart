@@ -69,13 +69,14 @@ void main() {
   });
 
   test('login-config: methods for this domain, null on older servers', () async {
-    final ok = _client(_FixedAdapter(200, {
+    final adapter = _FixedAdapter(200, {
       'status': 'S',
       'data': {'scope': 'business', 'methods': ['password', 'qr'], 'allow_signup': false},
-    }));
+    });
+    final ok = _client(adapter);
     final cfg = await ok.getLoginConfig();
     expect(cfg?['methods'], ['password', 'qr']);
-    expect(ok.calls.single.queryParameters['host'], 'crm.example.test');
+    expect(adapter.calls.single.queryParameters['host'], 'crm.example.test');
     final old = _client(_FixedAdapter(404, {'status': 'E', 'message': 'not found'}));
     expect(await old.getLoginConfig(), isNull);
   });
