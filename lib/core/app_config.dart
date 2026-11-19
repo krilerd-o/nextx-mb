@@ -50,6 +50,9 @@ const String _keyEmail = 'session_email';
 const String _keyDisplayName = 'session_display_name';
 const String _keyPackageCode = 'session_package_code';
 const String _keyMenuKeys = 'session_menu_keys';
+
+/// Socket event NEXTX sends when what this user may see changed.
+const String kPermissionsChangedEvent = 'permissions:changed';
 const String _keyGettingStartedDone = 'getting_started_done';
 const String _keySearchHistory = 'search_history_json';
 const String _keyAccentIndex = 'accent_index';
@@ -701,6 +704,46 @@ class AppConfig extends ChangeNotifier {
         .listen((e) => _handleSessionEnded(SessionEnded.fromMap(e.data)));
   }
 
+  StreamSubscription<RealtimeEvent>? _permissionsSub;
+  Future<void>? _permissionsRefresh;
+  bool _permissionsAgain = false;
+
+  /// An admin changed Package menus / role / permission set (NEXTX `permissions:changed`):
+  /// reload the menus now. Open pages that are no longer allowed are left by the router
+  /// guard (it listens to this config).
+  void _listenPermissionsChanged() {
+    _permissionsSub?.cancel();
+    _permissionsSub = RealtimeService.instance.on(kPermissionsChangedEvent).listen((e) {
+      final bid = e.data['business_id']?.toString();
+      if (bid != null && bid.isNotEmpty && bid != _session.businessId) return;
+      unawaited(handlePermissionsChanged());
+    });
+  }
+
+  /// One refresh at a time; a change that arrives meanwhile runs one more refresh after it,
+  /// so the last change is never lost. Completes when the menus are up to date.
+  @visibleForTesting
+  Future<void> handlePermissionsChanged({Future<void> Function()? refresh}) {
+    final running = _permissionsRefresh;
+    if (running != null) {
+      _permissionsAgain = true;
+      return running;
+    }
+    final run = () async {
+      do {
+        _permissionsAgain = false;
+        if (!isLoggedIn) break;
+        try {
+          await (refresh ?? refreshSession)();
+        } catch (err) {
+          debugPrint('[permissions:changed] refreshSession: $err');
+        }
+      } while (_permissionsAgain);
+    }();
+    _permissionsRefresh = run.whenComplete(() => _permissionsRefresh = null);
+    return _permissionsRefresh!;
+  }
+
   Future<void> _loadUserScoped([SharedPreferences? p]) async {
     final prefs = p ?? await SharedPreferences.getInstance();
     final uid = _session.userId;
@@ -773,6 +816,7 @@ class AppConfig extends ChangeNotifier {
       businessId: _session.businessId,
     );
     _listenSessionEnded();
+    _listenPermissionsChanged();
     UnreadNotifications.instance.refresh(apiClient);
     PendingApprovals.instance.refresh(apiClient, userId: _session.userId);
     bindCalls(this);
@@ -1208,7 +1252,12 @@ class AppConfig extends ChangeNotifier {
       await prefs.setString(_keyBusinessName, bname ?? '');
     }
     if (pkg != null) await prefs.setString(_keyPackageCode, pkg);
-    if (menus != null) await prefs.setString(_keyMenuKeys, menus.join(','));
+    if (menus != null) {
+      await prefs.setString(_keyMenuKeys, menus.join(','));
+    } else {
+      // Unrestricted now (no Package / role limit): drop the old list so it cannot come back.
+      await prefs.remove(_keyMenuKeys);
+    }
     final display = _displayFromUser(user, email ?? '');
     await prefs.setString(_keyDisplayName, display);
     _session = _session.copyWith(
@@ -1219,6 +1268,8 @@ class AppConfig extends ChangeNotifier {
       displayName: display,
       packageCode: pkg,
       menuKeys: menus,
+      // `copyWith` keeps the old list for a null argument; null here means "no restriction any more".
+      clearMenus: menus == null,
       isSuperadmin: superadmin,
       menusLoaded: true,
       businessRole: me['role']?.toString(),
@@ -1248,6 +1299,8 @@ class AppConfig extends ChangeNotifier {
     // new business's when it loads its birthdays.
     if (businessId != _session.businessId) unawaited(BirthdayReminders.instance.cancelAll().catchError((_) {}));
     await prefs.remove(_keyPackageId);
+    // The old business's menus must not come back on the next cold start if the refresh below fails.
+    await prefs.remove(_keyMenuKeys);
     if (packageCode != null) {
       await prefs.setString(_keyPackageCode, packageCode);
       if (packageCode.isNotEmpty) await prefs.setString(_lastPackageKey(businessId), packageCode);

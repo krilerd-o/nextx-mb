@@ -36,6 +36,8 @@ class RealtimeService extends ChangeNotifier {
     // NEXTX signed this device out (usage mode / auto sign-out / admin) — AppConfig explains and signs out
     'auth:session_ended',
     'auth:force_logout',
+    // An admin changed Package menus / role / permission set — AppConfig reloads the menus
+    'permissions:changed',
     'new_message',
     'message_edited',
     'message_deleted',

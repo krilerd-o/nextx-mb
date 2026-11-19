@@ -70,6 +70,8 @@ IsaacMenuItem? isaacItemFor(String path) {
     return IsaacMenu.notebook;
   }
   if (p.startsWith('${IsaacMenu.minuteMeeting.route}/')) return IsaacMenu.minuteMeeting;
+  // Meeting join links (/m/:code) open AI Minute Meeting.
+  if (p.startsWith('/m/')) return IsaacMenu.minuteMeeting;
   for (final item in IsaacMenu.all) {
     if (p == item.route || (item.route == '/ai' && p.startsWith('/ai/'))) return item;
   }
@@ -86,6 +88,11 @@ String? accessRedirectFor(SessionState session, String path) {
   // the last loaded access; before it is known the page itself checks.
   final isaac = isaacItemFor(path);
   if (isaac != null) {
+    // AI Minute Meeting is a NEXTX menu (Package + Role), not an ISAAC plugin item:
+    // check it even before the plugin answers are cached.
+    if (isaac.key == IsaacMenu.minuteMeeting.key && !session.isSuperadmin && !session.canAccess(isaac.key)) {
+      return AppRoutes.mainShell;
+    }
     final access = IsaacAccessCache.peek(session.businessId ?? '');
     // The notebook runs on NEXTX AI (`ai_chat`): the Assistant's "Notebook" entry
     // opens it even when the ISAAC plugin menu item is hidden.
@@ -93,9 +100,19 @@ String? accessRedirectFor(SessionState session, String path) {
         access.visible(isaac, session) ||
         (isaac.key == IsaacMenu.notebook.key && access.visible(IsaacMenu.assistant, session));
     if (!allowed) return AppRoutes.mainShell;
+    // The Assistant shows in the menu on `ai_chat` even when a Package list leaves its key out
+    // (like the web), so the page it opens must not bounce the user back.
+    if (access != null && isaac.key == IsaacMenu.assistant.key) return null;
   }
   final keys = requiredMenusFor(path);
   if (keys == null) return null;
+  // Same rule as the store menu: orders, or stock for business admins only.
+  final first = Uri.tryParse(path)?.pathSegments.where((x) => x.isNotEmpty).firstOrNull;
+  if (first == 'commerce') {
+    final ok = MenuAccess.allow(session, MenuAccess.storeOrders) ||
+        (MenuAccess.allow(session, MenuAccess.storeStock) && session.isBusinessAdmin);
+    return ok ? null : AppRoutes.mainShell;
+  }
   if (MenuAccess.any(session, keys)) return null;
   return AppRoutes.mainShell;
 }
