@@ -25,6 +25,7 @@ import 'widgets/nx_atmosphere.dart';
 import 'widgets/nx_language_switch.dart';
 import 'widgets/nx_ui_scale.dart';
 import 'core/i18n.dart';
+import 'screens/ongoing/ongoing_overlay.dart';
 
 class NextXMobileApp extends StatefulWidget {
   const NextXMobileApp({super.key});
@@ -144,6 +145,11 @@ class _NextXMobileAppState extends State<NextXMobileApp>
                               open: (location) => _router.push(location),
                               canPop: () => _router.canPop(),
                             ),
+                          ),
+                        // Meeting room / AI Minute recording: floating bubble (× to hide) while their screen is closed.
+                        if (sel.$4)
+                          Positioned.fill(
+                            child: OngoingSessionsOverlay(navigatorKey: _router.routerDelegate.navigatorKey, call: CallService.instance),
                           ),
                         if (AppLock.instance.locked && sel.$4)
                           const Positioned.fill(child: AppLockScreen()),

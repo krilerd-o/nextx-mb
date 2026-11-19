@@ -20,6 +20,7 @@ class AiCommand {
     this.deep = false,
     this.create,
     this.kind,
+    this.open,
   });
 
   /// Without the slash, e.g. `lead`, `สรุป`.
@@ -44,6 +45,9 @@ class AiCommand {
 
   /// workspace_item: `task` or `epic`.
   final String? kind;
+
+  /// Opens an app location instead of writing a prompt (e.g. `/ประชุม` → AI Minute Meeting).
+  final String? open;
 
   bool get isCreate => create != null;
 
@@ -207,6 +211,14 @@ const kAiBuiltinCommands = <AiCommand>[
     description: 'ยอดขาย ดีล กิจกรรม',
     template: 'ทำรายงาน [ยอดขาย / ดีล / กิจกรรม] ของ [ช่วงเวลา]',
     icon: 'chart',
+  ),
+  AiCommand(
+    command: 'ประชุม',
+    title: 'ประชุม / บันทึกประชุม',
+    description: 'บันทึกเสียง อัปโหลดไฟล์ หรือเปิดห้องประชุม',
+    template: '',
+    icon: 'meeting',
+    open: '/ai-minutes?do=commands',
   ),
   AiCommand(command: 'แปล', title: 'แปลภาษา', description: 'ไทย ↔ อังกฤษ', template: 'แปลเป็นภาษา [อังกฤษ / ไทย]: [ข้อความ]', icon: 'translate'),
   AiCommand(

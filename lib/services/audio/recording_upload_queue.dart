@@ -534,7 +534,9 @@ class RecordingUploadQueue extends ChangeNotifier {
     _retry?.cancel();
     await load();
     while (true) {
-      final next = _items.where((p) => p.businessId == null || businessId == null || p.businessId == businessId).firstOrNull;
+      // Every part goes to the business it was recorded in (X-Business-Id per part), so switching business
+      // mid-recording neither stalls the old parts nor sends them to the new business.
+      final next = _items.firstOrNull;
       if (next == null) break;
       if (next.hasFile && !File(next.path).existsSync()) {
         _items.remove(next);
@@ -550,7 +552,7 @@ class RecordingUploadQueue extends ChangeNotifier {
       try {
         final sender = senders[next.target];
         if (sender == null) throw StateError('no sender for ${next.target}');
-        final rid = await sender(api!, next);
+        final rid = await ApiClient.inBusiness(next.businessId ?? businessId, () => sender(api!, next));
         await _remove(next);
         if (next.op == RecordingOp.create && rid != null && rid.isNotEmpty) {
           _created[next.clientSessionId] = rid;

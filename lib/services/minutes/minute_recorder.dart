@@ -169,9 +169,21 @@ class MinuteRecorder extends ChangeNotifier {
 
   void _notify() => notifyListeners();
 
+  /// The business the app has open now; [businessId] stays on the recording's business while one is running
+  /// (switching business must not move a meeting half way).
+  String? _openBusinessId;
+
   void bind({required ApiClient api, String? businessId}) {
     this.api = api;
-    this.businessId = businessId;
+    _openBusinessId = businessId;
+    if (phase == MinuteRecPhase.idle) this.businessId = businessId;
+  }
+
+  /// A request about the running meeting, sent to its own business.
+  Future<T> _inMeetingBusiness<T>(Future<T> Function() body) => ApiClient.inBusiness(businessId, body);
+
+  void _adoptOpenBusiness() {
+    if (phase == MinuteRecPhase.idle) businessId = _openBusinessId ?? businessId;
   }
 
   CallService? _call;
@@ -210,6 +222,7 @@ class MinuteRecorder extends ChangeNotifier {
     if (perm != MicPermission.granted) return perm == MicPermission.permanentlyDenied ? RecordStart.permanentlyDenied : RecordStart.denied;
     final a = api;
     if (a == null) return RecordStart.failed;
+    businessId = _openBusinessId ?? businessId;
     phase = MinuteRecPhase.starting;
     live = LiveState.connecting;
     error = null;
@@ -405,7 +418,7 @@ class MinuteRecorder extends ChangeNotifier {
     final id = meetingId;
     if (id != null) {
       _t.emit('stt:pause', _idBody);
-      unawaited(api?.pauseMinuteMeeting(id).then((_) {}, onError: (_) {}));
+      unawaited(_inMeetingBusiness(() async => api?.pauseMinuteMeeting(id)).then((_) {}, onError: (_) {}));
     }
     unawaited(_fg.update(paused: true, elapsedMs: elapsed.inMilliseconds));
   }
@@ -427,7 +440,7 @@ class MinuteRecorder extends ChangeNotifier {
     final id = meetingId;
     if (id != null) {
       _t.emit('stt:resume', {..._idBody, 'offset_ms': _recordedMs});
-      unawaited(api?.resumeMinuteMeeting(id).then((_) {}, onError: (_) {}));
+      unawaited(_inMeetingBusiness(() async => api?.resumeMinuteMeeting(id)).then((_) {}, onError: (_) {}));
     }
     unawaited(_fg.update(paused: false, elapsedMs: elapsed.inMilliseconds));
     return true;
@@ -447,7 +460,7 @@ class MinuteRecorder extends ChangeNotifier {
     title = t.trim();
     _notify();
     final id = meetingId;
-    if (id != null) unawaited(api?.updateMinuteMeeting(id, {'title': title}).then((_) {}, onError: (_) {}));
+    if (id != null) unawaited(_inMeetingBusiness(() async => api?.updateMinuteMeeting(id, {'title': title})).then((_) {}, onError: (_) {}));
     unawaited(_fg.update(paused: paused, elapsedMs: elapsed.inMilliseconds, title: title));
   }
 
@@ -531,7 +544,7 @@ class MinuteRecorder extends ChangeNotifier {
     final id = meetingId;
     if (id != null) {
       _t.emit('stt:stop', _idBody);
-      unawaited(api?.deleteMinuteMeeting(id).then((_) {}, onError: (_) {}));
+      unawaited(_inMeetingBusiness(() async => api?.deleteMinuteMeeting(id)).then((_) {}, onError: (_) {}));
     }
     unawaited(_fg.stop());
     _reset();
@@ -539,6 +552,7 @@ class MinuteRecorder extends ChangeNotifier {
 
   void _reset() {
     phase = MinuteRecPhase.idle;
+    _adoptOpenBusiness();
     live = LiveState.connecting;
     _sttOn = false;
     _runningSince = null;

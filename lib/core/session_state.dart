@@ -15,6 +15,7 @@ class SessionState {
     this.isSuperadmin = false,
     this.menusLoaded = false,
     this.businessRole,
+    this.roleMenuKeys,
   });
 
   final String? accessToken;
@@ -30,6 +31,18 @@ class SessionState {
 
   /// Role in the current business from `/api/me` (`owner` | `admin` | `member`).
   final String? businessRole;
+
+  /// Menus ticked on the user's role in this business (`/api/me` → `allowed_menu_keys`); `null` = the role
+  /// does not restrict menus. The AI Assistant / Notebook follow this (not the Package), like the web.
+  final List<String>? roleMenuKeys;
+
+  /// Role permission for features without a Package menu of their own (owner / admin always pass).
+  bool roleAllows(List<String> keys) {
+    if (isBusinessAdmin) return true;
+    final r = roleMenuKeys;
+    if (r == null || r.isEmpty) return true;
+    return keys.any(r.contains);
+  }
 
   /// Owner/admin of the current business (or superadmin) — gates admin-only APIs
   /// such as store stock and mark-paid.
@@ -67,6 +80,8 @@ class SessionState {
     bool? isSuperadmin,
     bool? menusLoaded,
     String? businessRole,
+    List<String>? roleMenuKeys,
+    bool clearRoleMenus = false,
     bool clearToken = false,
     bool clearBusiness = false,
     bool clearMenus = false,
@@ -83,6 +98,7 @@ class SessionState {
       isSuperadmin: isSuperadmin ?? this.isSuperadmin,
       menusLoaded: menusLoaded ?? this.menusLoaded,
       businessRole: clearBusiness ? null : (businessRole ?? this.businessRole),
+      roleMenuKeys: clearBusiness || clearRoleMenus ? null : (roleMenuKeys ?? this.roleMenuKeys),
     );
   }
 }

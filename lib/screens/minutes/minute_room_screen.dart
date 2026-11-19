@@ -21,7 +21,18 @@ import 'minutes_widgets.dart';
 @visibleForTesting
 MinuteRoomSession Function(Map<String, dynamic> join, String code)? debugRoomSession;
 
-Future<void> openMinuteRoomScreen(BuildContext context, {required Map<String, dynamic> join, required String code, required String title, bool micOn = false, bool camOn = false}) {
+Future<void> openMinuteRoomScreen(BuildContext context, {required Map<String, dynamic> join, required String code, required String title, bool micOn = false, bool camOn = false}) async {
+  final nav = Navigator.of(context, rootNavigator: true);
+  final api = context.read<AppConfig>().apiClient;
+  final bid = context.read<AppConfig>().session.businessId;
+  // Already in this room (minimised): just show it again.
+  final cur = MinuteRoomSession.active.value;
+  if (cur != null && !cur.closed && cur.roomCode == code) return reopenMinuteRoom(nav, cur);
+  // In another room: leave it first (one room at a time).
+  if (cur != null && !cur.closed) {
+    unawaited(ApiClient.inBusiness(cur.businessId, () => api.leaveMinuteRoom(cur.roomCode, cur.ticket)).then((_) {}, onError: (_) {}));
+    await cur.close();
+  }
   final s =
       debugRoomSession?.call(join, code) ??
       MinuteRoomSession(
@@ -34,10 +45,27 @@ Future<void> openMinuteRoomScreen(BuildContext context, {required Map<String, dy
         stage: join['stage'] is Map ? Map<String, dynamic>.from(join['stage'] as Map) : null,
         boardMode: '${join['board'] ?? 'all'}',
       );
-  return Navigator.of(context, rootNavigator: true).push(
+  s
+    ..title = title
+    ..businessId = bid
+    ..url = '${join['livekit_url'] ?? ''}'
+    ..token = '${join['token'] ?? ''}';
+  MinuteRoomSession.active.value = s;
+  await nav.push(
     MaterialPageRoute<void>(
       fullscreenDialog: true,
-      builder: (_) => MinuteRoomScreen(session: s, url: '${join['livekit_url'] ?? ''}', token: '${join['token'] ?? ''}', title: title, micOn: micOn, camOn: camOn),
+      builder: (_) => MinuteRoomScreen(session: s, url: s.url, token: s.token, title: title, micOn: micOn, camOn: camOn),
+    ),
+  );
+}
+
+/// Back to a minimised room (bubble tap, "กลับเข้าห้อง").
+Future<void> reopenMinuteRoom(NavigatorState nav, MinuteRoomSession s) {
+  if (s.closed || s.screenOpen) return Future<void>.value();
+  return nav.push(
+    MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (_) => MinuteRoomScreen(session: s, url: s.url, token: s.token, title: s.title),
     ),
   );
 }
@@ -63,7 +91,7 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
   final _reactions = <(String, String, int)>[];
   StreamSubscription<(String, String)>? _rx;
   int _rxId = 0;
-  final _started = DateTime.now();
+  DateTime get _started => s.startedAt ?? DateTime.now();
   Timer? _tick;
 
   @override
@@ -76,7 +104,8 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
       Timer(const Duration(seconds: 3), () => mounted ? setState(() => _reactions.removeWhere((x) => x.$3 == id)) : null);
     });
     _tick = Timer.periodic(const Duration(seconds: 1), (_) => mounted ? setState(() {}) : null);
-    unawaited(s.start(url: widget.url, token: widget.token, micOn: widget.micOn, camOn: widget.camOn));
+    s.screenShown();
+    if (!s.started) unawaited(s.start(url: widget.url, token: widget.token, micOn: widget.micOn, camOn: widget.camOn));
   }
 
   @override
@@ -84,31 +113,57 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
     _tick?.cancel();
     _rx?.cancel();
     s.removeListener(_changed);
-    unawaited(s.leave().whenComplete(s.dispose));
+    // Closing the screen only minimises: the room keeps going in the floating bubble.
+    if (!s.disposed) s.screenHidden();
+    if (s.closed && s.screens == 0) s.dispose();
     super.dispose();
   }
 
-  void _changed() => mounted ? setState(() {}) : null;
+  bool _popped = false;
+  void _changed() {
+    if (!mounted) return;
+    if (s.closed && !_popped) {
+      // Removed by the host / left from the bubble / signed out.
+      _popped = true;
+      final reason = s.closedReason;
+      final nav = Navigator.of(context);
+      if (nav.canPop()) nav.pop();
+      if (reason == 'removed') ScaffoldMessenger.maybeOf(nav.context)?.showSnackBar(SnackBar(content: Text(tr('ผู้จัดนำคุณออกจากห้องประชุม'))));
+      return;
+    }
+    setState(() {});
+  }
+
+  /// Back / caret-down: keep the meeting, show the bubble.
+  void _minimise() {
+    HapticFeedback.selectionClick();
+    Navigator.of(context).maybePop();
+  }
 
   ApiClient get _api => context.read<AppConfig>().apiClient;
 
   Future<void> _leave({bool end = false}) async {
     if (end) {
       try {
-        await _api.endMinuteRoom(s.meetingId);
+        await ApiClient.inBusiness(s.businessId, () => _api.endMinuteRoom(s.meetingId));
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e is ApiEnvelopeException ? e.message : tr('จบการประชุมไม่สำเร็จ'))));
         return;
       }
     } else {
-      unawaited(_api.leaveMinuteRoom(s.roomCode, s.ticket).then((_) {}, onError: (_) {}));
+      unawaited(ApiClient.inBusiness(s.businessId, () => _api.leaveMinuteRoom(s.roomCode, s.ticket)).then((_) {}, onError: (_) {}));
     }
     if (!mounted) return;
     final nav = Navigator.of(context);
-    nav.pop();
-    if (end && s.meetingId.isNotEmpty) {
-      ScaffoldMessenger.maybeOf(nav.context)?.showSnackBar(SnackBar(content: Text(tr('จบการประชุมแล้ว — ไอแซคกำลังทำบันทึกการประชุม'))));
-      GoRouter.maybeOf(nav.context)?.push(AppRoutes.aiMinute(s.meetingId));
+    final messenger = ScaffoldMessenger.maybeOf(nav.context);
+    final router = GoRouter.maybeOf(nav.context);
+    final meetingId = s.meetingId;
+    _popped = true;
+    await s.close();
+    if (nav.canPop()) nav.pop();
+    if (end && meetingId.isNotEmpty) {
+      messenger?.showSnackBar(SnackBar(content: Text(tr('จบการประชุมแล้ว — ไอแซคกำลังทำบันทึกการประชุม'))));
+      router?.push(AppRoutes.aiMinute(meetingId));
     }
   }
 
@@ -190,9 +245,10 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
     child: Row(
       children: [
         IconButton(
+          key: const ValueKey('room-minimise'),
           tooltip: tr('ย่อ'),
           icon: const Icon(NxI.caretDown, color: Colors.white70),
-          onPressed: _confirmLeave,
+          onPressed: _minimise,
         ),
         Expanded(
           child: Column(

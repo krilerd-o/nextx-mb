@@ -70,8 +70,9 @@ class IsaacAccess {
         if (!aiChat) return false;
         if (pluginLoaded && _menus['assistant'] == false) return false;
         if (session.isSuperadmin) return true;
-        // Package lists may leave it out — ai_chat already passed (like the web).
-        return true;
+        // Package lists may leave it out — ai_chat already passed (like the web) — but the role must allow
+        // it (the server answers 403 otherwise).
+        return session.roleAllows(const ['ai-assistant']);
       case 'isaac-notebook':
       case 'ai-minute-auto':
         if (!pluginLoaded || !pluginEnabled) return false;
@@ -80,7 +81,10 @@ class IsaacAccess {
             ? (hasMenus ? _menus['notebook'] != false : plugin?['menu_bot'] != false)
             : (hasMenus ? _menus['minute_auto'] != false : plugin?['menu_minute_auto'] != false);
         if (!on) return false;
-        if (session.isSuperadmin || plugin?['audience'] != 'menu_permission') return true;
+        if (session.isSuperadmin) return true;
+        // Notebook data lives behind the role menu (isaac-notebook or the assistant) on the server.
+        if (item.key == 'isaac-notebook' && !session.roleAllows(const ['isaac-notebook', 'ai-assistant'])) return false;
+        if (plugin?['audience'] != 'menu_permission') return true;
         return session.canAccess(item.key);
       case 'ai-minute-meeting':
         // A NEXTX menu of its own (Package + Role), not the ISAAC plugin.

@@ -23,6 +23,7 @@ import '../comm_ai/comm_ai_isaac.dart';
 import 'notebook_book_card.dart';
 import 'notebook_share_sheet.dart';
 import 'notebook_widgets.dart';
+import '../../core/business_switch_reload.dart';
 
 /// `/notebook` — the user's ISAAC notebooks (NotebookLM-style library): book cards in each
 /// notebook's colour / icon (pinned first), search from the header icon like the other lists.
@@ -36,7 +37,7 @@ class NotebookHomeScreen extends StatefulWidget {
   State<NotebookHomeScreen> createState() => _NotebookHomeScreenState();
 }
 
-class _NotebookHomeScreenState extends State<NotebookHomeScreen> {
+class _NotebookHomeScreenState extends State<NotebookHomeScreen> with ReloadOnBusinessSwitch {
   late final NotebookLibraryController _c = widget.controller ??
       NotebookLibraryController(
         context.read<AppConfig>().apiClient,
@@ -49,8 +50,12 @@ class _NotebookHomeScreenState extends State<NotebookHomeScreen> {
   void initState() {
     super.initState();
     _c.addListener(_onChange);
+    watchBusiness();
     WidgetsBinding.instance.addPostFrameCallback((_) => _c.load());
   }
+
+  @override
+  void onBusinessSwitched() => _c.load();
 
   @override
   void dispose() {
