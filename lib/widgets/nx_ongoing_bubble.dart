@@ -67,7 +67,11 @@ class NxOngoingBubble extends StatefulWidget {
     this.accent = const Color(0xFF6366F1),
     this.onHidden,
     this.gestureKey,
+    this.menu = const [],
   });
+
+  /// Long-press actions (mute / leave / pause / stop …): shown in a small panel next to the bubble.
+  final List<OngoingMenuItem> menu;
 
   /// Key of the tappable area (tests); default `ongoing-bubble-<kind>`.
   final Key? gestureKey;
@@ -92,6 +96,7 @@ class _NxOngoingBubbleState extends State<NxOngoingBubble> {
   Offset? _pos;
   bool _dragging = false;
   bool _overX = false;
+  bool _menu = false;
 
   Offset _default(Size size, EdgeInsets pad) =>
       widget.initial?.call(size, pad) ?? Offset(size.width - widget.size.width - 12, pad.top + (size.height - pad.top - pad.bottom) * 0.6);
@@ -102,8 +107,54 @@ class _NxOngoingBubbleState extends State<NxOngoingBubble> {
     final pad = MediaQuery.paddingOf(context);
     final pos = clampOngoingBubble(_pos ?? _default(screen, pad), screen, pad, size: widget.size);
     final zone = ongoingDismissZone(screen, pad);
+    final menuItems = widget.menu;
+    final left = pos.dx + widget.size.width / 2 < screen.width / 2;
+    final menuH = menuItems.length * 48.0 + 12;
+    final below = pos.dy + widget.size.height + 8 + menuH < screen.height - pad.bottom;
     return Stack(
       children: [
+        if (_menu && menuItems.isNotEmpty) ...[
+          // Tap anywhere else closes it.
+          Positioned.fill(key: const ValueKey('menu-scrim'), child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _menu = false))),
+          Positioned(
+            key: const ValueKey('menu'),
+            left: left ? pos.dx : null,
+            right: left ? null : screen.width - pos.dx - widget.size.width,
+            top: below ? pos.dy + widget.size.height + 8 : pos.dy - menuH - 8,
+            width: 210,
+            child: Material(
+              key: ValueKey('ongoing-menu-${widget.kind}'),
+              elevation: 12,
+              color: const Color(0xF2111827),
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final m in menuItems)
+                      InkWell(
+                        key: ValueKey('ongoing-menu-${m.id}'),
+                        onTap: () {
+                          setState(() => _menu = false);
+                          m.onTap();
+                        },
+                        child: SizedBox(
+                          height: 48,
+                          child: Row(children: [
+                            const SizedBox(width: 14),
+                            Icon(m.icon, size: 19, color: m.danger ? const Color(0xFFF87171) : Colors.white),
+                            const SizedBox(width: 12),
+                            Expanded(child: Text(m.label, style: TextStyle(color: m.danger ? const Color(0xFFF87171) : Colors.white, fontSize: 14, fontWeight: FontWeight.w600))),
+                          ]),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
         if (_dragging)
           Positioned.fromRect(
             key: const ValueKey('zone'),
@@ -140,7 +191,16 @@ class _NxOngoingBubbleState extends State<NxOngoingBubble> {
               HapticFeedback.selectionClick();
               widget.onTap();
             },
-            onPanStart: (_) => setState(() => _dragging = true),
+            onLongPress: menuItems.isEmpty
+                ? null
+                : () {
+                    HapticFeedback.mediumImpact();
+                    setState(() => _menu = true);
+                  },
+            onPanStart: (_) => setState(() {
+              _dragging = true;
+              _menu = false;
+            }),
             onPanUpdate: (d) {
               final next = clampOngoingBubble((_pos ?? pos) + d.delta, screen, pad, size: widget.size);
               final over = (next & widget.size).overlaps(zone.inflate(8));
@@ -181,6 +241,16 @@ class _NxOngoingBubbleState extends State<NxOngoingBubble> {
       ],
     );
   }
+}
+
+/// One long-press action of a floating bubble.
+class OngoingMenuItem {
+  const OngoingMenuItem({required this.id, required this.label, required this.icon, required this.onTap, this.danger = false});
+  final String id;
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool danger;
 }
 
 /// Dark pill content used by the room / recorder bubbles: a leading badge, a title + a status line, one action.

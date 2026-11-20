@@ -181,6 +181,10 @@ class _NotebookRecorderBubbleState extends State<NotebookRecorderBubble> {
     return NxOngoingBubble(
       kind: 'notebook_recording',
       gestureKey: const ValueKey('notebook-recorder-bubble'),
+      menu: [
+        OngoingMenuItem(id: 'nb-pause', label: tr(paused ? 'อัดต่อ' : 'หยุดชั่วคราว'), icon: paused ? NxI.microphone : LucideIcons300.pause, onTap: () => r.togglePause()),
+        OngoingMenuItem(id: 'nb-open', label: tr('เปิดหน้าบันทึก'), icon: NxI.cornersOut, onTap: widget.onExpand),
+      ],
       size: kRecorderBubbleSize,
       initial: (size, pad) => clampRecorderBubble(defaultRecorderBubblePos(size, pad, callBubble: widget.callBubble), size, pad, callBubble: widget.callBubble),
       onTap: widget.onExpand,

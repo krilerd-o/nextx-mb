@@ -37,6 +37,7 @@ import 'home_edit_mode.dart';
 import 'home_hero.dart';
 import 'home_isaac.dart';
 import 'home_isaac_shortcuts.dart';
+import 'home_ongoing_card.dart';
 import 'home_widgets.dart';
 import 'widget_gallery_sheet.dart';
 import '../hr/attendance_punch_sheet.dart';
@@ -1079,6 +1080,8 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
                 ),
               ),
+            // Call / meeting room / recording / upload running now, and open rooms to join.
+            HomeOngoingCard(revision: _revision),
             if (_whatsNew > 0) ...[
               const SizedBox(height: 12),
               _WhatsNewCard(

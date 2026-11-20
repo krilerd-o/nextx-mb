@@ -89,6 +89,7 @@ class RealtimeService extends ChangeNotifier {
     'minute:room_waiting',
     'minute:room_removed',
     'minute:chat',
+    'minute:chat_removed',
     'minute:board_kick',
     // Meeting workspace (notes / checklist / board / sketch), see services/minutes/minute_board_controller.dart.
     'minute:board',

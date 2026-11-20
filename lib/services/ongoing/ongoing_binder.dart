@@ -54,7 +54,7 @@ class OngoingSessionsBinder {
     };
     _callKit.onEnded = (id) {
       final r = _room;
-      if (r != null && !r.closed && id == _callKit.idFor(r)) unawaited(_leave(r));
+      if (r != null && !r.closed && id == _callKit.idFor(r)) unawaited(leave(r));
     };
     _roomChanged();
     _syncCall();
@@ -185,14 +185,15 @@ class OngoingSessionsBinder {
         case 'mute' || 'unmute':
           if ((action == 'mute') == r.media.micOn) await r.toggleMic();
         case 'hangup':
-          await _leave(r);
+          await leave(r);
         case 'open':
           openRoom?.call(r);
       }
     }
   }
 
-  Future<void> _leave(MinuteRoomSession r) async {
+  /// Leave a room for real (server + media) — also from the bubble menu.
+  Future<void> leave(MinuteRoomSession r) async {
     final l = leaveRoom;
     if (l != null) {
       await l(r);

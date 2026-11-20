@@ -307,7 +307,7 @@ class MinuteRecorder extends ChangeNotifier {
       live = offline || !_t.connected ? LiveState.offline : LiveState.connecting;
       if (live == LiveState.offline) notice.value = offlineNotice;
       _notify();
-      unawaited(_fg.start(title: this.title, elapsedMs: 0));
+      unawaited(_fg.start(title: this.title, elapsedMs: 0, labels: NativeRecordingForeground.minuteLabels));
       _startTicker();
       if (!offline) await _startStt();
       return RecordStart.started;

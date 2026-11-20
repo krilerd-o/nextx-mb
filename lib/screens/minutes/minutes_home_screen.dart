@@ -95,7 +95,7 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
     if (!quiet) setState(() => _loading = true);
     try {
       final asked = _bizId;
-      final rows = await _api.getMinuteMeetings(q: _search.text, source: _filter == 'all' ? null : _filter);
+      final rows = await _api.getMinuteMeetings(q: _search.text, source: _filter == 'all' || _filter == 'shared' ? null : _filter, scope: _filter == 'shared' ? 'shared' : null);
       if (!mounted || asked != _bizId) return; // answer for the business we left
       setState(() {
         _items = [for (final r in rows) MinuteMeeting.fromJson(r)];
@@ -244,7 +244,7 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                   child: Row(
                     children: [
-                      for (final f in const [('all', 'ทั้งหมด', NxI.squaresFour), ('record', 'บันทึกสด', NxI.microphone), ('upload', 'ไฟล์', NxI.uploadSimple), ('room', 'ห้องประชุม', NxI.users)])
+                      for (final f in const [('all', 'ทั้งหมด', NxI.squaresFour), ('record', 'บันทึกสด', NxI.microphone), ('upload', 'ไฟล์', NxI.uploadSimple), ('room', 'ห้องประชุม', NxI.users), ('shared', 'แชร์กับฉัน', NxI.shareNetwork)])
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: ChoiceChip(
@@ -541,6 +541,17 @@ class _MeetingCard extends StatelessWidget {
                           ],
                           const SizedBox(width: 10),
                           Flexible(child: Text(tr(minuteSourceLabel(m.source)), overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: minuteTint(context, color), fontWeight: FontWeight.w600))),
+                          if (m.sharedWithMe) ...[
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Container(
+                                key: ValueKey('minute-card-shared-${m.id}'),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                                decoration: BoxDecoration(color: const Color(0xFF7C3AED).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(99)),
+                                child: Text(tr('แชร์ให้ฉัน'), maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall?.copyWith(color: const Color(0xFF7C3AED), fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       if (text != null) ...[

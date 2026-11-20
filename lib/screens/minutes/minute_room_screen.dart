@@ -753,7 +753,26 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
                       for (final m in msgs)
                         Align(
                           alignment: m.mine ? Alignment.centerRight : Alignment.centerLeft,
-                          child: Container(
+                          child: GestureDetector(
+                            key: ValueKey('room-chat-msg-${m.id ?? m.at.millisecondsSinceEpoch}'),
+                            // Host / co-host: long-press a saved message to remove it.
+                            onLongPress: s.isHost && s.serverChat && m.id != null
+                                ? () async {
+                                    final ok = await showDialog<bool>(
+                                      context: ctx,
+                                      builder: (d) => AlertDialog(
+                                        title: Text(tr('ลบข้อความนี้?')),
+                                        content: Text(m.text, maxLines: 4, overflow: TextOverflow.ellipsis),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(tr('ยกเลิก'))),
+                                          FilledButton(key: const ValueKey('room-chat-delete-ok'), onPressed: () => Navigator.pop(d, true), child: Text(tr('ลบ'))),
+                                        ],
+                                      ),
+                                    );
+                                    if (ok == true) await s.deleteChat(m.id!);
+                                  }
+                                : null,
+                            child: Container(
                             margin: const EdgeInsets.only(bottom: 6),
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
@@ -767,6 +786,7 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
                                 Text(m.text),
                               ],
                             ),
+                          ),
                           ),
                         ),
                     ],
@@ -788,9 +808,15 @@ class _MinuteRoomScreenState extends State<MinuteRoomScreen> {
                       ),
                       IconButton(
                         icon: const Icon(NxI.paperPlaneTilt),
-                        onPressed: () {
-                          s.sendChat(c.text);
+                        onPressed: () async {
+                          final text = c.text;
                           c.clear();
+                          final messenger = ScaffoldMessenger.maybeOf(ctx);
+                          if (!await s.sendChat(text)) {
+                            // Refused (chat turned off / too fast / offline): say why, keep the text.
+                            c.text = text;
+                            messenger?.showSnackBar(SnackBar(content: Text(tr(s.error ?? 'ส่งข้อความไม่สำเร็จ'))));
+                          }
                         },
                       ),
                     ],

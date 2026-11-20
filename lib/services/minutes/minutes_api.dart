@@ -11,11 +11,14 @@ extension MinutesApi on ApiClient {
   /// What the server supports: `{rooms, languages:[{code,name}], templates:[{key,th,en}], upload:{part_size,max_bytes}, …}`.
   Future<Map<String, dynamic>> getMinutesConfig() async => _dataMap(await _send('GET', '/api/ai/minutes/config'));
 
-  Future<List<Map<String, dynamic>>> getMinuteMeetings({String? q, String? source, String? status, int limit = 30, int offset = 0}) async {
+  /// [scope] `shared` = other people's meetings I can see; [open] = rooms that can still be joined.
+  Future<List<Map<String, dynamic>>> getMinuteMeetings({String? q, String? source, String? status, String? scope, bool open = false, int limit = 30, int offset = 0}) async {
     final env = await _send('GET', '/api/ai/minutes', query: {
       if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
       'source': ?source,
       'status': ?status,
+      'scope': ?scope,
+      if (open) 'open': '1',
       'limit': '$limit',
       if (offset > 0) 'offset': '$offset',
     });
@@ -99,6 +102,15 @@ extension MinutesApi on ApiClient {
       _dataMap(await _send('POST', '/api/ai/minutes/$id/shares', data: {'type': type, 'target_id': ?targetId}));
 
   Future<void> removeMinuteShare(String id, String shareId) async => _send('DELETE', '/api/ai/minutes/$id/shares/$shareId');
+
+  /// Room chat saved with the meeting: `[{id, identity, user_id, name, text, at}]`.
+  Future<List<Map<String, dynamic>>> getMinuteChat(String id) async {
+    final d = _dataMap(await _send('GET', '/api/ai/minutes/$id/chat'));
+    return [for (final x in (d['items'] as List? ?? const [])) if (x is Map) Map<String, dynamic>.from(x)];
+  }
+
+  /// Host / co-host removes a chat message.
+  Future<void> deleteMinuteChat(String id, String msgId) async => _send('DELETE', '/api/ai/minutes/$id/chat/$msgId');
 
   /// PDPA "ลบข้อมูลของฉัน": my meetings here + my lines / chat in other people's rooms.
   Future<Map<String, dynamic>> deleteMyMinuteData() async => _dataMap(await _send('DELETE', '/api/ai/minutes/me/data'));

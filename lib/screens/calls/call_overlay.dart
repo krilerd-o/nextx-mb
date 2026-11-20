@@ -529,6 +529,11 @@ class _BubbleState extends State<_Bubble> {
     return NxOngoingBubble(
       kind: 'call',
       gestureKey: const ValueKey('call-bubble'),
+      menu: [
+        OngoingMenuItem(id: 'call-mic', label: tr(s.muted ? 'เปิดไมค์' : 'ปิดไมค์'), icon: s.muted ? NxI.microphone : NxI.microphoneSlash, onTap: () => s.toggleMute()),
+        OngoingMenuItem(id: 'call-open', label: tr('เปิดหน้าสาย'), icon: NxI.cornersOut, onTap: () => s.setMinimized(false)),
+        OngoingMenuItem(id: 'call-hangup', label: tr('วางสาย'), icon: NxI.phoneX, danger: true, onTap: () => s.hangUp()),
+      ],
       size: const Size(w, h),
       initial: (size, pad) => Offset(size.width - w - 12, pad.top + 72),
       onTap: () => s.setMinimized(false),

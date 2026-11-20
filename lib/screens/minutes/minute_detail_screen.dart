@@ -23,6 +23,7 @@ import 'minutes_widgets.dart';
 import '../../services/minutes/minute_room_session.dart';
 import 'minute_join_sheet.dart' show joinMinuteRoomAsMember;
 import 'minute_room_screen.dart' show reopenMinuteRoom;
+import 'minute_chat_tab.dart';
 
 /// One meeting: player + tabs สรุป · ถอดข้อความ · แปล · ถามไอแซค.
 class MinuteDetailScreen extends StatefulWidget {
@@ -33,8 +34,15 @@ class MinuteDetailScreen extends StatefulWidget {
   State<MinuteDetailScreen> createState() => _MinuteDetailScreenState();
 }
 
-class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTickerProviderStateMixin {
-  late final _tabs = TabController(length: 5, vsync: this)..addListener(() => mounted ? setState(() {}) : null);
+class _MinuteDetailScreenState extends State<MinuteDetailScreen> with TickerProviderStateMixin {
+  late TabController _tabs = _newTabs(5);
+  TabController _newTabs(int n) => TabController(length: n, vsync: this)..addListener(() => mounted ? setState(() {}) : null);
+
+  /// Room meetings get a "แชท" tab (the saved room chat).
+  bool get _hasChat => _m?.source == 'room';
+
+  /// Shared with me inside the business: no Ask / new translations (they spend the business's AI quota).
+  bool _viaShare = false;
   MinuteMeeting? _m;
 
   /// Shared with me inside the business → read only (no share / rename / delete). Old servers: editable.
@@ -102,6 +110,13 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
         _m = MinuteMeeting.fromJson(Map<String, dynamic>.from(d['item'] as Map));
         _room = d['room'] is Map ? Map<String, dynamic>.from(d['room'] as Map) : null;
         _canWrite = d['access'] is Map ? (d['access'] as Map)['can_write'] == true : true;
+        _viaShare = d['access'] is Map && (d['access'] as Map)['via'] == 'share';
+        final want = _m?.source == 'room' ? 6 : 5;
+        if (_tabs.length != want) {
+          final old = _tabs;
+          _tabs = _newTabs(want);
+          WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+        }
         _keepDays = d['retention'] is Map ? (((d['retention'] as Map)['days'] as num?)?.toInt() ?? 0) : 0;
         _lines = [for (final s in (d['segments'] as List? ?? const [])) if (s is Map) MinuteLine.fromJson(Map<String, dynamic>.from(s))];
         _summaries = [for (final s in (d['summaries'] as List? ?? const [])) if (s is Map) MinuteSummary.fromJson(Map<String, dynamic>.from(s))];
@@ -315,7 +330,14 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
           controller: _tabs,
           isScrollable: true,
           tabAlignment: TabAlignment.start,
-          tabs: [Tab(text: tr('สรุป')), Tab(text: tr('ถอดข้อความ')), Tab(text: tr('แปล')), Tab(text: tr('ถามไอแซค')), Tab(key: const ValueKey('minute-tab-workspace'), text: tr('โน้ต · บอร์ด'))],
+          tabs: [
+            Tab(text: tr('สรุป')),
+            Tab(text: tr('ถอดข้อความ')),
+            Tab(text: tr('แปล')),
+            Tab(text: tr('ถามไอแซค')),
+            Tab(key: const ValueKey('minute-tab-workspace'), text: tr('โน้ต · บอร์ด')),
+            if (_hasChat) Tab(key: const ValueKey('minute-tab-chat'), text: tr('แชท')),
+          ],
         ),
       ),
       body: _loading
@@ -340,8 +362,8 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
                     // Drawing / dragging cards must not swipe to another tab.
                     physics: _tabs.index == 4 ? const NeverScrollableScrollPhysics() : null,
                     children: [
-                      _SummaryTab(meeting: m, summary: _summary, busy: _summarizing, onSummarize: _summarize, onSeek: _seek, onCreateTasks: _createTasks),
-                      _TranscriptTab(lines: _lines, speakerOf: _speaker, positionMs: _player.positionMs, onSeek: _seek, onEdit: _editLine),
+                      _SummaryTab(meeting: m, summary: _summary, busy: _summarizing, onSummarize: _canWrite ? _summarize : null, onSeek: _seek, onCreateTasks: _canWrite ? _createTasks : null),
+                      _TranscriptTab(lines: _lines, speakerOf: _speaker, positionMs: _player.positionMs, onSeek: _seek, onEdit: _canWrite ? _editLine : null),
                       _TranslateTab(
                         meeting: m,
                         lines: _lines,
@@ -349,11 +371,12 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
                         status: _trStatus,
                         viewLang: _viewLang,
                         onView: (l) => setState(() => _viewLang = l),
-                        onTranslate: _translate,
+                        onTranslate: _viaShare ? null : _translate,
                         speakerOf: _speaker,
                       ),
-                      _AskTab(meetingId: m.id, onSeek: _seek, enabled: _lines.isNotEmpty),
+                      _AskTab(meetingId: m.id, onSeek: _seek, enabled: _lines.isNotEmpty && !_viaShare),
                       _WorkspaceTab(meetingId: m.id, api: _api),
+                      if (_hasChat) MinuteChatTab(meetingId: m.id, api: _api, canDelete: _canWrite),
                     ],
                   ),
                 ),
@@ -542,19 +565,21 @@ class _MediaPlayer extends ChangeNotifier {
 
 class _SummaryTab extends StatelessWidget {
   const _SummaryTab({required this.meeting, required this.summary, required this.busy, required this.onSummarize, required this.onSeek, required this.onCreateTasks});
+
+  /// null = read only (shared with me / a participant who is not a co-host).
   final MinuteMeeting meeting;
   final MinuteSummary? summary;
   final bool busy;
-  final Future<void> Function({String? template}) onSummarize;
+  final Future<void> Function({String? template})? onSummarize;
   final ValueChanged<int> onSeek;
-  final VoidCallback onCreateTasks;
+  final VoidCallback? onCreateTasks;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final s = summary;
     if (s == null) {
-      final canSummarize = meeting.ready;
+      final canSummarize = meeting.ready && onSummarize != null;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -568,7 +593,7 @@ class _SummaryTab extends StatelessWidget {
               if (canSummarize)
                 FilledButton.icon(
                   key: const ValueKey('minute-summarize'),
-                  onPressed: busy ? null : () => onSummarize(),
+                  onPressed: busy ? null : () => onSummarize!(),
                   icon: busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.sparkle),
                   label: Text(tr(busy ? 'กำลังสรุป…' : 'สรุปตอนนี้')),
                 ),
@@ -608,7 +633,7 @@ class _SummaryTab extends StatelessWidget {
         const SizedBox(height: 4),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Flexible(child: Chip(label: Text(tr(minuteTemplateLabel(s.template)), overflow: TextOverflow.ellipsis), visualDensity: VisualDensity.compact)),
-          TextButton.icon(key: const ValueKey('minute-resummarize'), onPressed: busy ? null : () => onSummarize(), icon: const Icon(NxI.arrowClockwise, size: 16), label: Text(tr('สรุปใหม่'))),
+          if (onSummarize != null) TextButton.icon(key: const ValueKey('minute-resummarize'), onPressed: busy ? null : () => onSummarize!(), icon: const Icon(NxI.arrowClockwise, size: 16), label: Text(tr('สรุปใหม่'))),
         ]),
         const SizedBox(height: 6),
         section('ใจความสำคัญ', NxI.listBullets, const Color(0xFF4F46E5), [for (final t in s.keyPoints) bullet(t)]),
@@ -622,7 +647,7 @@ class _SummaryTab extends StatelessWidget {
               title: _TimeLinkText(a.text, onSeek: onSeek),
               subtitle: (a.owner ?? a.due) == null ? null : Text([if (a.owner != null) a.owner!, if (a.due != null) a.due!].join(' · ')),
             ),
-          if (s.actions.isNotEmpty)
+          if (s.actions.isNotEmpty && onCreateTasks != null)
             Align(
               alignment: Alignment.centerRight,
               child: FilledButton.tonalIcon(key: const ValueKey('minute-create-tasks'), onPressed: onCreateTasks, icon: const Icon(NxI.calendarPlus, size: 16), label: Text(tr('สร้างเป็นงานใน CRM'))),
@@ -696,7 +721,7 @@ class _TranscriptTab extends StatelessWidget {
   final String Function(MinuteLine) speakerOf;
   final int positionMs;
   final ValueChanged<int> onSeek;
-  final ValueChanged<MinuteLine> onEdit;
+  final ValueChanged<MinuteLine>? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -714,7 +739,7 @@ class _TranscriptTab extends StatelessWidget {
           key: ValueKey('minute-line-${l.seq}'),
           borderRadius: BorderRadius.circular(12),
           onTap: () => onSeek(l.startMs),
-          onLongPress: () => onEdit(l),
+          onLongPress: onEdit == null ? null : () => onEdit!(l),
           child: Container(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
             decoration: BoxDecoration(color: now ? theme.colorScheme.primary.withValues(alpha: 0.08) : null, borderRadius: BorderRadius.circular(12)),
@@ -758,7 +783,7 @@ class _TranslateTab extends StatelessWidget {
   final Map<String, String> status;
   final String? viewLang;
   final ValueChanged<String> onView;
-  final ValueChanged<String> onTranslate;
+  final ValueChanged<String>? onTranslate;
   final String Function(MinuteLine) speakerOf;
 
   @override
@@ -778,13 +803,13 @@ class _TranslateTab extends StatelessWidget {
               if (e.key != meeting.locale)
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
-                  child: translations.containsKey(e.key)
+                  child: translations.containsKey(e.key) || onTranslate == null
                       ? ChoiceChip(key: ValueKey('minute-tr-view-${e.key}'), label: Text(tr(e.value)), selected: lang == e.key, onSelected: (_) => onView(e.key))
                       : ActionChip(
                           key: ValueKey('minute-tr-make-${e.key}'),
                           avatar: status[e.key] == 'working' ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.plus, size: 16),
                           label: Text(tr(e.value)),
-                          onPressed: status[e.key] == 'working' || lines.isEmpty ? null : () => onTranslate(e.key),
+                          onPressed: status[e.key] == 'working' || lines.isEmpty ? null : () => onTranslate!(e.key),
                         ),
                 ),
           ]),

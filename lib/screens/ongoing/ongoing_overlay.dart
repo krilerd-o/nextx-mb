@@ -148,6 +148,17 @@ class _OngoingSessionsOverlayState extends State<OngoingSessionsOverlay> {
       key: const ValueKey('room-bubble'),
       kind: 'room',
       semanticsLabel: tr('ห้องประชุม — แตะเพื่อกลับเข้าห้อง'),
+      menu: [
+        OngoingMenuItem(id: 'room-mic', label: tr(mic ? 'ปิดไมค์' : 'เปิดไมค์'), icon: mic ? LucideIcons300.micOff : NxI.microphone, onTap: () => unawaited(r.toggleMic())),
+        OngoingMenuItem(id: 'room-open', label: tr('กลับเข้าห้อง'), icon: NxI.videoCamera, onTap: _openRoom),
+        OngoingMenuItem(
+          id: 'room-leave',
+          label: tr('ออกจากห้อง'),
+          icon: NxI.phoneX,
+          danger: true,
+          onTap: () => unawaited(OngoingSessionsBinder.instance?.leave(r) ?? r.close()),
+        ),
+      ],
       onTap: _openRoom,
       onHidden: _hint,
       child: NxOngoingPill(
@@ -176,6 +187,12 @@ class _OngoingSessionsOverlayState extends State<OngoingSessionsOverlay> {
       key: const ValueKey('minute-recorder-bubble'),
       kind: 'minute_recording',
       semanticsLabel: tr('บันทึกประชุม — แตะเพื่อเปิด'),
+      menu: [
+        OngoingMenuItem(id: 'rec-pause', label: tr(paused ? 'อัดต่อ' : 'หยุดชั่วคราว'), icon: paused ? NxI.microphone : LucideIcons300.pause, onTap: () => unawaited(r.togglePause())),
+        OngoingMenuItem(id: 'rec-open', label: tr('เปิดหน้าบันทึก'), icon: NxI.cornersOut, onTap: _openRecorder),
+        // Stopping needs the finish choices (summary / translate …): open the recorder for it.
+        OngoingMenuItem(id: 'rec-stop', label: tr('จบการบันทึก…'), icon: LucideIcons300.square, danger: true, onTap: _openRecorder),
+      ],
       onTap: _openRecorder,
       onHidden: _hint,
       child: NxOngoingPill(

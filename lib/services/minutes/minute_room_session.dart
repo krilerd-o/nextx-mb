@@ -445,6 +445,19 @@ class MinuteRoomSession extends ChangeNotifier {
     return true;
   }
 
+  /// Host / co-host removes a chat message (saved chat only).
+  Future<bool> deleteChat(int id) async {
+    if (!serverChat || !isHost) return false;
+    final ack = await _rt.emitAck('minute:chat_delete', {'ticket': ticket, 'id': id});
+    if (ack['ok'] != true) {
+      error = 'ลบข้อความไม่สำเร็จ';
+      notifyListeners();
+      return false;
+    }
+    chat.value = chat.value.where((m) => m.id != id).toList();
+    return true;
+  }
+
   Future<void> react(String emoji) async {
     await media.sendData({'type': 'reaction', 'emoji': emoji, 'name': name}, topic: 'reaction');
     reactions.add((name, emoji));
@@ -516,6 +529,9 @@ class MinuteRoomSession extends ChangeNotifier {
         final m = _chatOf(Map<String, dynamic>.from(item));
         if (m.id != null && chat.value.any((x) => x.id == m.id)) return;
         chat.value = [...chat.value, m];
+      case 'minute:chat_removed':
+        final rid = (d['id'] as num?)?.toInt();
+        if (rid != null) chat.value = chat.value.where((m) => m.id != rid).toList();
       case 'minute:room_removed':
         if ('${d['identity'] ?? ''}' != identity) return;
         closedReason = 'removed';

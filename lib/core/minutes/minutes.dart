@@ -93,6 +93,7 @@ class MinuteMeeting {
     this.ownerId,
     this.roomOpen = false,
     this.purgedAt,
+    this.accessVia,
   });
 
   factory MinuteMeeting.fromJson(Map<String, dynamic> j) => MinuteMeeting(
@@ -120,6 +121,7 @@ class MinuteMeeting {
     ownerId: _s(j['owner_id']),
     roomOpen: j['room_open'] == true,
     purgedAt: DateTime.tryParse('${j['purged_at'] ?? ''}')?.toLocal(),
+    accessVia: _s(j['access_via']),
   );
 
   final String id;
@@ -151,6 +153,10 @@ class MinuteMeeting {
   /// Files and transcript removed by the retention period (PDPA).
   final DateTime? purgedAt;
 
+  /// How I see it: owner | room (I was in it) | share (shared with me, read only).
+  final String? accessVia;
+  bool get sharedWithMe => accessVia == 'share';
+
   bool get busy => status == 'processing' || status == 'uploading';
   bool get ready => status == 'ready';
   bool get video => mediaKind == 'video';
@@ -180,6 +186,7 @@ class MinuteMeeting {
     ownerId: ownerId,
     roomOpen: roomOpen,
     purgedAt: purgedAt,
+    accessVia: accessVia,
   );
 }
 
