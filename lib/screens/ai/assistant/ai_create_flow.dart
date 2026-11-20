@@ -50,6 +50,13 @@ bool aiCanCreate(BuildContext context, String module) {
   return MenuAccess.allow(session, EntityModules.menuKeyOf(module));
 }
 
+/// Can this user open [location] from a slash command (the page's own menu permission)?
+bool aiCanOpen(BuildContext context, String location) {
+  final session = context.read<AppConfig>().session;
+  if (location.startsWith('/ai-minutes')) return session.isSuperadmin || session.canAccess('ai-minute-meeting');
+  return true;
+}
+
 /// In-app link to a new record (same shapes the server's entityLink uses).
 String aiRecordLink(String module, String id, {String? boardId, String? kind}) => switch (module) {
   'activity' => '/calendar?open=$id',

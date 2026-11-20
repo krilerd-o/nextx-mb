@@ -44,6 +44,7 @@ import 'widgets/ai_mode_sheet.dart';
 import 'widgets/ai_sheets.dart';
 import 'widgets/ai_style.dart';
 import 'widgets/ai_welcome.dart';
+import '../../../core/business_switch_reload.dart';
 
 /// ISAAC AI Assistant (web `/ai`), redesigned for phones: a calm chat with
 /// three header controls, quick starters, `/` commands, `@` records, answer
@@ -81,7 +82,7 @@ class AiAssistantScreen extends StatefulWidget {
   State<AiAssistantScreen> createState() => _AiAssistantScreenState();
 }
 
-class _AiAssistantScreenState extends State<AiAssistantScreen> with WidgetsBindingObserver {
+class _AiAssistantScreenState extends State<AiAssistantScreen> with WidgetsBindingObserver, ReloadOnBusinessSwitch {
   late final AiAssistantController _c = widget.controller ?? AiAssistantController(context.read<AppConfig>().apiClient);
   final _input = TextEditingController();
   final _focus = FocusNode();
@@ -147,10 +148,19 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> with WidgetsBindi
     return _boards ?? const [];
   }
 
+  /// Another business: its own chats (the open one belongs to the old business) and its boards.
+  @override
+  void onBusinessSwitched() {
+    _c.newChat();
+    _boards = null;
+    unawaited(_c.loadConversations());
+  }
+
   @override
   void initState() {
     super.initState();
     _c.addListener(_onChange);
+    watchBusiness();
     WidgetsBinding.instance.addObserver(this);
     AiSpeaker.instance.speaking.addListener(_onSpeaking);
     _c.onBackgroundReply = (chatId, title, text) {
@@ -383,6 +393,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> with WidgetsBindi
   void _pickCommand(AiCommand c) {
     HapticFeedback.selectionClick();
     unawaited(aiCountCommandUse(c.command));
+    final open = c.open;
+    if (open != null) {
+      // `/ประชุม`: straight to AI Minute Meeting's "what to start" sheet.
+      _input.clear();
+      unawaited(context.push(open));
+      return;
+    }
     if (c.isCreate) {
       // Becomes a chip: type / speak the details (or nothing) and send.
       setState(() {
@@ -403,10 +420,10 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> with WidgetsBindi
       if (c.isCreate && aiCanCreate(context, c.create!)) c,
   ];
 
-  /// Slash menu: create commands the user can't use are hidden.
+  /// Slash menu: create commands the user can't use are hidden (and `/ประชุม` without AI Minute Meeting).
   List<AiCommand> _usableCommands() => [
     for (final c in _c.allCommands)
-      if (!c.isCreate || aiCanCreate(context, c.create!)) c,
+      if ((!c.isCreate || aiCanCreate(context, c.create!)) && (c.open == null || aiCanOpen(context, c.open!))) c,
   ];
 
   /// The chat so far as plain text, for "เติมจากแชทนี้".

@@ -38,6 +38,8 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -80,6 +82,12 @@
             android:name=".NotebookRecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+        <!-- Team calls and meeting rooms in the background: ongoing notification with mute / hang up /
+             open (NxOngoingService.kt). Camera only while the camera is on. -->
+        <service
+            android:name=".NxOngoingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|camera" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

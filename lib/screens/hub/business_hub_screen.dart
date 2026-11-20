@@ -10,6 +10,7 @@ import '../../widgets/nx_skeleton.dart';
 import '../../widgets/nx_step_header.dart';
 import '../../core/i18n.dart';
 import '../../widgets/nx_refresh.dart';
+import '../../widgets/business_switch_guard.dart';
 
 /// Step: choose the business (skipped automatically when there is only one).
 class BusinessHubScreen extends StatefulWidget {
@@ -52,6 +53,9 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
   Future<void> _choose(Map<String, dynamic> b) async {
     final id = b['id']?.toString() ?? '';
     if (id.isEmpty) return;
+    final config = context.read<AppConfig>();
+    if (id != config.session.businessId && !await confirmBusinessSwitch(context)) return;
+    if (!mounted) return;
     setState(() => _choosing = id);
     await context.read<AppConfig>().selectBusiness(
           businessId: id,

@@ -91,7 +91,7 @@ void main() {
     });
 
     test('switching business forgets the saved menus of the old one', () async {
-      SharedPreferences.setMockInitialValues({'session_menu_keys': 'lead,deal'});
+      SharedPreferences.setMockInitialValues({'session_menu_keys': 'lead,deal', 'session_role_menu_keys': 'lead'});
       final c = await config(
         const SessionState(accessToken: 't', userId: '2', businessId: '1', menusLoaded: true, menuKeys: ['lead', 'deal']),
         const {}, // every call fails: the refresh after the switch cannot load the new menus
@@ -99,6 +99,7 @@ void main() {
       await c.selectBusiness(businessId: '9', businessName: 'B');
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('session_menu_keys'), isNull);
+      expect(prefs.getString('session_role_menu_keys'), isNull);
       expect(c.session.menusLoaded, isFalse);
     });
 

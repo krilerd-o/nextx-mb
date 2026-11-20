@@ -21,6 +21,8 @@ class MinuteUploadJob {
     this.sentBytes = 0,
     this.state = 'uploading',
     this.error,
+    this.businessId,
+    this.userId,
   });
 
   factory MinuteUploadJob.fromJson(Map<String, dynamic> j) => MinuteUploadJob(
@@ -35,6 +37,8 @@ class MinuteUploadJob {
     sentBytes: (j['sent_bytes'] as num?)?.toInt() ?? 0,
     state: '${j['state'] ?? 'uploading'}',
     error: j['error']?.toString(),
+    businessId: j['business_id']?.toString(),
+    userId: j['user_id']?.toString(),
   );
 
   final String uploadId;
@@ -44,6 +48,10 @@ class MinuteUploadJob {
   final int size;
   final int partSize;
   final String title;
+
+  /// The business the meeting belongs to (parts keep going there after a business switch) and who uploads.
+  final String? businessId;
+  final String? userId;
 
   /// Body of `POST …/complete` (features chosen before uploading).
   final Map<String, dynamic> complete;
@@ -68,6 +76,8 @@ class MinuteUploadJob {
     'sent_bytes': sentBytes,
     'state': state,
     'error': ?error,
+    'business_id': ?businessId,
+    'user_id': ?userId,
   };
 }
 
@@ -99,10 +109,33 @@ class MinuteUploader extends ChangeNotifier {
   /// A file finished uploading (the server is processing it now).
   Stream<MinuteUploadJob> get done => _done.stream;
 
-  Future<void> bind(ApiClient api) async {
+  String? _userId;
+
+  /// After sign-in / switching business. Only this user's uploads run (another account on the same phone
+  /// never sends or sees them); each upload talks to its own business.
+  Future<void> bind(ApiClient api, {String? userId}) async {
     this.api = api;
+    _userId = userId;
     await _load();
+    notifyListeners();
     unawaited(_pump());
+  }
+
+  bool _isMine(MinuteUploadJob j) => j.userId == null || _userId == null || j.userId == _userId;
+
+  /// This user's uploads (all businesses).
+  List<MinuteUploadJob> get mine => [for (final j in jobs) if (_isMine(j)) j];
+
+  /// This user's uploads into [businessId] (what a business's meeting list shows).
+  List<MinuteUploadJob> forBusiness(String? businessId) =>
+      [for (final j in mine) if (j.businessId == null || businessId == null || j.businessId == businessId) j];
+
+  /// Signed out: stop sending (the files stay queued for when this user signs in again).
+  void signOut() {
+    _retry?.cancel();
+    api = null;
+    _userId = null;
+    notifyListeners();
   }
 
   Future<void> _load() async {
@@ -132,6 +165,7 @@ class MinuteUploader extends ChangeNotifier {
     if (a == null) throw StateError('not bound');
     await _load();
     final size = await File(path).length();
+    final bid = a.effectiveBusinessId;
     final r = await a.startMinuteUpload({...body, 'filename': filename, 'mime': mime, 'size': size, 'client_session_id': 'upl-${path.hashCode}-$size'});
     final up = Map<String, dynamic>.from(r['upload'] as Map);
     final item = Map<String, dynamic>.from((r['item'] as Map?) ?? const {});
@@ -144,6 +178,8 @@ class MinuteUploader extends ChangeNotifier {
       partSize: (up['part_size'] as num).toInt(),
       title: '${item['title'] ?? filename}',
       complete: complete,
+      businessId: bid,
+      userId: _userId,
     );
     jobs.removeWhere((j) => j.uploadId == job.uploadId);
     jobs.add(job);
@@ -158,7 +194,7 @@ class MinuteUploader extends ChangeNotifier {
     await _save();
     notifyListeners();
     try {
-      await api?.abortMinuteUpload(job.uploadId);
+      await ApiClient.inBusiness(job.businessId, () async => api?.abortMinuteUpload(job.uploadId));
     } catch (_) {}
   }
 
@@ -179,10 +215,10 @@ class MinuteUploader extends ChangeNotifier {
     _running = true;
     try {
       while (true) {
-        final job = jobs.where((j) => j.state == 'uploading').firstOrNull;
+        final job = jobs.where((j) => j.state == 'uploading' && _isMine(j)).firstOrNull;
         if (job == null) break;
         try {
-          await _run(a, job);
+          await ApiClient.inBusiness(job.businessId, () => _run(a, job));
           _failures = 0;
         } on ApiEnvelopeException catch (e) {
           if (e.statusCode == 404 || e.statusCode == 409 && e.errorCode == 'UPLOAD_CLOSED' || e.statusCode == 413 || e.statusCode == 415) {

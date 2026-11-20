@@ -13,6 +13,9 @@ import '../../core/notebook/notebook_recording.dart';
 import '../../services/calls/call_service.dart';
 import '../../services/notebook/notebook_recorder.dart';
 import '../../widgets/nx_icons.dart';
+import '../../widgets/nx_ongoing_bubble.dart';
+import '../../services/minutes/minute_recorder.dart';
+import '../../services/minutes/minute_room_session.dart';
 import '../comm_ai/comm_ai_isaac.dart';
 import 'notebook_record_screen.dart';
 import 'notebook_widgets.dart' show kRecordRed;
@@ -120,14 +123,21 @@ class _NotebookRecorderOverlayState extends State<NotebookRecorderOverlay> with 
   Widget build(BuildContext context) {
     final call = widget.call;
     return ListenableBuilder(
-      listenable: Listenable.merge([widget.recorder, ?call]),
+      listenable: Listenable.merge([widget.recorder, OngoingBubbles.instance, MinuteRoomSession.active, MinuteRecorder.instance, ?call]),
       builder: (context, _) {
         final r = widget.recorder;
         final callBubble = call != null && call.minimized && (call.phase == CallPhase.active || call.phase == CallPhase.outgoing);
         final callFull = call != null && !call.minimized && (call.phase == CallPhase.active || call.phase == CallPhase.outgoing || call.incoming != null);
+        // One bubble at a time: a meeting room / meeting recording bubble wins (ongoing_overlay.dart).
+        final room = MinuteRoomSession.active.value;
+        final otherBubble = (room != null && !room.closed) || MinuteRecorder.instance.active;
+        if (!r.active) OngoingBubbles.instance.forget('notebook_recording');
+        final hidden = OngoingBubbles.instance.isHidden('notebook_recording');
+        final show = r.active && !r.screenOpen && !callFull && !otherBubble;
         return Stack(
           children: [
-            if (r.active && !r.screenOpen && !callFull) NotebookRecorderBubble(recorder: r, callBubble: callBubble, onExpand: _expand),
+            if (show && !hidden) NotebookRecorderBubble(recorder: r, callBubble: callBubble, onExpand: _expand),
+            if (show && hidden) NxOngoingRestorePill(kind: 'notebook_recording', label: tr('กำลังบันทึกเสียง')),
             NotebookRecordingToast(recorder: r, open: widget.open),
           ],
         );
@@ -147,7 +157,6 @@ class NotebookRecorderBubble extends StatefulWidget {
 }
 
 class _NotebookRecorderBubbleState extends State<NotebookRecorderBubble> {
-  Offset? _pos;
   Timer? _t;
 
   @override
@@ -166,76 +175,65 @@ class _NotebookRecorderBubbleState extends State<NotebookRecorderBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final pad = MediaQuery.paddingOf(context);
     final r = widget.recorder;
-    const s = kRecorderBubbleSize;
-    final pos = clampRecorderBubble(_pos ?? defaultRecorderBubblePos(size, pad, callBubble: widget.callBubble), size, pad, callBubble: widget.callBubble);
     final paused = r.paused;
-    return Positioned(
-      left: pos.dx,
-      top: pos.dy,
-      width: s.width,
-      height: s.height,
-      child: GestureDetector(
-        key: const ValueKey('notebook-recorder-bubble'),
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onExpand,
-        onPanUpdate: (d) => setState(() => _pos = clampRecorderBubble((_pos ?? pos) + d.delta, size, pad, callBubble: widget.callBubble)),
-        child: Semantics(
-          button: true,
-          label: tr('บันทึกเสียงในสมุดโน้ต — แตะเพื่อเปิด'),
-          child: Material(
-            elevation: 12,
-            shadowColor: Colors.black54,
-            color: const Color(0xF2111827),
-            shape: StadiumBorder(
-              side: BorderSide(color: (paused ? Colors.white : kRecordRed).withValues(alpha: paused ? 0.14 : 0.45)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 5, 0),
-              child: Row(
-                children: [
-                  NotebookRecordDot(paused: paused, size: 10),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          recordingClock(r.elapsed.inMilliseconds),
-                          key: const ValueKey('notebook-recorder-bubble-time'),
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, height: 1.1, fontFeatures: [FontFeature.tabularFigures()]),
-                        ),
-                        Text(
-                          tr(paused ? 'หยุดชั่วคราว' : 'กำลังบันทึก'),
-                          maxLines: 1,
-                          style: TextStyle(color: paused ? Colors.white54 : const Color(0xFFFDA4AF), fontSize: 10.5, fontWeight: FontWeight.w700, height: 1.2),
-                        ),
-                      ],
+    // Shared floating bubble: drag (snaps to an edge), tap to open, drop on the × to hide.
+    return NxOngoingBubble(
+      kind: 'notebook_recording',
+      gestureKey: const ValueKey('notebook-recorder-bubble'),
+      size: kRecorderBubbleSize,
+      initial: (size, pad) => clampRecorderBubble(defaultRecorderBubblePos(size, pad, callBubble: widget.callBubble), size, pad, callBubble: widget.callBubble),
+      onTap: widget.onExpand,
+      semanticsLabel: tr('บันทึกเสียงในสมุดโน้ต — แตะเพื่อเปิด'),
+      child: Material(
+        elevation: 12,
+        shadowColor: Colors.black54,
+        color: const Color(0xF2111827),
+        shape: StadiumBorder(
+          side: BorderSide(color: (paused ? Colors.white : kRecordRed).withValues(alpha: paused ? 0.14 : 0.45)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 5, 0),
+          child: Row(
+            children: [
+              NotebookRecordDot(paused: paused, size: 10),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      recordingClock(r.elapsed.inMilliseconds),
+                      key: const ValueKey('notebook-recorder-bubble-time'),
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, height: 1.1, fontFeatures: [FontFeature.tabularFigures()]),
                     ),
-                  ),
-                  SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: Material(
-                      color: paused ? kRecordRed : Colors.white.withValues(alpha: 0.12),
-                      shape: const CircleBorder(),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        key: const ValueKey('notebook-recorder-bubble-toggle'),
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          r.togglePause();
-                        },
-                        child: Icon(paused ? NxI.microphone : LucideIcons300.pause, size: 19, color: Colors.white),
-                      ),
+                    Text(
+                      tr(paused ? 'หยุดชั่วคราว' : 'กำลังบันทึก'),
+                      maxLines: 1,
+                      style: TextStyle(color: paused ? Colors.white54 : const Color(0xFFFDA4AF), fontSize: 10.5, fontWeight: FontWeight.w700, height: 1.2),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+              SizedBox(
+                width: 40,
+                height: 40,
+                child: Material(
+                  color: paused ? kRecordRed : Colors.white.withValues(alpha: 0.12),
+                  shape: const CircleBorder(),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: const ValueKey('notebook-recorder-bubble-toggle'),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      r.togglePause();
+                    },
+                    child: Icon(paused ? NxI.microphone : LucideIcons300.pause, size: 19, color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

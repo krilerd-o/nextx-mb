@@ -89,6 +89,20 @@ extension MinutesApi on ApiClient {
 
   Future<void> revokeMinuteLink(String linkId) async => _send('DELETE', '/api/ai/minutes/share/links/$linkId');
 
+  /// Shared inside the business (read only): `[{id, type: user|role|business, target_id, name}]`.
+  Future<List<Map<String, dynamic>>> getMinuteShares(String id) async {
+    final d = _dataMap(await _send('GET', '/api/ai/minutes/$id/shares'));
+    return [for (final x in (d['items'] as List? ?? const [])) if (x is Map) Map<String, dynamic>.from(x)];
+  }
+
+  Future<Map<String, dynamic>> addMinuteShare(String id, {required String type, int? targetId}) async =>
+      _dataMap(await _send('POST', '/api/ai/minutes/$id/shares', data: {'type': type, 'target_id': ?targetId}));
+
+  Future<void> removeMinuteShare(String id, String shareId) async => _send('DELETE', '/api/ai/minutes/$id/shares/$shareId');
+
+  /// PDPA "ลบข้อมูลของฉัน": my meetings here + my lines / chat in other people's rooms.
+  Future<Map<String, dynamic>> deleteMyMinuteData() async => _dataMap(await _send('DELETE', '/api/ai/minutes/me/data'));
+
   Future<Map<String, dynamic>> emailMinutes(String id, Map<String, dynamic> body) async =>
       _dataMap(await _send('POST', '/api/ai/minutes/$id/share/email', data: body, options: Options(receiveTimeout: const Duration(minutes: 3))));
 

@@ -50,6 +50,7 @@ const String _keyEmail = 'session_email';
 const String _keyDisplayName = 'session_display_name';
 const String _keyPackageCode = 'session_package_code';
 const String _keyMenuKeys = 'session_menu_keys';
+const String _keyRoleMenuKeys = 'session_role_menu_keys';
 
 /// Socket event NEXTX sends when what this user may see changed.
 const String kPermissionsChangedEvent = 'permissions:changed';
@@ -90,6 +91,7 @@ const List<String> _spaceBundleKeys = [
   _keyDisplayName,
   _keyPackageCode,
   _keyMenuKeys,
+  _keyRoleMenuKeys,
   _keyPackageId,
   _keyServerConfirmed,
   'offline_checkin_queue_v1',
@@ -602,6 +604,8 @@ class AppConfig extends ChangeNotifier {
     final display = prefs.getString(_keyDisplayName);
     final pkg = prefs.getString(_keyPackageCode);
     final menusRaw = prefs.getString(_keyMenuKeys);
+    final roleRaw = prefs.getString(_keyRoleMenuKeys);
+    final roleMenus = roleRaw == null || roleRaw.isEmpty ? null : roleRaw.split(',').where((e) => e.isNotEmpty).toList();
     List<String>? menus;
     if (menusRaw != null && menusRaw.isNotEmpty) {
       menus = menusRaw.split(',').where((e) => e.isNotEmpty).toList();
@@ -619,6 +623,7 @@ class AppConfig extends ChangeNotifier {
       packageCode: pkg,
       menuKeys: menus,
       menusLoaded: menus != null,
+      roleMenuKeys: roleMenus,
     );
     _api.attachSession(
       baseUrl: _apiBaseUrl,
@@ -1258,6 +1263,8 @@ class AppConfig extends ChangeNotifier {
       // Unrestricted now (no Package / role limit): drop the old list so it cannot come back.
       await prefs.remove(_keyMenuKeys);
     }
+    final roleKeys = allowed is List && allowed.isNotEmpty ? allowed.map((e) => e.toString()).toList() : null;
+    await prefs.setString(_keyRoleMenuKeys, roleKeys?.join(',') ?? '');
     final display = _displayFromUser(user, email ?? '');
     await prefs.setString(_keyDisplayName, display);
     _session = _session.copyWith(
@@ -1273,6 +1280,8 @@ class AppConfig extends ChangeNotifier {
       isSuperadmin: superadmin,
       menusLoaded: true,
       businessRole: me['role']?.toString(),
+      roleMenuKeys: roleKeys,
+      clearRoleMenus: roleKeys == null,
     );
     // New device: take the roles / tabs saved on the account (feature `prefs_mobile`).
     final remote = ShellTabsConfig.fromServer(user?['mobile_shell']);
@@ -1301,6 +1310,7 @@ class AppConfig extends ChangeNotifier {
     await prefs.remove(_keyPackageId);
     // The old business's menus must not come back on the next cold start if the refresh below fails.
     await prefs.remove(_keyMenuKeys);
+    await prefs.remove(_keyRoleMenuKeys);
     if (packageCode != null) {
       await prefs.setString(_keyPackageCode, packageCode);
       if (packageCode.isNotEmpty) await prefs.setString(_lastPackageKey(businessId), packageCode);
@@ -1400,7 +1410,7 @@ class AppConfig extends ChangeNotifier {
   /// Back to the business list (switch business).
   Future<void> clearBusiness() async {
     final prefs = await SharedPreferences.getInstance();
-    for (final k in [_keyBusinessId, _keyBusinessName, _keyPackageCode, _keyPackageId, _keyMenuKeys]) {
+    for (final k in [_keyBusinessId, _keyBusinessName, _keyPackageCode, _keyPackageId, _keyMenuKeys, _keyRoleMenuKeys]) {
       await prefs.remove(k);
     }
     _packageId = null;
@@ -1422,9 +1432,15 @@ class AppConfig extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set at start-up (call_setup.dart): ends calls / rooms and stops recordings before the token goes.
+  static Future<void> Function()? beforeSignOut;
+
   Future<void> logout() async {
     if (_loggingOut) return;
     _loggingOut = true;
+    try {
+      await beforeSignOut?.call();
+    } catch (_) {}
     try {
       await DevicePushService.instance.unregister(this);
     } catch (_) {}

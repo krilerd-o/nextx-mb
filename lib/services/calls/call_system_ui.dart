@@ -7,6 +7,7 @@ import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 
 import '../api_client.dart';
 import 'call_service.dart';
+import '../ongoing/ongoing_binder.dart';
 
 bool get callKitSupported => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
 
@@ -112,6 +113,8 @@ class CallKitBridge {
     if (!callKitSupported) return;
     _sub?.cancel();
     _sub = FlutterCallkitIncoming.onEvent.listen((event) async {
+      // Meeting rooms reported to CallKit (iOS) handle their own mute / end.
+      if (OngoingSessionsBinder.instance?.callKit.handle(event) ?? false) return;
       switch (event) {
         case CallEventActionCallAccept(:final callKitParams):
           final extra = Map<String, dynamic>.from(callKitParams.extra ?? const {});

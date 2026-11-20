@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../core/app_config.dart';
 import '../core/hub_selection.dart';
 import '../services/api_client.dart';
+import 'business_switch_guard.dart';
 import 'nx_icons.dart';
 import '../screens/spaces/space_switcher.dart' show runColorHandOff;
 import '../core/i18n.dart';
@@ -262,6 +263,9 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
     final code = p['code']?.toString() ?? '';
     final name = p['name']?.toString() ?? code;
     HapticFeedback.mediumImpact();
+    // A running call / room / recording: say what happens before switching business.
+    if (_bizId != null && _bizId != config.session.businessId && !await confirmBusinessSwitch(context)) return;
+    if (!mounted) return;
     setState(() => _switching = code);
     // Let the chosen card show it is picked before the hand-off starts.
     await Future<void>.delayed(const Duration(milliseconds: 260));

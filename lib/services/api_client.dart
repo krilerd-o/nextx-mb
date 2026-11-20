@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
@@ -141,6 +142,16 @@ class EntityListPage {
 }
 
 class ApiClient {
+  static const _zoneBusiness = #nxBusinessOverride;
+
+  /// Runs [body] with every request sent for business [businessId] (`X-Business-Id`) whatever business
+  /// is open now — a recording / upload / room keeps talking to the business it started in after a switch.
+  static Future<T> inBusiness<T>(String? businessId, Future<T> Function() body) =>
+      businessId == null || businessId.isEmpty ? body() : runZoned(body, zoneValues: {_zoneBusiness: businessId});
+
+  /// The business a request made here would go to (tests / diagnostics).
+  String? get effectiveBusinessId => (Zone.current[_zoneBusiness] as String?) ?? _businessId;
+
   ApiClient({VoidCallback? onUnauthorized, Dio? dio}) : _onUnauthorized = onUnauthorized {
     _dio = dio ??
         Dio(
@@ -170,7 +181,7 @@ class ApiClient {
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
-          final bid = _businessId;
+          final bid = (options.extra['nx_business'] as String?) ?? (Zone.current[_zoneBusiness] as String?) ?? _businessId;
           if (bid != null && bid.isNotEmpty) {
             options.headers['X-Business-Id'] = bid;
           }

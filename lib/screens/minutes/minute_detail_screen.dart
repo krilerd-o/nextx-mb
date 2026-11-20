@@ -20,6 +20,9 @@ import '../../widgets/nx_icons.dart';
 import 'minute_share_sheet.dart';
 import 'minute_workspace.dart';
 import 'minutes_widgets.dart';
+import '../../services/minutes/minute_room_session.dart';
+import 'minute_join_sheet.dart' show joinMinuteRoomAsMember;
+import 'minute_room_screen.dart' show reopenMinuteRoom;
 
 /// One meeting: player + tabs สรุป · ถอดข้อความ · แปล · ถามไอแซค.
 class MinuteDetailScreen extends StatefulWidget {
@@ -33,6 +36,22 @@ class MinuteDetailScreen extends StatefulWidget {
 class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTickerProviderStateMixin {
   late final _tabs = TabController(length: 5, vsync: this)..addListener(() => mounted ? setState(() {}) : null);
   MinuteMeeting? _m;
+
+  /// Shared with me inside the business → read only (no share / rename / delete). Old servers: editable.
+  bool _canWrite = true;
+
+  /// Days files / transcripts are kept (PDPA; 0 = until deleted).
+  int _keepDays = 0;
+
+  /// The meeting's room (`{code, status, expires_at}`), when it is a room meeting.
+  Map<String, dynamic>? _room;
+
+  bool get _roomOpen {
+    final r = _room;
+    if (r == null || '${r['code'] ?? ''}'.isEmpty || r['status'] == 'ended') return false;
+    final exp = DateTime.tryParse('${r['expires_at'] ?? ''}');
+    return exp == null || exp.isAfter(DateTime.now());
+  }
   List<MinuteLine> _lines = const [];
   List<MinuteSummary> _summaries = const [];
   Map<String, Map<String, String>> _translations = const {};
@@ -81,6 +100,9 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
       }
       setState(() {
         _m = MinuteMeeting.fromJson(Map<String, dynamic>.from(d['item'] as Map));
+        _room = d['room'] is Map ? Map<String, dynamic>.from(d['room'] as Map) : null;
+        _canWrite = d['access'] is Map ? (d['access'] as Map)['can_write'] == true : true;
+        _keepDays = d['retention'] is Map ? (((d['retention'] as Map)['days'] as num?)?.toInt() ?? 0) : 0;
         _lines = [for (final s in (d['segments'] as List? ?? const [])) if (s is Map) MinuteLine.fromJson(Map<String, dynamic>.from(s))];
         _summaries = [for (final s in (d['summaries'] as List? ?? const [])) if (s is Map) MinuteSummary.fromJson(Map<String, dynamic>.from(s))];
         _translations = trs;
@@ -281,8 +303,13 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
       appBar: AppBar(
         title: Text(m?.title ?? tr('การประชุม'), maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
-          if (m != null) IconButton(key: const ValueKey('minute-share'), tooltip: tr('แชร์'), icon: const Icon(NxI.shareNetwork), onPressed: () => showMinuteShareSheet(context, meeting: m, langs: [m.locale, ..._translations.keys])),
-          if (m != null) IconButton(tooltip: tr('เพิ่มเติม'), icon: const Icon(NxI.dotsThreeVertical), onPressed: _more),
+          if (m != null && !_canWrite)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(child: Chip(key: const ValueKey('minute-read-only'), visualDensity: VisualDensity.compact, label: Text(tr('แชร์ให้ดู')))),
+            ),
+          if (m != null && _canWrite) IconButton(key: const ValueKey('minute-share'), tooltip: tr('แชร์'), icon: const Icon(NxI.shareNetwork), onPressed: () => showMinuteShareSheet(context, meeting: m, langs: [m.locale, ..._translations.keys])),
+          if (m != null && _canWrite) IconButton(tooltip: tr('เพิ่มเติม'), icon: const Icon(NxI.dotsThreeVertical), onPressed: _more),
         ],
         bottom: TabBar(
           controller: _tabs,
@@ -297,7 +324,15 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
           ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Text(tr(_error ?? 'ไม่พบการประชุม')), TextButton(onPressed: _load, child: Text(tr('ลองอีกครั้ง')))]))
           : Column(
               children: [
-                if (m.busy || m.status == 'failed' || m.status == 'live') _statusBar(m),
+                if (_roomOpen) _roomBar(m),
+                if (m.purgedAt != null) _purgedBar(),
+                if (m.purgedAt == null && _keepDays > 0 && m.ready)
+                  Padding(
+                    key: const ValueKey('minute-retention'),
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                    child: Text(tr('เก็บไฟล์และข้อความถอดเสียง $_keepDays วันหลังประชุม (ตั้งค่าโดยองค์กร)'), style: Theme.of(context).textTheme.bodySmall),
+                  ),
+                if (!_roomOpen && (m.busy || m.status == 'failed' || m.status == 'live')) _statusBar(m),
                 if (m.mediaUrl != null) _mediaBar(m),
                 Expanded(
                   child: TabBarView(
@@ -324,6 +359,51 @@ class _MinuteDetailScreenState extends State<MinuteDetailScreen> with SingleTick
                 ),
               ],
             ),
+    );
+  }
+
+  /// Room still open: join it, or go back to it when it is minimised (the floating bubble).
+  Widget _roomBar(MinuteMeeting m) {
+    final cs = Theme.of(context).colorScheme;
+    final code = '${_room?['code'] ?? ''}';
+    return ValueListenableBuilder<MinuteRoomSession?>(
+      valueListenable: MinuteRoomSession.active,
+      builder: (context, active, _) {
+        final here = active != null && !active.closed && active.roomCode == code;
+        return Container(
+          key: const ValueKey('minute-room-bar'),
+          width: double.infinity,
+          color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+          padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+          child: Row(
+            children: [
+              Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF16A34A), shape: BoxShape.circle)),
+              const SizedBox(width: 10),
+              Expanded(child: Text(tr(here ? 'คุณอยู่ในห้องประชุมนี้ (ย่ออยู่)' : 'ห้องประชุมยังเปิดอยู่'), style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600))),
+              FilledButton.icon(
+                key: const ValueKey('minute-room-join'),
+                style: FilledButton.styleFrom(backgroundColor: const Color(0xFF16A34A), visualDensity: VisualDensity.compact),
+                icon: const Icon(NxI.videoCamera, size: 16),
+                label: Text(tr(here ? 'กลับเข้าห้อง' : 'เข้าห้องประชุม')),
+                onPressed: () => here
+                    ? reopenMinuteRoom(Navigator.of(context, rootNavigator: true), active)
+                    : joinMinuteRoomAsMember(context, meetingId: m.id, code: code, title: m.title),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _purgedBar() {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      key: const ValueKey('minute-purged-bar'),
+      width: double.infinity,
+      color: cs.surfaceContainerHighest,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Text(tr('ไฟล์เสียง/วิดีโอและข้อความถอดเสียงถูกลบตามระยะเวลาเก็บข้อมูลขององค์กรแล้ว'), style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant)),
     );
   }
 

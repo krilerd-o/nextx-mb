@@ -75,6 +75,7 @@ class AiStyle {
     'deep' => AiIcons.brain,
     'building' => NxI.buildings,
     'user' => NxI.user,
+    'meeting' => NxI.microphone,
     _ => NxI.sparkle,
   };
 }

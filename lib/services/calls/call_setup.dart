@@ -13,6 +13,9 @@ import '../../widgets/nx_avatar.dart';
 import '../notebook/notebook_recorder.dart';
 import '../minutes/minute_recorder.dart';
 import '../minutes/minute_uploader.dart';
+import '../ongoing/ongoing_activities.dart';
+import '../api_client.dart';
+import '../ongoing/ongoing_binder.dart';
 import 'call_media_webrtc.dart';
 import 'call_service.dart';
 import 'call_system_ui.dart';
@@ -66,7 +69,16 @@ void bindCalls(AppConfig config) {
   bindNotebookRecorder(api: config.apiClient, businessId: config.session.businessId);
   // AI Minute Meeting: live recordings (same mic rules) and large file uploads that continue after a restart.
   bindMinuteRecorder(api: config.apiClient, businessId: config.session.businessId);
-  unawaited(MinuteUploader.instance.bind(config.apiClient));
+  unawaited(MinuteUploader.instance.bind(config.apiClient, userId: config.session.userId));
+  AppConfig.beforeSignOut = wrapUpBeforeSignOut;
+  // Call / meeting room in the notification bar (buttons, PiP for video; iOS rooms via CallKit).
+  OngoingSessionsBinder.start(
+    call: service,
+    leaveRoom: (room) async {
+      unawaited(ApiClient.inBusiness(room.businessId, () => config.apiClient.leaveMinuteRoom(room.roomCode, room.ticket)).then((_) {}, onError: (_) {}));
+      await room.close();
+    },
+  );
 }
 
 /// Group rooms with more than 4 people: choose up to 3 to call.

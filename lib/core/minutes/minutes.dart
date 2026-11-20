@@ -91,6 +91,8 @@ class MinuteMeeting {
     this.speakers = const {},
     this.translateLangs = const [],
     this.ownerId,
+    this.roomOpen = false,
+    this.purgedAt,
   });
 
   factory MinuteMeeting.fromJson(Map<String, dynamic> j) => MinuteMeeting(
@@ -116,6 +118,8 @@ class MinuteMeeting {
     speakers: {for (final e in _map(j['speakers']).entries) e.key: '${e.value}'},
     translateLangs: _strList(_map(j['features'])['translate']),
     ownerId: _s(j['owner_id']),
+    roomOpen: j['room_open'] == true,
+    purgedAt: DateTime.tryParse('${j['purged_at'] ?? ''}')?.toLocal(),
   );
 
   final String id;
@@ -140,6 +144,12 @@ class MinuteMeeting {
   final Map<String, String> speakers;
   final List<String> translateLangs;
   final String? ownerId;
+
+  /// A meeting room that can still be joined ("เข้าร่วม" / "กลับเข้าห้อง").
+  final bool roomOpen;
+
+  /// Files and transcript removed by the retention period (PDPA).
+  final DateTime? purgedAt;
 
   bool get busy => status == 'processing' || status == 'uploading';
   bool get ready => status == 'ready';
@@ -168,6 +178,8 @@ class MinuteMeeting {
     speakers: speakers ?? this.speakers,
     translateLangs: translateLangs,
     ownerId: ownerId,
+    roomOpen: roomOpen,
+    purgedAt: purgedAt,
   );
 }
 

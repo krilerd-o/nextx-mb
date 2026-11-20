@@ -23,6 +23,9 @@ import 'minute_join_sheet.dart';
 import 'minute_room_create_screen.dart';
 import 'minute_upload_sheet.dart';
 import 'minutes_widgets.dart';
+import '../../services/minutes/minute_room_session.dart';
+import 'minute_room_screen.dart' show reopenMinuteRoom;
+import 'minute_join_sheet.dart' show joinMinuteRoomAsMember;
 
 /// ไอแซคบันทึกประชุม — start a recording, upload a file, open a meeting room, or join one; below, every
 /// meeting with search and filters (processing progress live from the socket).
@@ -53,6 +56,9 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
   @override
   void initState() {
     super.initState();
+    _config = context.read<AppConfig>();
+    _bizId = _config.session.businessId;
+    _config.addListener(_onConfig);
     _load();
     _loadConfig();
     _sub = RealtimeService.instance.events.listen(_onEvent);
@@ -64,6 +70,7 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
 
   @override
   void dispose() {
+    _config.removeListener(_onConfig);
     _debounce?.cancel();
     _sub?.cancel();
     _finSub?.cancel();
@@ -75,15 +82,21 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
   Future<void> _loadConfig() async {
     try {
       final c = await _api.getMinutesConfig();
-      if (mounted) setState(() => _roomsAvailable = c['rooms'] == true);
+      if (mounted) {
+        setState(() {
+          _roomsAvailable = c['rooms'] == true;
+          _keepDays = c['retention'] is Map ? (((c['retention'] as Map)['days'] as num?)?.toInt() ?? 0) : 0;
+        });
+      }
     } catch (_) {}
   }
 
   Future<void> _load({bool quiet = false}) async {
     if (!quiet) setState(() => _loading = true);
     try {
+      final asked = _bizId;
       final rows = await _api.getMinuteMeetings(q: _search.text, source: _filter == 'all' ? null : _filter);
-      if (!mounted) return;
+      if (!mounted || asked != _bizId) return; // answer for the business we left
       setState(() {
         _items = [for (final r in rows) MinuteMeeting.fromJson(r)];
         _error = null;
@@ -98,7 +111,27 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
     }
   }
 
+  late final AppConfig _config;
+  String? _bizId;
+
+  /// Switched business: the list, uploads and rooms are of the other business now.
+  void _onConfig() {
+    final bid = _config.session.businessId;
+    if (bid == _bizId) return;
+    _bizId = bid;
+    if (!mounted) return;
+    setState(() {
+      _items = const [];
+      _error = null;
+    });
+    _load();
+    _loadConfig();
+  }
+
   void _onEvent(RealtimeEvent e) {
+    // Events of meetings in another business (same account) are not about this list.
+    final eb = e.data['business_id']?.toString();
+    if (eb != null && _bizId != null && eb != _bizId) return;
     if (e.type == 'ai:minute_status') {
       final id = '${e.data['meeting_id']}';
       final i = _items.indexWhere((m) => m.id == id);
@@ -127,6 +160,9 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
         await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const MinuteRoomCreateScreen()));
       case 'join':
         await showMinuteJoinSheet(context);
+      case 'commands':
+        // `/ประชุม` in the AI Assistant and the Home shortcut: "what to start".
+        await _openCommands();
       default:
         // `/m/<code>` link: straight to the lobby.
         if (a.startsWith('join:')) await openMinuteLobby(context, a.substring(5));
@@ -246,12 +282,52 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
                   ),
                   SliverList.builder(itemCount: g.$2.length, itemBuilder: (_, i) => _MeetingCard(meeting: g.$2[i], onTap: () => _open(g.$2[i]))),
                 ],
+              SliverToBoxAdapter(child: _privacyFooter()),
               const SliverToBoxAdapter(child: SizedBox(height: 96)),
             ],
           ),
         ),
       ),
     );
+  }
+
+  int _keepDays = 0;
+
+  /// PDPA: how long this business keeps files + "ลบข้อมูลการประชุมของฉัน".
+  Widget _privacyFooter() {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+      child: Column(
+        children: [
+          if (_keepDays > 0) Text(tr('องค์กรเก็บไฟล์และข้อความถอดเสียง $_keepDays วัน'), key: const ValueKey('minutes-retention'), style: theme.textTheme.bodySmall),
+          TextButton(key: const ValueKey('minutes-delete-mine'), onPressed: _deleteMine, child: Text(tr('ลบข้อมูลการประชุมของฉัน'))),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteMine() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('ลบข้อมูลการประชุมของฉัน')),
+        content: Text(tr('การประชุมทั้งหมดที่คุณสร้างในธุรกิจนี้จะถูกลบ (ไฟล์ ข้อความถอดเสียง สรุป โน้ต และแชท) และข้อความที่คุณพูด/พิมพ์ในห้องประชุมของคนอื่นจะถูกลบด้วย — ย้อนกลับไม่ได้')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('ยกเลิก'))),
+          FilledButton(key: const ValueKey('minutes-delete-mine-ok'), style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error), onPressed: () => Navigator.pop(ctx, true), child: Text(tr('ลบข้อมูลของฉัน'))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final r = await _api.deleteMyMinuteData();
+      messenger.showSnackBar(SnackBar(content: Text(tr('ลบแล้ว: ${r['meetings'] ?? 0} การประชุม, ${r['lines'] ?? 0} ข้อความถอดเสียง, ${r['chat'] ?? 0} แชท'))));
+      _load(quiet: true);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e is ApiEnvelopeException ? e.message : tr('ลบไม่สำเร็จ'))));
+    }
   }
 
   /// Meetings by day: วันนี้ / เมื่อวาน / 7 วันที่ผ่านมา / ก่อนหน้า.
@@ -312,9 +388,28 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
 
   Widget _activeBanner() {
     return ListenableBuilder(
-      listenable: MinuteRecorder.instance,
+      listenable: Listenable.merge([MinuteRecorder.instance, MinuteRoomSession.active]),
       builder: (context, _) {
         final r = MinuteRecorder.instance;
+        final room = MinuteRoomSession.active.value;
+        if (room != null && !room.closed) {
+          // In a meeting room (minimised): one tap back in.
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Material(
+              color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+              child: ListTile(
+                key: const ValueKey('minutes-active-room'),
+                leading: const Icon(NxI.videoCamera, color: Color(0xFF16A34A)),
+                title: Text(room.title.isEmpty ? tr('ห้องประชุม') : room.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text(tr('กำลังประชุม — แตะเพื่อกลับเข้าห้อง')),
+                trailing: const Icon(NxI.caretRight),
+                onTap: () => reopenMinuteRoom(Navigator.of(context, rootNavigator: true), room),
+              ),
+            ),
+          );
+        }
         if (!r.active) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -339,7 +434,7 @@ class _MinutesHomeScreenState extends State<MinutesHomeScreen> {
     return ListenableBuilder(
       listenable: MinuteUploader.instance,
       builder: (context, _) {
-        final jobs = MinuteUploader.instance.jobs.where((j) => j.state != 'done').toList();
+        final jobs = MinuteUploader.instance.forBusiness(context.read<AppConfig>().session.businessId).where((j) => j.state != 'done').toList();
         if (jobs.isEmpty) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -452,7 +547,28 @@ class _MeetingCard extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(text, key: m.snippet != null ? ValueKey('minute-snippet-${m.id}') : null, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.78), height: 1.4)),
                       ],
-                      if (!m.ready) ...[const SizedBox(height: 8), MinuteStatusChip(meeting: m)],
+                      if (m.roomOpen && (m.roomCode ?? '').isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: ValueListenableBuilder<MinuteRoomSession?>(
+                            valueListenable: MinuteRoomSession.active,
+                            builder: (context, active, _) {
+                              final here = active != null && !active.closed && active.roomCode == m.roomCode;
+                              return ActionChip(
+                                key: ValueKey('minute-card-join-${m.id}'),
+                                avatar: const Icon(NxI.videoCamera, size: 15, color: Colors.white),
+                                backgroundColor: const Color(0xFF16A34A),
+                                side: BorderSide.none,
+                                visualDensity: VisualDensity.compact,
+                                label: Text(tr(here ? 'กลับเข้าห้อง' : 'เข้าร่วม'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                                onPressed: () => here
+                                    ? reopenMinuteRoom(Navigator.of(context, rootNavigator: true), active)
+                                    : joinMinuteRoomAsMember(context, meetingId: m.id, code: m.roomCode!, title: m.title),
+                              );
+                            },
+                          ),
+                        )
+                      else if (!m.ready) ...[const SizedBox(height: 8), MinuteStatusChip(meeting: m)],
                     ],
                   ),
                 ),
