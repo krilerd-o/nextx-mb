@@ -207,13 +207,15 @@ void main() {
     expect(bubble, findsOneWidget);
     expect(find.byKey(const ValueKey('notebook-recording-live-card')), findsOneWidget, reason: 'the sources list shows the live recording');
     final before = tester.getTopLeft(bubble);
-    await tester.drag(bubble, const Offset(-220, 380));
+    await tester.drag(bubble, const Offset(-40, -60));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     final after = tester.getTopLeft(bubble);
-    expect(after.dx, lessThan(before.dx));
-    expect(after.dy, greaterThan(before.dy));
-    await tester.drag(bubble, const Offset(-900, 0)); // clamped inside the screen
+    expect(after.dy, lessThan(before.dy));
+    expect(after.dx, greaterThanOrEqualTo(before.dx), reason: 'snaps back to the right edge');
+    await tester.drag(bubble, const Offset(-900, 0)); // other side: snaps to the left edge
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(tester.getTopLeft(bubble).dx, 8);
     await tester.tap(find.byKey(const ValueKey('notebook-recorder-bubble-toggle')));
     await settle(tester, 3);

@@ -10,6 +10,7 @@ import '../../services/calls/live_transcription.dart';
 import '../../widgets/nx_avatar.dart';
 import '../../widgets/nx_icons.dart';
 import 'live_captions.dart';
+import '../../widgets/nx_ongoing_bubble.dart';
 
 /// Shows the call on top of the whole app: incoming, calling…, in call (full screen or a
 /// floating bubble). Put it in `MaterialApp.builder` above the navigator.
@@ -20,14 +21,22 @@ class CallOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: service,
+      listenable: Listenable.merge([service, OngoingBubbles.instance]),
       builder: (context, _) {
         final s = service;
         final children = <Widget>[];
         if (s.incoming != null && s.phase != CallPhase.active && s.phase != CallPhase.outgoing) {
           children.add(Positioned.fill(child: _IncomingView(service: s)));
         } else if (s.phase == CallPhase.outgoing || s.phase == CallPhase.active) {
-          children.add(s.minimized ? _Bubble(service: s) : Positioned.fill(child: _CallView(service: s)));
+          if (!s.minimized) {
+            children.add(Positioned.fill(child: _CallView(service: s)));
+          } else if (OngoingBubbles.instance.isHidden('call')) {
+            children.add(NxOngoingRestorePill(kind: 'call', label: tr('กำลังคุยสาย'), color: const Color(0xFF16A34A)));
+          } else {
+            children.add(Positioned.fill(child: _Bubble(service: s)));
+          }
+        } else {
+          OngoingBubbles.instance.forget('call');
         }
         final msg = s.error ?? s.notice;
         if (msg != null) {
@@ -493,7 +502,6 @@ class _Bubble extends StatefulWidget {
 }
 
 class _BubbleState extends State<_Bubble> {
-  Offset? _pos;
   Timer? _t;
 
   @override
@@ -512,26 +520,25 @@ class _BubbleState extends State<_Bubble> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final pad = MediaQuery.paddingOf(context);
     const w = 96.0, h = 132.0;
-    final pos = _pos ?? Offset(size.width - w - 12, pad.top + 72);
     final s = widget.service;
     final p = s.participants.values.firstOrNull;
     final elapsed = s.startedAt == null ? Duration.zero : DateTime.now().difference(s.startedAt!);
-    return Positioned(
-      left: pos.dx,
-      top: pos.dy,
-      width: w,
-      height: h,
-      child: GestureDetector(
-        key: const ValueKey('call-bubble'),
-        onTap: () => s.setMinimized(false),
-        onPanUpdate: (d) => setState(() {
-          final n = (_pos ?? pos) + d.delta;
-          _pos = Offset(n.dx.clamp(4, size.width - w - 4), n.dy.clamp(pad.top + 4, size.height - h - pad.bottom - 4));
-        }),
-        child: Material(
+    // Shared floating bubble: drag (snaps to an edge), tap to open, drop on the × to hide (the call goes on
+    // in the notification bar; the pill at the top brings the bubble back).
+    return NxOngoingBubble(
+      kind: 'call',
+      gestureKey: const ValueKey('call-bubble'),
+      menu: [
+        OngoingMenuItem(id: 'call-mic', label: tr(s.muted ? 'เปิดไมค์' : 'ปิดไมค์'), icon: s.muted ? NxI.microphone : NxI.microphoneSlash, onTap: () => s.toggleMute()),
+        OngoingMenuItem(id: 'call-open', label: tr('เปิดหน้าสาย'), icon: NxI.cornersOut, onTap: () => s.setMinimized(false)),
+        OngoingMenuItem(id: 'call-hangup', label: tr('วางสาย'), icon: NxI.phoneX, danger: true, onTap: () => s.hangUp()),
+      ],
+      size: const Size(w, h),
+      initial: (size, pad) => Offset(size.width - w - 12, pad.top + 72),
+      onTap: () => s.setMinimized(false),
+      semanticsLabel: tr('สายที่กำลังคุย — แตะเพื่อเปิด'),
+      child: Material(
           elevation: 10,
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(16),
@@ -557,7 +564,6 @@ class _BubbleState extends State<_Bubble> {
             ),
           ]),
         ),
-      ),
     );
   }
 }

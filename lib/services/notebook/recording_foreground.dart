@@ -12,7 +12,8 @@ import 'package:flutter/services.dart';
 /// iOS: background audio is on in Info.plist and the recorder owns the audio session, so nothing
 /// native is needed; the calls are no-ops.
 abstract class RecordingForeground {
-  Future<void> start({required String title, required int elapsedMs});
+  /// [labels] override the notification texts (an AI Minute recording says "บันทึกประชุม").
+  Future<void> start({required String title, required int elapsedMs, Map<String, String>? labels});
   Future<void> update({required bool paused, required int elapsedMs, String? title});
   Future<void> stop();
   Stream<String> get actions;
@@ -49,7 +50,8 @@ class NativeRecordingForeground implements RecordingForeground {
   }
 
   @override
-  Future<void> start({required String title, required int elapsedMs}) => _call('start', {'title': title, 'elapsedMs': elapsedMs, 'labels': _labels});
+  Future<void> start({required String title, required int elapsedMs, Map<String, String>? labels}) =>
+      _call('start', {'title': title, 'elapsedMs': elapsedMs, 'labels': {..._labels, ...?labels}});
 
   @override
   Future<void> update({required bool paused, required int elapsedMs, String? title}) => _call('update', {'paused': paused, 'elapsedMs': elapsedMs, 'title': ?title});
@@ -58,6 +60,9 @@ class NativeRecordingForeground implements RecordingForeground {
   Future<void> stop() => _call('stop');
 
   /// Notification texts (Thai; the service has no access to the app's i18n).
+  /// Labels of an AI Minute meeting recording (same service, its own wording).
+  static const minuteLabels = {'channel': 'บันทึกประชุม', 'recording': 'กำลังบันทึกประชุม'};
+
   static const _labels = {
     'channel': 'บันทึกเสียงในสมุดโน้ต',
     'recording': 'กำลังบันทึกเสียง',
@@ -72,6 +77,7 @@ class NativeRecordingForeground implements RecordingForeground {
 class NoopRecordingForeground implements RecordingForeground {
   final _actions = StreamController<String>.broadcast();
   final calls = <String>[];
+  Map<String, String>? lastLabels;
 
   /// Simulates a tap on a notification action.
   void tap(String action) => _actions.add(action);
@@ -79,7 +85,10 @@ class NoopRecordingForeground implements RecordingForeground {
   @override
   Stream<String> get actions => _actions.stream;
   @override
-  Future<void> start({required String title, required int elapsedMs}) async => calls.add('start');
+  Future<void> start({required String title, required int elapsedMs, Map<String, String>? labels}) async {
+    lastLabels = labels;
+    calls.add('start');
+  }
   @override
   Future<void> update({required bool paused, required int elapsedMs, String? title}) async => calls.add(paused ? 'update:paused' : 'update:live');
   @override

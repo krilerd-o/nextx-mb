@@ -85,6 +85,9 @@ String? accessRedirectFor(SessionState session, String path) {
   // ISAAC AI pages follow the plugin / AI settings (like the web menu). Uses
   // the last loaded access; before it is known the page itself checks.
   final isaac = isaacItemFor(path);
+  // The role permission is known without the ISAAC settings (same rule as the server's requireRoleMenu).
+  if (isaac?.key == IsaacMenu.assistant.key && !session.roleAllows(const ['ai-assistant'])) return AppRoutes.mainShell;
+  if (isaac?.key == IsaacMenu.notebook.key && !session.roleAllows(const ['isaac-notebook', 'ai-assistant'])) return AppRoutes.mainShell;
   if (isaac != null) {
     final access = IsaacAccessCache.peek(session.businessId ?? '');
     // The notebook runs on NEXTX AI (`ai_chat`): the Assistant's "Notebook" entry

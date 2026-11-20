@@ -146,17 +146,23 @@ class _MinuteSharePanelState extends State<MinuteSharePanel> {
       children: [
         SegmentedButton<int>(
           segments: [
-            ButtonSegment(value: 0, icon: const Icon(NxI.downloadSimple, size: 16), label: Text(tr('ไฟล์'))),
-            ButtonSegment(value: 1, icon: const Icon(NxI.link, size: 16), label: Text(tr('ลิงก์'))),
-            ButtonSegment(value: 2, icon: const Icon(NxI.envelope, size: 16), label: Text(tr('อีเมล'))),
+            ButtonSegment(value: 0, icon: const Icon(NxI.downloadSimple, size: 16), label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('ไฟล์'), maxLines: 1, softWrap: false))),
+            ButtonSegment(value: 1, icon: const Icon(NxI.link, size: 16), label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('ลิงก์'), maxLines: 1, softWrap: false))),
+            ButtonSegment(value: 2, icon: const Icon(NxI.envelope, size: 16), label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('อีเมล'), maxLines: 1, softWrap: false))),
+            ButtonSegment(value: 3, icon: const Icon(NxI.buildings, size: 16), label: FittedBox(fit: BoxFit.scaleDown, child: Text(tr('องค์กร'), maxLines: 1, softWrap: false))),
           ],
           selected: {_tab},
+          // Four tabs on a phone: no extra check icon, so the labels stay on one line.
+          showSelectedIcon: false,
+          style: SegmentedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4), visualDensity: VisualDensity.compact, textStyle: theme.textTheme.labelLarge?.copyWith(fontSize: 13)),
           onSelectionChanged: (s) => setState(() => _tab = s.first),
         ),
+        if (_tab == 3) MinuteOrgSharePanel(meeting: widget.meeting),
+        if (_tab != 3) ...[
         MinuteSectionTitle('สิ่งที่แชร์', icon: NxI.listChecks),
         Wrap(spacing: 6, runSpacing: 6, children: [
-          for (final e in const [('summary', 'สรุป'), ('actions', 'สิ่งที่ต้องทำ'), ('transcript', 'ข้อความถอดเสียง'), ('audio', 'เสียง / วิดีโอ')])
-            if (e.$1 != 'audio' || (_tab == 1 && widget.meeting.mediaUrl != null))
+          for (final e in const [('summary', 'สรุป'), ('actions', 'สิ่งที่ต้องทำ'), ('notes', 'โน้ต · บอร์ด'), ('chat', 'แชทในห้อง'), ('transcript', 'ข้อความถอดเสียง'), ('audio', 'เสียง / วิดีโอ')])
+            if ((e.$1 != 'audio' || (_tab == 1 && widget.meeting.mediaUrl != null)) && (e.$1 != 'chat' || widget.meeting.source == 'room'))
               FilterChip(
                 key: ValueKey('minute-share-inc-${e.$1}'),
                 label: Text(tr(e.$2)),
@@ -174,6 +180,7 @@ class _MinuteSharePanelState extends State<MinuteSharePanel> {
         if (_tab == 0) ..._fileTab(theme),
         if (_tab == 1) ..._linkTab(theme),
         if (_tab == 2) ..._emailTab(theme),
+        ],
         if (_busy) const Padding(padding: EdgeInsets.only(top: 10), child: LinearProgressIndicator()),
         if (_msg != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_msg!, key: const ValueKey('minute-share-msg'), style: theme.textTheme.bodyMedium)),
       ],
@@ -243,4 +250,161 @@ class _MinuteSharePanelState extends State<MinuteSharePanel> {
     SwitchListTile(contentPadding: EdgeInsets.zero, value: _withLink, onChanged: (v) => setState(() => _withLink = v), title: Text(tr('แนบลิงก์เปิดดูออนไลน์ (7 วัน)')), subtitle: Text(tr('แนบ PDF ไปด้วยเสมอ'))),
     SizedBox(width: double.infinity, child: FilledButton.icon(key: const ValueKey('minute-email-send'), onPressed: _busy ? null : _email, icon: const Icon(NxI.paperPlaneTilt), label: Text(tr('ส่งอีเมล')))),
   ];
+}
+
+/// "ในองค์กร": share with a colleague, a role or everyone in this business (read only).
+class MinuteOrgSharePanel extends StatefulWidget {
+  const MinuteOrgSharePanel({super.key, required this.meeting});
+  final MinuteMeeting meeting;
+  @override
+  State<MinuteOrgSharePanel> createState() => _MinuteOrgSharePanelState();
+}
+
+class _MinuteOrgSharePanelState extends State<MinuteOrgSharePanel> {
+  List<Map<String, dynamic>>? _items;
+  List<Map<String, dynamic>> _users = const [];
+  List<Map<String, dynamic>> _roles = const [];
+  String _kind = 'user';
+  final _q = TextEditingController();
+  Timer? _debounce;
+  String? _busy;
+  String? _msg;
+
+  ApiClient get _api => context.read<AppConfig>().apiClient;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _search();
+    // Roles are listed for admins; others simply do not get the role option.
+    _api.getRoles().then((r) {
+      if (mounted) setState(() => _roles = r);
+    }, onError: (_) {});
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _q.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final items = await _api.getMinuteShares(widget.meeting.id);
+      if (mounted) setState(() => _items = items);
+    } catch (e) {
+      if (mounted) setState(() {
+        _items = const [];
+        _msg = e is ApiEnvelopeException ? e.message : null;
+      });
+    }
+  }
+
+  void _search() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () async {
+      try {
+        final u = await _api.getUsers(q: _q.text.trim().isEmpty ? null : _q.text.trim(), limit: 20);
+        if (mounted) setState(() => _users = u);
+      } catch (_) {}
+    });
+  }
+
+  bool _has(String type, Object? id) => (_items ?? const []).any((s) => s['type'] == type && '${s['target_id']}' == '${id ?? 0}');
+
+  Future<void> _add(String type, [int? id]) async {
+    setState(() {
+      _busy = '$type:${id ?? 0}';
+      _msg = null;
+    });
+    try {
+      await _api.addMinuteShare(widget.meeting.id, type: type, targetId: id);
+      await _load();
+    } catch (e) {
+      if (mounted) setState(() => _msg = e is ApiEnvelopeException ? e.message : tr('แชร์ไม่สำเร็จ'));
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  Future<void> _remove(Map<String, dynamic> s) async {
+    setState(() => _busy = 'rm:${s['id']}');
+    try {
+      await _api.removeMinuteShare(widget.meeting.id, '${s['id']}');
+      await _load();
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  static String _userName(Map<String, dynamic> u) {
+    final n = [u['first_name'], u['last_name']].where((x) => x != null && '$x'.trim().isNotEmpty).join(' ').trim();
+    return n.isNotEmpty ? n : '${u['user_name'] ?? u['email1'] ?? u['email'] ?? '#${u['id']}'}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final items = _items;
+    return Column(
+      key: const ValueKey('minute-org-share'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        Text(tr('คนที่ได้รับแชร์จะเห็นบันทึกการประชุมนี้ในรายการของตัวเอง (ดูได้อย่างเดียว) — เฉพาะคนในธุรกิจนี้'), style: theme.textTheme.bodySmall),
+        MinuteSectionTitle('แชร์ให้', icon: NxI.users),
+        Wrap(spacing: 6, children: [
+          ChoiceChip(label: Text(tr('เพื่อนร่วมงาน')), selected: _kind == 'user', onSelected: (_) => setState(() => _kind = 'user')),
+          if (_roles.isNotEmpty) ChoiceChip(label: Text(tr('ตามบทบาท')), selected: _kind == 'role', onSelected: (_) => setState(() => _kind = 'role')),
+          ChoiceChip(key: const ValueKey('minute-org-everyone'), label: Text(tr('ทุกคนในธุรกิจ')), selected: _kind == 'business', onSelected: (_) => setState(() => _kind = 'business')),
+        ]),
+        const SizedBox(height: 8),
+        if (_kind == 'user') ...[
+          TextField(controller: _q, onChanged: (_) => _search(), decoration: InputDecoration(prefixIcon: const Icon(NxI.magnifyingGlass, size: 18), hintText: tr('ค้นหาชื่อหรืออีเมล…'), isDense: true)),
+          for (final u in _users.take(20))
+            ListTile(
+              key: ValueKey('minute-org-user-${u['id']}'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(NxI.user, size: 18),
+              title: Text(_userName(u), maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: _busy == 'user:${u['id']}'
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text(tr(_has('user', u['id']) ? 'แชร์แล้ว' : 'แชร์'), style: TextStyle(color: theme.colorScheme.primary)),
+              onTap: _has('user', u['id']) || _busy != null ? null : () => _add('user', int.tryParse('${u['id']}')),
+            ),
+        ],
+        if (_kind == 'role')
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final r in _roles)
+              FilterChip(label: Text('${r['name'] ?? ''}'), selected: _has('role', r['id']), onSelected: _has('role', r['id']) ? null : (_) => _add('role', int.tryParse('${r['id']}'))),
+          ]),
+        if (_kind == 'business')
+          FilledButton.icon(
+            key: const ValueKey('minute-org-everyone-share'),
+            onPressed: _has('business', 0) || _busy != null ? null : () => _add('business'),
+            icon: const Icon(NxI.buildings, size: 16),
+            label: Text(tr(_has('business', 0) ? 'แชร์ให้ทุกคนแล้ว' : 'แชร์ให้ทุกคนในธุรกิจ')),
+          ),
+        if (_msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_msg!, style: TextStyle(color: theme.colorScheme.error))),
+        MinuteSectionTitle('แชร์แล้ว', icon: NxI.checkCircle),
+        if (items == null)
+          const LinearProgressIndicator()
+        else if (items.isEmpty)
+          Text(tr('ยังไม่ได้แชร์ให้ใครในองค์กร'), style: theme.textTheme.bodySmall)
+        else
+          for (final s in items)
+            ListTile(
+              key: ValueKey('minute-org-share-${s['id']}'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(s['type'] == 'business' ? NxI.buildings : s['type'] == 'role' ? NxI.shield : NxI.user, size: 18),
+              title: Text(s['type'] == 'business' ? tr('ทุกคนในธุรกิจ') : '${s['name'] ?? '#${s['target_id']}'}'),
+              trailing: IconButton(tooltip: tr('เลิกแชร์'), icon: const Icon(NxI.trash, size: 18), onPressed: _busy != null ? null : () => _remove(s)),
+            ),
+      ],
+    );
+  }
 }

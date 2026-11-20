@@ -25,7 +25,8 @@ class RoomCaption {
 }
 
 class RoomChatMessage {
-  const RoomChatMessage({required this.from, required this.text, required this.at, this.mine = false});
+  const RoomChatMessage({required this.from, required this.text, required this.at, this.mine = false, this.id});
+  final int? id;
   final String from;
   final String text;
   final DateTime at;
@@ -271,7 +272,55 @@ class MinuteRoomSession extends ChangeNotifier {
   static const _voiceLevel = 0.035;
   static const _hangover = Duration(milliseconds: 1200);
 
+  // ── one live room in the app (back only minimises it; Leave / End close it)
+
+  /// The room the app is in now (a floating bubble shows it while its screen is closed).
+  static final active = ValueNotifier<MinuteRoomSession?>(null);
+
+  /// Title / LiveKit address for reopening the screen from the bubble.
+  String title = '';
+  String url = '';
+  String token = '';
+  DateTime? startedAt;
+
+  /// Business the room belongs to (requests about it go there after a business switch).
+  String? businessId;
+
+  /// Open room screens (0 → the bubble shows).
+  int screens = 0;
+  bool get screenOpen => screens > 0;
+  // Called from a screen's initState / dispose (inside a build): tell listeners right after it.
+  void screenShown() {
+    screens++;
+    _notifySoon();
+  }
+
+  void screenHidden() {
+    if (screens > 0) screens--;
+    _notifySoon();
+  }
+
+  void _notifySoon() => scheduleMicrotask(() {
+        if (!_disposed) notifyListeners();
+      });
+
+  bool _started = false;
+  bool get started => _started;
+  bool closed = false;
+
+  /// Why the room closed by itself (removed by the host / ended), for the UI.
+  String? closedReason;
+
+  /// Server-side room chat (saved with the meeting); old servers: LiveKit data messages.
+  bool serverChat = false;
+
   Future<void> start({required String url, required String token, bool micOn = false, bool camOn = false}) async {
+    if (_started) return;
+    _started = true;
+    this.url = url;
+    this.token = token;
+    startedAt ??= DateTime.now();
+    if (active.value != this) active.value = this;
     try {
       await media.connect(url, token, micOn: micOn, camOn: camOn);
       connected = true;
@@ -287,6 +336,7 @@ class MinuteRoomSession extends ChangeNotifier {
     if (ack['ok'] == true) {
       captionsOn = ack['captions'] == true;
       translateLangs = [for (final l in (ack['langs'] as List? ?? const [])) '$l'];
+      _applyChatHistory(ack);
       if (ack['transcribe'] == true && micOn) await _startCaptions();
     }
     notifyListeners();
@@ -352,11 +402,60 @@ class MinuteRoomSession extends ChangeNotifier {
     await _rt.emitAck('minute:room_lang', {'ticket': ticket, 'lang': lang});
   }
 
-  Future<void> sendChat(String text) async {
+  void _applyChatHistory(Map<String, dynamic> ack) {
+    if (!ack.containsKey('chat_enabled')) return;
+    serverChat = ack['chat_enabled'] == true;
+    final items = ack['chat'];
+    if (items is! List) return;
+    final hist = [for (final c in items) if (c is Map) _chatOf(Map<String, dynamic>.from(c))];
+    // Keep lines that arrived before the history (same id → once).
+    final known = {for (final m in hist) if (m.id != null) m.id};
+    chat.value = [...hist, ...chat.value.where((m) => m.id == null || !known.contains(m.id))];
+  }
+
+  RoomChatMessage _chatOf(Map<String, dynamic> c) => RoomChatMessage(
+        id: (c['id'] as num?)?.toInt(),
+        from: '${c['name'] ?? ''}',
+        text: '${c['text'] ?? ''}',
+        at: DateTime.tryParse('${c['at'] ?? ''}')?.toLocal() ?? DateTime.now(),
+        mine: '${c['identity'] ?? ''}' == identity,
+      );
+
+  /// Sends a chat line. Saved with the meeting (server chat); false when it was refused.
+  Future<bool> sendChat(String text) async {
     final t = text.trim();
-    if (t.isEmpty) return;
+    if (t.isEmpty) return false;
+    if (serverChat) {
+      final ack = await _rt.emitAck('minute:chat_send', {'ticket': ticket, 'text': t});
+      if (ack['ok'] != true) {
+        error = switch ('${ack['error'] ?? ''}') {
+          'chat_off' => 'ผู้จัดปิดแชทในห้องนี้',
+          'rate_limited' => 'ส่งเร็วเกินไป — รอสักครู่',
+          _ => 'ส่งข้อความไม่สำเร็จ',
+        };
+        notifyListeners();
+        return false;
+      }
+      final item = ack['item'];
+      chat.value = [...chat.value, item is Map ? _chatOf(Map<String, dynamic>.from(item)) : RoomChatMessage(from: name, text: t, at: DateTime.now(), mine: true)];
+      return true;
+    }
     await media.sendData({'type': 'chat', 'text': t, 'name': name}, topic: 'chat');
     chat.value = [...chat.value, RoomChatMessage(from: name, text: t, at: DateTime.now(), mine: true)];
+    return true;
+  }
+
+  /// Host / co-host removes a chat message (saved chat only).
+  Future<bool> deleteChat(int id) async {
+    if (!serverChat || !isHost) return false;
+    final ack = await _rt.emitAck('minute:chat_delete', {'ticket': ticket, 'id': id});
+    if (ack['ok'] != true) {
+      error = 'ลบข้อความไม่สำเร็จ';
+      notifyListeners();
+      return false;
+    }
+    chat.value = chat.value.where((m) => m.id != id).toList();
+    return true;
   }
 
   Future<void> react(String emoji) async {
@@ -377,6 +476,8 @@ class MinuteRoomSession extends ChangeNotifier {
     final (from, topic, d) = e;
     switch (d['type'] ?? topic) {
       case 'chat':
+        // Server chat: every line arrives over the socket (and is saved); ignore the LiveKit copy.
+        if (serverChat) return;
         chat.value = [...chat.value, RoomChatMessage(from: '${d['name'] ?? from}', text: '${d['text'] ?? ''}', at: DateTime.now())];
       case 'reaction':
         reactions.add(('${d['name'] ?? from}', '${d['emoji'] ?? '👍'}'));
@@ -422,8 +523,24 @@ class MinuteRoomSession extends ChangeNotifier {
       case 'minute:room_waiting':
         if (!isHost) return;
         waiting.value = [...waiting.value.where((w) => w.$1 != '${d['identity']}'), ('${d['identity']}', '${d['name'] ?? ''}')];
+      case 'minute:chat':
+        final item = d['item'];
+        if (item is! Map) return;
+        final m = _chatOf(Map<String, dynamic>.from(item));
+        if (m.id != null && chat.value.any((x) => x.id == m.id)) return;
+        chat.value = [...chat.value, m];
+      case 'minute:chat_removed':
+        final rid = (d['id'] as num?)?.toInt();
+        if (rid != null) chat.value = chat.value.where((m) => m.id != rid).toList();
+      case 'minute:room_removed':
+        if ('${d['identity'] ?? ''}' != identity) return;
+        closedReason = 'removed';
+        unawaited(close());
       case RealtimeService.connectedEvent:
-        unawaited(_rt.emitAck('minute:room_join', {'ticket': ticket, 'lang': captionLang}));
+        unawaited(_rt.emitAck('minute:room_join', {'ticket': ticket, 'lang': captionLang}).then((ack) {
+          // Back online: lines sent meanwhile come with the history.
+          if (ack['ok'] == true) _applyChatHistory(ack);
+        }));
     }
   }
 
@@ -437,8 +554,29 @@ class MinuteRoomSession extends ChangeNotifier {
     connected = false;
   }
 
+  /// Leave for real (Leave / End / removed / sign-out): media off, the bubble goes, then dispose.
+  Future<void> close() async {
+    if (closed) return;
+    closed = true;
+    try {
+      await leave();
+    } catch (_) {}
+    if (active.value == this) active.value = null;
+    notifyListeners();
+    // Screens still showing it close themselves on `closed`; dispose after they have.
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      if (screens == 0) dispose();
+    });
+  }
+
+  bool _disposed = false;
+  bool get disposed => _disposed;
+
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    if (active.value == this) active.value = null;
     media.removeListener(_onMedia);
     board.dispose();
     unawaited(_micSub?.cancel());

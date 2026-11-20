@@ -229,10 +229,16 @@ class NotebookRecorder extends ChangeNotifier {
 
   void _notify() => notifyListeners();
 
+  /// Business open in the app now; [businessId] stays on the recording's business while one runs.
+  String? _openBusinessId;
+
   void bind({required ApiClient api, String? businessId}) {
     this.api = api;
-    this.businessId = businessId;
+    _openBusinessId = businessId;
+    if (phase == RecorderPhase.idle) this.businessId = businessId;
   }
+
+  Future<T> _inRecordingBusiness<T>(Future<T> Function() body) => ApiClient.inBusiness(businessId, body);
 
   // ── call conflict
 
@@ -311,6 +317,7 @@ class NotebookRecorder extends ChangeNotifier {
     final perm = await _permission();
     if (perm != MicPermission.granted) return perm == MicPermission.permanentlyDenied ? RecordStart.permanentlyDenied : RecordStart.denied;
     final a = api;
+    businessId = _openBusinessId ?? businessId;
     if (a == null) return RecordStart.failed;
     phase = RecorderPhase.starting;
     live = LiveState.connecting;
@@ -505,7 +512,7 @@ class NotebookRecorder extends ChangeNotifier {
     final rid = recordingId;
     if (rid != null) {
       _t.emit('stt:pause', _ridBody); // also on the socket: REST may land on another server instance
-      unawaited(api?.pauseNotebookRecording(notebookId!, rid).then((_) {}, onError: (_) {}));
+      unawaited(_inRecordingBusiness(() async => api?.pauseNotebookRecording(notebookId!, rid)).then((_) {}, onError: (_) {}));
     }
     unawaited(_fg.update(paused: true, elapsedMs: elapsed.inMilliseconds));
   }
@@ -528,7 +535,7 @@ class NotebookRecorder extends ChangeNotifier {
     final rid = recordingId;
     if (rid != null) {
       _t.emit('stt:resume', {..._ridBody, 'offset_ms': _recordedMs});
-      unawaited(api?.resumeNotebookRecording(notebookId!, rid).then((_) {}, onError: (_) {}));
+      unawaited(_inRecordingBusiness(() async => api?.resumeNotebookRecording(notebookId!, rid)).then((_) {}, onError: (_) {}));
     }
     unawaited(_fg.update(paused: false, elapsedMs: elapsed.inMilliseconds));
     return true;
@@ -635,13 +642,14 @@ class NotebookRecorder extends ChangeNotifier {
     await _wav?.discard();
     _wav = null;
     final rid = recordingId, nb = notebookId;
-    if (rid != null && nb != null) unawaited(api?.deleteNotebookRecording(nb, rid).then((_) {}, onError: (_) {}));
+    if (rid != null && nb != null) unawaited(_inRecordingBusiness(() async => api?.deleteNotebookRecording(nb, rid)).then((_) {}, onError: (_) {}));
     unawaited(_fg.stop());
     _reset();
   }
 
   void _reset() {
     phase = RecorderPhase.idle;
+    businessId = _openBusinessId ?? businessId;
     live = LiveState.connecting;
     _sttOn = false;
     _runningSince = null;

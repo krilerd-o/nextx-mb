@@ -37,6 +37,7 @@ import 'home_edit_mode.dart';
 import 'home_hero.dart';
 import 'home_isaac.dart';
 import 'home_isaac_shortcuts.dart';
+import 'home_ongoing_card.dart';
 import 'home_widgets.dart';
 import 'widget_gallery_sheet.dart';
 import '../hr/attendance_punch_sheet.dart';
@@ -141,9 +142,26 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
     _pastHero.value = o > meet - 16;
   }
 
+  /// Greeting / date follow Thai time without a rebuild from elsewhere: re-checked at each minute boundary.
+  Timer? _greetClock;
+  String _greetKey = '';
+
+  void _armGreetClock() {
+    final t = thaiNow();
+    final wait = Duration(seconds: 60 - t.second, milliseconds: -t.millisecond).inMilliseconds.clamp(200, 60000);
+    _greetClock = Timer(Duration(milliseconds: wait), () {
+      if (!mounted) return;
+      final n = thaiNow();
+      final key = '${greetingFor(n)}|${thaiShortDate(n)}';
+      if (key != _greetKey) setState(() => _greetKey = key);
+      _armGreetClock();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    _armGreetClock();
     _scroll.addListener(_onScroll);
     _restoreCache();
     _load();
@@ -341,6 +359,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
 
   @override
   void dispose() {
+    _greetClock?.cancel();
     HomeLayout.instance.removeListener(_onLayout);
     _scroll.removeListener(_onScroll);
     _pastHero.dispose();
@@ -814,7 +833,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
     final stats = _summary?['stats'] is Map
         ? Map<String, dynamic>.from(_summary!['stats'] as Map)
         : const <String, dynamic>{};
-    final aiAllowed = MenuAccess.allow(session, MenuAccess.ai);
+    final aiAllowed = MenuAccess.allow(session, MenuAccess.ai) && session.roleAllows(const ['ai-assistant']);
 
     final quick = <_QuickAction>[
       if (MenuAccess.allow(session, MenuAccess.attendance))
@@ -837,6 +856,9 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
       if (MenuAccess.allow(session, MenuAccess.mailbox))
         const _QuickAction(NxI.envelope, 'เมล', AppRoutes.mail),
       if (aiAllowed) const _QuickAction(NxI.robot, 'AI', AppRoutes.aiChat),
+      // AI Minute Meeting: straight to "บันทึก / อัปโหลด / เปิดห้อง".
+      if (session.isSuperadmin || session.canAccess('ai-minute-meeting'))
+        const _QuickAction(NxI.microphone, 'ประชุม', '${AppRoutes.aiMinutes}?do=commands'),
     ];
 
     final statTiles = [
@@ -1058,6 +1080,8 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen>
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
                 ),
               ),
+            // Call / meeting room / recording / upload running now, and open rooms to join.
+            HomeOngoingCard(revision: _revision),
             if (_whatsNew > 0) ...[
               const SizedBox(height: 12),
               _WhatsNewCard(
