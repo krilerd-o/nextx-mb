@@ -494,8 +494,13 @@ class ApiClient {
   String get googleAppLoginUrl => '${_dio.options.baseUrl.replaceAll(RegExp(r'/+$'), '')}/api/auth/google?app=1';
 
   /// Sign in with Apple (iOS): session, or `{needLinkConfirm, intentToken}`.
-  Future<Map<String, dynamic>> appleLogin(String identityToken) async {
-    return _dataMap(await _send('POST', '/api/auth/apple', data: {'identity_token': identityToken, 'remember': true}));
+  /// [authorizationCode] lets the server keep Apple's token so it can revoke it when the account is deleted.
+  Future<Map<String, dynamic>> appleLogin(String identityToken, {String? authorizationCode}) async {
+    return _dataMap(await _send('POST', '/api/auth/apple', data: {
+      'identity_token': identityToken,
+      'remember': true,
+      if (authorizationCode != null && authorizationCode.isNotEmpty) 'authorization_code': authorizationCode,
+    }));
   }
 
   Future<Map<String, dynamic>> googleMergePreview(String intent) async {
@@ -596,6 +601,15 @@ class ApiClient {
   /// 401 `STEP_UP_REQUIRED` (details `{required, missing}`) when a proof is missing.
   Future<Map<String, dynamic>> deactivateMyAccount(List<String> verifyTokens) async =>
       _dataMap(await _send('POST', '/api/me/delete-account', data: {'confirm': 'DELETE', 'verify_tokens': verifyTokens}));
+
+  /// `GET /api/me/delete-account/preview` → `{businesses:[{business_id,name,role}], sole_owner:[…], devices,
+  /// linked_sign_ins:[provider], can_delete}`. 404 = this server cannot delete permanently.
+  Future<Map<String, dynamic>> getDeleteAccountPreview() async => _dataMap(await _send('GET', '/api/me/delete-account/preview'));
+
+  /// Permanent deletion: `POST /api/me/delete-account {confirm:'DELETE', mode:'erase', verify_tokens}` → `{erased:true}`.
+  /// 401 `STEP_UP_REQUIRED` (a proof missing or already used), 409 `SOLE_OWNER` (`{sole_owner:[…]}`).
+  Future<Map<String, dynamic>> eraseMyAccount(List<String> verifyTokens) async => _dataMap(
+      await _send('POST', '/api/me/delete-account', data: {'confirm': 'DELETE', 'mode': 'erase', 'verify_tokens': verifyTokens}));
 
   /// `GET /api/me/notification-preferences` → `{channels, push_paused, groups:[{key, label_*, events:[…]}]}`.
   Future<Map<String, dynamic>> getNotificationPreferences() async =>

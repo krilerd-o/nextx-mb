@@ -10,12 +10,17 @@ class AppleAuth {
 
   static bool get supported => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
+  /// The one-time authorization code from the last sign-in (sent with the identity token so the server can
+  /// revoke the Apple token when the account is deleted).
+  static String? lastAuthorizationCode;
+
   /// Returns the identity token, or null when the user cancelled.
   static Future<String?> identityToken() async {
     try {
       final c = await SignInWithApple.getAppleIDCredential(
         scopes: const [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
       );
+      lastAuthorizationCode = c.authorizationCode;
       return c.identityToken;
     } on SignInWithAppleAuthorizationException catch (e) {
       if (e.code == AuthorizationErrorCode.canceled) return null;

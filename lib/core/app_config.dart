@@ -1058,11 +1058,11 @@ class AppConfig extends ChangeNotifier {
 
   /// Apple identity token (Sign in with Apple, iOS) → NEXTX session.
   /// An existing account found by Apple's verified email asks to link first.
-  Future<void> loginWithAppleIdToken(String identityToken) async {
+  Future<void> loginWithAppleIdToken(String identityToken, {String? authorizationCode}) async {
     _api.attachSession(baseUrl: _apiBaseUrl);
     final Map<String, dynamic> data;
     try {
-      data = await _api.appleLogin(identityToken);
+      data = await _api.appleLogin(identityToken, authorizationCode: authorizationCode);
     } on ApiEnvelopeException catch (e) {
       if (e.statusCode == 401) throw const AppleAuthError('ยืนยันตัวตนกับ Apple ไม่สำเร็จ ลองใหม่อีกครั้ง');
       rethrow;

@@ -59,7 +59,7 @@ Future<void> _walk(WidgetTester tester, {String word = 'ลบบัญชี'})
 }
 
 void main() {
-  testWidgets('"ลบบัญชี" lives in จัดการโปรไฟล์ (not in settings any more)', (tester) async {
+  testWidgets('"ลบบัญชีถาวร" lives in จัดการโปรไฟล์ (not in settings any more)', (tester) async {
     await _pump(tester, const ProfileManageScreen(), {'GET /api/me/profile': {'profile': {'first_name': 'QA'}}});
     expect(find.byKey(const ValueKey('pm-delete-account')), findsOneWidget);
     await _pump(tester, const SettingsScreen(), const {});

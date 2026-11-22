@@ -288,7 +288,7 @@ class _LoginScreenState extends State<LoginScreen> {
     await _run(() async {
       final token = await AppleAuth.identityToken();
       if (token == null || !mounted) return; // cancelled
-      await context.read<AppConfig>().loginWithAppleIdToken(token);
+      await context.read<AppConfig>().loginWithAppleIdToken(token, authorizationCode: AppleAuth.lastAuthorizationCode);
     });
   }
 

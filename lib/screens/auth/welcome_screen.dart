@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import '../../core/app_config.dart';
 
 import '../../core/navigation/app_routes.dart';
 import '../../widgets/nx_hero_cta.dart';
@@ -55,6 +57,19 @@ class WelcomeScreen extends StatefulWidget {
 class _WelcomeScreenState extends State<WelcomeScreen> {
   final _pages = PageController();
   var _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // After a permanent account deletion the app starts over here: say so once.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final notice = context.read<AppConfig>().takeLoginNotice();
+      if (notice != null && notice.isNotEmpty) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(key: const ValueKey('welcome-notice'), content: Text(tr(notice))));
+      }
+    });
+  }
 
   @override
   void dispose() {
