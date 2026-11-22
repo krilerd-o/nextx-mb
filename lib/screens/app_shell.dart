@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../widgets/ai_consent_gate.dart';
 
 import '../core/app_config.dart';
 import '../core/nx_breakpoint.dart';
@@ -73,7 +74,7 @@ Widget shellTabScreen(String id) {
     case 'files':
       return const FilesHomeScreen();
     case 'ai':
-      return const AiAssistantScreen();
+      return const AiConsentGate(child: AiAssistantScreen());
     case 'search':
       return const GlobalSearchScreen();
     case 'notifications':

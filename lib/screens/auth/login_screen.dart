@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/legal_links.dart';
 import '../../core/app_config.dart';
 import '../../core/auth_errors.dart';
 import '../../core/auth_redirect.dart';
@@ -594,6 +595,29 @@ class _LoginScreenState extends State<LoginScreen> {
                             TextButton(onPressed: _loading ? null : _openRegister, child: Text(tr('สมัครสมาชิก'))),
                           ],
                         ),
+                      // App Store / Google Play: the privacy policy and terms are reachable before sign-in.
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            TextButton(
+                              key: const ValueKey('login-privacy'),
+                              style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant, textStyle: theme.textTheme.labelMedium),
+                              onPressed: () => openLegal(LegalPage.privacy),
+                              child: Text(tr('นโยบายความเป็นส่วนตัว')),
+                            ),
+                            Text('·', style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                            TextButton(
+                              key: const ValueKey('login-terms'),
+                              style: TextButton.styleFrom(foregroundColor: cs.onSurfaceVariant, textStyle: theme.textTheme.labelMedium),
+                              onPressed: () => openLegal(LegalPage.terms),
+                              child: Text(tr('ข้อกำหนดการใช้บริการ')),
+                            ),
+                          ],
+                        ),
+                      ),
                       if (kDebugMode) TextButton(onPressed: () => nxPush<void>(context, const FieldGalleryScreen()), child: Text(tr('พรีวิว UI Type'))),
                     ],
                   ),

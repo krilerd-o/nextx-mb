@@ -14,6 +14,7 @@ import '../../core/i18n.dart';
 import '../../core/navigation/app_routes.dart';
 import '../../core/thai_time.dart';
 import '../../services/api_exceptions.dart';
+import '../../widgets/ai_consent_gate.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_skeleton.dart';
 import '../ai/assistant/ai_assistant_controller.dart' show aiErrorText;
@@ -302,6 +303,14 @@ class _IsaacBriefCardState extends State<IsaacBriefCard> {
 
   Future<void> _ask() async {
     if (_loading) return;
+    // The brief sends my work facts to the AI provider: ask once first (App Store 5.1.2(i)).
+    if (!await ensureAiConsent(context)) {
+      if (!mounted) return;
+      setState(() => _expanded = false);
+      IsaacBriefCache.setExpanded(_scope, false);
+      return;
+    }
+    if (!mounted) return;
     final config = context.read<AppConfig>();
     final now = thaiNow();
     final facts = widget.facts();

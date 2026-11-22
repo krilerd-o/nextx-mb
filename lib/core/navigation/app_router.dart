@@ -66,6 +66,7 @@ import '../../screens/settings/diagnostics_screen.dart';
 import 'notification_deep_link.dart';
 import '../qr_login.dart';
 import 'route_access.dart';
+import '../../widgets/ai_consent_gate.dart';
 import '../i18n.dart';
 import '../../screens/profile/profile_hub_screen.dart';
 import '../../screens/doc_form/doc_form_launcher.dart';
@@ -310,7 +311,7 @@ GoRouter createAppRouter(AppConfig config) {
         path: AppRoutes.aiChat,
         builder: (_, state) {
           final q = state.uri.queryParameters;
-          return AiAssistantScreen(contextModule: q['ctx_module'], contextId: q['ctx_id'], contextTitle: q['ctx_title'], initialPrompt: q['prompt'] ?? q['share_text'], initialChatId: q['chat'], initialCommand: q['cmd']);
+          return AiConsentGate(child: AiAssistantScreen(contextModule: q['ctx_module'], contextId: q['ctx_id'], contextTitle: q['ctx_title'], initialPrompt: q['prompt'] ?? q['share_text'], initialChatId: q['chat'], initialCommand: q['cmd']));
         },
       ),
       GoRoute(
@@ -320,26 +321,30 @@ GoRouter createAppRouter(AppConfig config) {
       // ISAAC AI (same routes as the web menu group).
       // ISAAC Notebook is native now; old ISAAC / web links land on it.
       GoRoute(path: AppRoutes.isaacNotebook, redirect: (_, _) => AppRoutes.notebook),
-      GoRoute(path: AppRoutes.notebook, builder: (_, _) => const NotebookHomeScreen()),
+      GoRoute(path: AppRoutes.notebook, builder: (_, _) => const AiConsentGate(child: NotebookHomeScreen())),
       GoRoute(
         path: '/notebook/:id',
         // ?recording=<rid>[&note=<nid>]: a finished recording's summary note opens after load.
-        builder: (_, state) => NotebookScreen(
-          key: ValueKey(state.uri.toString()),
-          id: state.pathParameters['id'] ?? '',
-          openRecordingId: state.uri.queryParameters['recording'],
-          openNoteId: state.uri.queryParameters['note'],
+        builder: (_, state) => AiConsentGate(
+          child: NotebookScreen(
+            key: ValueKey(state.uri.toString()),
+            id: state.pathParameters['id'] ?? '',
+            openRecordingId: state.uri.queryParameters['recording'],
+            openNoteId: state.uri.queryParameters['note'],
+          ),
         ),
       ),
       GoRoute(
         path: '/notebook/:id/source/:sid',
-        builder: (_, state) => NotebookSourceDeepLink(id: state.pathParameters['id'] ?? '', sourceId: state.pathParameters['sid'] ?? ''),
+        builder: (_, state) => AiConsentGate(child: NotebookSourceDeepLink(id: state.pathParameters['id'] ?? '', sourceId: state.pathParameters['sid'] ?? '')),
       ),
       GoRoute(path: '/ai/notebook', redirect: (_, _) => AppRoutes.notebook),
       GoRoute(path: '/ai/notebook/:id', redirect: (_, state) => notebookWebRedirect(state.pathParameters['id'] ?? '', state.uri.queryParameters)),
-      GoRoute(path: AppRoutes.aiMinuteAuto, builder: (_, _) => const IsaacEmbedScreen(menu: 'minute_auto')),
-      GoRoute(path: AppRoutes.aiMinutes, builder: (_, state) => MinutesHomeScreen(key: ValueKey(state.uri.toString()), initialAction: state.uri.queryParameters['do'])),
-      GoRoute(path: '/ai-minutes/:id', builder: (_, state) => MinuteDetailScreen(key: ValueKey(state.pathParameters['id']), meetingId: state.pathParameters['id'] ?? '')),
+      GoRoute(path: AppRoutes.aiMinuteAuto, builder: (_, _) => const AiConsentGate(child: IsaacEmbedScreen(menu: 'minute_auto'))),
+      // AI features ask for consent first (App Store 5.1.2(i)); a meeting join link (/m/:code) does not —
+      // its lobby already says what the room transcribes / records.
+      GoRoute(path: AppRoutes.aiMinutes, builder: (_, state) => AiConsentGate(child: MinutesHomeScreen(key: ValueKey(state.uri.toString()), initialAction: state.uri.queryParameters['do']))),
+      GoRoute(path: '/ai-minutes/:id', builder: (_, state) => AiConsentGate(child: MinuteDetailScreen(key: ValueKey(state.pathParameters['id']), meetingId: state.pathParameters['id'] ?? ''))),
       GoRoute(path: '/m/:code', builder: (_, state) => MinutesHomeScreen(key: ValueKey(state.uri.toString()), initialAction: 'join:${state.pathParameters['code'] ?? ''}')),
       GoRoute(path: AppRoutes.isaacAgent, builder: (_, _) => const IsaacComingSoonScreen(product: 'agent')),
       GoRoute(path: AppRoutes.isaacSocialWatch, builder: (_, _) => const IsaacComingSoonScreen(product: 'social_watch')),

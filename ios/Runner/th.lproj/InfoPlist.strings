@@ -7,5 +7,3 @@
 "NSPhotoLibraryAddUsageDescription" = "บันทึกไฟล์ที่ดาวน์โหลดจากแอป";
 "NSMicrophoneUsageDescription" = "ใช้ไมโครโฟนสำหรับโทรและวิดีโอคอล, คำบรรยายสดและบันทึกเสียงในสาย (เมื่อคุณยินยอม) ให้ ISAAC สรุปการโทร, อัดเสียงประชุมใน ISAAC Notebook (อัดต่อได้แม้ปิดจอ) กับ AI Minute Auto และส่งข้อความเสียง";
 "NSSpeechRecognitionUsageDescription" = "แปลงเสียงพูดเป็นข้อความเมื่อถามผู้ช่วย AI";
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "ใช้ตำแหน่งเพื่อเช็คอินหน้างานและลงเวลา (แอปใช้ตำแหน่งเฉพาะตอนเปิดใช้งาน)";
-"NSLocationAlwaysUsageDescription" = "ใช้ตำแหน่งเพื่อเช็คอินหน้างานและลงเวลา (แอปใช้ตำแหน่งเฉพาะตอนเปิดใช้งาน)";

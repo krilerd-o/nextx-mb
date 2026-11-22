@@ -43,6 +43,13 @@ post_install do |installer|
       if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 15.5
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
       end
+      # Location is used only while the app is in use (no NSLocationAlways* keys in Info.plist):
+      # compile out geolocator's "always" request so App Store Connect does not flag a missing
+      # purpose string (ITMS-90683).
+      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      defs = [defs] if defs.is_a?(String)
+      defs << 'BYPASS_PERMISSION_LOCATION_ALWAYS=1' unless defs.include?('BYPASS_PERMISSION_LOCATION_ALWAYS=1')
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
     end
   end
 end

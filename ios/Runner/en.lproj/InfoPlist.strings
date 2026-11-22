@@ -7,5 +7,3 @@
 "NSPhotoLibraryAddUsageDescription" = "Save files you download in the app.";
 "NSMicrophoneUsageDescription" = "Uses the microphone for voice and video calls, live call captions and call recording (only when you agree) so ISAAC can summarise calls, to record meetings in ISAAC Notebook (recording continues with the screen off) and AI Minute Auto, and for voice messages.";
 "NSSpeechRecognitionUsageDescription" = "Turns your speech into text when you ask the AI assistant";
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "Your location is used to check in on site and to clock in or out (only while you use the app).";
-"NSLocationAlwaysUsageDescription" = "Your location is used to check in on site and to clock in or out (only while you use the app).";

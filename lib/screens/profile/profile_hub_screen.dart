@@ -22,6 +22,7 @@ import '../../widgets/nx_workspace_switcher.dart' show showWorkspaceSwitcherShee
 import 'my_signatures_screen.dart';
 import 'notification_prefs_screen.dart';
 import 'profile_manage_screen.dart';
+import 'privacy_ai_screen.dart';
 import 'profile_ui.dart';
 import 'security_settings_screen.dart';
 import 'theme_settings_screen.dart';
@@ -160,6 +161,16 @@ class _ProfileHubScreenState extends State<ProfileHubScreen> {
                 title: 'จัดการโปรไฟล์',
                 subtitle: 'ข้อมูลส่วนตัว เบอร์โทร แก้ไขโปรไฟล์ ลบบัญชี',
                 onTap: () => nxPush<void>(context, const ProfileManageScreen()),
+              ),
+            ),
+            KeyedSubtree(
+              key: const ValueKey('profile-privacy-ai'),
+              child: SettingsTile(
+                icon: NxI.shieldCheck,
+                tint: const Color(0xFF10B981),
+                title: 'ความเป็นส่วนตัวและ AI',
+                subtitle: 'การอนุญาตใช้ AI นโยบาย ข้อกำหนด ลบข้อมูลของฉัน',
+                onTap: () => nxPush<void>(context, const PrivacyAiScreen()),
               ),
             ),
           ]),
