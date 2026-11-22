@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 import '../core/app_alice.dart';
 import '../core/doc_form/doc_pick_rules.dart' show pickerQueryParams;
 import 'api_exceptions.dart';
+import '../core/session_ended.dart';
 import 'http/tuned_adapter.dart';
 
 export 'api_exceptions.dart';
@@ -192,6 +193,13 @@ class ApiClient {
           handler.next(options);
         },
         onResponse: (res, handler) {
+          // Signed out by the business usage mode / admin, seen on an open endpoint (200).
+          final endedOk = SessionEnded.fromHeaders(res.headers.value('x-session-revoked'), res.headers.value('x-session-revoked-info'));
+          final hadToken = (_accessToken ?? '').isNotEmpty;
+          if (endedOk != null && hadToken && !res.requestOptions.path.contains('/api/auth/')) {
+            lastSessionEnded = endedOk;
+            _onSessionEnded?.call(endedOk);
+          }
           // Sliding session (NEXTX middleware/jwt.js): signed in and in use → a fresh
           // 90-day token arrives here; 90 days without any request → sign in again.
           final fresh = res.headers.value('x-session-token');
@@ -211,9 +219,20 @@ class ApiClient {
           // A one-off OTP token was refused: the signed-in session itself is fine.
           final oneOffToken = err.requestOptions.extra['nx_token'] != null;
           if (code == 401 && !isAuthCall && !oneOffToken && !isStepUpRefusal(path, err.response?.data)) {
-            // Signed out from another device (NEXTX X-Session-Revoked) vs token simply expired.
-            lastUnauthorizedRevoked = err.response?.headers.value('x-session-revoked') == '1';
+            // Signed out from another device / by the business usage mode (NEXTX X-Session-Revoked:
+            // replaced | limit | idle | admin | logout, older servers: 1) vs token simply expired.
+            final ended = SessionEnded.fromHeaders(err.response?.headers.value('x-session-revoked'), err.response?.headers.value('x-session-revoked-info'));
+            lastUnauthorizedRevoked = ended != null;
+            lastSessionEnded = ended;
             _onUnauthorized?.call();
+          }
+          // Business security rule blocks every request (IP / hours / required 2FA / password age).
+          final data = err.response?.data;
+          final errorCode = data is Map ? data['error_code']?.toString() : null;
+          if (code == 403 && !isAuthCall && errorCode != null && kPolicyBlockCodes.contains(errorCode) && (_accessToken ?? '').isNotEmpty) {
+            final ended = SessionEnded.policyBlock(errorCode, data is Map ? data['message']?.toString() : null);
+            lastSessionEnded = ended;
+            _onSessionEnded?.call(ended);
           }
           handler.next(err);
         },
@@ -243,6 +262,14 @@ class ApiClient {
 
   /// The last 401 said this session was signed out from another device.
   bool lastUnauthorizedRevoked = false;
+
+  /// Why the server ended this session (last revoked header / policy block), if it said.
+  SessionEnded? lastSessionEnded;
+
+  void Function(SessionEnded ended)? _onSessionEnded;
+
+  /// Called when a response says this device was signed out (or a business rule blocks it).
+  void setOnSessionEnded(void Function(SessionEnded ended)? cb) => _onSessionEnded = cb;
   String? _accessToken;
   String? _businessId;
   String? _packageCode;
@@ -282,6 +309,25 @@ class ApiClient {
 
   /// `?app=1`: the server sends the browser back to `moainext://app/login?token=`.
   String lineLoginUrlFor({required bool app}) => app ? '$lineLoginUrl?app=1' : lineLoginUrl;
+
+  /// Sign-in rule of this server's domain (NEXTX `GET /api/public/login-config`):
+  /// `{ scope, business_name, allow_signup, methods[], allow_forgot_password, allow_invite, notice, … }`.
+  /// `null` on older servers (404) or errors — the login screen then shows every method as before.
+  Future<Map<String, dynamic>?> getLoginConfig() async {
+    try {
+      final host = Uri.tryParse(_dio.options.baseUrl)?.host ?? '';
+      final res = await _dio.get<dynamic>(
+        '/api/public/login-config',
+        queryParameters: host.isEmpty ? null : {'host': host},
+        options: Options(validateStatus: (_) => true),
+      );
+      final body = res.data;
+      if (res.statusCode != 200 || body is! Map || body['status'] != 'S' || body['data'] is! Map) return null;
+      return Map<String, dynamic>.from(body['data'] as Map);
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Raw `GET /api/health` body (envelope) — server fingerprint + `data.mobile`.
   Future<Object?> getHealthRaw() async {

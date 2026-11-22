@@ -19,6 +19,8 @@ import '../../widgets/nx_icons.dart';
 import '../crm/field_gallery_screen.dart';
 import 'line_login_screen.dart';
 import 'qr_login_scan_screen.dart';
+import '../../core/session_ended.dart';
+import '../../widgets/nx_session_ended_dialog.dart';
 import 'link_confirm_screen.dart';
 import 'register_screen.dart';
 import '../../core/i18n.dart';
@@ -56,7 +58,16 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     final config = context.read<AppConfig>();
     if (config.sessionExpiredNotice) {
-      _error = config.sessionRevokedNotice ? 'ถูกออกจากระบบจากอุปกรณ์อื่น กรุณาเข้าสู่ระบบใหม่' : 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
+      final ended = config.takeSessionEnded();
+      if (ended != null) {
+        // Why NEXTX signed this device out (usage mode / auto sign-out / admin / business rule).
+        _error = sessionEndedText(ended).title;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) showNxSessionEndedDialog(context, ended);
+        });
+      } else {
+        _error = config.sessionRevokedNotice ? 'ถูกออกจากระบบจากอุปกรณ์อื่น กรุณาเข้าสู่ระบบใหม่' : 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) => config.clearSessionExpiredNotice());
     }
     final notice = config.takeLoginNotice();
@@ -64,8 +75,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final recent = config.recentAccounts;
     if (recent.isNotEmpty && !RegExp(r'^\+?[0-9 -]+$').hasMatch(recent.first.loginId)) _id.text = recent.first.loginId;
     final invite = config.pendingInvite;
-    if (invite != null) WidgetsBinding.instance.addPostFrameCallback((_) => _openRegister());
+    if (invite != null) WidgetsBinding.instance.addPostFrameCallback((_) { if (_inviteOpen) _openRegister(); });
     _loadSocial();
+    _loadLoginConfig();
     WidgetsBinding.instance.addPostFrameCallback((_) => _consumePending());
     _config = context.read<AppConfig>()..addListener(_onConfig);
   }
@@ -102,6 +114,38 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _error = null);
     await nxPush<bool>(context, const QrLoginScanScreen());
   }
+
+  /// Sign-in rule of this server's domain (NEXTX สิทธิ์ระบบโดเมน); null = show everything (older servers).
+  Map<String, dynamic>? _loginCfg;
+
+  Future<void> _loadLoginConfig() async {
+    final cfg = await context.read<AppConfig>().apiClient.getLoginConfig();
+    if (!mounted || cfg == null) return;
+    setState(() {
+      _loginCfg = cfg;
+      if (!_modeAllowed(_mode)) {
+        final first = _Mode.values.where(_modeAllowed);
+        if (first.isNotEmpty) _mode = first.first;
+      }
+    });
+  }
+
+  bool _allows(String method) {
+    final list = _loginCfg?['methods'];
+    if (list is! List) return true;
+    return list.map((e) => '$e').contains(method);
+  }
+
+  bool _modeAllowed(_Mode m) => _allows(switch (m) {
+        _Mode.password => 'password',
+        _Mode.otpEmail => 'email_otp',
+        _Mode.otpSms => 'sms_otp',
+        _Mode.scan => 'qr',
+      });
+
+  bool get _signupOpen => _loginCfg == null || _loginCfg!['allow_signup'] != false;
+  bool get _inviteOpen => _loginCfg == null || _loginCfg!['allow_invite'] != false;
+  bool get _forgotOpen => _loginCfg == null || _loginCfg!['allow_forgot_password'] != false;
 
   Future<void> _openRegister() async {
     if (!mounted) return;
@@ -337,8 +381,27 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                       ),
                       const SizedBox(height: 24),
-                      _ModeSwitch(value: _mode.index, labels: [tr('รหัสผ่าน'), tr('อีเมล'), tr('SMS'), tr('สแกน')], onChanged: _loading ? null : (i) => _setMode(_Mode.values[i])),
-                      if (config.pendingInvite != null) ...[
+                      if ((_loginCfg?['notice']?.toString() ?? '').isNotEmpty) ...[
+                        Container(
+                          key: const ValueKey('login-domain-notice'),
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          margin: const EdgeInsets.only(bottom: 14),
+                          decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(14)),
+                          child: Text(_loginCfg!['notice'].toString(), style: theme.textTheme.bodyMedium),
+                        ),
+                      ],
+                      Builder(builder: (_) {
+                        final modes = _Mode.values.where(_modeAllowed).toList();
+                        if (modes.length <= 1) return const SizedBox.shrink();
+                        const labels = {_Mode.password: 'รหัสผ่าน', _Mode.otpEmail: 'อีเมล', _Mode.otpSms: 'SMS', _Mode.scan: 'สแกน'};
+                        return _ModeSwitch(
+                          value: modes.indexOf(_mode).clamp(0, modes.length - 1),
+                          labels: [for (final m in modes) tr(labels[m]!)],
+                          onChanged: _loading ? null : (i) => _setMode(modes[i]),
+                        );
+                      }),
+                      if (config.pendingInvite != null && _inviteOpen) ...[
                         const SizedBox(height: 14),
                         Material(
                           color: cs.primary.withValues(alpha: 0.10),
@@ -412,7 +475,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 )
                               : const SizedBox(width: double.infinity),
                         ),
-                        if (!otp && !scan)
+                        if (!otp && !scan && _forgotOpen)
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(onPressed: _loading ? null : _forgot, child: Text(tr('ลืมรหัสผ่าน?'))),
@@ -468,7 +531,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       SizedBox(height: otp && !_otpSent ? 4 : 12),
                       NxHeroCta(key: const ValueKey('login-primary'), label: primaryLabel, busy: _loading, onPressed: _loading ? null : _primary),
-                      if (_social.line || _social.google || AppleAuth.supported) ...[
+                      if ((_social.line && _allows('line')) || (_social.google && _allows('google')) || (AppleAuth.supported && _allows('apple'))) ...[
                         const SizedBox(height: 22),
                         Row(
                           children: [
@@ -481,7 +544,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                         const SizedBox(height: 14),
-                        if (AppleAuth.supported) ...[
+                        if ((AppleAuth.supported && _allows('apple'))) ...[
                           SizedBox(
                             width: double.infinity,
                             child: _SocialButton(
@@ -493,11 +556,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               onPressed: _loading ? null : _apple,
                             ),
                           ),
-                          if (_social.line || _social.google) const SizedBox(height: 12),
+                          if ((_social.line && _allows('line')) || (_social.google && _allows('google'))) const SizedBox(height: 12),
                         ],
                         Row(
                           children: [
-                            if (_social.google)
+                            if ((_social.google && _allows('google')))
                               Expanded(
                                 child: _SocialButton(
                                   label: 'Google',
@@ -508,8 +571,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   onPressed: _loading ? null : _google,
                                 ),
                               ),
-                            if (_social.line && _social.google) const SizedBox(width: 12),
-                            if (_social.line)
+                            if ((_social.line && _allows('line')) && (_social.google && _allows('google'))) const SizedBox(width: 12),
+                            if ((_social.line && _allows('line')))
                               Expanded(
                                 child: _SocialButton(
                                   label: 'LINE',
@@ -523,13 +586,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
                       const SizedBox(height: 18),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(tr('ยังไม่มีบัญชี?'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-                          TextButton(onPressed: _loading ? null : _openRegister, child: Text(tr('สมัครสมาชิก'))),
-                        ],
-                      ),
+                      if (_signupOpen)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(tr('ยังไม่มีบัญชี?'), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                            TextButton(onPressed: _loading ? null : _openRegister, child: Text(tr('สมัครสมาชิก'))),
+                          ],
+                        ),
                       if (kDebugMode) TextButton(onPressed: () => nxPush<void>(context, const FieldGalleryScreen()), child: Text(tr('พรีวิว UI Type'))),
                     ],
                   ),

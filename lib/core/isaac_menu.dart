@@ -166,6 +166,9 @@ class IsaacAccessCache {
   }
 
   static void clear() => _cache.clear();
+
+  /// Tests: pretend [access] was just loaded for [businessId].
+  static void debugPut(String businessId, IsaacAccess access) => _cache[businessId] = (at: DateTime.now(), access: access);
 }
 
 /// Minute Auto route from plugin `minute_auto` (web `AiMinuteAutoPage.jsx`).
