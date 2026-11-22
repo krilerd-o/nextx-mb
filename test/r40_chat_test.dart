@@ -33,6 +33,16 @@ Future<AppConfig> _pump(WidgetTester tester, Widget screen, FakeNextxAdapter ada
 final _now = DateTime.now().toUtc();
 String _ago(Duration d) => _now.subtract(d).toIso8601String();
 
+/// The chat's day chip is by Bangkok date: the oldest message (29 minutes ago) is on "yesterday"
+/// between 00:00 and 00:29 Bangkok time.
+String _bangkokDayLabel(Duration ago) {
+  DateTime bkk(DateTime t) {
+    final b = t.toUtc().add(const Duration(hours: 7));
+    return DateTime(b.year, b.month, b.day);
+  }
+  return bkk(_now.subtract(ago)) == bkk(_now) ? 'วันนี้' : 'เมื่อวาน';
+}
+
 final _rooms = [
   {
     'id': 1,
@@ -253,7 +263,7 @@ void main() {
     expect(list.reverse, isTrue);
     expect(list.childrenDelegate, isA<SliverChildBuilderDelegate>());
     double y(Finder f) => tester.getTopLeft(f).dy;
-    final day = find.text('วันนี้');
+    final day = find.text(_bangkokDayLabel(const Duration(minutes: 29)));
     final first = find.textContaining('สำคัญ', findRichText: true).first;
     final forwarded = find.byKey(const ValueKey('chat-forwarded'));
     final call = find.byKey(const ValueKey('chat-call-log-5'));
