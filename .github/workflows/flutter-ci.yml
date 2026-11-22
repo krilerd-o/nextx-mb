@@ -28,6 +28,10 @@ on:
         description: 'Upload the Android APK to Firebase App Distribution'
         type: boolean
         default: false
+      firebase_only:
+        description: 'With "firebase": only the Android Firebase upload (no iOS / Android store builds; tests still run)'
+        type: boolean
+        default: false
       android_version:
         description: 'Android version name for Firebase (e.g. 0.03.000); empty = pubspec version'
         type: string
@@ -74,6 +78,7 @@ jobs:
         run: flutter test
 
   build-android:
+    if: ${{ !inputs.firebase_only }}
     needs: analyze-test
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -178,43 +183,6 @@ jobs:
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 14
 
-      # Firebase App Distribution (Actions → Run workflow → tick "firebase").
-      # Secret FIREBASE_APPDIST_SERVICE_ACCOUNT_JSON: JSON key of a service account with the
-      # "Firebase App Distribution Admin" role in project moai-nextt.
-      - name: Firebase App Distribution (Android)
-        if: ${{ inputs.firebase }}
-        env:
-          NX_ALLOW_DEBUG_SIGNING: '1'
-          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-          SA_JSON: ${{ secrets.FIREBASE_APPDIST_SERVICE_ACCOUNT_JSON }}
-          FIREBASE_ANDROID_APP_ID: '1:628579731141:android:4e5588d9e4984a67af12ac'
-          BUILD_NAME: ${{ inputs.android_version }}
-          BUILD_NUMBER: ${{ inputs.android_build }}
-          TESTER_GROUPS: ${{ inputs.firebase_groups }}
-          NOTES: ${{ inputs.release_notes }}
-        run: |
-          if [ -z "$SA_JSON" ]; then echo "::error::Add secret FIREBASE_APPDIST_SERVICE_ACCOUNT_JSON first (see docs/RELEASE_STORES.md)"; exit 1; fi
-          python3 .github/scripts/secret_file.py SA_JSON "$RUNNER_TEMP/appdist.json" json
-          ARGS=""
-          [ -n "$BUILD_NAME" ] && ARGS="$ARGS --build-name=$BUILD_NAME"
-          [ -n "$BUILD_NUMBER" ] && ARGS="$ARGS --build-number=$BUILD_NUMBER"
-          flutter build apk --release $ARGS --dart-define=NX_STORE=google --dart-define=NX_MAPS=${{ secrets.MAPS_API_KEY != '' && '1' || '0' }}
-          APK=build/app/outputs/flutter-apk/app-release.apk
-          ls -la "$APK"
-          [ -n "$NOTES" ] || NOTES="MOAI NEXT ${BUILD_NAME:-build} — $(git log -1 --pretty=%s)"
-          DIST=""
-          [ -n "$TESTER_GROUPS" ] && DIST="--groups $TESTER_GROUPS"
-          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/appdist.json" npx -y firebase-tools@14 appdistribution:distribute "$APK" \
-            --app "$FIREBASE_ANDROID_APP_ID" --release-notes "$NOTES" $DIST
-          rm -f "$RUNNER_TEMP/appdist.json"
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ inputs.firebase }}
-        with:
-          name: app-release-universal-apk-firebase
-          path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 14
-
       # Huawei AppGallery build: HMS push + OpenStreetMap, Google sign-in kept (GBox / microG).
       # Secret AGCONNECT_SERVICES_JSON_BASE64 = base64 of agconnect-services.json (push).
       - name: Huawei AppGallery build
@@ -245,6 +213,111 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  # Firebase App Distribution (Actions → Run workflow → tick "firebase"; add "firebase_only" to build nothing else).
+  # Its own runner: on the runner that already built the debug + per-CPU APKs, a third release build hung
+  # (0.9.1, attempt 1) and lost the runner (attempt 2). One release APK here, then the upload, each step with
+  # a time limit so a hang fails in minutes instead of 45.
+  # Secret FIREBASE_APPDIST_SERVICE_ACCOUNT_JSON: JSON key of a service account with the
+  # "Firebase App Distribution Admin" role in project moai-nextt.
+  firebase-android:
+    if: ${{ inputs.firebase }}
+    needs: analyze-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
+
+      # Signing keys come from repository secrets (Settings → Secrets → Actions):
+      # - ANDROID_TESTER_KEYSTORE_BASE64 / ANDROID_TESTER_KEYSTORE_PASSWORD: fixed key for
+      #   debug + tester APKs, so the SHA-1 stays the same (needed for Google Sign-In).
+      # - ANDROID_KEYSTORE_BASE64 / _PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD: release key.
+      # The SHA-1 to register in Google Cloud is printed below.
+      - name: Signing keys (optional)
+        env:
+          TESTER_B64: ${{ secrets.ANDROID_TESTER_KEYSTORE_BASE64 }}
+          TESTER_PASSWORD: ${{ secrets.ANDROID_TESTER_KEYSTORE_PASSWORD }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TESTER_B64" ]; then
+            python3 .github/scripts/secret_file.py TESTER_B64 android/app/tester.keystore
+            printf 'storePassword=%s\nkeyAlias=tester\nkeyPassword=%s\n' "$TESTER_PASSWORD" "$TESTER_PASSWORD" > android/tester.properties
+            echo "Tester key SHA-1:"; keytool -list -v -keystore android/app/tester.keystore -storepass "$TESTER_PASSWORD" -alias tester | grep -E 'SHA1'
+          else
+            echo "::warning::No ANDROID_TESTER_KEYSTORE_BASE64 secret — APKs use a random debug key, Google Sign-In will not work on them."
+          fi
+          if [ -n "$KEYSTORE_B64" ]; then
+            python3 .github/scripts/secret_file.py KEYSTORE_B64 android/app/release.jks
+            printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/key.properties
+            echo "Release key SHA-1:"; keytool -list -v -keystore android/app/release.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | grep -E 'SHA1'
+          fi
+
+      # Firebase (push) config from a secret: base64 of google-services.json.
+      # Without it the app still builds; push notifications just stay off.
+      - name: Firebase config (optional)
+        env:
+          GSJ_B64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GSJ_B64" ]; then
+            python3 .github/scripts/secret_file.py GSJ_B64 android/app/google-services.json json
+            echo "google-services.json written"
+          else
+            echo "::warning::No GOOGLE_SERVICES_JSON_BASE64 secret — push notifications are off in this build."
+          fi
+
+      - name: Release APK for Firebase
+        timeout-minutes: 20
+        env:
+          NX_ALLOW_DEBUG_SIGNING: '1'
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+          BUILD_NAME: ${{ inputs.android_version }}
+          BUILD_NUMBER: ${{ inputs.android_build }}
+          GRADLE_OPTS: -Dorg.gradle.daemon=false
+        run: |
+          flutter pub get
+          ARGS=""
+          [ -n "$BUILD_NAME" ] && ARGS="$ARGS --build-name=$BUILD_NAME"
+          [ -n "$BUILD_NUMBER" ] && ARGS="$ARGS --build-number=$BUILD_NUMBER"
+          flutter build apk --release $ARGS --dart-define=NX_STORE=google --dart-define=NX_MAPS=${{ secrets.MAPS_API_KEY != '' && '1' || '0' }}
+          ls -la build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload to Firebase App Distribution
+        timeout-minutes: 10
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_APPDIST_SERVICE_ACCOUNT_JSON }}
+          FIREBASE_ANDROID_APP_ID: '1:628579731141:android:4e5588d9e4984a67af12ac'
+          BUILD_NAME: ${{ inputs.android_version }}
+          TESTER_GROUPS: ${{ inputs.firebase_groups }}
+          NOTES: ${{ inputs.release_notes }}
+        run: |
+          if [ -z "$SA_JSON" ]; then echo "::error::Add secret FIREBASE_APPDIST_SERVICE_ACCOUNT_JSON first (see docs/RELEASE_STORES.md)"; exit 1; fi
+          python3 .github/scripts/secret_file.py SA_JSON "$RUNNER_TEMP/appdist.json" json
+          [ -n "$NOTES" ] || NOTES="MOAI NEXT ${BUILD_NAME:-build} — $(git log -1 --pretty=%s)"
+          DIST=""
+          [ -n "$TESTER_GROUPS" ] && DIST="--groups $TESTER_GROUPS"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/appdist.json" npx -y firebase-tools@14 appdistribution:distribute \
+            build/app/outputs/flutter-apk/app-release.apk --app "$FIREBASE_ANDROID_APP_ID" --release-notes "$NOTES" $DIST
+          rm -f "$RUNNER_TEMP/appdist.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-universal-apk-firebase
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
+
   # iOS / iPadOS: always build without signing (catches Xcode / pod errors on every push).
   # With the App Store secrets it also signs an .ipa and uploads it to TestFlight.
   # Secrets (Settings → Secrets → Actions), all optional:
@@ -254,6 +327,7 @@ jobs:
   # - IOS_DIST_CERT_P12_BASE64 / IOS_DIST_CERT_PASSWORD / IOS_PROFILE_BASE64  App Store signing
   # - ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8_BASE64  App Store Connect API key (upload)
   build-ios:
+    if: ${{ !inputs.firebase_only }}
     needs: analyze-test
     runs-on: macos-latest
     # extra time: TestFlight External waits for Apple to process the build before submitting it for review
