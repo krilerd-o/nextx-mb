@@ -43,6 +43,8 @@ List<String>? requiredMenusFor(String path) {
       return const [MenuAccess.mailbox];
     case 'files':
       return const [MenuAccess.files];
+    case 'lead-register':
+      return const [MenuAccess.leadRegister];
     case 'call-log':
       return const [MenuAccess.callLog];
     case 'comm-ai':

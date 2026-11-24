@@ -140,3 +140,22 @@ These need NEXTX with `run-migrate-ai-mobile-chat.js` (see NEXTX `backend/docs/a
 | `POST /api/ai/tools/confirm` and `/cancel` + `conversation_id`, `message_id` | Remembers the result on the saved proposal |
 | `POST /api/ai/extract-fields {module, text, context}` | "ไอแซคช่วยกรอก" in the create forms for `/lead /contact /account /case /นัด /งาน /epic /quotation` |
 | `POST /api/entity/:module`, `POST /api/boards/:id/tasks\|epics` | The records themselves; owner = the signed-in user unless changed |
+
+## Lead Register (ลงทะเบียน Lead) — menu `lead-register`
+
+| App (`ApiClient`) | NEXTX endpoint |
+|---|---|
+| `getLeadForms` | `GET /api/lead-register/forms` |
+| `getLeadFormTemplates` | `GET /api/lead-register/templates` |
+| `getLeadForm` / `createLeadForm` / `updateLeadForm` / `deleteLeadForm` / `duplicateLeadForm` | `GET·POST·PUT·DELETE /api/lead-register/forms[/:id]`, `POST /forms/from-template/:key`, `POST /forms/:id/duplicate` |
+| `setLeadFormStatus` | `POST /api/lead-register/forms/:id/publish` · `/close` |
+| `setLeadFormFlowStep` | `PATCH /api/lead-register/forms/:id/flow/:step` |
+| `getLeadFormFill` | `GET /api/lead-register/forms/:id/fill` (staff-only questions included) |
+| `submitLeadForm` | `POST /api/lead-register/forms/:id/submit` (`client_uuid` = idempotent; offline queue `offline_lead_register_v1`) |
+| `uploadLeadFormAnswerFile` | `POST /api/lead-register/forms/:id/upload` |
+| `scanLeadFormCard` | `POST /api/lead-register/forms/:id/scan-card` (vision → answers; phone OCR text when `no_ai`) |
+| `getLeadFormResponses` / `getLeadFormResponse` / `rerunLeadFormFlow` | `GET /forms/:id/responses`, `GET /responses/:id`, `POST /responses/:id/rerun-flow` |
+| `getLeadFormSummary` | `GET /api/lead-register/forms/:id/summary` |
+| `getLeadRegisterResponsesOfLead` | `GET /api/lead-register/leads/:leadId/responses` |
+
+Public visitors use the web page `/f/:token` (`/api/public/lead-form/:token`).

@@ -138,6 +138,7 @@ class NxI {
   static const gitBranch = LucideIcons300.gitBranch;
   static const treeStructure = LucideIcons300.network;
   static const bookmark = LucideIcons300.bookmark;
+  static const floppyDisk = LucideIcons300.save;
   static const subtask = LucideIcons300.listTree;
   static const listChecks = LucideIcons300.listChecks;
   static const checkSquare = LucideIcons300.squareCheck;

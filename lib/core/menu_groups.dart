@@ -112,6 +112,7 @@ const kMenuGroups = <MenuGroupDef>[
     sections: [
       MenuSectionDef(items: [
         MenuItemDef(id: 'lead', title: 'ผู้มุ่งหวัง', subtitle: 'ลูกค้าที่กำลังติดตาม', icon: NxI.flag, route: '/crm/lead', menuKeys: [MenuAccess.lead]),
+        MenuItemDef(id: 'lead-register', title: 'ลงทะเบียน Lead', subtitle: 'แบบฟอร์ม · หน้าบูธ · สแกนนามบัตร', icon: NxI.clipboardText, route: AppRoutes.leadRegister, menuKeys: [MenuAccess.leadRegister]),
         MenuItemDef(id: 'account', title: 'บัญชีลูกค้า', subtitle: 'บริษัทและองค์กร', icon: NxI.buildings, route: '/crm/account', menuKeys: [MenuAccess.account]),
         MenuItemDef(id: 'contact', title: 'ผู้ติดต่อ', subtitle: 'รายชื่อบุคคล', icon: NxI.addressBook, route: '/crm/contact', menuKeys: [MenuAccess.contact]),
       ]),
