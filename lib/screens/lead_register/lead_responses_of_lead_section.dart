@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
+import '../../core/menu_access.dart';
 import '../../core/nx_page_route.dart';
 import '../../widgets/nx_icons.dart';
 import '../../widgets/nx_surface_card.dart';
@@ -37,6 +38,11 @@ class _LeadResponsesOfLeadSectionState extends State<LeadResponsesOfLeadSection>
   }
 
   Future<void> _load() async {
+    final cfg = context.read<AppConfig>();
+    if (!cfg.isLoggedIn || !MenuAccess.allow(cfg.session, MenuAccess.leadRegister)) {
+      setState(() => _failed = true);
+      return;
+    }
     try {
       final list = await context.read<AppConfig>().apiClient.getLeadRegisterResponsesOfLead(widget.leadId);
       if (mounted) setState(() => _list = list);
