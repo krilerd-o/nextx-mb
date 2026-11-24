@@ -20,6 +20,7 @@ import '../services/api_client.dart';
 import '../services/app_lock.dart';
 import '../services/device_push_service.dart';
 import '../services/offline_queue.dart';
+import '../services/lead_register_queue.dart';
 import '../services/offline_photos.dart';
 import '../services/photo_upload_center.dart';
 import '../services/realtime_service.dart';
@@ -1581,6 +1582,12 @@ class AppConfig extends ChangeNotifier {
       PhotoUploadCenter.instance.scope = '${apiClient.baseUrl}|$businessScope';
       unawaited(PhotoUploadCenter.instance.drain(apiClient).catchError((Object e) {
         debugPrint('[photo-queue] drain: $e');
+        return 0;
+      }));
+    }
+    if (_session.isLoggedIn) {
+      unawaited(LeadRegisterQueue.instance.flush(apiClient).catchError((Object e) {
+        debugPrint('[lead-register-queue] flush: $e');
         return 0;
       }));
     }

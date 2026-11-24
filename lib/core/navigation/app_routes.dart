@@ -96,6 +96,7 @@ class AppRoutes {
   static const String approvals = '/approvals';
   static const String commerce = '/commerce';
   static const String callLog = '/call-log';
+  static const String leadRegister = '/lead-register';
   static const String commAi = '/comm-ai';
   static const String commAiSettings = '/comm-ai/settings';
   static const String commAiInsights = '/comm-ai/insights';

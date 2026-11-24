@@ -3340,6 +3340,109 @@ class ApiClient {
   Future<List<int>> downloadCommAiExportJob(String jobId) =>
       _downloadBytes('/api/comm-ai/export-jobs/$jobId/download', receiveTimeout: const Duration(minutes: 10));
 
+  // ---------------------------------------------------------------- Lead Register (NEXTX /api/lead-register)
+
+  /// `GET /api/lead-register/forms` — every form of the business with counts.
+  Future<List<Map<String, dynamic>>> getLeadForms({String? q}) async =>
+      extractMapList(_dataMap(await _send('GET', '/api/lead-register/forms', query: {if (q != null && q.isNotEmpty) 'q': q}))['list']);
+
+  /// `GET /api/lead-register/templates` — built-in templates.
+  Future<List<Map<String, dynamic>>> getLeadFormTemplates() async =>
+      extractMapList(_dataMap(await _send('GET', '/api/lead-register/templates'))['list']);
+
+  /// `GET /api/lead-register/forms/:id` — full form (questions, flow, settings, files).
+  Future<Map<String, dynamic>> getLeadForm(int id) async =>
+      asStringKeyedMap(_dataMap(await _send('GET', '/api/lead-register/forms/$id'))['form']) ?? {};
+
+  /// `GET /api/lead-register/forms/:id/fill` — definition for staff / kiosk fill (staff-only questions included).
+  Future<Map<String, dynamic>> getLeadFormFill(int id) async => _dataMap(await _send('GET', '/api/lead-register/forms/$id/fill'));
+
+  Future<Map<String, dynamic>> createLeadForm({String? templateKey, Map<String, dynamic>? body}) async {
+    final path = templateKey != null ? '/api/lead-register/forms/from-template/${Uri.encodeComponent(templateKey)}' : '/api/lead-register/forms';
+    return asStringKeyedMap(_dataMap(await _send('POST', path, data: body ?? const {}))['form']) ?? {};
+  }
+
+  /// `PUT /api/lead-register/forms/:id` — any of name, description, ui_type, theme, settings, questions, flow, smownerid.
+  Future<Map<String, dynamic>> updateLeadForm(int id, Map<String, dynamic> body) async =>
+      asStringKeyedMap(_dataMap(await _send('PUT', '/api/lead-register/forms/$id', data: body))['form']) ?? {};
+
+  /// `POST /api/lead-register/forms/:id/publish|close`.
+  Future<Map<String, dynamic>> setLeadFormStatus(int id, {required bool publish}) async =>
+      asStringKeyedMap(_dataMap(await _send('POST', '/api/lead-register/forms/$id/${publish ? 'publish' : 'close'}'))['form']) ?? {};
+
+  /// `PATCH /api/lead-register/forms/:id/flow/:step` — quick on/off and settings of one flow step.
+  Future<Map<String, dynamic>> setLeadFormFlowStep(int id, String step, Map<String, dynamic> patch) async =>
+      asStringKeyedMap(_dataMap(await _send('PATCH', '/api/lead-register/forms/$id/flow/$step', data: patch))['form']) ?? {};
+
+  Future<void> deleteLeadForm(int id) async => _send('DELETE', '/api/lead-register/forms/$id');
+
+  Future<Map<String, dynamic>> duplicateLeadForm(int id) async =>
+      asStringKeyedMap(_dataMap(await _send('POST', '/api/lead-register/forms/$id/duplicate'))['form']) ?? {};
+
+  /// `POST /api/lead-register/forms/:id/submit` — staff / kiosk / mobile answer.
+  /// [clientUuid] makes replays (offline queue, double taps) idempotent.
+  Future<Map<String, dynamic>> submitLeadForm(
+    int id, {
+    required Map<String, dynamic> answers,
+    required String clientUuid,
+    String channel = 'mobile',
+    int? fillMs,
+    int? leadId,
+    bool draft = false,
+  }) async =>
+      _dataMap(await _send('POST', '/api/lead-register/forms/$id/submit', data: {
+        'answers': answers,
+        'client_uuid': clientUuid,
+        'channel': channel,
+        'fill_ms': ?fillMs,
+        'lead_id': ?leadId,
+        if (draft) 'status': 'draft',
+      }));
+
+  /// `POST /api/lead-register/forms/:id/upload` — files for File / Image / Video / Drawing answers → `[{url,name,size,mime}]`.
+  Future<List<Map<String, dynamic>>> uploadLeadFormAnswerFile(int id, List<int> bytes, String filename, {String? mime}) async {
+    final parts = (mime ?? '').split('/');
+    final form = FormData()
+      ..files.add(MapEntry(
+        'files',
+        MultipartFile.fromBytes(bytes, filename: filename, contentType: parts.length == 2 ? DioMediaType(parts[0], parts[1]) : null),
+      ));
+    return extractMapList(_dataMap(await _send('POST', '/api/lead-register/forms/$id/upload', data: form))['files']);
+  }
+
+  /// `POST /api/lead-register/forms/:id/scan-card` — business card → answers keyed by question id.
+  Future<Map<String, dynamic>> scanLeadFormCard(int id, {List<int>? front, List<int>? back, String? ocrText}) async {
+    final form = FormData();
+    if (ocrText != null && ocrText.trim().isNotEmpty) form.fields.add(MapEntry('ocr_text', ocrText));
+    if (front != null) form.files.add(MapEntry('front', MultipartFile.fromBytes(front, filename: 'card_front.jpg', contentType: DioMediaType('image', 'jpeg'))));
+    if (back != null) form.files.add(MapEntry('back', MultipartFile.fromBytes(back, filename: 'card_back.jpg', contentType: DioMediaType('image', 'jpeg'))));
+    return _dataMap(await _send('POST', '/api/lead-register/forms/$id/scan-card', data: form));
+  }
+
+  /// `GET /api/lead-register/forms/:id/responses` → `{list, next_cursor, total}`.
+  Future<Map<String, dynamic>> getLeadFormResponses(int id, {String? q, String? cursor, int limit = 30}) async =>
+      _dataMap(await _send('GET', '/api/lead-register/forms/$id/responses', query: {
+        if (q != null && q.isNotEmpty) 'q': q,
+        'cursor': ?cursor,
+        'limit': '$limit',
+      }));
+
+  /// `GET /api/lead-register/responses/:id` — answers + flow timeline.
+  Future<Map<String, dynamic>> getLeadFormResponse(int responseId) async =>
+      asStringKeyedMap(_dataMap(await _send('GET', '/api/lead-register/responses/$responseId'))['response']) ?? {};
+
+  /// `POST /api/lead-register/responses/:id/rerun-flow` — retry failed / pending steps.
+  Future<Map<String, dynamic>> rerunLeadFormFlow(int responseId, {List<String>? steps, bool force = false}) async =>
+      _dataMap(await _send('POST', '/api/lead-register/responses/$responseId/rerun-flow', data: {'steps': ?steps, 'force': force}));
+
+  /// `GET /api/lead-register/forms/:id/summary` — KPIs, trend, funnel, per-question summaries.
+  Future<Map<String, dynamic>> getLeadFormSummary(int id, {int days = 30}) async =>
+      _dataMap(await _send('GET', '/api/lead-register/forms/$id/summary', query: {'days': '$days'}));
+
+  /// `GET /api/lead-register/leads/:leadId/responses` — every answer of one Lead (all forms).
+  Future<List<Map<String, dynamic>>> getLeadRegisterResponsesOfLead(int leadId) async =>
+      extractMapList(_dataMap(await _send('GET', '/api/lead-register/leads/$leadId/responses'))['list']);
+
   Future<List<int>> _downloadBytes(String path, {Duration? receiveTimeout}) async {
     try {
       final res = await _dio.get<List<int>>(

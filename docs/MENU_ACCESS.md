@@ -24,6 +24,7 @@
 | รออนุมัติ | `quotation` / `leave-management` / `pending-approvals` | `/approvals` |
 | กล่องจดหมาย | `mailbox` | `/mail…` |
 | บันทึกการโทร | `call-log` | `/call-log` |
+| ลงทะเบียน Lead | `lead-register` | `/lead-register`, `/lead-register/:id`, `/lead-register/:id/fill` |
 | ISAAC การสื่อสาร | `comm-ai-history`, `comm-ai-insights` | `/comm-ai…` |
 | HR | `attendance`, `leave-request`, `leave-management`, `attendance-report`, `hr-dashboard` | `/hr…` |
 | จัดการไฟล์ | `file-manager` | `/files` |

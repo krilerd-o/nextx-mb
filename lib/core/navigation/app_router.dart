@@ -29,6 +29,9 @@ import '../../screens/jobs/my_jobs_screen.dart';
 import '../../screens/module/module_hub_screen.dart';
 import '../../screens/module/menu_group_screen.dart';
 import '../../screens/crm/call_log_screen.dart';
+import '../../screens/lead_register/lead_form_detail_screen.dart';
+import '../../screens/lead_register/lead_form_fill_screen.dart';
+import '../../screens/lead_register/lead_register_home_screen.dart';
 import '../../screens/comm_ai/call_summary_screen.dart';
 import '../../screens/comm_ai/comm_ai_history_screen.dart';
 import '../../screens/comm_ai/comm_ai_insights_screen.dart';
@@ -264,6 +267,23 @@ GoRouter createAppRouter(AppConfig config) {
       GoRoute(
         path: AppRoutes.callLog,
         builder: (_, _) => const CallLogScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.leadRegister,
+        builder: (_, _) => const LeadRegisterHomeScreen(),
+      ),
+      // Web link /lead-register/:id (notifications) and /lead-register/:id/fill[?kiosk=1&lead=ID]
+      GoRoute(
+        path: '${AppRoutes.leadRegister}/:id',
+        builder: (_, state) => LeadFormDetailScreen(formId: int.tryParse(state.pathParameters['id'] ?? '') ?? 0),
+      ),
+      GoRoute(
+        path: '${AppRoutes.leadRegister}/:id/fill',
+        builder: (_, state) => LeadFormFillScreen(
+          formId: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
+          kiosk: state.uri.queryParameters['kiosk'] == '1',
+          leadId: int.tryParse(state.uri.queryParameters['lead'] ?? ''),
+        ),
       ),
       GoRoute(
         path: AppRoutes.commAi,
