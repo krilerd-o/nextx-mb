@@ -12,6 +12,8 @@ import '../../services/api_exceptions.dart';
 import '../../services/lead_register_queue.dart';
 import '../../widgets/fields/nx_entity_form.dart' show nxFieldHostFor;
 import '../../widgets/fields/nx_form_field.dart';
+import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_icons.dart';
 import '../crm/card_scan/card_capture_screen.dart';
 import '../crm/card_scan/card_ocr.dart';
@@ -337,16 +339,29 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
                 : _layout == 'classic'
                     ? _classic(accent)
                     : _cards(accent, big);
+    final content = Theme(
+      data: Theme.of(context).copyWith(colorScheme: Theme.of(context).colorScheme.copyWith(primary: accent)),
+      child: Stack(children: [
+        Listener(onPointerDown: (_) => _bumpIdle(), child: body),
+        if (_kiosk)
+          Positioned(
+            right: 8,
+            top: 4,
+            child: IconButton(tooltip: tr('ออกจากโหมดคีออสก์'), onPressed: _exitKiosk, icon: Icon(NxI.lock, color: Theme.of(context).hintColor, size: 18)),
+          ),
+      ]),
+    );
     return PopScope(
       canPop: !_kiosk,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _kiosk) _exitKiosk();
       },
-      child: Scaffold(
-        appBar: _kiosk
-            ? null
-            : AppBar(
-                title: Text(form.name, overflow: TextOverflow.ellipsis),
+      child: _kiosk
+          ? Scaffold(body: SafeArea(child: content))
+          : NxScrollScaffold(
+              motionBlur: false,
+              header: NxAppHeader(
+                title: form.name,
                 actions: [
                   ValueListenableBuilder<int>(
                     valueListenable: LeadRegisterQueue.instance.pending,
@@ -360,21 +375,8 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
                   ),
                 ],
               ),
-        body: SafeArea(
-          child: Theme(
-            data: Theme.of(context).copyWith(colorScheme: Theme.of(context).colorScheme.copyWith(primary: accent)),
-            child: Stack(children: [
-              Listener(onPointerDown: (_) => _bumpIdle(), child: body),
-              if (_kiosk)
-                Positioned(
-                  right: 8,
-                  top: 4,
-                  child: IconButton(tooltip: tr('ออกจากโหมดคีออสก์'), onPressed: _exitKiosk, icon: Icon(NxI.lock, color: Theme.of(context).hintColor, size: 18)),
-                ),
-            ]),
-          ),
-        ),
-      ),
+              body: SafeArea(top: false, child: content),
+            ),
     );
   }
 

@@ -8,6 +8,8 @@ import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/lead_register/lead_form.dart';
 import '../../core/nx_page_route.dart';
+import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_icons.dart';
 import '../journey/job_sign_link.dart' show NxQrCode;
 import 'lead_form_builder_screen.dart';
@@ -68,9 +70,10 @@ class _LeadFormDetailScreenState extends State<LeadFormDetailScreen> {
     final accent = f == null ? Theme.of(context).colorScheme.primary : leadAccent(f.theme);
     return DefaultTabController(
       length: 4,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(f?.name ?? widget.name, overflow: TextOverflow.ellipsis),
+      child: NxScrollScaffold(
+        motionBlur: false,
+        header: NxAppHeader(
+          title: f?.name ?? widget.name,
           actions: [
             IconButton(
               tooltip: tr('แก้ไขแบบฟอร์ม'),
@@ -93,12 +96,14 @@ class _LeadFormDetailScreenState extends State<LeadFormDetailScreen> {
               ],
             ),
           ],
-          bottom: TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            indicatorColor: accent,
-            tabs: [Tab(text: tr('คำตอบ')), Tab(text: tr('สรุป')), const Tab(text: 'Flow'), Tab(text: tr('แชร์'))],
-          ),
+        ),
+        headerBottomHeight: 46,
+        headerBottom: TabBar(
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          indicatorColor: accent,
+          dividerColor: Colors.transparent,
+          tabs: [Tab(text: tr('คำตอบ')), Tab(text: tr('สรุป')), const Tab(text: 'Flow'), Tab(text: tr('แชร์'))],
         ),
         floatingActionButton: FilledButton.icon(
           style: FilledButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.white, minimumSize: const Size(0, 52), padding: const EdgeInsets.symmetric(horizontal: 20), shape: const StadiumBorder(), elevation: 3),

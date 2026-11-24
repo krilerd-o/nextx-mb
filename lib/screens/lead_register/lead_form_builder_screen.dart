@@ -8,6 +8,8 @@ import '../../core/app_config.dart';
 import '../../core/i18n.dart';
 import '../../core/lead_register/lead_form.dart';
 import '../../core/nx_page_route.dart';
+import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_icons.dart';
 import 'lead_form_fill_screen.dart';
 import 'lead_form_renderer.dart';
@@ -88,12 +90,11 @@ class _LeadFormBuilderScreenState extends State<LeadFormBuilderScreen> {
     final f = _f;
     return DefaultTabController(
       length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(tr('แก้ไขแบบฟอร์ม')),
-            Text(_saving ? tr('กำลังบันทึก…') : _dirty ? tr('มีการแก้ไข…') : tr('บันทึกแล้ว'), style: Theme.of(context).textTheme.labelSmall),
-          ]),
+      child: NxScrollScaffold(
+        motionBlur: false,
+        header: NxAppHeader(
+          title: tr('แก้ไขแบบฟอร์ม'),
+          subtitle: _saving ? tr('กำลังบันทึก…') : _dirty ? tr('มีการแก้ไข…') : tr('บันทึกแล้ว'),
           actions: [
             IconButton(
               tooltip: tr('ทดลองกรอก'),
@@ -117,8 +118,9 @@ class _LeadFormBuilderScreenState extends State<LeadFormBuilderScreen> {
                 child: Text(tr('เผยแพร่')),
               ),
           ],
-          bottom: TabBar(tabs: [Tab(text: tr('คำถาม')), Tab(text: tr('ตั้งค่า')), const Tab(text: 'Flow')]),
         ),
+        headerBottomHeight: 46,
+        headerBottom: TabBar(dividerColor: Colors.transparent, tabs: [Tab(text: tr('คำถาม')), Tab(text: tr('ตั้งค่า')), const Tab(text: 'Flow')]),
         body: f == null ? const Center(child: CircularProgressIndicator()) : TabBarView(children: [_questionsTab(), _settingsTab(), _flowTab()]),
       ),
     );
@@ -146,13 +148,13 @@ class _LeadFormBuilderScreenState extends State<LeadFormBuilderScreen> {
                 TextFormField(
                   initialValue: f['name']?.toString(),
                   style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                  decoration: InputDecoration(border: InputBorder.none, hintText: tr('ชื่อแบบฟอร์ม')),
+                  decoration: InputDecoration(border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, filled: false, hintText: tr('ชื่อแบบฟอร์ม')),
                   onChanged: (v) => _change(() => f['name'] = v),
                 ),
                 TextFormField(
                   initialValue: f['description']?.toString(),
                   maxLines: null,
-                  decoration: InputDecoration(border: InputBorder.none, hintText: tr('คำอธิบาย')),
+                  decoration: InputDecoration(border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, filled: false, hintText: tr('คำอธิบาย')),
                   onChanged: (v) => _change(() => f['description'] = v),
                 ),
               ]),
@@ -207,7 +209,7 @@ class _LeadFormBuilderScreenState extends State<LeadFormBuilderScreen> {
           child: TextFormField(
             key: ValueKey('st-${s['id']}'),
             initialValue: s['title']?.toString(),
-            decoration: InputDecoration(border: InputBorder.none, isDense: true, hintText: tr('ชื่อส่วน')),
+            decoration: InputDecoration(border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, filled: false, isDense: true, hintText: tr('ชื่อส่วน')),
             style: const TextStyle(fontWeight: FontWeight.w600),
             onChanged: (v) {
               sections[si] = {...s, 'title': v};
@@ -471,9 +473,10 @@ class _QuestionEditorState extends State<_QuestionEditor> {
   Widget build(BuildContext context) {
     final t = q['uitype']?.toString() ?? 'Text';
     final cond = q['show_if'] is Map ? Map<String, dynamic>.from(q['show_if'] as Map) : null;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(tr('แก้ไขคำถาม')),
+    return NxScrollScaffold(
+      motionBlur: false,
+      header: NxAppHeader(
+        title: tr('แก้ไขคำถาม'),
         actions: [TextButton(onPressed: () => Navigator.pop(context, q), child: Text(tr('เสร็จ')))],
       ),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 48), children: [

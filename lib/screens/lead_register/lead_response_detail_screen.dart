@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
+import '../../widgets/nx_app_header.dart';
+import '../../widgets/nx_scroll_scaffold.dart';
 import '../../widgets/nx_icons.dart';
 import 'lead_form_detail_screen.dart' show leadFlowStatusColor, leadFlowStatusLabel;
 
@@ -74,8 +76,9 @@ class _LeadResponseDetailScreenState extends State<LeadResponseDetailScreen> {
   Widget build(BuildContext context) {
     final r = _r;
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: Text(r == null ? '#${widget.responseId}' : (r['respondent_name'] ?? r['respondent_email'] ?? '#${widget.responseId}').toString())),
+    return NxScrollScaffold(
+      motionBlur: false,
+      header: NxAppHeader(title: r == null ? '#${widget.responseId}' : (r['respondent_name'] ?? r['respondent_email'] ?? '#${widget.responseId}').toString()),
       body: r == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
