@@ -71,6 +71,7 @@ dependencies:
   # Pinned: 1.4.0 is only days old.
   app_badge_plus: 1.3.5
   livekit_client: ^2.13.2
+  wakelock_plus: ^1.3.3
 
 dev_dependencies:
   flutter_test:

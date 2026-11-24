@@ -33,9 +33,9 @@ class LeadRegisterQueue {
 
   Future<void> load() async => pending.value = (await _read()).length;
 
-  Future<void> add({required int formId, required Map<String, dynamic> answers, required String clientUuid, required String channel, int? fillMs, int? leadId}) async {
+  Future<void> add({required int formId, required Map<String, dynamic> answers, required String clientUuid, required String channel, int? fillMs, int? leadId, Map<String, dynamic>? cardImage}) async {
     final items = await _read();
-    items.add({'form_id': formId, 'answers': answers, 'client_uuid': clientUuid, 'channel': channel, 'fill_ms': fillMs, 'lead_id': leadId, 'at': DateTime.now().toIso8601String()});
+    items.add({'form_id': formId, 'answers': answers, 'client_uuid': clientUuid, 'channel': channel, 'fill_ms': fillMs, 'lead_id': leadId, 'card_image': ?cardImage, 'at': DateTime.now().toIso8601String()});
     await _write(items);
   }
 
@@ -58,6 +58,7 @@ class LeadRegisterQueue {
             channel: it['channel']?.toString() ?? 'mobile',
             fillMs: (it['fill_ms'] as num?)?.toInt(),
             leadId: (it['lead_id'] as num?)?.toInt(),
+            cardImage: it['card_image'] is Map ? Map<String, dynamic>.from(it['card_image'] as Map) : null,
           );
           sent++;
         } on ApiEnvelopeException {

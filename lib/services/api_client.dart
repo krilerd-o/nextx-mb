@@ -3389,6 +3389,8 @@ class ApiClient {
     int? fillMs,
     int? leadId,
     bool draft = false,
+    Map<String, dynamic>? cardImage,
+    int? responseId,
   }) async =>
       _dataMap(await _send('POST', '/api/lead-register/forms/$id/submit', data: {
         'answers': answers,
@@ -3396,8 +3398,24 @@ class ApiClient {
         'channel': channel,
         'fill_ms': ?fillMs,
         'lead_id': ?leadId,
+        'card_image': ?cardImage,
+        'response_id': ?responseId,
         if (draft) 'status': 'draft',
       }));
+
+  /// `POST /api/lead-register/forms/:id/files` — salesheet attachments for the email step → updated file list.
+  Future<List<Map<String, dynamic>>> uploadLeadFormSalesheet(int id, List<int> bytes, String filename, {String? mime}) async {
+    final parts = (mime ?? '').split('/');
+    final form = FormData()
+      ..files.add(MapEntry(
+        'files',
+        MultipartFile.fromBytes(bytes, filename: filename, contentType: parts.length == 2 ? DioMediaType(parts[0], parts[1]) : null),
+      ));
+    return extractMapList(_dataMap(await _send('POST', '/api/lead-register/forms/$id/files', data: form))['files']);
+  }
+
+  /// `DELETE /api/lead-register/forms/:id/files/:fileId`.
+  Future<void> deleteLeadFormSalesheet(int id, int fileId) async => _send('DELETE', '/api/lead-register/forms/$id/files/$fileId');
 
   /// `POST /api/lead-register/forms/:id/upload` — files for File / Image / Video / Drawing answers → `[{url,name,size,mime}]`.
   Future<List<Map<String, dynamic>>> uploadLeadFormAnswerFile(int id, List<int> bytes, String filename, {String? mime}) async {

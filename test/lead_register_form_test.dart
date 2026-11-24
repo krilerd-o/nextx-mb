@@ -90,4 +90,32 @@ void main() {
     expect(leadNewQuestion('Email')['map_to'], 'email_1st');
     expect(leadNewQuestion('FormChoiceGrid')['rows'], isNotEmpty);
   });
+
+  test('offline card text fills email, mobile, website and name by mapping', () {
+    final f = LeadFormDef({
+      'id': 2,
+      'sections': [
+        {
+          'id': 's1',
+          'questions': [
+            q('fn', 'Text', extra: {'map_to': 'lead_firstname'}),
+            q('ln', 'Text', extra: {'map_to': 'lead_lastname'}),
+            q('mail', 'Email', extra: {'map_to': 'email_1st'}),
+            q('mob', 'Phone', extra: {'map_to': 'mobile_1st'}),
+            q('co', 'Text', extra: {'map_to': 'company_name'}),
+            q('web', 'Link'),
+          ],
+        },
+      ],
+    });
+    const text = 'DELTA LOGISTICS CO., LTD.\nWichai Thongdee\nSales Director\nT. 02-123-4567\nM. 081-234-5678\nwichai@delta.co.th\nwww.delta.co.th';
+    final out = leadParseCardText(text, f);
+    expect(out['mail'], 'wichai@delta.co.th');
+    expect(out['mob'], '0812345678');
+    expect(out['web'], 'www.delta.co.th');
+    expect(out['co'], 'DELTA LOGISTICS CO., LTD.');
+    expect(out['fn'], 'Wichai');
+    expect(out['ln'], 'Thongdee');
+    expect(leadParseCardText('', f), isEmpty);
+  });
 }

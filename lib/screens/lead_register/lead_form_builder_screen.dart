@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -419,12 +420,14 @@ class _LeadFormBuilderScreenState extends State<LeadFormBuilderScreen> {
           onChanged: (v) => setStep('lead', {'duplicate': v}),
         ),
         TextFormField(initialValue: lead['lead_source']?.toString(), decoration: InputDecoration(labelText: tr('แหล่งที่มา (Lead source)')), onChanged: (v) => setStep('lead', {'lead_source': v})),
+        SwitchListTile(contentPadding: EdgeInsets.zero, value: lead['notify_owner'] != false, onChanged: (v) => setStep('lead', {'notify_owner': v}), title: Text(tr('แจ้งเตือนเจ้าของ Lead'))),
+        SwitchListTile(contentPadding: EdgeInsets.zero, value: lead['timeline_note'] != false, onChanged: (v) => setStep('lead', {'timeline_note': v}), title: Text(tr('บันทึกคำตอบลงไทม์ไลน์ของ Lead'))),
       ]),
       card('email', 'ส่งอีเมล Salesheet', NxI.envelope, const Color(0xFF0EA5E9), [
         TextFormField(initialValue: step('email')['subject']?.toString(), decoration: InputDecoration(labelText: tr('หัวเรื่อง')), onChanged: (v) => setStep('email', {'subject': v})),
         TextFormField(initialValue: step('email')['intro']?.toString(), maxLines: 3, decoration: InputDecoration(labelText: tr('ข้อความ'), helperText: '{first_name} {company} {form}'), onChanged: (v) => setStep('email', {'intro': v})),
-        SwitchListTile(contentPadding: EdgeInsets.zero, value: step('email')['notify_owner'] != false, onChanged: (v) => setStep('email', {'notify_owner': v}), title: Text(tr('แจ้งเตือนเจ้าของ Lead'))),
-        Text(tr('อัปโหลดไฟล์ Salesheet ได้จากหน้าเว็บ (แท็บ Flow)'), style: Theme.of(context).textTheme.bodySmall),
+        SwitchListTile(contentPadding: EdgeInsets.zero, value: step('email')['include_edit_link'] != false, onChanged: (v) => setStep('email', {'include_edit_link': v}), title: Text(tr('แนบลิงก์แก้ไขคำตอบในอีเมล'))),
+        _salesheets(),
       ]),
       card('deal', 'สร้าง Deal อัตโนมัติ', NxI.handshake, const Color(0xFFF59E0B), [
         TextFormField(initialValue: step('deal')['name_template']?.toString(), decoration: InputDecoration(labelText: tr('ชื่อ Deal'), helperText: '{company} {name} {form}'), onChanged: (v) => setStep('deal', {'name_template': v})),
@@ -449,8 +452,85 @@ class _LeadFormBuilderScreenState extends State<LeadFormBuilderScreen> {
           ),
         ]),
         SwitchListTile(contentPadding: EdgeInsets.zero, value: step('activity')['business_days'] != false, onChanged: (v) => setStep('activity', {'business_days': v}), title: Text(tr('นับเฉพาะวันทำการ'))),
+        TextFormField(
+          initialValue: step('activity')['due_time']?.toString() ?? '10:00',
+          keyboardType: TextInputType.datetime,
+          decoration: InputDecoration(labelText: tr('เวลาครบกำหนด (HH:MM)')),
+          onChanged: (v) {
+            if (RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(v.trim())) setStep('activity', {'due_time': v.trim()});
+          },
+        ),
         TextFormField(initialValue: step('activity')['subject_template']?.toString(), decoration: InputDecoration(labelText: tr('หัวข้อ')), onChanged: (v) => setStep('activity', {'subject_template': v})),
       ]),
+    ]);
+  }
+
+  bool _uploading = false;
+
+  List<Map<String, dynamic>> get _salesheetFiles {
+    final raw = _f?['files'];
+    if (raw is! List) return const [];
+    return [for (final x in raw) if (x is Map && (x['kind'] ?? 'salesheet') == 'salesheet') Map<String, dynamic>.from(x)];
+  }
+
+  Future<void> _uploadSalesheet() async {
+    final api = context.read<AppConfig>().apiClient;
+    final picked = await FilePicker.platform.pickFiles(withData: true, allowMultiple: true);
+    if (picked == null || picked.files.isEmpty || !mounted) return;
+    setState(() => _uploading = true);
+    try {
+      for (final pf in picked.files) {
+        final bytes = pf.bytes;
+        if (bytes == null) continue;
+        final ext = (pf.extension ?? '').toLowerCase();
+        final mime = ext == 'pdf' ? 'application/pdf' : (const {'png', 'jpg', 'jpeg', 'webp'}.contains(ext) ? 'image/${ext == 'jpg' ? 'jpeg' : ext}' : null);
+        final files = await api.uploadLeadFormSalesheet(widget.formId, bytes, pf.name, mime: mime);
+        if (!mounted) return;
+        setState(() => _f!['files'] = [...(_f!['files'] is List ? _f!['files'] as List : const []), ...files]);
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('อัปโหลดไม่สำเร็จ'))));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _removeSalesheet(Map<String, dynamic> file) async {
+    final id = (file['id'] as num?)?.toInt();
+    if (id == null) return;
+    try {
+      await context.read<AppConfig>().apiClient.deleteLeadFormSalesheet(widget.formId, id);
+      if (!mounted) return;
+      setState(() => _f!['files'] = [for (final x in (_f!['files'] as List)) if (!(x is Map && x['id'] == file['id'])) x]);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ลบไฟล์ไม่สำเร็จ'))));
+    }
+  }
+
+  Widget _salesheets() {
+    final files = _salesheetFiles;
+    final theme = Theme.of(context);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(padding: const EdgeInsets.only(top: 8, bottom: 4), child: Text(tr('ไฟล์ Salesheet ที่แนบ'), style: theme.textTheme.labelLarge)),
+      for (final file in files)
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(NxI.fileText, size: 20),
+          title: Text(file['file_name']?.toString() ?? '', overflow: TextOverflow.ellipsis),
+          subtitle: file['size_bytes'] is num ? Text('${((file['size_bytes'] as num) / 1024).ceil()} KB') : null,
+          trailing: IconButton(tooltip: tr('ลบ'), icon: const Icon(NxI.trash, size: 18), onPressed: () => _removeSalesheet(file)),
+        ),
+      if (files.isEmpty) Text(tr('ยังไม่มีไฟล์'), style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
+      const SizedBox(height: 6),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          onPressed: _uploading ? null : _uploadSalesheet,
+          icon: _uploading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(NxI.uploadSimple, size: 18),
+          label: Text(tr('อัปโหลดไฟล์ Salesheet')),
+        ),
+      ),
     ]);
   }
 }

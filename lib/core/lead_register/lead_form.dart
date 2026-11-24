@@ -315,3 +315,51 @@ Map<String, dynamic> leadNewQuestion(String uitype) {
   });
   return (answers: next, filled: filled);
 }
+
+final _cardEmail = RegExp(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}');
+final _cardPhone = RegExp(r'(?:\+?66[\s\-]?|0)(?:\d[\s\-.]?){8,9}');
+final _cardUrl = RegExp(r'(?:https?://)?(?:www\.)[^\s,]+', caseSensitive: false);
+
+/// Offline fallback for the business-card scan: on-device OCR text → answers by
+/// question id (email, phone, website and a best-guess name). Uses each question's
+/// lead-field mapping first, then its UI type. AI refinement is the online path.
+Map<String, dynamic> leadParseCardText(String text, LeadFormDef form) {
+  final lines = text.split(RegExp(r'[\r\n]+')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+  final email = _cardEmail.firstMatch(text)?.group(0);
+  final phones = _cardPhone.allMatches(text).map((m) => m.group(0)!.replaceAll(RegExp(r'[\s\-.]'), '')).toList();
+  final mobile = phones.firstWhere((p) => RegExp(r'^(?:\+?66|0)[689]').hasMatch(p), orElse: () => phones.isEmpty ? '' : phones.first);
+  final url = _cardUrl.firstMatch(text)?.group(0);
+  final companyMark = RegExp(r'(co\.?,?\s*ltd|limited|inc\b|corp|plc|บริษัท|จำกัด|ห้างหุ้นส่วน|group)', caseSensitive: false);
+  final company = lines.where((l) => companyMark.hasMatch(l)).firstOrNull;
+  String? name;
+  for (final l in lines) {
+    if (_cardEmail.hasMatch(l) || _cardPhone.hasMatch(l) || _cardUrl.hasMatch(l) || RegExp(r'[\d,@/]').hasMatch(l) || companyMark.hasMatch(l)) continue;
+    final words = l.split(RegExp(r'\s+'));
+    if (words.length >= 2 && words.length <= 4 && l.length <= 40) {
+      name = l;
+      break;
+    }
+  }
+  final nameParts = name?.split(RegExp(r'\s+')) ?? const <String>[];
+  final out = <String, dynamic>{};
+  final qs = [for (final s in form.sections) ...s.questions];
+  void put(bool Function(LeadQuestion q) match, String? value) {
+    if (value == null || value.isEmpty) return;
+    for (final q in qs) {
+      if (!out.containsKey(q.id) && match(q)) {
+        out[q.id] = value;
+        return;
+      }
+    }
+  }
+
+  put((q) => q.mapTo == 'email_1st' || (q.mapTo == null && q.uitype == 'Email'), email);
+  put((q) => q.mapTo == 'mobile_1st' || (q.mapTo == null && q.uitype == 'Phone'), mobile.isEmpty ? null : mobile);
+  put((q) => q.mapTo == 'website' || (q.mapTo == null && q.uitype == 'Link'), url);
+  put((q) => q.mapTo == 'company_name', company);
+  if (nameParts.length >= 2) {
+    put((q) => q.mapTo == 'lead_firstname', nameParts.first);
+    put((q) => q.mapTo == 'lead_lastname', nameParts.sublist(1).join(' '));
+  }
+  return out;
+}

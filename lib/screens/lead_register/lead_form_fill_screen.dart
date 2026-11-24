@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/app_config.dart';
 import '../../core/i18n.dart';
@@ -56,7 +59,13 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
   Timer? _idleTimer;
   final _scroll = ScrollController();
   NxFieldHost? _host;
+  Map<String, dynamic>? _cardImage;
+  int? _serverDraftId;
+  Timer? _draftTimer;
 
+  String get _draftKey => 'lr_draft_v1:${widget.formId}:${widget.leadId ?? 0}';
+
+  bool _kioskOn = false;
   bool get _kiosk => widget.kiosk || _form?.uiType == 'kiosk';
   String get _layout => _kiosk ? 'kiosk' : (_form?.uiType ?? 'classic');
 
@@ -64,15 +73,27 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
   void initState() {
     super.initState();
     _load();
-    if (widget.kiosk) SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    if (widget.kiosk) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      _keepAwake(true);
+    }
     LeadRegisterQueue.instance.load();
+  }
+
+  /// Booth screens must not sleep between visitors.
+  void _keepAwake(bool on) {
+    try {
+      (on ? WakelockPlus.enable() : WakelockPlus.disable()).catchError((_) {});
+    } catch (_) {}
   }
 
   @override
   void dispose() {
     _resetTimer?.cancel();
     _idleTimer?.cancel();
+    _draftTimer?.cancel();
     _scroll.dispose();
+    if (_kioskOn || widget.kiosk) _keepAwake(false);
     if (widget.kiosk) SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -89,6 +110,9 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
         _form = LeadFormDef(f);
         _started = !_kiosk;
       });
+      if (_kiosk && !widget.kiosk) _keepAwake(true);
+      _kioskOn = _kiosk;
+      if (!_kiosk) await _restoreLocalDraft();
     } catch (e) {
       if (mounted) setState(() => _loadError = e);
     }
@@ -119,6 +143,70 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
     );
   }
 
+  // ---- local draft: a half-filled form survives app switch / restart (not in kiosk)
+  Future<void> _restoreLocalDraft() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final raw = p.getString(_draftKey);
+      if (raw == null) return;
+      final m = jsonDecode(raw);
+      if (m is! Map || m['answers'] is! Map || (m['answers'] as Map).isEmpty) return;
+      if (!mounted) return;
+      setState(() {
+        _answers = Map<String, dynamic>.from(m['answers'] as Map);
+        _cardImage = m['card_image'] is Map ? Map<String, dynamic>.from(m['card_image'] as Map) : null;
+        _serverDraftId = (m['server_draft_id'] as num?)?.toInt();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(tr('กู้คืนคำตอบที่กรอกค้างไว้แล้ว')),
+        action: SnackBarAction(label: tr('ล้าง'), onPressed: () {
+          _clearLocalDraft();
+          _reset();
+        }),
+      ));
+    } catch (_) {}
+  }
+
+  void _saveLocalDraftSoon() {
+    if (_kiosk) return;
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 600), () async {
+      try {
+        final p = await SharedPreferences.getInstance();
+        if (_answers.isEmpty) {
+          await p.remove(_draftKey);
+        } else {
+          await p.setString(_draftKey, jsonEncode({'answers': _answers, 'card_image': _cardImage, 'server_draft_id': _serverDraftId, 'at': DateTime.now().toIso8601String()}));
+        }
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _clearLocalDraft() async {
+    _draftTimer?.cancel();
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.remove(_draftKey);
+    } catch (_) {}
+  }
+
+  /// Staff draft on the server — finish later from any device (never runs the flow).
+  Future<void> _saveServerDraft() async {
+    if (_answers.isEmpty) return;
+    final api = context.read<AppConfig>().apiClient;
+    setState(() => _busy = true);
+    try {
+      final out = await api.submitLeadForm(widget.formId, answers: _answers, clientUuid: _uuid(), channel: 'mobile', leadId: widget.leadId, draft: true, cardImage: _cardImage, responseId: _serverDraftId);
+      _serverDraftId = (out['id'] as num?)?.toInt() ?? _serverDraftId;
+      _saveLocalDraftSoon();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกร่างแล้ว'))));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('บันทึกร่างไม่สำเร็จ'))));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   void _set(String key, dynamic value) {
     _startAt ??= DateTime.now();
     _bumpIdle();
@@ -131,6 +219,7 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
       _errors.remove(key);
       _aiFilled.remove(key);
     });
+    _saveLocalDraftSoon();
   }
 
   void _bumpIdle() {
@@ -152,6 +241,8 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
       _done = null;
       _startAt = null;
       _started = !_kiosk;
+      _cardImage = null;
+      _serverDraftId = null;
     });
   }
 
@@ -205,7 +296,8 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
     setState(() => _busy = true);
     final s = _form!.settings;
     try {
-      await api.submitLeadForm(widget.formId, answers: _answers, clientUuid: uuid, channel: channel, fillMs: fillMs, leadId: widget.leadId);
+      await api.submitLeadForm(widget.formId, answers: _answers, clientUuid: uuid, channel: channel, fillMs: fillMs, leadId: widget.leadId, cardImage: _cardImage, responseId: _serverDraftId);
+      await _clearLocalDraft();
       _finish(title: s['thank_you_title']?.toString() ?? tr('ขอบคุณ!'), message: s['thank_you_message']?.toString() ?? tr('บันทึกคำตอบแล้ว'));
     } on ApiEnvelopeException catch (e) {
       final details = e.details?['errors'];
@@ -213,7 +305,8 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr(e.message))));
     } catch (_) {
       // No network: keep it on the phone, send later (same client_uuid = no duplicates).
-      await LeadRegisterQueue.instance.add(formId: widget.formId, answers: _answers, clientUuid: uuid, channel: channel, fillMs: fillMs, leadId: widget.leadId);
+      await LeadRegisterQueue.instance.add(formId: widget.formId, answers: _answers, clientUuid: uuid, channel: channel, fillMs: fillMs, leadId: widget.leadId, cardImage: _cardImage);
+      await _clearLocalDraft();
       _finish(title: tr('บันทึกไว้ในเครื่องแล้ว'), message: tr('ไม่มีอินเทอร์เน็ต — ระบบจะส่งให้อัตโนมัติเมื่อกลับมาออนไลน์'), offline: true);
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -273,13 +366,24 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
     if (images == null || !mounted) return;
     setState(() => _scanning = true);
     try {
-      var out = await api.scanLeadFormCard(widget.formId, front: images.front, back: images.back);
-      if (out['status'] == 'no_ai') {
-        // No AI vision on the server: read the card on the phone and send just the text.
+      Map<String, dynamic> scanned;
+      try {
+        var out = await api.scanLeadFormCard(widget.formId, front: images.front, back: images.back);
+        if (out['card_image'] is Map) _cardImage = Map<String, dynamic>.from(out['card_image'] as Map);
+        if (out['status'] == 'no_ai') {
+          // No AI vision on the server: read the card on the phone and send just the text.
+          final ocr = await CardOcr.read(images.front);
+          if (ocr != null && ocr.trim().isNotEmpty) out = await api.scanLeadFormCard(widget.formId, ocrText: ocr);
+        }
+        scanned = out['answers'] is Map ? Map<String, dynamic>.from(out['answers'] as Map) : <String, dynamic>{};
+      } on ApiEnvelopeException {
+        rethrow;
+      } catch (_) {
+        // Offline: on-device OCR + simple rules (email / phone / name). AI refines when online.
         final ocr = await CardOcr.read(images.front);
-        if (ocr != null && ocr.trim().isNotEmpty) out = await api.scanLeadFormCard(widget.formId, ocrText: ocr);
+        scanned = ocr == null ? <String, dynamic>{} : leadParseCardText(ocr, _form!);
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('ออฟไลน์ — อ่านนามบัตรในเครื่อง (ตรวจสอบข้อมูลก่อนส่ง)'))));
       }
-      final scanned = out['answers'] is Map ? Map<String, dynamic>.from(out['answers'] as Map) : <String, dynamic>{};
       final merged = leadMergeScan(_answers, scanned);
       _startAt ??= DateTime.now();
       setState(() {
@@ -289,6 +393,7 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
           _errors.remove(k);
         }
       });
+      _saveLocalDraftSoon();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(merged.filled.isEmpty ? tr('อ่านนามบัตรไม่พบข้อมูลที่ตรงกับคำถาม') : '${tr('เติมข้อมูลแล้ว')} ${merged.filled.length} ${tr('ช่อง — ตรวจสอบก่อนส่ง')}'),
@@ -318,6 +423,8 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
       );
       if (ok != true) return;
     }
+    _keepAwake(false);
+    _kioskOn = false;
     if (mounted) Navigator.of(context).maybePop();
   }
 
@@ -363,6 +470,11 @@ class _LeadFormFillScreenState extends State<LeadFormFillScreen> {
               header: NxAppHeader(
                 title: form.name,
                 actions: [
+                  IconButton(
+                    tooltip: tr('บันทึกร่าง'),
+                    onPressed: _busy || _answers.isEmpty || _done != null ? null : _saveServerDraft,
+                    icon: const Icon(NxI.floppyDisk, size: 20),
+                  ),
                   ValueListenableBuilder<int>(
                     valueListenable: LeadRegisterQueue.instance.pending,
                     builder: (_, n, _) => n == 0
