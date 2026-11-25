@@ -57,6 +57,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../widgets/nx_refresh.dart';
 import '../../widgets/nx_refresh_bar.dart';
 import '../../core/nx_swr_cache.dart';
+import '../lead_register/lead_responses_of_lead_section.dart';
 
 /// [NxSwrCache] key of a record (`GET /api/entity/:module/:id`); deep links and
 /// the detail page share it.
@@ -1053,6 +1054,7 @@ class _EntityDetailScreenState extends State<EntityDetailScreen> {
                         nxPush<void>(context, row != null ? EntityDetailScreen(module: module, row: {...row, 'id': id}) : EntityByIdLoader(module: module, id: id));
                       },
                     ),
+                    if (widget.module == 'lead' && (int.tryParse(_id) ?? 0) > 0) LeadResponsesOfLeadSection(leadId: int.parse(_id)),
                     const SizedBox(height: 20),
                     Text(tr('แท็ก'), style: theme.textTheme.titleMedium),
                     const SizedBox(height: 8),

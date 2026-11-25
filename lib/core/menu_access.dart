@@ -4,6 +4,7 @@ class MenuAccess {
   MenuAccess._();
 
   static const lead = 'lead';
+  static const leadRegister = 'lead-register';
   static const contact = 'contact';
   static const account = 'account';
   static const deal = 'deal';
